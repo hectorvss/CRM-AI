@@ -333,6 +333,57 @@ router.get('/effectiveness', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
+// ── GET /api/reports/calls ────────────────────────────────────────────────────
+
+router.get('/calls', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getCalls({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports calls error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/reports/team-inbox ───────────────────────────────────────────────
+
+router.get('/team-inbox', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getTeamInbox({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports team-inbox error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/reports/outbound ─────────────────────────────────────────────────
+
+router.get('/outbound', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getOutbound({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports outbound error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/summary', async (req: MultiTenantRequest, res: Response) => {
   try {
     const period = String(req.query.period ?? '30d');

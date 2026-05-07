@@ -924,6 +924,12 @@ export const reportsApi = {
     request<any>(`/reports/csat?${buildReportParams(period, channel)}`),
   effectiveness: (period = '30d', channel = 'all') =>
     request<any>(`/reports/effectiveness?${buildReportParams(period, channel)}`),
+  calls: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/calls?${buildReportParams(period, channel)}`),
+  teamInbox: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/team-inbox?${buildReportParams(period, channel)}`),
+  outbound: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/outbound?${buildReportParams(period, channel)}`),
 };
 
 export const operationsApi = {

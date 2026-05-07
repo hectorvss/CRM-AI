@@ -2090,7 +2090,8 @@ class SupabaseCaseRepository implements CaseRepository {
       .eq('tenant_id', scope.tenantId)
       .eq('workspace_id', scope.workspaceId)
       .limit(1);
-    if (error) throw error;
+    // Graceful: table may not exist yet — return false instead of throwing
+    if (error) return false;
     return Array.isArray(data) && data.length > 0;
   }
   async listStarredCaseIds(scope: CaseScope & { userId: string }) {
@@ -2101,7 +2102,8 @@ class SupabaseCaseRepository implements CaseRepository {
       .eq('user_id', scope.userId)
       .eq('tenant_id', scope.tenantId)
       .eq('workspace_id', scope.workspaceId);
-    if (error) throw error;
+    // Graceful: table may not exist yet — return empty array instead of throwing
+    if (error) return [];
     return Array.isArray(data) ? data.map((r: any) => r.case_id) : [];
   }
 

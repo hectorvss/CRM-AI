@@ -3,8 +3,8 @@
 // Navigate via the left-nav icons. All assets from Figma CDN (7-day TTL).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, workflowsApi } from '../api/client';
+import { Fragment, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { agentsApi, aiApi, attachmentsApi, auditApi, billingApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, policyRulesApi, reportsApi, workflowsApi, workspacesApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
@@ -791,6 +791,205 @@ function titleCase(value?: string | null) {
     .replace(/_/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dropdown — single reusable popover-menu component used in place of native
+// <select> across the prototype. Matches the design ref the user shared:
+// rounded card, optional left icon, optional right-aligned keyboard
+// shortcut, optional divider before an item, optional danger styling.
+//
+// Usage:
+//   <Dropdown
+//     value={typeFilter}
+//     onChange={setTypeFilter}
+//     items={[
+//       { value: 'any',     label: 'Tipo: cualquiera' },
+//       { value: 'article', label: 'Artículo' },
+//       { value: 'policy',  label: 'Política' },
+//     ]}
+//   />
+//
+// For action menus (no value, just buttons) pass items with a `onSelect`
+// override or use the generic `onChange` callback (each item's value is
+// just the id of the action that fires).
+// ─────────────────────────────────────────────────────────────────────────────
+type DropdownItem = {
+  value: string;
+  label: string;
+  icon?: ReactNode;
+  shortcut?: string;
+  danger?: boolean;
+  divider?: boolean;
+  disabled?: boolean;
+};
+
+function Dropdown({
+  value,
+  items,
+  onChange,
+  placement = 'bottom-start',
+  triggerLabel,
+  triggerClassName,
+  menuClassName,
+  renderTrigger,
+  align = 'left',
+  width,
+}: {
+  value?: string;
+  items: DropdownItem[];
+  onChange: (v: string) => void;
+  placement?: 'bottom-start' | 'bottom-end' | 'top-start' | 'top-end';
+  triggerLabel?: string;
+  triggerClassName?: string;
+  menuClassName?: string;
+  renderTrigger?: (selected: DropdownItem | undefined, isOpen: boolean) => ReactNode;
+  align?: 'left' | 'right';
+  width?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const selected = items.find(it => it.value === value);
+  // Close on Escape, click-outside.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    function onClick(e: MouseEvent) {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t)) return;
+      if (menuRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClick);
+    };
+  }, [open]);
+
+  const positionClass = placement === 'top-start' || placement === 'top-end'
+    ? 'bottom-[calc(100%+4px)]'
+    : 'top-[calc(100%+4px)]';
+  const alignClass = align === 'right' ? 'right-0' : 'left-0';
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={triggerRef}
+        onClick={() => setOpen(o => !o)}
+        type="button"
+        className={triggerClassName ?? `h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${open ? 'border-[#1a1a1a]' : ''}`}
+      >
+        {renderTrigger
+          ? renderTrigger(selected, open)
+          : <>
+              <span className="truncate">{selected?.label ?? triggerLabel ?? '—'}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </>}
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className={`absolute ${positionClass} ${alignClass} z-30 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 ${menuClassName ?? ''}`}
+          style={{ minWidth: width ?? 200 }}
+          role="menu"
+        >
+          {items.map((it, idx) => (
+            <Fragment key={it.value + idx}>
+              {it.divider && idx > 0 && <div className="my-1 border-t border-[#f1f1ee]" />}
+              <button
+                type="button"
+                disabled={it.disabled}
+                onClick={() => { if (!it.disabled) { onChange(it.value); setOpen(false); } }}
+                className={`w-full flex items-center gap-2.5 px-3 h-9 text-[13px] text-left ${
+                  it.disabled
+                    ? 'text-[#a4a4a2] cursor-not-allowed'
+                    : it.danger
+                      ? 'text-[#b91c1c] hover:bg-[#fef2f2]'
+                      : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
+                } ${value === it.value && !it.danger ? 'font-semibold bg-[#f8f8f7]' : ''}`}
+                role="menuitem"
+              >
+                {it.icon && <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{it.icon}</span>}
+                <span className="flex-1 truncate">{it.label}</span>
+                {it.shortcut && <span className="text-[11.5px] text-[#646462] font-mono flex-shrink-0">{it.shortcut}</span>}
+              </button>
+            </Fragment>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Fin client-side resource store (localStorage-backed CRUD) ───────────────
+// Used by Pautas / Atributos editors so they work fully without the backend.
+function useFinResource<T extends { id: string }>(key: string, seed?: T[]) {
+  const lsKey = `clain.fin.${key}`;
+  const [items, setItems] = useState<T[]>(() => {
+    try {
+      const raw = window.localStorage.getItem(lsKey);
+      if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return seed ?? [];
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(lsKey, JSON.stringify(items)); } catch { /* ignore */ }
+  }, [items, lsKey]);
+  return {
+    items,
+    create: (item: Omit<T, 'id'>): T => {
+      const next = { ...item, id: `${key}_${Date.now()}_${Math.floor(Math.random() * 1000)}` } as T;
+      setItems(prev => [...prev, next]);
+      return next;
+    },
+    update: (id: string, patch: Partial<T>) =>
+      setItems(prev => prev.map(it => (it.id === id ? { ...it, ...patch } : it))),
+    remove: (id: string) => setItems(prev => prev.filter(it => it.id !== id)),
+    replace: (next: T[]) => setItems(next),
+  };
+}
+
+// ─── Fin domain types (used by Pautas + Atributos editors) ───────────────────
+type FinPauta = {
+  id: string;
+  category: string;
+  title: string;
+  audience: 'all' | 'users' | 'leads' | 'visitors';
+  channels: string[];
+  body: string;
+  enabled: boolean;
+  metrics?: { used?: number; resolved?: number; routed?: number };
+};
+type FinAtributoValue = { id: string; name: string; description: string };
+type FinAtributoCondition = { id: string; whenValue: string; thenAttributeId: string; usingValues: string[] };
+type FinAtributo = {
+  id: string;
+  name: string;
+  description: string;
+  audience: 'all' | 'users' | 'leads' | 'visitors';
+  escalationRules: number;
+  reDetectOnClose: boolean;
+  values: FinAtributoValue[];
+  conditions: FinAtributoCondition[];
+  enabled: boolean;
+};
+type FinProcedimientoStep = {
+  id: string;
+  kind: 'verification' | 'action' | 'condition';
+  title: string;
+  body: string;
+};
+type FinProcedimiento = {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  steps: FinProcedimientoStep[];
+  enabled: boolean;
+  createdAt: number;
+};
 
 function relativeTime(value?: string | null) {
   if (!value) return 'Ahora';
@@ -5456,46 +5655,118 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
 
-  // Explicit collapse state — initial defaults open the group whose sub is active.
-  // Click on chevron/header now toggles freely (decoupled from navigation).
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    workspace:  isWorkspaceSection,
-    suscripcion:isSuscripcionSection,
-    canales:    isCanalesSection,
-    inbox:      isInboxSection,
-    ia:         isIASection,
-    integ:      isIntegSection,
-    datos:      isDatos,
-    personal:   isPersonalSection,
+    workspace:   isWorkspaceSection,
+    suscripcion: isSuscripcionSection,
+    canales:     isCanalesSection,
+    inbox:       isInboxSection,
+    ia:          isIASection,
+    integ:       isIntegSection,
+    datos:       isDatos,
+    personal:    isPersonalSection,
   });
   const toggle = (k: string) => setOpenGroups(s => ({ ...s, [k]: !s[k] }));
-  // Chevron icon: rotate-90 when open (down ▼), default right (▶).
-  const Chev = ({ open }: { open: boolean }) => (
-    <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 transition-transform ${open ? 'rotate-90' : ''}`} />
+
+  // Inline SVG chevron — rotates 90° when open
+  const Chev = ({ on }: { on: boolean }) => (
+    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#8a8a88] flex-shrink-0 transition-transform duration-150 ${on ? 'rotate-90' : ''}`}>
+      <path d="M6 4l4 4-4 4z"/>
+    </svg>
   );
 
-  function SubItems({ items }: { items: typeof DATOS_SUB }) {
+  // Group section header with icon + rotating chevron
+  function GroupRow({ icon, label, groupKey, sectionActive }: { icon: React.ReactNode; label: string; groupKey: string; sectionActive: boolean }) {
     return (
-      <div className="flex flex-col gap-0.5 pl-3">
-        {items.map((sub) => {
-          const active = sub.nav !== null && view === sub.nav;
-          return (
-            <button
-              key={sub.label}
-              onClick={() => sub.nav && onNavigate(sub.nav)}
-              className={`flex items-center w-full px-3 py-[7px] rounded-lg text-[13px] text-left ${
-                active
-                  ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]"
-                  : "font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]"
-              }`}
-            >
-              {sub.label}
-            </button>
-          );
-        })}
-      </div>
+      <button
+        onClick={() => toggle(groupKey)}
+        className={`flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] text-left ${
+          sectionActive ? 'font-semibold text-[#1a1a1a] bg-[#ededea]/60' : 'font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]'
+        }`}
+      >
+        <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{icon}</div>
+        <span className="flex-1">{label}</span>
+        <Chev on={openGroups[groupKey]} />
+      </button>
     );
   }
+
+  // Sub-item with icon + white-card active state
+  function SubRow({ icon, label, nav, warn }: { icon: React.ReactNode; label: string; nav: View | null; warn?: boolean }) {
+    const active = nav !== null && view === nav;
+    return (
+      <button
+        onClick={() => nav && onNavigate(nav)}
+        disabled={!nav}
+        className={`flex items-center gap-2 w-full h-8 pl-3 pr-2.5 rounded-lg text-[13px] text-left ${
+          active
+            ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+            : nav
+              ? 'font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]'
+              : 'font-medium text-[#9a9a98] cursor-default'
+        }`}
+      >
+        <div className="w-[15px] h-[15px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{icon}</div>
+        <span className="flex-1">{label}</span>
+        {warn && <span className="text-[#f59e0b] text-[11px] leading-none">⚠</span>}
+      </button>
+    );
+  }
+
+  // ── Group icons (18px) ────────────────────────────────────────────────────
+  const IcoHome        = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2L2 7v7h4v-4h4v4h4V7L8 2z"/></svg>;
+  const IcoWorkspace   = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="7" width="12" height="7" rx="1.5" opacity="0.5"/><path d="M1 7.5L8 2l7 5.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/><rect x="6" y="9" width="4" height="5" rx="1"/></svg>;
+  const IcoCreditCard  = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="3" width="14" height="10" rx="1.5"/><rect x="1" y="6.5" width="14" height="2" fill="white" opacity="0.35"/><rect x="3" y="9.5" width="3" height="1.5" rx="0.5" fill="white" opacity="0.55"/></svg>;
+  const IcoChannels    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12a1 1 0 011 1v7a1 1 0 01-1 1H9l-3 3v-3H2a1 1 0 01-1-1V3a1 1 0 011-1z"/></svg>;
+  const IcoInboxGrp    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 3a1 1 0 011-1h12a1 1 0 011 1v6H11l-1 2H6L5 9H1V3z" opacity="0.55"/><path d="M1 9h4l1 2h4l1-2h4v3a1 1 0 01-1 1H2a1 1 0 01-1-1V9z"/></svg>;
+  const IcoAIGrp       = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>;
+  const IcoIntegGrp    = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2.2"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15M3.2 3.2l1.8 1.8M11 11l1.8 1.8M3.2 12.8l1.8-1.8M11 5l1.8-1.8" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoDataGrp     = <svg viewBox="0 0 16 16" fill="currentColor"><ellipse cx="8" cy="4" rx="6" ry="2"/><path d="M2 4v3c0 1.1 2.7 2 6 2s6-.9 6-2V4" opacity="0.65"/><path d="M2 7v3c0 1.1 2.7 2 6 2s6-.9 6-2V7" opacity="0.35"/></svg>;
+  const IcoHelpGrp     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="10" rx="1.5" opacity="0.55"/><path d="M6.5 5.5a1.5 1.5 0 113 0c0 .8-.5 1.2-1 1.6S8 8 8 8.5M8 10v.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoOutboundGrp = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 5.5h1.5v5H2a1 1 0 01-1-1v-3a1 1 0 011-1zM3.5 5.5L9 2v12L3.5 10.5v-5z"/><path d="M11 6.3a2.5 2.5 0 010 3.4" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/><path d="M12.7 4.5a5 5 0 010 7" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoUserGrp     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6H2z"/></svg>;
+
+  // ── Sub-item icons (15px) ─────────────────────────────────────────────────
+  const IcoGeneral     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoTeammate    = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="5" r="2.3"/><path d="M1 13c0-2.6 2.2-4.7 5-4.7s5 2.1 5 4.7H1z"/><circle cx="12" cy="5" r="1.8" opacity="0.55"/><path d="M10.5 13h4.5c0-2-1.7-3.7-4-4" opacity="0.55"/></svg>;
+  const IcoHoursS      = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" opacity="0.3"/><path d="M8 4v4l2.5 2.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>;
+  const IcoBrandsS     = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2l1.8 3.7L14 6.4l-3 3 .7 4.2L8 11.6l-3.7 2-.7-4.2-3-3 4.2-.7L8 2z"/></svg>;
+  const IcoSecurityS   = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L2 3.5v4C2 11.2 5 14 8 15c3-1 6-3.8 6-7.5v-4L8 1z" opacity="0.45"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoMultilingS  = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="5.5" opacity="0.25"/><ellipse cx="8" cy="8" rx="3" ry="5.5" stroke="currentColor" strokeWidth="1.1" fill="none"/><path d="M2.5 8h11" stroke="currentColor" strokeWidth="1.1" fill="none"/></svg>;
+  const IcoBillingS    = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><rect x="1" y="7" width="14" height="2" fill="white" opacity="0.35"/><rect x="3" y="9.5" width="3" height="1.3" rx="0.4" fill="white" opacity="0.55"/></svg>;
+  const IcoMessengerS  = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1C4.1 1 1 3.8 1 7.2c0 2 1 3.7 2.6 5l-.5 2.8 2.8-1.4c.6.2 1.3.3 2.1.3 3.9 0 7-2.8 7-6.2S11.9 1 8 1z"/><path d="M5 9l2-2.5 2 1.5 2-2" stroke="white" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoEmailS      = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 5.5l7 4.5 7-4.5" stroke="white" strokeWidth="1.2" fill="none"/></svg>;
+  const IcoPhoneS      = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2h3l1.5 3.5L6 7a8 8 0 004 4l1.5-1.5L15 11v3a1 1 0 01-1 1A13 13 0 012 3a1 1 0 011-1z"/></svg>;
+  const IcoWhatsAppS   = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6.5" opacity="0.45"/><path d="M5 10.5c.8.5 1.8.8 2.8.8 2.8 0 5-2.2 5-5S10.8 1.5 8 1.5 3 3.7 3 6.5c0 .9.2 1.8.7 2.5L3 11.5l2-.5-.2-.5z" opacity="0.8"/><path d="M6 6.5c0-.3.2-.5.4-.5l.4.1c.2 0 .3.1.4.3l.4 1.1c.1.2 0 .4-.1.5l-.3.3a3.5 3.5 0 001.5 1.5l.3-.3c.1-.2.3-.2.5-.1l1.1.4c.2.1.4.3.4.5 0 .3-.3.5-.5.5C8 10.8 6 8.8 6 6.5z" fill="white"/></svg>;
+  const IcoSwitchS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="5" width="14" height="6" rx="3"/><circle cx="11" cy="8" r="2.5" fill="white"/></svg>;
+  const IcoSlackS      = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="2" width="3.5" height="3.5" rx="0.8" opacity="0.8"/><rect x="2" y="6.5" width="3.5" height="3.5" rx="0.8" opacity="0.55"/><rect x="6.5" y="2" width="3.5" height="3.5" rx="0.8" opacity="0.55"/><rect x="6.5" y="6.5" width="3.5" height="3.5" rx="0.8" opacity="0.35"/><rect x="11" y="2" width="3.5" height="8" rx="0.8" opacity="0.25"/></svg>;
+  const IcoDiscordS    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M12.5 3A10 10 0 0010 2.5c-.1.3-.2.6-.4.8A9.4 9.4 0 006.3 3c-.1.2-.3.5-.4.8A10 10 0 003.5 5.5C2.5 7.9 2.5 10.4 3.5 12c.8.8 1.8 1 2.5 1l.5-1a4.5 4.5 0 01-1.5-1 5.5 5.5 0 001 .3v.5a5.5 5.5 0 004 0v-.5c.3-.1.7-.2 1-.3a4.5 4.5 0 01-1.5 1l.5 1c.7 0 1.7-.2 2.5-1 1-1.6 1-4.1 0-6.5z"/><circle cx="6.2" cy="9" r="1"/><circle cx="9.8" cy="9" r="1"/></svg>;
+  const IcoSMSS        = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12a1 1 0 011 1v7a1 1 0 01-1 1H9l-3 3v-3H2a1 1 0 01-1-1V3a1 1 0 011-1z" opacity="0.65"/><path d="M5 6.5h6M5 8.7h4" stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round"/></svg>;
+  const IcoSocialS     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="2"/><circle cx="12" cy="4" r="2"/><circle cx="12" cy="12" r="2"/><path d="M5.9 7.1l4.2-2.2M5.9 8.9l4.2 2.2" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>;
+  const IcoAllChanS    = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.2" opacity="0.8"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity="0.35"/></svg>;
+  const IcoTeamS       = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="5" r="2.3"/><path d="M1 13c0-2.6 2.2-4.7 5-4.7S11 10.4 11 13H1z"/><circle cx="12" cy="5" r="1.8" opacity="0.55"/><path d="M10.5 13h4.5c0-2-1.7-3.7-4-4" opacity="0.55"/></svg>;
+  const IcoAssignS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8l2 2 4-4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoMacrosS     = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 4.5h10M3 8h7M3 11.5h5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/><path d="M13 9l2 2-2 2" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoTicketsS    = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="4" width="14" height="8" rx="1.5"/><path d="M4 8h1.5M7 8h1.5M10 8h1.5" stroke="white" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoSLAS        = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" opacity="0.25"/><path d="M8 4v4l2.5 2.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>;
+  const IcoFinS        = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>;
+  const IcoBuzonS      = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="4" width="14" height="9" rx="2" opacity="0.4"/><path d="M1 7l7 4 7-4" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>;
+  const IcoAutoS       = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 2H4.5a1.5 1.5 0 00-1.5 1.5V4M10 2h1.5A1.5 1.5 0 0113 3.5V4M10 14h1.5a1.5 1.5 0 001.5-1.5V12M6 14H4.5A1.5 1.5 0 013 12.5V12" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/><rect x="4" y="6" width="8" height="4" rx="1.2"/></svg>;
+  const IcoAppS        = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.2" opacity="0.8"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity="0.35"/></svg>;
+  const IcoConnS       = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="2.5"/><circle cx="12" cy="8" r="2.5"/><path d="M6.5 8h3" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>;
+  const IcoAuthS       = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="8" cy="10.5" r="1.2" fill="white"/></svg>;
+  const IcoDevS        = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 5L2 8l3 3M11 5l3 3-3 3M9.5 3l-3 10" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoLabelsS     = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h6.2L14 8l-5.8 6H2l-1-1V3l1-1z"/><circle cx="5.5" cy="8" r="1.2" fill="white"/></svg>;
+  const IcoPeopleS     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6H2z"/></svg>;
+  const IcoCompaniesS  = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="6" width="12" height="9" rx="1"/><path d="M5 6V4.5A1.5 1.5 0 016.5 3h3A1.5 1.5 0 0111 4.5V6" stroke="currentColor" strokeWidth="1.1" fill="none"/><rect x="6.5" y="9" width="3" height="3" rx="0.5" fill="white" opacity="0.65"/></svg>;
+  const IcoConvS       = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12a1 1 0 011 1v7a1 1 0 01-1 1H9l-3 3v-3H2a1 1 0 01-1-1V3a1 1 0 011-1z"/></svg>;
+  const IcoImportsS    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 12.5h12" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>;
+  const IcoTopicsS     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="5.5" opacity="0.25"/><path d="M5.5 8h5M8 5.5v5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/></svg>;
+  const IcoCustomS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2" opacity="0.35"/><rect x="5.5" y="5.5" width="5" height="5" rx="1"/></svg>;
+  const IcoInfoS       = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" opacity="0.25"/><path d="M8 7v4.5M8 5.3v.7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>;
+  const IcoNotifsS     = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a5 5 0 015 5v3l1.5 2.5h-13L3 10V7a5 5 0 015-5zM6.3 13.5a1.8 1.8 0 003.4 0H6.3z"/></svg>;
+  const IcoVisibleS    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2" fill="white"/></svg>;
+  const IcoTokensS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V5a3 3 0 016 0v1" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="8" cy="10" r="1.3" fill="white"/></svg>;
+  const IcoAccessS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="7" width="10" height="7" rx="1.5"/><path d="M4 7V5.5a4 4 0 018 0V7" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="7" cy="11" r="1.3" fill="white"/><path d="M14 8l1.5 1.5L14 11" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
 
   return (
     <div className="flex flex-col h-full w-[230px] flex-shrink-0 bg-[#fbfbf9] rounded-[16px] drop-shadow-[0px_1px_2px_rgba(20,20,20,0.15)] overflow-hidden">
@@ -5504,99 +5775,122 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-0.5">
-        {/* Inicio (no chevron) */}
-        <button className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Inicio</span>
+        {/* Inicio */}
+        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoHome}</div>
+          <span className="flex-1">Inicio</span>
         </button>
 
-        {/* Espacio de trabajo section */}
-        <button
-          onClick={() => toggle('workspace')}
-          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-        >
-          <span>Espacio de trabajo</span>
-          <Chev open={openGroups.workspace} />
-        </button>
+        {/* Espacio de trabajo */}
+        <GroupRow icon={IcoWorkspace} label="Espacio de trabajo" groupKey="workspace" sectionActive={isWorkspaceSection} />
         {openGroups.workspace && (
-          <div className="flex flex-col gap-0.5 pl-3">
-            {WORKSPACE_SUB.map((sub) => {
-              const active = sub.nav !== null && view === sub.nav;
-              return (
-                <button
-                  key={sub.label}
-                  onClick={() => sub.nav && onNavigate(sub.nav)}
-                  className={`flex items-center w-full px-3 py-[7px] rounded-lg text-[13px] text-left ${
-                    active
-                      ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]"
-                      : "font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]"
-                  }`}
-                >
-                  <span className="flex-1">{sub.label}</span>
-                  {sub.warn && <span className="text-[#f59e0b] ml-1">⚠</span>}
-                </button>
-              );
-            })}
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoGeneral}    label="General"              nav={null} />
+            <SubRow icon={IcoTeammate}   label="Compañeros de equipo" nav={null} />
+            <SubRow icon={IcoHoursS}     label="Horario de atención"  nav={'workspaceHours'} />
+            <SubRow icon={IcoBrandsS}    label="Marcas"               nav={'workspaceBrands'} />
+            <SubRow icon={IcoSecurityS}  label="Seguridad"            nav={'workspaceSecurity'} warn />
+            <SubRow icon={IcoMultilingS} label="Multilingüe"          nav={'workspaceMultilingual'} />
           </div>
         )}
 
-        {/* Suscripción section */}
-        <button onClick={() => toggle('suscripcion')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Suscripción</span>
-          <Chev open={openGroups.suscripcion} />
-        </button>
-        {openGroups.suscripcion && <SubItems items={SUSCRIPCION_SUB} />}
+        {/* Suscripción */}
+        <GroupRow icon={IcoCreditCard} label="Suscripción" groupKey="suscripcion" sectionActive={isSuscripcionSection} />
+        {openGroups.suscripcion && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoBillingS} label="Facturación" nav={'billing'} />
+          </div>
+        )}
 
-        {/* Canales section */}
-        <button onClick={() => toggle('canales')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Canales</span>
-          <Chev open={openGroups.canales} />
-        </button>
-        {openGroups.canales && <SubItems items={CANALES_SUB} />}
+        {/* Canales */}
+        <GroupRow icon={IcoChannels} label="Canales" groupKey="canales" sectionActive={isCanalesSection} />
+        {openGroups.canales && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoMessengerS} label="Messenger"                nav={'messenger'} />
+            <SubRow icon={IcoEmailS}     label="Correo electrónico"        nav={'email'} />
+            <SubRow icon={IcoPhoneS}     label="Teléfono"                  nav={'phone'} />
+            <SubRow icon={IcoWhatsAppS}  label="WhatsApp"                  nav={'whatsapp'} />
+            <SubRow icon={IcoSwitchS}    label="Switch"                    nav={null} />
+            <SubRow icon={IcoSlackS}     label="Slack"                     nav={null} />
+            <SubRow icon={IcoDiscordS}   label="Discord"                   nav={'discord'} />
+            <SubRow icon={IcoSMSS}       label="SMS"                       nav={'sms'} />
+            <SubRow icon={IcoSocialS}    label="Canales de redes sociales" nav={'social'} />
+            <SubRow icon={IcoAllChanS}   label="Todos los canales"         nav={'allChannels'} />
+          </div>
+        )}
 
-        {/* Inbox section */}
-        <button onClick={() => toggle('inbox')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Inbox</span>
-          <Chev open={openGroups.inbox} />
-        </button>
-        {openGroups.inbox && <SubItems items={INBOX_SUB} />}
+        {/* Inbox */}
+        <GroupRow icon={IcoInboxGrp} label="Inbox" groupKey="inbox" sectionActive={isInboxSection} />
+        {openGroups.inbox && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoTeamS}    label="Inbox para el equipo" nav={'inboxTeam'} />
+            <SubRow icon={IcoAssignS}  label="Asignaciones"         nav={'assignments'} />
+            <SubRow icon={IcoMacrosS}  label="Macros"               nav={'macros'} />
+            <SubRow icon={IcoTicketsS} label="Folios de atención"   nav={'tickets'} />
+            <SubRow icon={IcoSLAS}     label="SLA"                  nav={'sla'} />
+          </div>
+        )}
 
-        {/* IA y automatización section */}
-        <button onClick={() => toggle('ia')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>IA y automatización</span>
-          <Chev open={openGroups.ia} />
-        </button>
-        {openGroups.ia && <SubItems items={IA_SUB} />}
+        {/* IA y automatización */}
+        <GroupRow icon={IcoAIGrp} label="IA y automatización" groupKey="ia" sectionActive={isIASection} />
+        {openGroups.ia && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoFinS}   label="Fin AI Agent"   nav={'fin'} />
+            <SubRow icon={IcoBuzonS} label="Buzón de IA"    nav={'aiInbox'} />
+            <SubRow icon={IcoAutoS}  label="Automatización" nav={'automation'} />
+          </div>
+        )}
 
-        {/* Integraciones section */}
-        <button onClick={() => toggle('integ')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Integraciones</span>
-          <Chev open={openGroups.integ} />
-        </button>
-        {openGroups.integ && <SubItems items={INTEG_SUB} />}
+        {/* Integraciones */}
+        <GroupRow icon={IcoIntegGrp} label="Integraciones" groupKey="integ" sectionActive={isIntegSection} />
+        {openGroups.integ && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoAppS}  label="Tienda de aplicaciones"    nav={'appStore'} />
+            <SubRow icon={IcoConnS} label="Conectores de datos"       nav={'connectors'} />
+            <SubRow icon={IcoAuthS} label="Autenticación"             nav={null} />
+            <SubRow icon={IcoDevS}  label="Centro para desarrolladores" nav={null} />
+          </div>
+        )}
 
-        {/* Datos section */}
-        <button onClick={() => toggle('datos')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Datos</span>
-          <Chev open={openGroups.datos} />
-        </button>
-        {openGroups.datos && <SubItems items={DATOS_SUB} />}
+        {/* Datos */}
+        <GroupRow icon={IcoDataGrp} label="Datos" groupKey="datos" sectionActive={isDatos} />
+        {openGroups.datos && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoLabelsS}    label="Etiquetas"                     nav={'labels'} />
+            <SubRow icon={IcoPeopleS}    label="Personas"                      nav={'people'} />
+            <SubRow icon={IcoCompaniesS} label="Empresas"                      nav={'companies'} />
+            <SubRow icon={IcoConvS}      label="Conversaciones"                nav={'settings'} />
+            <SubRow icon={IcoCustomS}    label="Objetos personalizados"        nav={null} />
+            <SubRow icon={IcoImportsS}   label="Importaciones y exportaciones" nav={'imports'} />
+            <SubRow icon={IcoTopicsS}    label="Temas"                         nav={null} />
+          </div>
+        )}
 
-        {SETTINGS_NAV_BOTTOM.map((item) => (
-          <button
-            key={item.label}
-            className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-          >
-            <span>{item.label}</span>
-            <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className="w-3.5 h-3.5 opacity-40" />
-          </button>
-        ))}
-
-        {/* Personal section */}
-        <button onClick={() => toggle('personal')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Personal</span>
-          <Chev open={openGroups.personal} />
+        {/* Standalone bottom items */}
+        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoHelpGrp}</div>
+          <span className="flex-1">Centro de ayuda</span>
+          <Chev on={false} />
         </button>
-        {openGroups.personal && <SubItems items={PERSONAL_SUB} />}
+        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoOutboundGrp}</div>
+          <span className="flex-1">Canales salientes</span>
+          <Chev on={false} />
+        </button>
+
+        {/* Personal */}
+        <GroupRow icon={IcoUserGrp} label="Personal" groupKey="personal" sectionActive={isPersonalSection} />
+        {openGroups.personal && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoInfoS}      label="Información"            nav={'personal'} />
+            <SubRow icon={IcoSecurityS}  label="Seguridad de la cuenta" nav={'security'} />
+            <SubRow icon={IcoNotifsS}    label="Notificaciones"         nav={'notifications'} />
+            <SubRow icon={IcoVisibleS}   label="Visible para ti"        nav={'visible'} />
+            <SubRow icon={IcoTokensS}    label="Tokens de API"          nav={'tokens'} />
+            <SubRow icon={IcoAccessS}    label="Acceso a la cuenta"     nav={'accountAccess'} />
+            <SubRow icon={IcoMultilingS} label="Multilingüe"            nav={'multilingual'} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -6128,6 +6422,13 @@ const convFeedItems = [
 ];
 
 function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: me, loading: meLoading } = useApi(() => iamApi.me(), [], null);
+  const displayName = me?.name ?? me?.fullName ?? 'Hector Vidal Sanchez';
+  const displayEmail = me?.email ?? 'hectorvidal041103@gmail.com';
+  const initials = displayName.split(' ').map((p: string) => p[0]).join('').slice(0, 2).toUpperCase();
+  const displayRole = me?.role ?? me?.roleName ?? 'Agente';
+  const location = me?.location ?? 'Elda, Spain';
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -6146,15 +6447,15 @@ function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
             <div className="absolute inset-0 flex items-end px-8 pb-5">
               <div className="flex items-end gap-4">
                 <div className="w-[74px] h-[74px] rounded-full bg-[#9ec5fa] border-[3px] border-white flex items-center justify-center text-[22px] font-bold text-[#1a1a1a] flex-shrink-0">
-                  HV
+                  {initials}
                 </div>
                 <div className="flex flex-col gap-0.5 pb-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[20px] font-semibold text-white">Hector Vidal Sanchez</span>
+                    <span className="text-[20px] font-semibold text-white">{displayName}</span>
                     <span className="text-[11px] font-semibold text-white/90 bg-white/25 rounded-[4px] px-2 py-[2px]">Tú</span>
                   </div>
                   <div className="flex items-center gap-3 text-[13px] text-white/80">
-                    <span>Elda, Spain</span>
+                    <span>{location}</span>
                     <span>·</span>
                     <span>9:56 a.m.</span>
                     <span>·</span>
@@ -6178,10 +6479,10 @@ function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   <button className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-3 py-[5px] hover:bg-[#444]">Editar</button>
                 </div>
                 <div className="px-5 py-3">
-                  <ProfileRow value="Hector Vidal Sanchez">
+                  <ProfileRow value={displayName}>
                     <svg viewBox="0 0 14 14" fill="none" className="w-4 h-4"><circle cx="7" cy="4.5" r="2.3" stroke="#1a1a1a" strokeWidth="1.2"/><path d="M2 12c0-2.5 2.2-4.5 5-4.5s5 2 5 4.5" stroke="#1a1a1a" strokeWidth="1.2" strokeLinecap="round"/></svg>
                   </ProfileRow>
-                  <ProfileRow value="hector.vidal.sanchez">
+                  <ProfileRow value={me?.username ?? me?.handle ?? displayName.toLowerCase().replace(/\s+/g, '.')}>
                     <svg viewBox="0 0 14 14" fill="none" className="w-4 h-4"><rect x="1" y="3" width="12" height="8" rx="1.5" stroke="#1a1a1a" strokeWidth="1.2"/><path d="M1 5l6 4 6-4" stroke="#1a1a1a" strokeWidth="1.2"/></svg>
                   </ProfileRow>
                   <ProfileRow value="Activo">
@@ -6223,7 +6524,7 @@ function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   </div>
                   <div className="flex items-start gap-3 py-1">
                     <span className="text-[13px] text-[#646462] w-[85px] flex-shrink-0">Correo</span>
-                    <span className="text-[12px] text-[#1a1a1a] break-all">hectorvidal041103@gmail.com</span>
+                    <span className="text-[12px] text-[#1a1a1a] break-all">{displayEmail}</span>
                   </div>
                 </div>
               </div>
@@ -6312,6 +6613,9 @@ function SecurityInput({ label, defaultValue = "", placeholder = "", blue = fals
 }
 
 function SecurityView({ view, onNavigate, onBack }: { view: View; onNavigate: (v: View) => void; onBack: () => void }) {
+  const { data: me } = useApi(() => iamApi.me(), [], null);
+  const displayEmail = me?.email ?? 'hectorvidal041103@gmail.com';
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -6348,7 +6652,7 @@ function SecurityView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
                   <div className="flex items-center gap-3">
                     <input
                       type="text"
-                      defaultValue="hectorvidal041103@gmail.com"
+                      defaultValue={displayEmail}
                       className="border border-[#e9eae6] rounded-[6px] px-3 py-[6px] text-[14px] text-[#1a1a1a] outline-none focus:border-[#1a1a1a] w-[236px]"
                     />
                     <button className="bg-[#f8f8f7] rounded-full px-3 py-[7px] text-[14px] font-semibold text-[#81817e] hover:bg-[#efefed] flex-shrink-0">Guardar</button>
@@ -7086,8 +7390,11 @@ const macrosList = [
 ];
 
 function MacrosView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [selected, setSelected] = useState('1');
-  const macro = macrosList.find(m => m.id === selected)!;
+  const { data: macros, loading: macrosLoading } = useApi(() => macrosApi.list(), [], []);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const list = macros.length > 0 ? macros : macrosList; // fallback to demo data
+  const effectiveId = selectedId ?? list[0]?.id ?? '1';
+  const macro = list.find((m: any) => m.id === effectiveId) ?? list[0];
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -7140,14 +7447,14 @@ function MacrosView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                     Filtrar por
                     <svg viewBox="0 0 10 6" className="w-2.5 h-2.5 fill-[#646462]"><path d="M0 0l5 6 5-6z"/></svg>
                   </button>
-                  <span className="text-[13px] text-[#646462]">4 macros</span>
+                  <span className="text-[13px] text-[#646462]">{macrosLoading ? '…' : `${list.length} macros`}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   <div className="px-4 py-2 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Macros compartidas</div>
-                  {macrosList.map(m => (
-                    <button key={m.id} onClick={() => setSelected(m.id)}
+                  {list.map((m: any) => (
+                    <button key={m.id} onClick={() => setSelectedId(m.id)}
                       className={`w-full px-4 py-3 text-left text-[13px] border-b border-[#e9eae6] flex items-center gap-2 ${
-                        selected === m.id ? 'bg-[#f0efff] text-[#1a1a1a] font-medium' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
+                        effectiveId === m.id ? 'bg-[#f0efff] text-[#1a1a1a] font-medium' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
                       }`}>
                       {m.emoji && <span>{m.emoji}</span>}
                       {m.label}
@@ -7404,9 +7711,25 @@ function SlaView({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
 // ── AiInboxView ───────────────────────────────────────────────────────────────
 
 function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [copilot, setCopilot] = useState(true);
-  const [redactar, setRedactar] = useState(true);
-  const [autocompletar, setAutocompletar] = useState(true);
+  const { data: wsCtx } = useApi(() => workspacesApi.currentContext(), [], null);
+  const [copilot, setCopilot] = useState<boolean>(true);
+  const [redactar, setRedactar] = useState<boolean>(true);
+  const [autocompletar, setAutocompletar] = useState<boolean>(true);
+
+  // Hydrate from workspace settings once loaded
+  useEffect(() => {
+    if (!wsCtx) return;
+    if (wsCtx.settings?.ai_copilot_enabled !== undefined) setCopilot(!!wsCtx.settings.ai_copilot_enabled);
+    if (wsCtx.settings?.ai_draft_enabled !== undefined) setRedactar(!!wsCtx.settings.ai_draft_enabled);
+    if (wsCtx.settings?.ai_autocomplete_enabled !== undefined) setAutocompletar(!!wsCtx.settings.ai_autocomplete_enabled);
+  }, [wsCtx]);
+
+  async function persistToggles(key: string, value: boolean) {
+    if (!wsCtx?.id) return;
+    try {
+      await workspacesApi.updateSettings(wsCtx.id, { [key]: value });
+    } catch { /* best-effort */ }
+  }
 
   function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
     return (
@@ -7434,7 +7757,7 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
             {/* Copilot */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
-                <Toggle on={copilot} onToggle={() => setCopilot(v => !v)} />
+                <Toggle on={copilot} onToggle={() => { setCopilot(v => { persistToggles('ai_copilot_enabled', !v); return !v; }); }} />
                 <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Copilot</h4>
               </div>
               <p className="text-[13px] text-[#646462] ml-11">Un asistente personal de IA, impulsado por contenido y conversaciones pasadas.</p>
@@ -7450,7 +7773,7 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
             {/* Redactar */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
-                <Toggle on={redactar} onToggle={() => setRedactar(v => !v)} />
+                <Toggle on={redactar} onToggle={() => { setRedactar(v => { persistToggles('ai_draft_enabled', !v); return !v; }); }} />
                 <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Redactar y resumir con AI</h4>
               </div>
               <p className="text-[13px] text-[#646462] ml-11">Ajustar las respuestas y utilizar resúmenes</p>
@@ -7469,7 +7792,7 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
             {/* Autocompletar */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
-                <Toggle on={autocompletar} onToggle={() => setAutocompletar(v => !v)} />
+                <Toggle on={autocompletar} onToggle={() => { setAutocompletar(v => { persistToggles('ai_autocomplete_enabled', !v); return !v; }); }} />
                 <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Autocompletar con IA</h4>
               </div>
               <p className="text-[13px] text-[#646462] ml-11">Generar título y descripción del folio de atención automáticamente</p>
@@ -7691,6 +8014,9 @@ const CONNECTOR_CARDS: { svg: string; label: string; bg: string }[] = [
 ];
 
 function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: connectors, loading: connectorsLoading } = useApi(() => connectorsApi.list(), [], []);
+  const hasConnectors = connectors.length > 0;
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -7707,18 +8033,56 @@ function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View
             </div>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 px-12 py-12 flex flex-col items-center">
-            <h2 className="text-[28px] font-bold text-[#1a1a1a] text-center mb-3 leading-tight">Incorpore datos de sus clientes<br/>en tiempo real en Intercom</h2>
-            <p className="text-[14px] text-[#646462] text-center mb-10 max-w-[600px]">Conéctese a cualquier sistema externo o API personalizada con Conectores de datos sin código. Impulse Fin y el servicio de asistencia con datos en tiempo real para ofrecer asistencia más personalizada.</p>
-            <div className="grid grid-cols-3 gap-4 w-full max-w-[800px]">
-              {CONNECTOR_CARDS.map(card => (
-                <button key={card.label} className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]">
-                  <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
-                    <img src={card.svg} alt="" className="w-4 h-4" />
-                  </div>
-                  <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
-                </button>
-              ))}
-            </div>
+            {hasConnectors ? (
+              <div className="w-full max-w-[800px]">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-[18px] font-bold text-[#1a1a1a]">Tus conectores ({connectors.length})</h2>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {connectors.map((c: any) => (
+                    <div key={c.id} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-center gap-4 hover:bg-[#fafaf9]">
+                      <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[18px]">
+                        {c.icon ?? '🔌'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-semibold text-[#1a1a1a]">{c.name ?? c.label ?? c.id}</p>
+                        <p className="text-[12px] text-[#646462] truncate">{c.description ?? c.type ?? ''}</p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0 ${
+                        c.status === 'active' || c.isActive ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#f3f3f1] text-[#646462]'
+                      }`}>
+                        {c.status === 'active' || c.isActive ? 'Activo' : c.status ?? 'Inactivo'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-8 grid grid-cols-3 gap-4">
+                  {CONNECTOR_CARDS.map(card => (
+                    <button key={card.label} className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]">
+                      <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
+                        <img src={card.svg} alt="" className="w-4 h-4" />
+                      </div>
+                      <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-[28px] font-bold text-[#1a1a1a] text-center mb-3 leading-tight">Incorpore datos de sus clientes<br/>en tiempo real en Intercom</h2>
+                <p className="text-[14px] text-[#646462] text-center mb-10 max-w-[600px]">Conéctese a cualquier sistema externo o API personalizada con Conectores de datos sin código. Impulse Fin y el servicio de asistencia con datos en tiempo real para ofrecer asistencia más personalizada.</p>
+                <div className="grid grid-cols-3 gap-4 w-full max-w-[800px]">
+                  {CONNECTOR_CARDS.map(card => (
+                    <button key={card.label} className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]">
+                      <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
+                        <img src={card.svg} alt="" className="w-4 h-4" />
+                      </div>
+                      <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -7730,6 +8094,12 @@ function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View
 
 function LabelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [search, setSearch] = useState('');
+  const { data: tags, loading: tagsLoading } = useApi(() =>
+    fetch('/api/tags').then(r => r.ok ? r.json() : []).then((d: any) => Array.isArray(d) ? d : []),
+    [], []
+  );
+  const labelRows = tags.length > 0 ? tags : [{ name: 'Feature Request', createdAt: '1h ago', createdBy: '—', people: 0, companies: 0, conversations: 0, messages: 0 }];
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -7753,15 +8123,19 @@ function LabelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                   <th key={h} className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">{h} <span className="text-[#ccc]">↕</span></th>
                 ))}
               </tr></thead>
-              <tbody><tr className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
-                <td className="px-4 py-3"><span className="flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M2 5l5-3 7 3-5 9-7-9z"/></svg>Feature Request</span></td>
-                <td className="px-4 py-3 text-[#646462]">1h ago</td>
-                <td className="px-4 py-3 text-[#646462]">—</td>
-                <td className="px-4 py-3 text-[#646462]">0</td>
-                <td className="px-4 py-3 text-[#646462]">0</td>
-                <td className="px-4 py-3 text-[#646462]">0</td>
-                <td className="px-4 py-3 text-[#646462]">0</td>
-              </tr></tbody>
+              <tbody>
+                {labelRows.map((lbl: any, i: number) => (
+                  <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                    <td className="px-4 py-3"><span className="flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M2 5l5-3 7 3-5 9-7-9z"/></svg>{lbl.name ?? lbl.label ?? lbl.tag}</span></td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.createdAt ?? '—'}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.createdBy ?? '—'}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.people ?? 0}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.companies ?? 0}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.conversations ?? 0}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.messages ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         </div>
@@ -8413,6 +8787,13 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
 
 function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [tab, setTab] = useState<'suscripcion' | 'facturas' | 'pago'>('suscripcion');
+  const { data: sub, loading: subLoading } = useApi(() => billingApi.subscription('org_default'), [], null);
+  const { data: usageData, loading: usageLoading } = useApi(() => billingApi.usage(), [], null);
+  const { data: ledger, loading: ledgerLoading } = useApi(() => billingApi.ledger('org_default'), [], []);
+  const planName = sub?.planId ?? sub?.plan_id ?? sub?.plan?.name ?? 'Advanced';
+  const trialEnd = sub?.trialEndsAt ?? sub?.trial_ends_at ?? null;
+  const trialEndStr = trialEnd ? new Date(trialEnd).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : '20 may 2026';
+  const monthlyAmount = sub?.amountCents != null ? `USD ${(sub.amountCents / 100).toFixed(2)}` : 'USD 0.00';
   const tabs = [
     { id: 'suscripcion' as const, label: 'Suscripción' },
     { id: 'facturas'    as const, label: 'Facturas' },
@@ -8451,9 +8832,9 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h2 className="text-[16px] font-bold text-[#1a1a1a]">Prueba gratuita</h2>
-                  <p className="text-[13px] text-[#646462] mt-1">Fecha de finalización de la prueba: 20 may 2026</p>
+                  <p className="text-[13px] text-[#646462] mt-1">{`Fecha de finalización de la prueba: ${trialEndStr}`}</p>
                 </div>
-                <p className="text-[14px] font-semibold text-[#1a1a1a]">USD 0.00</p>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">{monthlyAmount}</p>
               </div>
               {/* Plan card */}
               <div className="border border-[#e9eae6] rounded-[12px] mb-4">
@@ -8462,7 +8843,7 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
                   <button className="text-[13px] text-[#646462] flex items-center gap-1 hover:text-[#1a1a1a]">≡ Ver funciones incluidas</button>
                 </div>
                 <div className="px-5 py-4 flex items-center gap-3">
-                  <span className="text-[14px] font-medium text-[#1a1a1a]">Advanced</span>
+                  <span className="text-[14px] font-medium text-[#1a1a1a]">{subLoading ? '…' : planName}</span>
                   <span className="bg-[#e0e7ff] text-[#4338ca] rounded-full px-2 py-0.5 text-[11px] font-medium">Prueba De Advanced</span>
                   <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1 ml-auto">⚙ Cambiar plan</button>
                 </div>
@@ -8485,7 +8866,27 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
             </>}
 
             {tab === 'facturas' && (
-              <p className="text-[13px] text-[#646462]">No hay facturas disponibles aún.</p>
+              ledgerLoading ? (
+                <p className="text-[13px] text-[#646462]">Cargando facturas…</p>
+              ) : ledger.length === 0 ? (
+                <p className="text-[13px] text-[#646462]">No hay facturas disponibles aún.</p>
+              ) : (
+                <table className="w-full text-[13px]">
+                  <thead><tr className="border-b border-[#e9eae6]">
+                    {['Fecha', 'Descripción', 'Importe', 'Estado'].map(h => <th key={h} className="text-left px-4 py-2 font-medium text-[#646462]">{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {ledger.map((row: any, i: number) => (
+                      <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                        <td className="px-4 py-3">{row.date ? new Date(row.date).toLocaleDateString('es-ES') : '—'}</td>
+                        <td className="px-4 py-3 text-[#1a1a1a]">{row.description ?? row.desc ?? '—'}</td>
+                        <td className="px-4 py-3">{row.amountCents != null ? `USD ${(row.amountCents / 100).toFixed(2)}` : row.amount ?? '—'}</td>
+                        <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${row.status === 'paid' ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#fef9c3] text-[#854d0e]'}`}>{row.status ?? '—'}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
             )}
 
             {tab === 'pago' && <>
@@ -9255,6 +9656,9 @@ function SocialChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: 
 
 function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [method, setMethod] = useState<'manual' | 'roundrobin' | 'equilibrio'>('manual');
+  const { data: teams, loading: teamsLoading } = useApi(() => iamApi.teams(), [], []);
+  const { data: members } = useApi(() => iamApi.members(), [], []);
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -9269,6 +9673,27 @@ function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View)
             </div>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {/* Existing teams list */}
+            {teams.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-[15px] font-semibold text-[#1a1a1a] mb-3">Buzones del equipo ({teams.length})</h2>
+                <div className="flex flex-col gap-2">
+                  {teams.map((t: any) => {
+                    const teamMembers = members.filter((m: any) => m.teamId === t.id || m.team_id === t.id);
+                    return (
+                      <div key={t.id} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-center gap-4 hover:bg-[#fafaf9]">
+                        <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[18px]">👥</div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-semibold text-[#1a1a1a]">{t.name ?? t.label ?? t.id}</p>
+                          <p className="text-[12px] text-[#646462]">{teamMembers.length > 0 ? `${teamMembers.length} miembros` : t.description ?? 'Sin descripción'}</p>
+                        </div>
+                        <button className="text-[13px] text-[#646462] border border-[#e9eae6] rounded-full px-3 py-1.5 hover:bg-[#f3f3f1]">Editar</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {/* Promo card */}
             <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
               <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
@@ -9911,6 +10336,7 @@ function OutboundView() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ReportsSubView =
+  | 'overview' | 'aiResumen' | 'areasNegocio' | 'agentesPerf' | 'aprobacionesRisk' | 'costesRoi'
   | 'temas' | 'sugerencias' | 'export' | 'horarios'
   | 'finAgent' | 'copilot'
   | 'calls' | 'conversations' | 'csat' | 'effectiveness'
@@ -9919,7 +10345,8 @@ type ReportsSubView =
 
 type ReportsItemIcon = 'topic' | 'export' | 'schedule' | 'folder' | 'admin'
   | 'lightbulb' | 'sparkles' | 'fin' | 'copilot' | 'phone' | 'chat' | 'star'
-  | 'zap' | 'clock' | 'sla' | 'inbox' | 'user' | 'ticket' | 'doc' | 'globe';
+  | 'zap' | 'clock' | 'sla' | 'inbox' | 'user' | 'ticket' | 'doc' | 'globe'
+  | 'chart' | 'ai' | 'area' | 'robot' | 'approve' | 'coin';
 
 type ReportsNavGroup = {
   key?: ReportsSubView;
@@ -9928,16 +10355,590 @@ type ReportsNavGroup = {
   items?: { key: ReportsSubView; label: string; icon?: ReportsItemIcon }[];
 };
 
+// ── Reports Analysis helpers ──────────────────────────────────────────────────
+function rsparkPath(vals: number[]): string {
+  if (vals.length < 2) return 'M0,20 L100,20';
+  const max = Math.max(...vals, 1), min = Math.min(...vals, 0), rng = max - min || 1;
+  return vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${((i / (vals.length - 1)) * 100).toFixed(1)},${(20 - ((v - min) / rng) * 17).toFixed(1)}`).join(' ');
+}
+function rsparkArea(vals: number[]): string { return `${rsparkPath(vals)} L100,22 L0,22 Z`; }
+function rsparkDerive(valueStr: string | number, trend: string, idx: number): number[] {
+  const base = Math.max(parseFloat(String(valueStr).replace(/[^0-9.]/g, '')) || 10, 1);
+  const dir = trend === 'up' ? 1 : trend === 'down' ? -1 : 0;
+  return Array.from({ length: 8 }, (_, i) => Math.max(0, base + dir * base * 0.18 * (i / 7) + ((idx + i) % 3) * base * 0.03));
+}
+function ReportsAnalysisKpiCard({ label, value, change, trend, sub }: { label: string; value: string; change?: string; trend?: string; sub?: string; idx?: number }) {
+  const deltaColor = trend === 'up' ? 'text-[#16a34a]' : trend === 'down' ? 'text-[#dc2626]' : 'text-[#646462]';
+  const deltaArrow = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '';
+  return (
+    <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+      <div className="flex items-center gap-1 mb-3">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+        <span className="text-[12.5px] text-[#1a1a1a]">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[28px] font-bold text-[#1a1a1a] leading-none">{value}</span>
+        {change && <span className={`text-[12px] font-medium ${deltaColor}`}>{deltaArrow} {change}</span>}
+      </div>
+      {sub && <p className="text-[11.5px] text-[#646462] mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+// ── 1. Visión general ─────────────────────────────────────────────────────────
+function ReportsOverviewContent({ period, channel }: { period: string; channel: string }) {
+  const { data: ov, loading } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
+  const { data: sla } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
+  const kpis: any[] = ov?.kpis ?? [];
+  const improved = kpis.filter((m: any) => m.trend === 'up').slice(0, 3);
+  const worsened = kpis.filter((m: any) => m.trend === 'down').slice(0, 3);
+  const dist: any[] = sla?.distribution ?? [];
+  const distTotal = dist.reduce((s, d) => s + (d.count ?? 0), 0);
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Visión general</h1>
+          <p className="text-[12.5px] text-[#646462]">Métricas principales del workspace en el período seleccionado.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {loading && !kpis.length ? (
+          <div className="grid grid-cols-2 gap-3">{['Total','Resolución','SLA','Auto-IA','Riesgo'].map((l, i) => <div key={i} className="border border-[#e9eae6] rounded-[10px] bg-white h-[110px] animate-pulse" />)}</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {kpis.map((m: any, i: number) => <ReportsAnalysisKpiCard key={i} idx={i} label={m.label} value={m.value} change={m.change} trend={m.trend} sub={m.sub} />)}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+            <h2 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Cambios de rendimiento</h2>
+            <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-wide mb-2 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#16a34a] inline-block"/>Mejoras</p>
+            {improved.length ? improved.map((m: any, i: number) => (
+              <div key={i} className="text-[12px] text-[#646462] mb-1.5 flex items-start gap-1.5">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a] flex-shrink-0 mt-0.5"><path d="M3 11l5-7 5 7z"/></svg>
+                <span><strong className="text-[#1a1a1a]">{m.label}</strong>: {m.value}{m.change ? ` (${m.change})` : ''}</span>
+              </div>
+            )) : <p className="text-[12px] text-[#646462] mb-3">Sin KPIs al alza en este rango.</p>}
+            <div className="border-t border-[#e9eae6] pt-3 mt-3">
+              <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-wide mb-2 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#dc2626] inline-block"/>Caídas</p>
+              {worsened.length ? worsened.map((m: any, i: number) => (
+                <div key={i} className="text-[12px] text-[#646462] mb-1.5 flex items-start gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#dc2626] flex-shrink-0 mt-0.5"><path d="M3 5l5 7 5-7z"/></svg>
+                  <span><strong className="text-[#1a1a1a]">{m.label}</strong>: {m.value}{m.change ? ` (${m.change})` : ''}</span>
+                </div>
+              )) : <p className="text-[12px] text-[#646462]">Sin KPIs a la baja en este rango.</p>}
+            </div>
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+            <h2 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Distribución SLA</h2>
+            {dist.length ? dist.map((d: any, i: number) => {
+              const pct = distTotal > 0 ? Math.round((d.count / distTotal) * 100) : 0;
+              const bar = d.status === 'breached' ? 'bg-[#dc2626]' : d.status === 'at_risk' ? 'bg-[#f97316]' : 'bg-[#16a34a]';
+              return (
+                <div key={i} className="mb-3">
+                  <div className="flex justify-between text-[12px] mb-1">
+                    <span className="text-[#1a1a1a] capitalize">{String(d.status).replace(/_/g,' ')}</span>
+                    <span className="text-[#646462]">{d.count} ({pct}%)</span>
+                  </div>
+                  <div className="w-full bg-[#f3f3f1] rounded-full h-1.5"><div className={`${bar} h-1.5 rounded-full`} style={{ width: `${pct}%` }}/></div>
+                </div>
+              );
+            }) : <p className="text-[12px] text-[#646462]">Sin datos SLA para este filtro.</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 2. Resumen IA ─────────────────────────────────────────────────────────────
+type GeneratedAiReport = { id: string; title: string; date: string; audience: string; executiveSummary: string[]; positiveSignals: {title:string;detail:string}[]; riskFlags: {title:string;detail:string}[]; businessImpact: {title:string;detail:string}[]; recommendations: string[]; costSummary: {title:string;detail:string}[]; rangeLabel: string; channelLabel: string; };
+function ReportsAiResumenContent({ period, channel }: { period: string; channel: string }) {
+  const [audience, setAudience] = useState('Executive / C-Suite');
+  const [generating, setGenerating] = useState(false);
+  const [reports, setReports] = useState<GeneratedAiReport[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = reports.find(r => r.id === selectedId) ?? null;
+  const generate = async () => {
+    if (generating) return;
+    setGenerating(true);
+    try {
+      const s = await reportsApi.summary(period, channel, audience);
+      const now = new Date();
+      const r: GeneratedAiReport = {
+        id: String(Date.now()),
+        title: `${audience} — ${now.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })}`,
+        date: now.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
+        audience,
+        executiveSummary: Array.isArray(s?.executiveSummary) ? s.executiveSummary : [],
+        positiveSignals: Array.isArray(s?.positiveSignals) ? s.positiveSignals : [],
+        riskFlags: Array.isArray(s?.riskFlags) ? s.riskFlags : [],
+        businessImpact: Array.isArray(s?.businessImpact) ? s.businessImpact : [],
+        recommendations: Array.isArray(s?.recommendations) ? s.recommendations : [],
+        costSummary: Array.isArray(s?.costSummary) ? s.costSummary : [],
+        rangeLabel: s?.rangeLabel ?? period,
+        channelLabel: s?.channelLabel ?? channel,
+      };
+      setReports(prev => [r, ...prev]);
+      setSelectedId(r.id);
+    } finally { setGenerating(false); }
+  };
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0 gap-4">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Resumen IA</h1>
+          <p className="text-[12.5px] text-[#646462]">Genera un informe narrativo basado en los datos reales del período.</p>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <select value={audience} onChange={e => setAudience(e.target.value)} className="text-[13px] border border-[#e9eae6] rounded-[8px] px-3 py-1.5 bg-white text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a]">
+            <option>Executive / C-Suite</option>
+            <option>Support Lead</option>
+            <option>Technical Team</option>
+          </select>
+          <button onClick={generate} disabled={generating} className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-black disabled:opacity-50">
+            <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-current ${generating ? 'animate-spin' : ''}`}><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>
+            {generating ? 'Generando…' : 'Generar informe'}
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-1 min-h-0">
+        {/* Left panel: list */}
+        <div className="w-[240px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col bg-[#f8f8f7]">
+          <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Informes generados</span>
+            <span className="bg-[#e9eae6] text-[#646462] text-[11px] font-bold px-1.5 py-0.5 rounded-full">{reports.length}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2">
+            {reports.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full py-10 text-center px-3">
+                <svg viewBox="0 0 16 16" className="w-8 h-8 fill-[#e9eae6] mb-2"><path d="M3 2a1 1 0 011-1h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2zm6.5 0v3h3l-3-3z" fillRule="evenodd"/></svg>
+                <p className="text-[12px] text-[#646462]">Genera tu primer informe pulsando el botón.</p>
+              </div>
+            ) : reports.map(r => (
+              <button key={r.id} onClick={() => setSelectedId(r.id)} className={`w-full text-left p-3 rounded-[8px] mb-1 transition-colors ${selectedId === r.id ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_rgba(20,20,20,0.10)]' : 'hover:bg-[#e9eae6]/40'}`}>
+                <p className="text-[12.5px] font-semibold text-[#1a1a1a] truncate">{r.title}</p>
+                <p className="text-[11px] text-[#646462] mt-0.5">{r.date}</p>
+                <span className="mt-1 inline-block bg-[#dcfce7] text-[#16a34a] text-[10px] font-bold px-1.5 py-0.5 rounded uppercase">Generado</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Right panel: report detail */}
+        <div className="flex-1 overflow-y-auto">
+          {!selected ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-10">
+              <svg viewBox="0 0 16 16" className="w-12 h-12 fill-[#e9eae6] mb-3"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>
+              <h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-1">Sin informe seleccionado</h3>
+              <p className="text-[13px] text-[#646462] max-w-xs">Genera un informe IA para obtener un resumen narrativo de actividad real del período.</p>
+            </div>
+          ) : (
+            <div className="p-6 space-y-5">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="bg-[#ede9fe] text-[#6d28d9] text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">Informe IA</span>
+                  <span className="bg-[#f3f3f1] text-[#646462] text-[10px] font-bold px-2 py-0.5 rounded uppercase">{selected.audience}</span>
+                  <span className="text-[12px] text-[#646462]">{selected.rangeLabel} · {selected.channelLabel}</span>
+                </div>
+                <h1 className="text-[22px] font-bold text-[#1a1a1a]">{selected.title}</h1>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+                <p className="text-[12px] font-bold text-[#1a1a1a] uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Resumen ejecutivo
+                </p>
+                {selected.executiveSummary.map((l, i) => <p key={i} className="text-[13px] text-[#1a1a1a] leading-relaxed mb-1">{l}</p>)}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1 mb-3"><span className="w-2 h-2 rounded-full bg-[#16a34a]"/>Señales positivas</p>
+                  {(selected.positiveSignals.length ? selected.positiveSignals : [{title:'Sin señal',detail:'No se detectó ninguna mejora significativa.'}]).map((item, i) => (
+                    <div key={i} className="flex items-start gap-2 mb-2 text-[12.5px]">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a] flex-shrink-0 mt-0.5"><path d="M3 11l5-7 5 7z"/></svg>
+                      <div><strong className="text-[#1a1a1a]">{item.title}</strong><br/><span className="text-[#646462]">{item.detail}</span></div>
+                    </div>
+                  ))}
+                </div>
+                <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1 mb-3"><span className="w-2 h-2 rounded-full bg-[#dc2626]"/>Riesgos detectados</p>
+                  {(selected.riskFlags.length ? selected.riskFlags : [{title:'Sin riesgos',detail:'No se detectaron bloqueos en este rango.'}]).map((item, i) => (
+                    <div key={i} className="flex items-start gap-2 mb-2 text-[12.5px]">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#dc2626] flex-shrink-0 mt-0.5"><path d="M8 2l6 12H2L8 2z"/></svg>
+                      <div><strong className="text-[#1a1a1a]">{item.title}</strong><br/><span className="text-[#646462]">{item.detail}</span></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] mb-3">Recomendaciones</p>
+                <ul className="space-y-1.5">
+                  {selected.recommendations.map((r, i) => <li key={i} className="text-[12.5px] text-[#646462] flex items-start gap-2"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#6366f1] flex-shrink-0 mt-0.5"><path d="M6.5 11.5L3 8l1-1 2.5 2.5 6-6 1 1z"/></svg>{r}</li>)}
+                </ul>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {selected.businessImpact.slice(0,2).map((item, i) => (
+                  <div key={i} className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+                    <p className="text-[12.5px] font-semibold text-[#1a1a1a] mb-1">{item.title}</p>
+                    <p className="text-[12px] text-[#646462]">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 3. Áreas de negocio ───────────────────────────────────────────────────────
+function ReportsAreasNegocioContent({ period, channel }: { period: string; channel: string }) {
+  const { data: ov, loading: ovLoad } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
+  const { data: intents, loading: intLoad } = useApi(() => reportsApi.intents(period, channel), [period, channel], null);
+  const { data: approvals } = useApi(() => reportsApi.approvals(period, channel), [period, channel], null);
+  const kpiMap = Object.fromEntries((ov?.kpis ?? []).map((m: any) => [m.key, m]));
+  const intentList: any[] = intents?.intents ?? [];
+  const topIntent = intentList[0];
+  const weakest = [...intentList].sort((a, b) => parseFloat(a.handled) - parseFloat(b.handled))[0];
+  const cards = [
+    { label: 'Tasa resolución IA', value: kpiMap.auto_resolution?.value ?? kpiMap.resolution_rate?.value ?? '—', trend: kpiMap.auto_resolution?.trend ?? 'neutral', sub: 'Resoluciones automatizadas' },
+    { label: 'Tasa aprobación', value: approvals?.rates?.approvalRate ?? '—', trend: 'neutral', sub: 'Aprobadas vs. total' },
+    { label: 'Tiempo decisión medio', value: approvals?.rates?.avgDecisionHours != null ? `${approvals.rates.avgDecisionHours}h` : '—', trend: 'neutral', sub: 'Mediana de aprobaciones' },
+    { label: 'Cumplimiento SLA', value: kpiMap.sla_compliance?.value ?? '—', trend: kpiMap.sla_compliance?.trend ?? 'neutral', sub: 'Dentro del SLA' },
+    { label: 'Casos de alto riesgo', value: kpiMap.high_risk?.value ?? '—', trend: 'down', sub: 'Marcados críticos/altos' },
+    { label: 'Total casos', value: kpiMap.total_cases?.value ?? '—', change: kpiMap.total_cases?.change, trend: kpiMap.total_cases?.trend ?? 'neutral', sub: kpiMap.total_cases?.sub ?? '' },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Áreas de negocio</h1>
+          <p className="text-[12.5px] text-[#646462]">Demanda por intención y señales de cobertura de IA.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        <div className="grid grid-cols-3 gap-3">
+          {cards.map((c, i) => <ReportsAnalysisKpiCard key={i} idx={i} label={c.label} value={String(c.value)} change={(c as any).change} trend={c.trend} sub={c.sub} />)}
+        </div>
+        <div className="grid grid-cols-[1fr_280px] gap-3">
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-[#1a1a1a]">Intenciones principales</span>
+            </div>
+            <table className="w-full text-left">
+              <thead><tr className="bg-[#f8f8f7] border-b border-[#e9eae6] text-[11px] text-[#646462] uppercase tracking-wide font-semibold">
+                <th className="px-5 py-2">Intención</th>
+                <th className="px-5 py-2 text-right">Volumen</th>
+                <th className="px-5 py-2 text-right">IA manejó</th>
+                <th className="px-5 py-2 w-1/4">Cuota</th>
+              </tr></thead>
+              <tbody className="text-[12.5px] divide-y divide-[#f3f3f1]">
+                {intLoad && !intentList.length ? (
+                  <tr><td colSpan={4} className="px-5 py-6 text-center text-[#646462]">Cargando intenciones…</td></tr>
+                ) : !intentList.length ? (
+                  <tr><td colSpan={4} className="px-5 py-6 text-center text-[#646462]">Sin intenciones detectadas en este rango.</td></tr>
+                ) : intentList.map((intent: any, i: number) => (
+                  <tr key={i} className="hover:bg-[#f8f8f7] transition-colors">
+                    <td className="px-5 py-2.5 font-medium text-[#1a1a1a] capitalize">{String(intent.name).replace(/_/g,' ')}</td>
+                    <td className="px-5 py-2.5 text-right text-[#646462]">{intent.volume}</td>
+                    <td className="px-5 py-2.5 text-right font-medium text-[#16a34a]">{intent.handled}</td>
+                    <td className="px-5 py-2.5">
+                      <div className="w-full bg-[#f3f3f1] rounded-full h-1.5"><div className="bg-[#6366f1] h-1.5 rounded-full" style={{ width: intent.shareOfTotal }}/></div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-col gap-3">
+            <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1.5 mb-2">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Micro-resumen IA
+              </p>
+              <p className="text-[12.5px] text-[#646462] leading-relaxed">
+                {topIntent ? `${String(topIntent.name).replace(/_/g,' ')} lidera la demanda con ${topIntent.volume} casos y ${topIntent.handled} gestión IA.` : 'Sin área de negocio dominante en este rango.'}
+                {weakest ? ` El flujo con menor cobertura es ${String(weakest.name).replace(/_/g,' ')} — revisar.` : ''}
+              </p>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4 flex-1">
+              <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Acciones recomendadas</p>
+              {[topIntent, weakest].filter(Boolean).map((intent, i) => (
+                <div key={i} className="flex items-start gap-2 p-2.5 rounded-[8px] border border-[#e9eae6] hover:bg-[#f8f8f7] mb-2 cursor-pointer">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0 mt-0.5"><path d="M3 3h10v1.5H8.5v9.5h-1V4.5H3z"/></svg>
+                  <div>
+                    <p className="text-[12px] font-medium text-[#1a1a1a]">{i === 0 ? 'Auditar' : 'Mejorar'} {String(intent.name).replace(/_/g,' ')}</p>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#fef3c7] text-[#92400e]">{i === 0 ? 'Alto impacto' : 'Medio impacto'}</span>
+                  </div>
+                </div>
+              ))}
+              {!topIntent && <p className="text-[12px] text-[#646462]">Sin recomendaciones para este rango.</p>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 4. Agentes ────────────────────────────────────────────────────────────────
+function ReportsAgentesContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.agents(period, channel), [period, channel], null);
+  const agents: any[] = (data?.agents ?? []).slice(0, 6).map((a: any, i: number) => ({
+    ...a, idx: i,
+    successNum: parseFloat(String(a.successRate).replace(/[^0-9.]/g, '')) || 0,
+    trend: parseFloat(String(a.successRate)) >= 90 ? 'up' : parseFloat(String(a.successRate)) >= 70 ? 'neutral' : 'down',
+  }));
+  const spotlight = [...agents].sort((a, b) => a.successNum - b.successNum)[0] ?? null;
+  const avg = agents.length ? Math.round(agents.reduce((s, a) => s + a.successNum, 0) / agents.length) : null;
+  const AGENT_ICON_MAP: Record<string, string> = { orchestration:'supervisor_account', ingest:'merge_type', intelligence:'psychology', resolution:'build', communication:'edit_document', observability:'visibility', connectors:'cable' };
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Agentes</h1>
+          <p className="text-[12.5px] text-[#646462]">Rendimiento de cada agente IA en el período seleccionado.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {loading && !agents.length ? (
+          <div className="grid grid-cols-2 gap-3">{Array.from({length:4}).map((_,i) => <div key={i} className="border border-[#e9eae6] rounded-[10px] h-[110px] animate-pulse bg-white"/>)}</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {agents.map((a, i) => <ReportsAnalysisKpiCard key={i} idx={i} label={a.name} value={a.successRate ?? '—'} change={a.failedRuns ? `${a.failedRuns} fallidos` : undefined} trend={a.trend} sub={`${a.totalRuns} ejecuciones · ${Number(a.tokensUsed||0).toLocaleString()} tokens`}/>)}
+          </div>
+        )}
+        <div className="grid grid-cols-[1fr_260px] gap-3">
+          {spotlight ? (
+            <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-[8px] bg-[#6366f1] flex items-center justify-center flex-shrink-0">
+                  <span className="material-symbols-outlined text-white text-[18px]">{AGENT_ICON_MAP[spotlight.category] || 'smart_toy'}</span>
+                </div>
+                <div>
+                  <h2 className="text-[14px] font-bold text-[#1a1a1a]">{spotlight.name}</h2>
+                  <p className="text-[12px] text-[#646462]">Tasa más baja del período — revisar primero</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {[
+                  { label: 'Tasa éxito', value: spotlight.successRate ?? '—', bad: spotlight.successNum < 80 },
+                  { label: 'Ejecuciones', value: spotlight.totalRuns ?? '—', bad: false },
+                  { label: 'Categoría', value: String(spotlight.category ?? '—').replace(/_/g,' '), bad: false },
+                ].map((s, i) => (
+                  <div key={i} className="bg-[#f8f8f7] rounded-[8px] p-3 border border-[#e9eae6]">
+                    <p className="text-[11px] text-[#646462] mb-1">{s.label}</p>
+                    <p className={`text-[15px] font-bold capitalize ${s.bad ? 'text-[#dc2626]' : 'text-[#1a1a1a]'}`}>{String(s.value)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-[#fef9ee] border border-[#fde68a] rounded-[8px] p-3 text-[12.5px] text-[#1a1a1a]">
+                <strong>Spotlight:</strong> {spotlight.name} tiene una tasa del {spotlight.successRate} en {spotlight.totalRuns} ejecuciones.{spotlight.failedRuns ? ` ${spotlight.failedRuns} ejecuciones fallidas requieren revisión.` : ' Sin ejecuciones fallidas.'}
+              </div>
+            </div>
+          ) : (
+            <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 flex items-center justify-center text-[#646462] text-[13px]">Sin datos de agentes para este filtro.</div>
+          )}
+          <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1.5 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Resumen de agentes
+            </p>
+            <p className="text-[12.5px] text-[#646462] leading-relaxed">
+              {agents.length ? `${agents.length} agentes activos este período. Tasa media de éxito: ${avg}% en el canal ${channel === 'all' ? 'global' : channel}.` : 'Sin actividad de agentes en el rango seleccionado.'}
+            </p>
+            {avg !== null && (
+              <div className="mt-3">
+                <div className="flex justify-between text-[12px] mb-1"><span className="text-[#646462]">Media</span><span className="font-semibold text-[#1a1a1a]">{avg}%</span></div>
+                <div className="w-full bg-[#e9eae6] rounded-full h-2">
+                  <div className={`h-2 rounded-full ${avg >= 80 ? 'bg-[#16a34a]' : avg >= 60 ? 'bg-[#f97316]' : 'bg-[#dc2626]'}`} style={{ width: `${avg}%` }}/>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 5. Aprobaciones y riesgo ──────────────────────────────────────────────────
+function ReportsAprobacionesContent({ period, channel }: { period: string; channel: string }) {
+  const { data: ap, loading } = useApi(() => reportsApi.approvals(period, channel), [period, channel], null);
+  const { data: sla } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
+  const funnel: any[] = ap?.funnel ?? [];
+  const triggered = funnel.find((s: any) => s.label === 'Triggered')?.val ?? '—';
+  const pending   = funnel.find((s: any) => s.label === 'Pending')?.val ?? '—';
+  const approved  = ap?.rates?.approvalRate ?? '—';
+  const rejected  = ap?.rates?.rejectionRate ?? '—';
+  const avgDec    = ap?.rates?.avgDecisionHours != null ? `${ap.rates.avgDecisionHours}h` : '—';
+  const highRisk  = ap?.byRisk?.find((r: any) => r.riskLevel === 'high')?.count ?? 0;
+  const breached  = sla?.distribution?.find((d: any) => d.status === 'breached')?.count ?? 0;
+  const cards = [
+    { label: 'Solicitudes de aprobación', value: String(triggered), sub: 'Total del período' },
+    { label: 'Pendientes de revisión', value: String(pending), sub: 'En espera', trend: 'down' },
+    { label: 'Tasa de aprobación', value: String(approved), sub: 'Aprobadas / total', trend: 'up' },
+    { label: 'Tasa de rechazo', value: String(rejected), sub: 'Rechazadas / total', trend: 'down' },
+    { label: 'Tiempo medio decisión', value: avgDec, sub: 'Solicitud a decisión' },
+    { label: 'Incumplimientos SLA', value: String(breached), sub: 'Casos fuera de SLA', trend: breached > 0 ? 'down' : 'neutral' },
+    { label: 'Elementos alto riesgo', value: String(highRisk), sub: 'Requieren revisión humana', trend: highRisk > 0 ? 'down' : 'neutral' },
+    { label: 'Ejecutados tras aprobación', value: String(approved), sub: 'Flujos aprobados que continúan' },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Aprobaciones y riesgo</h1>
+          <p className="text-[12.5px] text-[#646462]">Estado del backlog de aprobaciones y métricas de riesgo operativo.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {loading && !ap ? (
+          <div className="grid grid-cols-2 gap-3">{Array.from({length:4}).map((_,i) => <div key={i} className="border border-[#e9eae6] rounded-[10px] h-[110px] animate-pulse bg-white"/>)}</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {cards.map((c, i) => <ReportsAnalysisKpiCard key={i} idx={i} label={c.label} value={c.value} trend={(c as any).trend} sub={c.sub}/>)}
+          </div>
+        )}
+        <div className="grid grid-cols-[1fr_260px] gap-3">
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <h2 className="text-[13px] font-semibold text-[#1a1a1a] mb-4">Embudo de aprobaciones</h2>
+            {!funnel.length ? (
+              <p className="text-[12.5px] text-[#646462] text-center py-6">Sin solicitudes de aprobación en este filtro.</p>
+            ) : (
+              <div className="flex items-center justify-between">
+                {funnel.map((step: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="text-center">
+                      <p className="text-[26px] font-bold text-[#1a1a1a]">{step.val}</p>
+                      <p className="text-[12px] text-[#646462]">{step.label}</p>
+                    </div>
+                    {i < funnel.length - 1 && (
+                      <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#e9eae6] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1.5 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Resumen de riesgo IA
+            </p>
+            <p className="text-[12.5px] text-[#646462] leading-relaxed">
+              {ap?.rates?.avgDecisionHours != null
+                ? `Tiempo medio de decisión: ${avgDec}. Tasa aprobación: ${approved}, rechazo: ${rejected}.${breached > 0 ? ` ${breached} casos incumplieron el SLA.` : ' Sin incumplimientos SLA.'}`
+                : 'Sin datos de decisión disponibles para este rango.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 6. Costes y ROI ───────────────────────────────────────────────────────────
+function ReportsCostesRoiContent({ period, channel }: { period: string; channel: string }) {
+  const { data: costs, loading } = useApi(() => reportsApi.costs(period, channel), [period, channel], null);
+  const { data: ov } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
+  const summary = costs?.summary ?? {};
+  const byAgent: any[] = costs?.byAgent ?? [];
+  const kpis = ov?.kpis ?? [];
+  const totalCasesKpi = kpis.find((m: any) => m.key === 'total_cases');
+  const resolutionKpi = kpis.find((m: any) => m.key === 'resolution_rate');
+  const slaKpi = kpis.find((m: any) => m.key === 'sla_compliance');
+  const nCases = parseFloat(String(totalCasesKpi?.value ?? '0').replace(/[^0-9.]/g, '')) || 0;
+  const creditsUsed = summary.creditsUsed != null ? String(summary.creditsUsed) : '—';
+  const creditsAdded = summary.creditsAdded != null ? String(summary.creditsAdded) : '—';
+  const tokens = summary.totalTokens != null ? Number(summary.totalTokens).toLocaleString() : '—';
+  const autoResolved = summary.autoResolvedCases != null ? String(summary.autoResolvedCases) : '—';
+  const costPerCase = nCases > 0 && summary.creditsUsed != null ? `${(summary.creditsUsed / nCases).toFixed(4)} cr` : '—';
+  const cards = [
+    { label: 'Créditos usados', value: creditsUsed, sub: 'Coste IA procesamiento', trend: 'neutral' as const },
+    { label: 'Créditos añadidos', value: creditsAdded, sub: 'Recargas del workspace', trend: 'up' as const },
+    { label: 'Total tokens', value: tokens, sub: 'Tokens LLM consumidos', trend: 'neutral' as const },
+    { label: 'Casos auto-resueltos IA', value: autoResolved, sub: 'Completados por IA', trend: 'up' as const },
+    { label: 'Coste por caso', value: costPerCase, sub: 'Coste IA / caso medio', trend: 'neutral' as const },
+    { label: 'Total casos', value: totalCasesKpi?.value ?? '—', change: totalCasesKpi?.change, trend: totalCasesKpi?.trend ?? 'neutral' },
+    { label: 'Tasa resolución', value: resolutionKpi?.value ?? '—', change: resolutionKpi?.change, trend: resolutionKpi?.trend ?? 'neutral' },
+    { label: 'Cumplimiento SLA', value: slaKpi?.value ?? '—', change: slaKpi?.change, trend: slaKpi?.trend ?? 'neutral' },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Costes y ROI</h1>
+          <p className="text-[12.5px] text-[#646462]">Créditos IA consumidos, tokens y retorno de automatización.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {loading && !costs ? (
+          <div className="grid grid-cols-2 gap-3">{Array.from({length:4}).map((_,i) => <div key={i} className="border border-[#e9eae6] rounded-[10px] h-[110px] animate-pulse bg-white"/>)}</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {cards.map((c, i) => <ReportsAnalysisKpiCard key={i} idx={i} label={c.label} value={c.value} change={(c as any).change} trend={c.trend} sub={c.sub}/>)}
+          </div>
+        )}
+        <div className="grid grid-cols-[1fr_260px] gap-3">
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#e9eae6]">
+              <span className="text-[13px] font-semibold text-[#1a1a1a]">Coste por agente</span>
+            </div>
+            <table className="w-full text-left">
+              <thead><tr className="bg-[#f8f8f7] border-b border-[#e9eae6] text-[11px] text-[#646462] uppercase tracking-wide font-semibold">
+                <th className="px-5 py-2">Agente</th>
+                <th className="px-5 py-2 text-right">Tokens</th>
+                <th className="px-5 py-2 text-right">Créditos</th>
+              </tr></thead>
+              <tbody className="text-[12.5px] divide-y divide-[#f3f3f1]">
+                {!byAgent.length ? (
+                  <tr><td colSpan={3} className="px-5 py-6 text-center text-[#646462]">Sin datos de coste por agente para este filtro.</td></tr>
+                ) : byAgent.map((a: any, i: number) => (
+                  <tr key={i} className="hover:bg-[#f8f8f7] transition-colors">
+                    <td className="px-5 py-2.5 font-medium text-[#1a1a1a]">{a.name}</td>
+                    <td className="px-5 py-2.5 text-right text-[#646462]">{Number(a.tokens).toLocaleString()}</td>
+                    <td className="px-5 py-2.5 text-right font-semibold text-[#6366f1]">{a.cost}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1.5 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Resumen de costes
+            </p>
+            <p className="text-[12.5px] text-[#646462] leading-relaxed">
+              {summary.creditsUsed != null
+                ? <>{creditsUsed} créditos consumidos en {tokens} tokens y {autoResolved} ejecuciones completadas.<br/><br/><strong className="text-[#1a1a1a]">Filtro:</strong> {period === '7d' ? 'Últimos 7 días' : period === '90d' ? 'Últimos 90 días' : 'Últimos 30 días'} · {channel === 'all' ? 'Todos los canales' : channel}</>
+                : 'Sin datos de coste disponibles para este rango.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: ReportsSubView) => void }) {
   // All groups collapsed by default — user opens what they need via chevron click.
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    'Análisis': true,
     'Temas de informes': false,
-    'IA y automatización': true,
+    'IA y automatización': false,
     'Soporte humano': false,
     'Proactivo': false,
   });
   const toggleGroup = (label: string) => setOpenGroups(s => ({ ...s, [label]: !s[label] }));
   const groups: ReportsNavGroup[] = [
+    {
+      label: 'Análisis', icon: 'chart',
+      items: [
+        { key: 'overview',         label: 'Visión general',        icon: 'chart' },
+        { key: 'aiResumen',        label: 'Resumen IA',            icon: 'ai' },
+        { key: 'areasNegocio',     label: 'Áreas de negocio',      icon: 'area' },
+        { key: 'agentesPerf',      label: 'Agentes',               icon: 'robot' },
+        { key: 'aprobacionesRisk', label: 'Aprobaciones y riesgo', icon: 'approve' },
+        { key: 'costesRoi',        label: 'Costes y ROI',          icon: 'coin' },
+      ],
+    },
     {
       label: 'Temas de informes', icon: 'topic',
       items: [
@@ -10001,6 +11002,12 @@ function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: 
       case 'ticket':    return <svg viewBox="0 0 16 16" className={cls}><path d="M2 5a1 1 0 011-1h10a1 1 0 011 1v2a1 1 0 100 2v2a1 1 0 01-1 1H3a1 1 0 01-1-1V9a1 1 0 100-2V5z"/></svg>;
       case 'doc':       return <svg viewBox="0 0 16 16" className={cls}><path d="M3 2a1 1 0 011-1h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2zm6.5 0v3h3l-3-3z" fillRule="evenodd"/></svg>;
       case 'globe':     return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM2.5 8c0-.7.1-1.4.3-2H6c-.1.6-.1 1.3-.1 2 0 .7 0 1.4.1 2H2.8c-.2-.6-.3-1.3-.3-2zm5.5 5.5c-.8 0-1.6-1.5-1.9-3.5h3.8c-.3 2-1.1 3.5-1.9 3.5zM6 6c.3-2 1.1-3.5 1.9-3.5S9.7 4 10 6H6zm5.7 4c.1-.6.1-1.3.1-2 0-.7 0-1.4-.1-2h2.9c.2.6.3 1.3.3 2s-.1 1.4-.3 2h-2.9z"/></svg>;
+      case 'chart':     return <svg viewBox="0 0 16 16" className={cls}><path d="M2 13V9h2.5v4H2zm3.5 0V6.5H8V13H5.5zm3.5 0V4h2.5v9H9zm3.5 0V7.5H15V13h-2.5z"/></svg>;
+      case 'ai':        return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5L9.5 6 14 7.5 9.5 9 8 13.5 6.5 9 2 7.5 6.5 6 8 1.5zM12.5 10l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/></svg>;
+      case 'area':      return <svg viewBox="0 0 16 16" className={cls}><path d="M2 13l3-4 3 2 3-5 3 3V13H2z"/></svg>;
+      case 'robot':     return <svg viewBox="0 0 16 16" className={cls}><path d="M6 1.5h4v2H7.75v.75H10a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2h2.25V3.5H6v-2zM5.75 9a.75.75 0 101.5 0 .75.75 0 00-1.5 0zm4 0a.75.75 0 101.5 0 .75.75 0 00-1.5 0zM5 12.5h2V14H5v-1.5zm4 0h2V14H9v-1.5z"/></svg>;
+      case 'approve':   return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5l5.5 2.5v4c0 3-2.3 5.7-5.5 6.5C4.8 13.7 2.5 11 2.5 8V4L8 1.5zM6.5 8.7L5.5 9.7l2 2 3.5-4-1-1-2.5 2.7-1-.7z"/></svg>;
+      case 'coin':      return <svg viewBox="0 0 16 16" className={cls}><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v1M8 10.5v1M6 7.5C6 6.7 6.9 6 8 6s2 .7 2 1.5S9.1 9 8 9s-2 .7-2 1.5S6.9 12 8 12" fill="none" stroke="#fff" strokeWidth="1.2" strokeLinecap="round"/></svg>;
     }
   }
 
@@ -10432,27 +11439,88 @@ function ReportsCustomReport({ title, description }: { title: string; descriptio
 // ── Per-report custom Reports (Figma 3:16295, 3:20010, 3:22346, 3:24515,
 //    3:26772, 4:16934, 4:19011, 4:22197, 4:24401) ─────────────────────────────
 
-function ReportsCallsContent() {
+function ReportsCallsContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.calls(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 30 }, (_, i) => ({ day: i, count: 0 }));
+  const byDirection: { direction: string; count: number }[] = data?.byDirection ?? [];
+  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
+  const isEmpty = data?.isEmpty !== false;
+  const days = timeSeries.length;
+
   return (
     <>
       <ReportShellHeader title="Calls" description="Use the Calls report to visualize and explore your team's calling activity." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Inbound calls" value="0" />
-        <ReportsKpiCard label="Outbound calls" value="0" />
-        <ReportsKpiCard label="Messenger calls" value="0" />
-        <ReportsKpiCard label="Median call duration" value="—" />
-        <ReportsKpiCard label="Median call in queue time" value="—" />
-        <ReportsKpiCard label="Median call talk time" value="—" />
-        <div className="col-span-3 grid grid-cols-2 gap-4">
-          <ReportEmptyChart label="Calls - by direction" />
-          <ReportEmptyChart label="Inbound calls - by time and call state" />
+        <ReportsKpiCard label="Inbound calls" value={loading ? '…' : String(kpis.inbound_calls ?? 0)} />
+        <ReportsKpiCard label="Outbound calls" value={loading ? '…' : String(kpis.outbound_calls ?? 0)} />
+        <ReportsKpiCard label="Messenger calls" value={loading ? '…' : String(kpis.messenger_calls ?? 0)} />
+        <ReportsKpiCard label="Median call duration" value={kpis.median_call_duration ?? '—'} />
+        <ReportsKpiCard label="Median call in queue time" value={kpis.median_queue_time ?? '—'} />
+        <ReportsKpiCard label="Median call talk time" value={kpis.median_talk_time ?? '—'} />
+        {/* Call volume time series */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Calls - by time</span>
+          </div>
+          {isEmpty ? (
+            <div className="h-[160px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M11 2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1l1-1h2l1 1z"/><path d="M8 7v4M8 6h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a] font-medium">Sin actividad de llamadas</span>
+              <span className="text-[11.5px] text-[#646462] mt-0.5">Conecta un canal de voz para ver métricas de llamadas.</span>
+            </div>
+          ) : (
+            <>
+              <div className="h-[140px] flex items-end gap-0.5 px-2">
+                {timeSeries.map((t, i) => (
+                  <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                <span>Día 1</span><span>Día {Math.floor(days / 3)}</span><span>Día {Math.floor(2 * days / 3)}</span><span>Día {days}</span>
+              </div>
+            </>
+          )}
         </div>
+        {/* By direction donut */}
         <div className="col-span-3 grid grid-cols-2 gap-4">
-          <ReportEmptyChart label="Median call talk time" />
-          <ReportEmptyChart label="Median call in queue time" />
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Calls - by direction</span>
+            </div>
+            {isEmpty || byDirection.length === 0 ? (
+              <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos de dirección</div>
+            ) : (
+              <div className="space-y-2 pt-2">
+                {byDirection.map(d => {
+                  const maxD = Math.max(...byDirection.map(x => x.count), 1);
+                  const COLORS: Record<string, string> = { inbound: '#3b59f6', outbound: '#fc8a37', messenger: '#7c3aed' };
+                  return (
+                    <div key={d.direction} className="flex items-center gap-2">
+                      <span className="text-[11px] text-[#646462] w-[70px] capitalize">{d.direction}</span>
+                      <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
+                        <div className="h-2 rounded-full" style={{ width: `${(d.count / maxD) * 100}%`, background: COLORS[d.direction] ?? '#3b59f6' }} />
+                      </div>
+                      <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{d.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Inbound calls – by time and call state</span>
+            </div>
+            <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">
+              Requiere datos de estado de llamada en tiempo real
+            </div>
+          </div>
         </div>
-        <ReportEmptyTable label="Call performance" />
       </div>
     </>
   );
@@ -10564,19 +11632,69 @@ function ReportsConversationsContent({ period, channel }: { period: string; chan
 function ReportsCsatContent({ period, channel }: { period: string; channel: string }) {
   const { data, loading } = useApi(() => reportsApi.csat(period, channel), [period, channel], null);
   const kpis = data?.kpis ?? {};
+  const csatTs: { day: number; avgScore: number; count: number }[] = data?.timeSeries ?? [];
+  const csatBreakdown: { userId: string; name: string; avgCsat: number; count: number }[] = data?.teammateCsatBreakdown ?? [];
+  const maxCsat = Math.max(...csatTs.map(t => t.avgScore ?? 0), 1);
   return (
     <>
       <ReportShellHeader title="Surveyed CSAT" description="See how your customer satisfaction scores and support channels, teammates, e..." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
         <ReportsKpiCard label="Overall CSAT score" value={loading ? '…' : kpis.overall_csat != null ? `${kpis.overall_csat}%` : '—'} sub={`${kpis.positive_count ?? 0} de ${(kpis.positive_count ?? 0) + (kpis.neutral_count ?? 0) + (kpis.negative_count ?? 0)}`} />
-        <ReportsKpiCard label="Teammate CSAT score" value="—" sub="0 de 0" />
-        <ReportsKpiCard label="Fin Agent CSAT score" value="—" sub="0 de 0" />
-        <ReportEmptyChart label="CSAT score over time" span={3} />
+        <ReportsKpiCard label="Teammate CSAT score" value={loading ? '…' : kpis.teammate_csat != null ? `${kpis.teammate_csat}%` : '—'} sub={kpis.teammate_csat_count ? `${kpis.teammate_csat_count} surveys` : '0 de 0'} />
+        <ReportsKpiCard label="Fin Agent CSAT score" value={loading ? '…' : kpis.fin_csat != null ? `${kpis.fin_csat}%` : '—'} sub={kpis.fin_csat_count ? `${kpis.fin_csat_count} surveys` : '0 de 0'} />
+        {/* CSAT score over time */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">CSAT score over time (avg %)</span>
+          </div>
+          {csatTs.length === 0 || csatTs.every(t => t.count === 0) ? (
+            <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin encuestas CSAT en el período</div>
+          ) : (
+            <>
+              <div className="h-[120px] flex items-end gap-0.5 px-2">
+                {csatTs.map((t, i) => (
+                  <div key={i} style={{ height: t.avgScore ? `${(t.avgScore / maxCsat) * 100}%` : '4px' }}
+                    className={`flex-1 ${t.count > 0 ? 'bg-[#16a34a]' : 'bg-[#f3f3f1]'} rounded-t`}
+                    title={t.count > 0 ? `${Math.round(t.avgScore)}% (${t.count} surveys)` : 'Sin datos'} />
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                <span>Día 1</span><span>Día {Math.round(csatTs.length / 2)}</span><span>Día {csatTs.length}</span>
+              </div>
+            </>
+          )}
+        </div>
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Conversation ratings and remarks</h3>
         <div className="col-span-3 grid grid-cols-2 gap-4">
-          <ReportEmptyChart label="Conversation ratings - by conversation rating" />
-          <ReportEmptyChart label="Conversation ratings - by conversation rating" />
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Conversation ratings – by channel</span>
+            </div>
+            <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">Sin desglose de canal disponible</div>
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Conversation ratings – distribution</span>
+            </div>
+            <div className="space-y-2 pt-1">
+              {[{ label: '😊 Positive', count: kpis.positive_count ?? 0, color: '#16a34a' }, { label: '😐 Neutral', count: kpis.neutral_count ?? 0, color: '#d97706' }, { label: '😞 Negative', count: kpis.negative_count ?? 0, color: '#dc2626' }].map(r => {
+                const total = (kpis.positive_count ?? 0) + (kpis.neutral_count ?? 0) + (kpis.negative_count ?? 0);
+                return (
+                  <div key={r.label} className="flex items-center gap-2">
+                    <span className="text-[11px] text-[#646462] w-[80px]">{r.label}</span>
+                    <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
+                      <div className="h-2 rounded-full" style={{ width: `${total > 0 ? (r.count / total) * 100 : 0}%`, background: r.color }} />
+                    </div>
+                    <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{r.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
         <ReportsKpiCard label="Positive remarks" value={loading ? '…' : String(kpis.positive_count ?? 0)} />
         <ReportsKpiCard label="Neutral remarks" value={loading ? '…' : String(kpis.neutral_count ?? 0)} />
@@ -10593,14 +11711,58 @@ function ReportsCsatContent({ period, channel }: { period: string; channel: stri
           </div>
         </div>
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">CSAT survey</h3>
-        <ReportsKpiCard label="CSAT request rate" value={loading ? '…' : kpis.request_rate ?? '0%'} sub="0 de 0" />
-        <ReportsKpiCard label="CSAT response rate" value={loading ? '…' : kpis.response_rate ?? '0%'} sub="0 de 0" />
+        <ReportsKpiCard label="CSAT request rate" value={loading ? '…' : kpis.request_rate ?? '0%'} sub={loading ? undefined : `${kpis.survey_sent_count ?? 0} de ${kpis.closed_count ?? 0}`} />
+        <ReportsKpiCard label="CSAT response rate" value={loading ? '…' : kpis.response_rate ?? '0%'} sub={loading ? undefined : `${kpis.survey_responded_count ?? 0} de ${kpis.survey_sent_count ?? 0}`} />
         <div className="col-span-1" />
-        <ReportEmptyChart label="CSAT survey request & response rates - by time" span={3} />
+        {/* CSAT survey rates over time — would need per-conversation survey tracking */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">CSAT survey request & response rates – by time</span>
+          </div>
+          <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">
+            Requiere seguimiento de envíos de encuesta por conversación
+          </div>
+        </div>
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Dissatisfaction drivers</h3>
-        <ReportEmptyChart label="Topics driving dissatisfaction" span={3} />
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Topics driving dissatisfaction</span>
+          </div>
+          <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">
+            Requiere análisis NLP de comentarios – sin datos disponibles
+          </div>
+        </div>
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Teammate performance</h3>
-        <ReportEmptyTable label="Teammate CSAT performance" />
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Teammate CSAT performance</span>
+          </div>
+          <div className="grid grid-cols-3 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div>Compañero de equipo</div>
+            <div>Avg CSAT</div>
+            <div>Encuestas</div>
+          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : csatBreakdown.length === 0 ? (
+            <div className="h-[120px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Sin datos de CSAT por compañero</span>
+              <span className="text-[11.5px] text-[#646462] mt-0.5">Los datos aparecen cuando se reciban encuestas CSAT respondidas.</span>
+            </div>
+          ) : csatBreakdown.map((row) => (
+            <div key={row.userId} className="grid grid-cols-3 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="font-medium truncate">{row.name}</div>
+              <div className={row.avgCsat >= 80 ? 'text-[#16a34a]' : row.avgCsat >= 60 ? 'text-[#d97706]' : 'text-[#dc2626]'}>
+                {Math.round(row.avgCsat)}%
+              </div>
+              <div className="text-[#646462]">{row.count}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );
@@ -10609,6 +11771,8 @@ function ReportsCsatContent({ period, channel }: { period: string; channel: stri
 function ReportsEffectivenessContent({ period, channel }: { period: string; channel: string }) {
   const { data, loading } = useApi(() => reportsApi.effectiveness(period, channel), [period, channel], null);
   const kpis = data?.kpis ?? {};
+  const effTs: { day: number; fcr_rate: number }[] = data?.timeSeries ?? [];
+  const maxFcr = Math.max(...effTs.map(t => t.fcr_rate ?? 0), 1);
   return (
     <>
       <ReportShellHeader title="Effectiveness" description="Measure how effectively your teams handle conversations with the Effectiveness report." />
@@ -10616,18 +11780,30 @@ function ReportsEffectivenessContent({ period, channel }: { period: string; chan
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
         <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.conversations_replied_to ?? '—')} />
         <ReportsKpiCard label="Closed conversations on first contact rate" value={loading ? '…' : kpis.first_contact_resolution ?? '0%'} sub={kpis.first_contact_total != null ? `${kpis.first_contact_resolved ?? 0} de ${kpis.first_contact_total}` : undefined} />
-        <ReportsKpiCard label="Median replies to close a conversation" value={kpis.median_replies_to_close ?? '—'} />
+        <ReportsKpiCard label="Median replies to close a conversation" value={loading ? '…' : (kpis.median_replies_to_close != null ? String(kpis.median_replies_to_close) : '—')} />
         <ReportsKpiCard label="Conversations reassigned" value={loading ? '…' : String(kpis.conversations_reassigned ?? 0)} />
-        <ReportsKpiCard label="Median time to first assignment" value="—" />
-        <ReportsKpiCard label="Median time from first assignment to close" value="—" />
-        <div className="col-span-3 grid grid-cols-2 gap-4">
-          <ReportEmptyChart label="Median replies to close a conversation - by time" />
-          <ReportEmptyChart label="Median time to first assignment" />
-        </div>
-        <ReportLineChartCard label="Closed conversations on first contact rate - by time" span={3} points={[{ i: 0, v: 0 }]} axis={["Día 1","Día 7","Día 14","Día 21","Día 28"]} yMax={5} yLabel="5%" />
-        <div className="col-span-3 grid grid-cols-2 gap-4">
-          <ReportEmptyChart label="Conversations reassigned - by time" />
-          <ReportEmptyChart label="Median time from first assignment to close - by time" />
+        <ReportsKpiCard label="Median time to first assignment" value={loading ? '…' : kpis.median_time_to_first_assignment ?? '—'} />
+        <ReportsKpiCard label="Median time from first assignment to close" value={loading ? '…' : kpis.median_time_from_assign_to_close ?? '—'} />
+        {/* FCR time series chart */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">First contact resolution rate – by day</span>
+          </div>
+          {effTs.length === 0 ? (
+            <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos en el período</div>
+          ) : (
+            <>
+              <div className="h-[120px] flex items-end gap-0.5 px-2">
+                {effTs.map((t, i) => (
+                  <div key={i} style={{ height: t.fcr_rate ? `${(t.fcr_rate / maxFcr) * 100}%` : '4px' }} className={`flex-1 ${t.fcr_rate ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                <span>Día 1</span><span>Día {Math.floor(effTs.length / 3)}</span><span>Día {Math.floor(2 * effTs.length / 3)}</span><span>Día {effTs.length}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>
@@ -10637,6 +11813,9 @@ function ReportsEffectivenessContent({ period, channel }: { period: string; chan
 function ReportsResponsivenessContent({ period, channel }: { period: string; channel: string }) {
   const { data, loading } = useApi(() => reportsApi.responsiveness(period, channel), [period, channel], null);
   const kpis = data?.kpis ?? {};
+  const dist: { bucket: string; count: number }[] = data?.distribution ?? [];
+  const respTimeSeries: { day: number; avgMinutes: number }[] = data?.timeSeries ?? [];
+  const maxRespMin = Math.max(...respTimeSeries.map(t => t.avgMinutes), 1);
   return (
     <>
       <ReportShellHeader title="Responsiveness" description="See how quickly your team respond to, and close conversations with the Responsiveness report." />
@@ -10645,9 +11824,47 @@ function ReportsResponsivenessContent({ period, channel }: { period: string; cha
         <ReportsKpiCard label="Median response time: including time assigned to bot" value={loading ? '…' : kpis.median_response_time ?? '—'} />
         <ReportsKpiCard label="Median first response time: including time assigned to bot" value={loading ? '…' : kpis.median_first_response ?? '—'} />
         <ReportsKpiCard label="Median time to close: including time assigned to bot" value={loading ? '…' : kpis.median_time_to_close ?? '—'} />
-        <ReportEmptyChart label="Median response time: including time assigned to bot - by time" span={3} />
+        {/* Response time by day */}
+        {respTimeSeries.some(t => t.avgMinutes > 0) ? (
+          <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Avg first response time by day (minutes)</span>
+            </div>
+            <div className="h-[140px] flex items-end gap-0.5 px-2">
+              {respTimeSeries.map((t, i) => (
+                <div key={i} style={{ height: t.avgMinutes ? `${(t.avgMinutes / maxRespMin) * 100}%` : '4px' }} className={`flex-1 ${t.avgMinutes ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} title={`${t.avgMinutes}m`} />
+              ))}
+            </div>
+            <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-2">
+              <span>Día 1</span><span>Día {Math.round(respTimeSeries.length / 2)}</span><span>Día {respTimeSeries.length}</span>
+            </div>
+          </div>
+        ) : (
+          <ReportEmptyChart label="Median response time: including time assigned to bot - by time" span={3} />
+        )}
         <div className="col-span-3 grid grid-cols-2 gap-4">
-          <ReportEmptyChart label="Median first response time: including time assigned to bot - by time" />
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Avg first response time by day (min)</span>
+            </div>
+            {respTimeSeries.some(t => t.avgMinutes > 0) ? (
+              <>
+                <div className="h-[120px] flex items-end gap-0.5 px-2">
+                  {respTimeSeries.map((t, i) => (
+                    <div key={i} style={{ height: t.avgMinutes ? `${(t.avgMinutes / maxRespMin) * 100}%` : '4px' }}
+                      className={`flex-1 ${t.avgMinutes ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} title={`${t.avgMinutes}m`} />
+                  ))}
+                </div>
+                <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                  <span>Día 1</span><span>Día {Math.round(respTimeSeries.length / 2)}</span><span>Día {respTimeSeries.length}</span>
+                </div>
+              </>
+            ) : (
+              <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos en el período</div>
+            )}
+          </div>
           <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
             <div className="px-5 py-3 flex items-center gap-1">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
@@ -10656,15 +11873,40 @@ function ReportsResponsivenessContent({ period, channel }: { period: string; cha
             <div className="grid grid-cols-2 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
               <div>Intervalos de tiempo</div><div>% replies</div>
             </div>
-            {['< 30s','30s - 2m','2m - 5m','5m - 10m','10m - 30m','30m - 1h','> 1h'].map(row => (
-              <div key={row} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-                <div>{row}</div><div className="text-[#646462]">—</div>
-              </div>
-            ))}
+            {(dist.length > 0 ? dist : ['< 5m','5m - 15m','15m - 30m','30m - 1h','1h - 3h','3h - 8h','> 8h'].map(b => ({ bucket: b, count: 0 }))).map((row: any) => {
+              const total = dist.reduce((s: number, r: any) => s + (r.count || 0), 0);
+              const pctVal = total > 0 && typeof row === 'object' ? `${Math.round((row.count / total) * 100)}%` : '—';
+              const label = typeof row === 'string' ? row : row.bucket;
+              return (
+                <div key={label} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+                  <div>{label}</div><div className="text-[#646462]">{loading ? '…' : pctVal}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="col-span-3 grid grid-cols-2 gap-4">
-          <ReportEmptyChart label="Median time to close: including time assigned to bot - by time" />
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Avg time to close by day (min)</span>
+            </div>
+            {respTimeSeries.some(t => t.avgMinutes > 0) ? (
+              <>
+                <div className="h-[120px] flex items-end gap-0.5 px-2">
+                  {respTimeSeries.map((t, i) => (
+                    <div key={i} style={{ height: t.avgMinutes ? `${(t.avgMinutes / maxRespMin) * 100}%` : '4px' }}
+                      className={`flex-1 ${t.avgMinutes ? 'bg-[#8b5cf6]' : 'bg-[#f3f3f1]'} rounded-t`} title={`${t.avgMinutes}m`} />
+                  ))}
+                </div>
+                <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                  <span>Día 1</span><span>Día {Math.round(respTimeSeries.length / 2)}</span><span>Día {respTimeSeries.length}</span>
+                </div>
+              </>
+            ) : (
+              <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos en el período</div>
+            )}
+          </div>
           <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
             <div className="px-5 py-3 flex items-center gap-1">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
@@ -10673,14 +11915,28 @@ function ReportsResponsivenessContent({ period, channel }: { period: string; cha
             <div className="grid grid-cols-2 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
               <div>Intervalos de tiempo</div><div>% conversations</div>
             </div>
-            {['< 5m','5m - 15m','15m - 30m','30m - 1h','1h - 3h','3h - 8h','> 8h'].map(row => (
-              <div key={row} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-                <div>{row}</div><div className="text-[#646462]">—</div>
-              </div>
-            ))}
+            {(dist.length > 0 ? dist : ['< 5m','5m - 15m','15m - 30m','30m - 1h','1h - 3h','3h - 8h','> 8h'].map(b => ({ bucket: b, count: 0 }))).map((row: any) => {
+              const total = dist.reduce((s: number, r: any) => s + (r.count || 0), 0);
+              const pctVal = total > 0 && typeof row === 'object' ? `${Math.round((row.count / total) * 100)}%` : '—';
+              const label = typeof row === 'string' ? row : row.bucket;
+              return (
+                <div key={label} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+                  <div>{label}</div><div className="text-[#646462]">{loading ? '…' : pctVal}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
-        <ReportEmptyChart label="Median hourly distribution of response times: including time assigned to bot" span={3} />
+        {/* Hourly distribution — requires active-hours data; show placeholder */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Median hourly distribution of response times</span>
+          </div>
+          <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">
+            Requires active-hours tracking — no data available
+          </div>
+        </div>
       </div>
     </>
   );
@@ -10691,6 +11947,7 @@ function ReportsSlasContent({ period, channel }: { period: string; channel: stri
   const distribution: { status: string; count: number }[] = data?.distribution ?? [];
   const byPriority: { priority: string; slaStatus: string; count: number }[] = data?.byPriority ?? [];
   const breachedByType: { type: string; count: number }[] = data?.breachedByType ?? [];
+  const slaTimeSeries: { day: number; compliant: number; breached: number }[] = data?.timeSeries ?? [];
   const totalWithSla = distribution.reduce((s, d) => s + d.count, 0);
   const breachedCount = distribution.find(d => d.status === 'breached')?.count ?? 0;
   const compliantCount = distribution.find(d => d.status === 'compliant')?.count ?? 0;
@@ -10787,26 +12044,120 @@ function ReportsSlasContent({ period, channel }: { period: string; channel: stri
             </div>
           </div>
         )}
-        <ReportEmptyChart label="Targets hit over time" span={3} />
+        {/* SLA targets hit over time */}
+        {slaTimeSeries.some(t => t.compliant > 0 || t.breached > 0) ? (
+          <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Targets hit over time</span>
+              <span className="ml-auto flex items-center gap-3 text-[11px] text-[#646462]">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#16a34a] inline-block" />Compliant</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#dc2626] inline-block" />Breached</span>
+              </span>
+            </div>
+            <div className="h-[140px] flex items-end gap-0.5 px-2">
+              {slaTimeSeries.map((t, i) => {
+                const total = t.compliant + t.breached;
+                const maxH = Math.max(...slaTimeSeries.map(x => x.compliant + x.breached), 1);
+                return (
+                  <div key={i} className="flex-1 flex flex-col-reverse" style={{ height: total ? `${(total / maxH) * 100}%` : '4px' }}>
+                    {total > 0 ? (
+                      <>
+                        <div style={{ height: `${(t.compliant / total) * 100}%` }} className="bg-[#16a34a] rounded-t-sm w-full" />
+                        <div style={{ height: `${(t.breached / total) * 100}%` }} className="bg-[#dc2626] w-full" />
+                      </>
+                    ) : (
+                      <div className="bg-[#f3f3f1] w-full h-full rounded-t" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-2">
+              <span>Día 1</span><span>Día {Math.round(slaTimeSeries.length / 2)}</span><span>Día {slaTimeSeries.length}</span>
+            </div>
+          </div>
+        ) : (
+          <ReportEmptyChart label="Targets hit over time" span={3} />
+        )}
       </div>
     </>
   );
 }
 
-function ReportsTeamInboxContent() {
+function ReportsTeamInboxContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.teamInbox(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const inboxBreakdown: { inbox: string; assigned: number; replied: number; closed: number; medianClose: string }[] = data?.inboxBreakdown ?? [];
+  const inboxTimeSeries: { day: number; count: number }[] = data?.timeSeries ?? [];
+  const maxInboxTs = Math.max(...inboxTimeSeries.map(t => t.count), 1);
+  const isEmpty = data?.isEmpty !== false;
+
   return (
     <>
       <ReportShellHeader title="Team inbox performance" description="Check in on how each team inbox is performing with accurate metrics and insights." />
       <ReportShellFilters extraFilter={{ icon: 'team', label: 'Equipo es Cualquiera' }} />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Median team assignment to first response" value="—" />
-        <ReportsKpiCard label="Median team assignment to subsequent response" value="—" />
-        <ReportsKpiCard label="Median team assignment to close" value="—" />
-        <ReportsKpiCard label="Conversations assigned" value="0" />
-        <ReportsKpiCard label="Conversations replied to" value="0" />
-        <ReportsKpiCard label="Closed conversations" value="0" />
-        <ReportEmptyChart label="Teammate Activity" span={3} />
-        <ReportEmptyTable label="Comparison of Team inbox performance" />
+        <ReportsKpiCard label="Median team assignment to first response" value={kpis.median_assign_to_first_response ?? '—'} />
+        <ReportsKpiCard label="Median team assignment to subsequent response" value={kpis.median_assign_to_subsequent_response ?? '—'} />
+        <ReportsKpiCard label="Median team assignment to close" value={loading ? '…' : kpis.median_assign_to_close ?? '—'} />
+        <ReportsKpiCard label="Conversations assigned" value={loading ? '…' : String(kpis.conversations_assigned ?? 0)} />
+        <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.conversations_replied ?? 0)} />
+        <ReportsKpiCard label="Closed conversations" value={loading ? '…' : String(kpis.closed_conversations ?? 0)} />
+        {/* Inbox breakdown table */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Comparison of Team inbox performance</span>
+          </div>
+          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div>Inbox / Assignee</div>
+            <div>Assigned</div>
+            <div>Replied</div>
+            <div>Closed</div>
+            <div>Median close time</div>
+          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : isEmpty || inboxBreakdown.length === 0 ? (
+            <div className="h-[120px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Sin datos de inbox por equipo</span>
+              <span className="text-[11.5px] text-[#646462] mt-0.5">Asigna conversaciones a agentes para ver métricas aquí.</span>
+            </div>
+          ) : inboxBreakdown.map((row, i) => (
+            <div key={i} className="grid grid-cols-5 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="font-medium truncate">{row.inbox}</div>
+              <div>{row.assigned}</div>
+              <div>{row.replied}</div>
+              <div>{row.closed}</div>
+              <div className="text-[#646462]">{row.medianClose}</div>
+            </div>
+          ))}
+        </div>
+        {/* Team activity over time */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Team inbox activity – conversations per day</span>
+          </div>
+          {inboxTimeSeries.length === 0 || inboxTimeSeries.every(t => t.count === 0) ? (
+            <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin actividad en el período</div>
+          ) : (
+            <>
+              <div className="h-[120px] flex items-end gap-0.5 px-2">
+                {inboxTimeSeries.map((t, i) => (
+                  <div key={i} style={{ height: t.count ? `${(t.count / maxInboxTs) * 100}%` : '4px' }}
+                    className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`}
+                    title={`${t.count} conversaciones`} />
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                <span>Día 1</span><span>Día {Math.round(inboxTimeSeries.length / 2)}</span><span>Día {inboxTimeSeries.length}</span>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </>
   );
@@ -10816,43 +12167,118 @@ function ReportsTeammateContent({ period, channel }: { period: string; channel: 
   const { data, loading } = useApi(() => reportsApi.teammate(period, channel), [period, channel], null);
   const members: any[] = data?.members ?? [];
   const isEmpty = data?.isEmpty !== false || members.length === 0;
+  const teamTimeSeries: { day: number; count: number }[] = data?.teamTimeSeries ?? [];
+  const maxTts = Math.max(...teamTimeSeries.map(t => t.count), 1);
+
+  // Aggregate KPIs — prefer backend-computed values, fall back to client-side median
+  const handleTimes = members.filter((m: any) => m.medianHandleTime).map((m: any) => m.medianHandleTime as string);
+  const aggHandleTime = handleTimes.length > 0 ? handleTimes[Math.floor(handleTimes.length / 2)] : null;
+  const assignToCloseTimes = members.filter((m: any) => m.medianAssignToClose).map((m: any) => m.medianAssignToClose as string);
+  const aggAssignToClose = assignToCloseTimes.length > 0 ? assignToCloseTimes[Math.floor(assignToCloseTimes.length / 2)] : null;
+  const assignToFirstRespTimes = members.filter((m: any) => m.medianAssignToFirstResp).map((m: any) => m.medianAssignToFirstResp as string);
+  const aggAssignToFirstResp = assignToFirstRespTimes.length > 0 ? assignToFirstRespTimes[Math.floor(assignToFirstRespTimes.length / 2)] : null;
+  // Subsequent response — use backend aggregate
+  const aggSubsequentResp: string | null = data?.aggMedianSubsequentResp ?? null;
+  // Per-active-hour — from backend totals
+  const closedPerHour: number | null = data?.closedPerActiveHour ?? null;
+  const assignedPerHour: number | null = data?.assignedPerActiveHour ?? null;
+  const repliedPerHour: number | null = data?.repliedPerActiveHour ?? null;
+  const totalActiveHours: number = data?.totalActiveHours ?? 0;
+
+  const csatScores = members.filter((m: any) => m.avgCsat).map((m: any) => Number.parseFloat(String(m.avgCsat).replace('%', '')));
+  const aggTeammateCsat = csatScores.length > 0 ? `${Math.round(csatScores.reduce((s, v) => s + v, 0) / csatScores.length)}%` : null;
+
+  const fmtRate = (r: number | null) => r !== null ? String(r) : '—';
+  const activeHoursSub = totalActiveHours > 0 ? `${totalActiveHours}h activas totales` : undefined;
+
   return (
     <>
       <ReportShellHeader title="Teammate performance" description="Check in on teammate performance with accurate metrics and insights." />
       <ReportShellFilters extraFilter={{ icon: 'user', label: 'Compañero de equipo es Cualquiera' }} />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <div className="col-span-2"><ReportsKpiCard label="Median teammate handling time" value="—" /></div>
-        <ReportsKpiCard label="Median teammate assignment to close" value="—" />
-        <ReportsKpiCard label="Median teammate assignment to first response" value="—" />
-        <ReportsKpiCard label="Median teammate assignment to subsequent response" value="—" />
-        <ReportsKpiCard label="Conversations closed per active hour" value="—" />
-        <ReportsKpiCard label="Conversations assigned per active hour" value="—" />
-        <ReportsKpiCard label="Conversations replied to per active hour" value="—" />
+        <div className="col-span-2"><ReportsKpiCard label="Median teammate handling time" value={loading ? '…' : aggHandleTime ?? '—'} /></div>
+        <ReportsKpiCard label="Median teammate assignment to close" value={loading ? '…' : aggAssignToClose ?? '—'} />
+        <ReportsKpiCard label="Median teammate assignment to first response" value={loading ? '…' : aggAssignToFirstResp ?? '—'} />
+        <ReportsKpiCard label="Median teammate assignment to subsequent response" value={loading ? '…' : aggSubsequentResp ?? '—'} />
+        <ReportsKpiCard label="Conversations closed per active hour" value={loading ? '…' : fmtRate(closedPerHour)} sub={activeHoursSub} />
+        <ReportsKpiCard label="Conversations assigned per active hour" value={loading ? '…' : fmtRate(assignedPerHour)} sub={activeHoursSub} />
+        <ReportsKpiCard label="Conversations replied to per active hour" value={loading ? '…' : fmtRate(repliedPerHour)} sub={activeHoursSub} />
         <div className="col-span-1" />
-        <ReportEmptyChart label="Teammate Productivity" span={3} />
-        <ReportsKpiCard label="Teammate CSAT score" value="—" sub="0 de 0" />
-        <ReportEmptyChart label="Teammate conversation ratings - by conversation rating" span={2} />
+        {/* Teammate productivity chart — cases closed per day */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Teammate Productivity – cases closed per day</span>
+          </div>
+          {teamTimeSeries.length === 0 || teamTimeSeries.every(t => t.count === 0) ? (
+            <div className="h-[100px] flex items-center justify-center text-[12px] text-[#646462]">Sin actividad en el período</div>
+          ) : (
+            <>
+              <div className="h-[100px] flex items-end gap-0.5 px-2">
+                {teamTimeSeries.map((t, i) => (
+                  <div key={i} style={{ height: t.count ? `${(t.count / maxTts) * 100}%` : '3px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                <span>Día 1</span><span>Día {Math.floor(teamTimeSeries.length / 2)}</span><span>Día {teamTimeSeries.length}</span>
+              </div>
+            </>
+          )}
+        </div>
+        <ReportsKpiCard label="Teammate CSAT score" value={loading ? '…' : aggTeammateCsat ?? '—'} sub={csatScores.length > 0 ? `${csatScores.length} compañeros con datos` : '0 de 0'} />
+        <div className="col-span-2 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Teammate conversation ratings</span>
+          </div>
+          <div className="space-y-2 pt-1">
+            {(['positive','neutral','negative'] as const).map(sentiment => {
+              const counts = members.map((m: any) => {
+                const s = Number.parseFloat(String(m.avgCsat ?? '0').replace('%',''));
+                return sentiment === 'positive' ? (s >= 80 ? 1 : 0) : sentiment === 'neutral' ? (s >= 60 && s < 80 ? 1 : 0) : (s < 60 && s > 0 ? 1 : 0);
+              });
+              const count = counts.reduce((a: number, b: number) => a + b, 0);
+              const colors: Record<string,string> = { positive: '#16a34a', neutral: '#d97706', negative: '#dc2626' };
+              const labels: Record<string,string> = { positive: '😊 Positivo', neutral: '😐 Neutral', negative: '😞 Negativo' };
+              return (
+                <div key={sentiment} className="flex items-center gap-2">
+                  <span className="text-[11px] text-[#646462] w-[80px]">{labels[sentiment]}</span>
+                  <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
+                    <div className="h-2 rounded-full" style={{ width: members.length > 0 ? `${(count / members.length) * 100}%` : '0%', background: colors[sentiment] }} />
+                  </div>
+                  <span className="text-[11px] text-[#1a1a1a] w-5 text-right">{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
         <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
           <div className="px-5 py-3 flex items-center gap-1">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">Comparison of Teammate performance</span>
           </div>
-          <div className="grid grid-cols-4 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-            <div>Compañero de equipo</div>
+          <div className="grid grid-cols-8 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div className="col-span-2">Compañero de equipo</div>
             <div>Rol</div>
-            <div>Casos asignados</div>
-            <div>Casos cerrados</div>
+            <div>Asignados</div>
+            <div>Respondidos</div>
+            <div>Cerrados</div>
+            <div>T. gestión</div>
+            <div>CSAT</div>
           </div>
           {loading ? (
             <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
           ) : isEmpty ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay datos de compañeros de equipo disponibles. La tabla workspace_members puede no estar configurada.</div>
-          ) : members.map((m, i) => (
-            <div key={i} className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-              <div>{m.name ?? m.userId ?? 'Miembro'}</div>
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay miembros activos en el workspace. Añade agentes en workspace_members para ver datos aquí.</div>
+          ) : members.map((m: any, i: number) => (
+            <div key={i} className="grid grid-cols-8 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a] hover:bg-[#fafaf9]">
+              <div className="col-span-2 font-medium truncate">{m.name ?? m.userId ?? 'Miembro'}{m.team ? <span className="ml-1 text-[11px] text-[#646462]">· {m.team}</span> : null}</div>
               <div className="text-[#646462] capitalize">{m.role ?? '—'}</div>
               <div>{m.casesAssigned ?? 0}</div>
+              <div>{m.casesReplied ?? 0}</div>
               <div>{m.casesClosed ?? 0}</div>
+              <div className="text-[#646462]">{m.medianHandleTime ?? '—'}</div>
+              <div className={m.avgCsat ? (Number.parseFloat(String(m.avgCsat)) >= 80 ? 'text-[#16a34a]' : Number.parseFloat(String(m.avgCsat)) >= 60 ? 'text-[#d97706]' : 'text-[#dc2626]') : 'text-[#646462]'}>{m.avgCsat ?? '—'}</div>
             </div>
           ))}
         </div>
@@ -10865,6 +12291,7 @@ function ReportsTicketsContent({ period, channel }: { period: string; channel: s
   const { data, loading } = useApi(() => reportsApi.tickets(period, channel), [period, channel], null);
   const kpis = data?.kpis ?? {};
   const byType: { type: string; count: number }[] = data?.byType ?? [];
+  const byAssignee: { assignee: string; count: number }[] = data?.byAssignee ?? [];
   const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 28 }, (_, i) => ({ day: i, count: 0 }));
   const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
   const maxType = Math.max(...byType.map(t => t.count), 1);
@@ -10873,10 +12300,10 @@ function ReportsTicketsContent({ period, channel }: { period: string; channel: s
       <ReportShellHeader title="Tickets" description="Explore your tickets report and create your own custom reports using ticket data." />
       <ReportShellFilters extraFilter={{ icon: 'ticket', label: 'El tipo de ticket es Cualquiera' }} />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-4 gap-4">
-        <ReportsKpiCard label="Median ticket time to resolve" value="—" />
-        <ReportsKpiCard label="Median ticket time in submitted" value="—" />
-        <ReportsKpiCard label="Median ticket time in progress" value="—" />
-        <ReportsKpiCard label="Median ticket time in waiting on customer" value="—" />
+        <ReportsKpiCard label="Median ticket time to resolve" value={loading ? '…' : kpis.median_resolution ?? '—'} />
+        <ReportsKpiCard label="Median ticket time in submitted" value={loading ? '…' : kpis.median_time_submitted ?? '—'} />
+        <ReportsKpiCard label="Median ticket time in progress" value={loading ? '…' : kpis.median_time_in_progress ?? '—'} />
+        <ReportsKpiCard label="Median ticket time in waiting on customer" value={loading ? '…' : kpis.median_time_waiting ?? '—'} />
         <div className="col-span-2"><ReportsKpiCard label="New tickets" value={loading ? '…' : String(kpis.new_tickets ?? 0)} /></div>
         <div className="col-span-2"><ReportsKpiCard label="Resolved tickets" value={loading ? '…' : String(kpis.resolved_tickets ?? 0)} /></div>
         {/* time series */}
@@ -10916,8 +12343,39 @@ function ReportsTicketsContent({ period, channel }: { period: string; channel: s
         ) : (
           <div className="col-span-4"><ReportEmptyChart label="Ticket volume - by type" span={3} /></div>
         )}
-        <div className="col-span-2"><ReportEmptyChart label="Ticket volume - by team assigned" span={3} /></div>
-        <div className="col-span-2"><ReportEmptyChart label="Ticket volume - by teammate assigned" span={3} /></div>
+        {/* by team assigned — always empty since team routing is not tracked */}
+        <div className="col-span-2 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Tickets por equipo asignado</span>
+          </div>
+          <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos de asignación por equipo</div>
+        </div>
+        {/* by teammate assigned */}
+        <div className="col-span-2 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Tickets por compañero asignado</span>
+          </div>
+          {byAssignee.length === 0 ? (
+            <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">Sin asignaciones en el período</div>
+          ) : (
+            <div className="space-y-1.5">
+              {byAssignee.slice(0, 6).map(a => {
+                const maxA = Math.max(...byAssignee.map(x => x.count), 1);
+                return (
+                  <div key={a.assignee} className="flex items-center gap-2">
+                    <span className="text-[11px] text-[#646462] w-[90px] truncate">{a.assignee}</span>
+                    <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
+                      <div className="bg-[#3b59f6] h-2 rounded-full" style={{ width: `${(a.count / maxA) * 100}%` }} />
+                    </div>
+                    <span className="text-[11px] text-[#1a1a1a] w-5 text-right">{a.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
@@ -11038,87 +12496,6 @@ function ReportsSugerenciasContent() {
   );
 }
 
-function ReportsExportContent() {
-  const rows = ['215474178470870', '215474178470709', '215474178470505', '215474178470274'];
-  return (
-    <>
-      <div className="px-6 py-3 border-b border-[#e9eae6] bg-[#fafaf9] flex-shrink-0 text-center">
-        <p className="text-[12.5px] text-[#1a1a1a]">
-          <span className="mr-1">🍂</span>
-          Exporta datos más ricos con nuestra experiencia mejorada de exportación de conjuntos de datos. También puedes utilizar la nueva API de exportación de datos de informes para exportar datos. <a className="font-medium underline">Más información</a>
-        </p>
-      </div>
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
-          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Exportación de conjuntos de datos</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
-            Programar
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
-          </button>
-          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
-            Exportar CSV
-          </button>
-        </div>
-      </div>
-      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/></svg>
-          Conjunto de datos Conversation
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-        </button>
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-          Apr 8, 2026 - May 5, 2026
-        </button>
-        <button className="flex items-center gap-1 border border-dashed border-[#d4d4d2] rounded-full px-3 py-[6px] text-[12.5px] text-[#646462]">
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-          Añadir filtro
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-6 py-3 flex items-center justify-between text-[12.5px] text-[#646462] border-b border-[#e9eae6]">
-          <span><span className="text-[#1a1a1a] font-medium">4 de 4 artículos</span>  Las marcas de tiempo están en la hora Madrid (GMT+2)</span>
-          <button className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea] text-[#646462]">+</button>
-        </div>
-        <table className="w-full text-[12.5px]">
-          <thead>
-            <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
-              <th className="text-left font-medium text-[#646462] px-6 py-2">
-                <div className="flex items-center gap-1">ID de conversación<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
-              </th>
-              <th className="text-left font-medium text-[#646462] px-6 py-2">
-                <div className="flex items-center gap-1">La conversación comenzó el<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
-              </th>
-              <th className="text-left font-medium text-[#646462] px-6 py-2">La conversación se cerró por primera vez el</th>
-              <th className="text-left font-medium text-[#646462] px-6 py-2">La conversación se respondió por primera vez e...</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((id) => (
-              <tr key={id} className="border-b border-[#e9eae6]">
-                <td className="px-6 py-3">
-                  <a className="text-[#3b59f6] hover:underline inline-flex items-center gap-1">
-                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M9 2h5v5M14 2L7 9M11 9v4H3V5h4"/></svg>
-                    {id}
-                  </a>
-                </td>
-                <td className="px-6 py-3 text-[#1a1a1a]">8:55 AM may 5, 2026</td>
-                <td className="px-6 py-3 text-[#646462]">—</td>
-                <td className="px-6 py-3 text-[#646462]">—</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
 function ReportsHorariosContent() {
   const [tab, setTab] = useState<'informes' | 'datasets'>('informes');
   return (
@@ -11147,6 +12524,7 @@ function ReportsHorariosContent() {
 function ReportsArticlesContent({ period, channel }: { period: string; channel: string }) {
   const { data, loading } = useApi(() => reportsApi.articles(period, channel), [period, channel], null);
   const kpis = data?.kpis ?? {};
+  const topArticles: { title: string; views: number; helpful: number; unhelpful: number; deflected: number }[] = data?.topArticles ?? [];
   return (
     <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
@@ -11180,6 +12558,10 @@ function ReportsArticlesContent({ period, channel }: { period: string; channel: 
           <ReportsKpiCard label="Total artículos" value={loading ? '…' : String(kpis.total_articles ?? 0)} />
           <ReportsKpiCard label="Artículos publicados" value={loading ? '…' : String(kpis.published_articles ?? 0)} />
           <ReportsKpiCard label="Borradores" value={loading ? '…' : String(kpis.draft_articles ?? 0)} />
+          <ReportsKpiCard label="Visualizaciones" value={loading ? '…' : String(kpis.view_count_total ?? 0)} />
+          <ReportsKpiCard label="Búsquedas totales" value={loading ? '…' : String(kpis.search_hits_total ?? 0)} />
+          <ReportsKpiCard label="Tasa de utilidad" value={loading ? '…' : (kpis.helpfulness_rate ?? '0%')} sub={kpis.helpful_total != null ? `${kpis.helpful_total} útil / ${kpis.unhelpful_total ?? 0} no útil` : undefined} />
+          <ReportsKpiCard label="Conversaciones desviadas" value={loading ? '…' : String(kpis.deflected_total ?? 0)} />
         </div>
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
           <div className="flex items-center justify-between mb-3">
@@ -11232,10 +12614,22 @@ function ReportsArticlesContent({ period, channel }: { period: string; channel: 
               <div>Conversaciones</div>
               <div>última actualización</div>
             </div>
-            <div className="h-[160px] flex flex-col items-center justify-center text-center">
-              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-              <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
-            </div>
+            {topArticles.length > 0 ? topArticles.map((art, i) => (
+              <div key={i} className="grid grid-cols-7 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a] hover:bg-[#fafaf9]">
+                <div className="truncate pr-2" title={art.title}>{art.title}</div>
+                <div>{art.views}</div>
+                <div className="text-[#16a34a]">{art.helpful}</div>
+                <div className="text-[#a16207]">0</div>
+                <div className="text-[#dc2626]">{art.unhelpful}</div>
+                <div>{art.deflected}</div>
+                <div className="text-[#646462]">—</div>
+              </div>
+            )) : (
+              <div className="h-[160px] flex flex-col items-center justify-center text-center">
+                <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+                <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
+              </div>
+            )}
           </div>
         </div>
         <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
@@ -11264,17 +12658,24 @@ function ReportsArticlesContent({ period, channel }: { period: string; channel: 
   );
 }
 
-function ReportsOutboundEngagementContent() {
+function ReportsOutboundEngagementContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.outbound(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 30 }, (_, i) => ({ day: i, count: 0 }));
+  const byUser: { name: string; count: number }[] = data?.byUser ?? [];
+  const performance: { title: string; sent: number; goal: number }[] = data?.performance ?? [];
+  const isEmpty = data?.isEmpty !== false;
+  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
+  const days = timeSeries.length;
+
   return (
     <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
         <div className="flex items-center gap-2">
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
           <h1 className="text-[18px] font-bold text-[#1a1a1a]">Interacción del cliente</h1>
-          <span className="text-[12px] text-[#646462]">Anterior</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg></button>
           <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
             Exportar CSV
@@ -11284,7 +12685,7 @@ function ReportsOutboundEngagementContent() {
       <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-          29 abr 2026 - 5 may 2026
+          Período: {period}
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
         </button>
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
@@ -11296,81 +12697,354 @@ function ReportsOutboundEngagementContent() {
         <h2 className="text-[15px] font-bold text-[#1a1a1a]">Todos los tipos de mensajes</h2>
         <div className="grid grid-cols-2 gap-4">
           <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <p className="text-[12.5px] text-[#1a1a1a] mb-3">Mensajes enviados</p>
-            <div className="text-[14px] text-[#646462]">— —</div>
+            <p className="text-[12.5px] text-[#1a1a1a] mb-2">Mensajes enviados</p>
+            <p className="text-[24px] font-bold text-[#1a1a1a]">{loading ? '…' : String(kpis.total_sent ?? 0)}</p>
           </div>
           <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <p className="text-[12.5px] text-[#1a1a1a] mb-3">Horas de envío de mensajes</p>
-            <div className="text-[14px] text-[#646462]">— —</div>
+            <p className="text-[12.5px] text-[#1a1a1a] mb-2">Horas de envío de mensajes</p>
+            <p className="text-[24px] font-bold text-[#646462]">{kpis.send_hours ?? '—'}</p>
           </div>
         </div>
+        {/* Time series */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <p className="text-[12.5px] font-medium text-[#1a1a1a] mb-3">Mensajes enviados por day</p>
-          <div className="h-[180px] relative">
-            <div className="absolute left-0 top-0 bottom-4 w-8 flex flex-col justify-between text-[10px] text-[#646462]">
-              <span>100</span><span>80</span><span>60</span><span>40</span><span>20</span><span>0</span>
+          <p className="text-[12.5px] font-medium text-[#1a1a1a] mb-3">Mensajes enviados por día</p>
+          {isEmpty ? (
+            <div className="h-[160px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a] font-medium">Sin mensajes salientes</span>
+              <span className="text-[11.5px] text-[#646462] mt-0.5">Configura campañas o mensajes proactivos para ver datos aquí.</span>
             </div>
-            <div className="ml-8 h-full border-l border-b border-[#e9eae6] relative">
-              {[0,1,2,3,4].map(i => <div key={i} className="absolute left-0 right-0 border-t border-dashed border-[#f0f0ee]" style={{ top: `${20*(i+1)}%` }}/>)}
-            </div>
-            <div className="ml-8 mt-1 flex justify-between text-[10px] text-[#646462]">
-              <span>29 abr</span><span>30 abr</span><span>1 may</span><span>2 may</span><span>3 may</span><span>4 may</span><span>5 may</span>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="h-[140px] flex items-end gap-0.5 px-2">
+                {timeSeries.map((t, i) => (
+                  <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#fc8a37]' : 'bg-[#f3f3f1]'} rounded-t`} />
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                <span>Día 1</span><span>Día {Math.floor(days / 3)}</span><span>Día {Math.floor(2 * days / 3)}</span><span>Día {days}</span>
+              </div>
+            </>
+          )}
         </div>
+        {/* Volume by user */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
           <div className="px-5 py-3"><span className="text-[12.5px] font-medium text-[#1a1a1a]">Volumen de mensajes por usuario</span></div>
           <div className="border-t border-b border-[#e9eae6] grid grid-cols-2 px-5 py-2 text-[12px] text-[#646462]">
             <div>Nombre</div><div className="text-right">Mensajes enviados</div>
           </div>
-          <div className="h-[100px]"/>
+          {byUser.length === 0 ? (
+            <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos</div>
+          ) : byUser.map((u, i) => (
+            <div key={i} className="grid grid-cols-2 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="font-medium truncate">{u.name}</div>
+              <div className="text-right text-[#646462]">{u.count}</div>
+            </div>
+          ))}
         </div>
+        {/* Message performance */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
           <div className="px-5 py-3"><span className="text-[12.5px] font-medium text-[#1a1a1a]">Rendimiento del mensaje</span></div>
           <div className="border-t border-[#e9eae6] grid grid-cols-3 px-5 py-2 text-[12px] text-[#646462]">
             <div>Título</div><div>Enviado</div><div>Objetivo</div>
           </div>
-          <div className="h-[80px]"/>
+          {performance.length === 0 ? (
+            <div className="h-[60px] flex items-center justify-center text-[12px] text-[#646462]">Sin campañas configuradas</div>
+          ) : performance.map((p, i) => (
+            <div key={i} className="grid grid-cols-3 px-5 py-2.5 border-t border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="truncate">{p.title}</div>
+              <div>{p.sent}</div>
+              <div className="text-[#646462]">{p.goal ?? '—'}</div>
+            </div>
+          ))}
         </div>
-        <p className="text-[11.5px] text-[#646462] text-center pt-2">Los informes están en Madrid time (GMT+2)</p>
+        <p className="text-[11.5px] text-[#646462] text-center pt-2">Los informes están en zona horaria del servidor</p>
+      </div>
+    </>
+  );
+}
+
+function ReportsCopilotContent({ period, channel }: { period: string; channel: string }) {
+  // Copilot usage is derived from AI agent runs — we reuse the agents endpoint
+  const { data, loading } = useApi(() => reportsApi.agents(period, channel), [period, channel], null);
+  const agents: any[] = data?.agents ?? [];
+  const agentTimeSeries: { day: number; runs: number }[] = data?.timeSeries ?? [];
+  const maxAgentRuns = Math.max(...agentTimeSeries.map(t => t.runs), 1);
+  const totalRuns = agents.reduce((s, a) => s + (a.totalRuns ?? 0), 0);
+  const totalTokens = agents.reduce((s, a) => s + (a.tokensUsed ?? 0), 0);
+  const avgSuccessRate = agents.length > 0
+    ? Math.round(agents.reduce((s, a) => s + Number.parseFloat(String(a.successRate ?? '0')), 0) / agents.length)
+    : 0;
+  const copilotAgents = agents.filter(a => (a.name ?? '').toLowerCase().includes('copilot') || (a.slug ?? '').toLowerCase().includes('copilot'));
+  const displayAgents = copilotAgents.length > 0 ? copilotAgents : agents;
+  const isEmpty = agents.length === 0;
+
+  return (
+    <>
+      <ReportShellHeader title="Copilot" description="Analyze how Copilot is used by teammates in your workspace to assist conversations." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <ReportsKpiCard label="AI agent runs" value={loading ? '…' : String(totalRuns)} sub={`${agents.length} agentes activos`} />
+        <ReportsKpiCard label="Tokens consumidos" value={loading ? '…' : Number(totalTokens).toLocaleString()} />
+        <ReportsKpiCard label="Tasa de éxito media" value={loading ? '…' : `${avgSuccessRate}%`} />
+        {/* Agent table */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Actividad de agentes de IA / Copilot</span>
+          </div>
+          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div>Agente</div>
+            <div>Ejecuciones</div>
+            <div>Éxito</div>
+            <div>Fallos</div>
+            <div>Tokens</div>
+          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : isEmpty ? (
+            <div className="h-[140px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M4 4h8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H8L5 14v-2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a] font-medium">Sin actividad de Copilot</span>
+              <span className="text-[11.5px] text-[#646462] mt-0.5">Las métricas aparecen cuando los agentes procesan conversaciones.</span>
+            </div>
+          ) : displayAgents.map((a: any, i: number) => (
+            <div key={i} className="grid grid-cols-5 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="font-medium truncate">{a.name ?? a.slug ?? 'Agente'}</div>
+              <div>{a.totalRuns ?? 0}</div>
+              <div className={Number.parseFloat(String(a.successRate ?? '0').replace('%','')) >= 80 ? 'text-[#16a34a]' : 'text-[#dc2626]'}>
+                {a.successRate ?? '—'}
+              </div>
+              <div className="text-[#646462]">{a.failedRuns ?? 0}</div>
+              <div className="text-[#646462]">{Number(a.tokensUsed ?? 0).toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+        {/* Agent runs over time */}
+        {agentTimeSeries.some(t => t.runs > 0) ? (
+          <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Uso de Copilot por tiempo</span>
+            </div>
+            <div className="h-[140px] flex items-end gap-0.5 px-2">
+              {agentTimeSeries.map((t, i) => (
+                <div key={i} style={{ height: t.runs ? `${(t.runs / maxAgentRuns) * 100}%` : '4px' }} className={`flex-1 ${t.runs ? 'bg-[#8b5cf6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+              ))}
+            </div>
+            <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-2">
+              <span>Día 1</span><span>Día {Math.round(agentTimeSeries.length / 2)}</span><span>Día {agentTimeSeries.length}</span>
+            </div>
+          </div>
+        ) : (
+          <ReportEmptyChart label="Uso de Copilot por tiempo" span={3} />
+        )}
+      </div>
+    </>
+  );
+}
+
+function ReportsExportContent({ period, channel }: { period: string; channel: string }) {
+  const { data: casesData, loading } = useApi(() => casesApi.list({ limit: '50' }), [], null);
+  const cases: any[] = Array.isArray((casesData as any)?.items) ? (casesData as any).items : Array.isArray(casesData) ? casesData as any[] : [];
+  const total = (casesData as any)?.total ?? cases.length;
+
+  return (
+    <>
+      <div className="px-6 py-3 border-b border-[#e9eae6] bg-[#fafaf9] flex-shrink-0 text-center">
+        <p className="text-[12.5px] text-[#1a1a1a]">
+          <span className="mr-1">🍂</span>
+          Exporta datos más ricos con nuestra experiencia mejorada de exportación de conjuntos de datos. También puedes utilizar la nueva API de exportación de datos de informes para exportar datos. <a className="font-medium underline">Más información</a>
+        </p>
+      </div>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Exportación de conjuntos de datos</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
+            Programar
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+            Exportar CSV
+          </button>
+        </div>
+      </div>
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/></svg>
+          Conjunto de datos: Conversation
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+          Período: {period}
+        </button>
+        <button className="flex items-center gap-1 border border-dashed border-[#d4d4d2] rounded-full px-3 py-[6px] text-[12.5px] text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Añadir filtro
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-3 flex items-center justify-between text-[12.5px] text-[#646462] border-b border-[#e9eae6]">
+          <span>
+            {loading ? 'Cargando...' : <><span className="text-[#1a1a1a] font-medium">{cases.length} de {total} artículos</span>  Las marcas de tiempo están en la zona horaria del servidor</>}
+          </span>
+          <button className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea] text-[#646462]">+</button>
+        </div>
+        <table className="w-full text-[12.5px]">
+          <thead>
+            <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+              <th className="text-left font-medium text-[#646462] px-6 py-2">
+                <div className="flex items-center gap-1">ID de conversación<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
+              </th>
+              <th className="text-left font-medium text-[#646462] px-6 py-2">
+                <div className="flex items-center gap-1">La conversación comenzó el<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
+              </th>
+              <th className="text-left font-medium text-[#646462] px-6 py-2">Canal</th>
+              <th className="text-left font-medium text-[#646462] px-6 py-2">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={4} className="px-6 py-8 text-center text-[#646462]">Cargando...</td></tr>
+            ) : cases.length === 0 ? (
+              <tr><td colSpan={4} className="px-6 py-8 text-center text-[#646462]">No se encontraron conversaciones</td></tr>
+            ) : cases.map((c: any) => (
+              <tr key={c.id} className="border-b border-[#e9eae6] hover:bg-[#fafaf9]">
+                <td className="px-6 py-3">
+                  <span className="text-[#3b59f6] inline-flex items-center gap-1">
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M9 2h5v5M14 2L7 9M11 9v4H3V5h4"/></svg>
+                    {String(c.id).slice(0, 18)}
+                  </span>
+                </td>
+                <td className="px-6 py-3 text-[#1a1a1a]">
+                  {c.created_at ? new Date(c.created_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                </td>
+                <td className="px-6 py-3 text-[#646462] capitalize">{c.source_channel ?? '—'}</td>
+                <td className="px-6 py-3">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    c.status === 'resolved' || c.status === 'closed' ? 'bg-[#dcfce7] text-[#16a34a]' :
+                    c.status === 'open' ? 'bg-[#dbeafe] text-[#1d4ed8]' : 'bg-[#f3f3f1] text-[#646462]'
+                  }`}>
+                    {c.status ?? '—'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </>
   );
 }
 
 function ReportsView() {
-  const [sub, setSub] = useState<ReportsSubView>('finAgent');
+  const [sub, setSub] = useState<ReportsSubView>('overview');
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
   const [channel, setChannel] = useState('all');
   function renderSub() {
     switch (sub) {
+      // ── Análisis (from original Reports.tsx) ────────────────────────────
+      case 'overview':         return <ReportsOverviewContent period={period} channel={channel} />;
+      case 'aiResumen':        return <ReportsAiResumenContent period={period} channel={channel} />;
+      case 'areasNegocio':     return <ReportsAreasNegocioContent period={period} channel={channel} />;
+      case 'agentesPerf':      return <ReportsAgentesContent period={period} channel={channel} />;
+      case 'aprobacionesRisk': return <ReportsAprobacionesContent period={period} channel={channel} />;
+      case 'costesRoi':        return <ReportsCostesRoiContent period={period} channel={channel} />;
+      // ── Temas & misc ────────────────────────────────────────────────────
       case 'temas':         return <ReportsTopicsContent />;
       case 'sugerencias':   return <ReportsSugerenciasContent />;
-      case 'export':        return <ReportsExportContent />;
+      case 'export':        return <ReportsExportContent period={period} channel={channel} />;
       case 'horarios':      return <ReportsHorariosContent />;
+      // ── IA y automatización ─────────────────────────────────────────────
       case 'finAgent':      return <ReportsFinAgentContent period={period} channel={channel} />;
-      case 'copilot':       return <ReportsCustomReport title="Copilot" description="Analyze and report on how Copilot is used by teammates in your workspace." />;
-      case 'calls':         return <ReportsCallsContent />;
+      case 'copilot':       return <ReportsCopilotContent period={period} channel={channel} />;
+      // ── Soporte humano ──────────────────────────────────────────────────
+      case 'calls':         return <ReportsCallsContent period={period} channel={channel} />;
       case 'conversations': return <ReportsConversationsContent period={period} channel={channel} />;
       case 'csat':          return <ReportsCsatContent period={period} channel={channel} />;
       case 'effectiveness': return <ReportsEffectivenessContent period={period} channel={channel} />;
       case 'responsiveness':return <ReportsResponsivenessContent period={period} channel={channel} />;
       case 'slas':          return <ReportsSlasContent period={period} channel={channel} />;
-      case 'teamInbox':     return <ReportsTeamInboxContent />;
+      case 'teamInbox':     return <ReportsTeamInboxContent period={period} channel={channel} />;
       case 'teammate':      return <ReportsTeammateContent period={period} channel={channel} />;
       case 'tickets':       return <ReportsTicketsContent period={period} channel={channel} />;
+      // ── Proactivo ───────────────────────────────────────────────────────
       case 'articles':      return <ReportsArticlesContent period={period} channel={channel} />;
-      case 'outboundEng':   return <ReportsOutboundEngagementContent />;
+      case 'outboundEng':   return <ReportsOutboundEngagementContent period={period} channel={channel} />;
       case 'administrar':   return <KnowledgePlaceholder title="Administrar" subtitle="Configuración avanzada de informes, propietarios y permisos." />;
     }
   }
-  // setPeriod/setChannel will be wired to a future period/channel selector UI
+  const periodLabel = period === '7d' ? 'Últimos 7 días' : period === '90d' ? 'Últimos 90 días' : 'Últimos 30 días';
+  const channelLabel = channel === 'all' ? 'Todos los canales'
+    : channel === 'chat' ? 'Chat'
+    : channel === 'email' ? 'Email'
+    : channel === 'phone' ? 'Teléfono'
+    : channel === 'whatsapp' ? 'WhatsApp'
+    : channel === 'sms' ? 'SMS'
+    : 'Social';
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <ReportsSidebar sub={sub} onSelect={setSub} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {/* Global period + channel selector — every Reports*Content
+              receives these as props and reruns its API call when they
+              change, so the whole module stays in sync. */}
+          <div className="flex-shrink-0 h-12 border-b border-[#e9eae6] flex items-center px-5 gap-2">
+            <span className="text-[12px] uppercase tracking-wide text-[#646462] font-semibold">Filtros globales</span>
+            <span className="w-px h-5 bg-[#e9eae6] mx-2" />
+            <Dropdown
+              value={period}
+              onChange={(v) => setPeriod(v as '7d' | '30d' | '90d')}
+              triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              renderTrigger={() => (
+                <>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg>
+                  <span>{periodLabel}</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                </>
+              )}
+              items={[
+                { value: '7d',  label: 'Últimos 7 días' },
+                { value: '30d', label: 'Últimos 30 días' },
+                { value: '90d', label: 'Últimos 90 días' },
+              ]}
+            />
+            <Dropdown
+              value={channel}
+              onChange={setChannel}
+              triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              renderTrigger={() => (
+                <>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>
+                  <span>{channelLabel}</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                </>
+              )}
+              items={[
+                { value: 'all',      label: 'Todos los canales' },
+                { value: 'chat',     label: 'Chat',      divider: true },
+                { value: 'email',    label: 'Email' },
+                { value: 'phone',    label: 'Teléfono' },
+                { value: 'whatsapp', label: 'WhatsApp' },
+                { value: 'sms',      label: 'SMS' },
+                { value: 'social',   label: 'Social' },
+              ]}
+            />
+            <span className="flex-1" />
+            <button
+              onClick={() => { setPeriod('30d'); setChannel('all'); }}
+              disabled={period === '30d' && channel === 'all'}
+              className="h-8 px-3 rounded-[8px] text-[12.5px] text-[#646462] hover:bg-[#f8f8f7] disabled:opacity-50"
+            >Restablecer</button>
+          </div>
           {renderSub()}
         </div>
       </div>
@@ -12323,6 +13997,35 @@ function KnowledgeFolderModal({
 }
 
 // KnowledgeArticleEditor — create + edit individual articles.
+// Small collapsible block used by the right Información panel of
+// KnowledgeArticleEditor. Each section opens by default; clicking the
+// chevron toggles. State is local so toggling one doesn't re-render others.
+function ArticleEditorSection({
+  title, icon, defaultOpen = true, children,
+}: {
+  title: string;
+  icon?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-b border-[#e9eae6]">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-[#fafafa] text-left"
+      >
+        <span className="flex items-center gap-2 text-[14px] font-semibold text-[#1a1a1a]">
+          {icon}
+          {title}
+        </span>
+        <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${open ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
+      </button>
+      {open && <div className="px-5 pb-4">{children}</div>}
+    </div>
+  );
+}
+
 function KnowledgeArticleEditor({
   initial,
   domains,
@@ -12336,14 +14039,259 @@ function KnowledgeArticleEditor({
   onSaved: () => void;
   onAction: (msg: string, type?: 'success' | 'error') => void;
 }) {
+  // ── Core fields ─────────────────────────────────────────────────────────
   const [title, setTitle] = useState(initial?.title || '');
+  const [description, setDescription] = useState<string>(initial?.description || '');
   const [content, setContent] = useState(initial?.content || initial?.body || '');
   const [type, setType] = useState<string>(String(initial?.type || 'ARTICLE').toUpperCase());
-  const [domainId, setDomainId] = useState<string>(initial?.domain_id || initial?.domainId || (domains[0]?.id ?? ''));
+  const [domainId, setDomainId] = useState<string>(initial?.domain_id || initial?.domainId || '');
   const [visibility, setVisibility] = useState<'public' | 'internal'>(initial?.visibility === 'internal' ? 'internal' : 'public');
+  const [language, setLanguage] = useState<string>(initial?.language || 'en');
+  const [authorUserId, setAuthorUserId] = useState<string>(initial?.author_user_id || initial?.created_by || '');
+  // ── Fin section ─────────────────────────────────────────────────────────
+  const [finService,    setFinService]    = useState<boolean>(!!initial?.fin_service);
+  const [finSales,      setFinSales]      = useState<boolean>(!!initial?.fin_sales);
+  const [copilotEnabled,setCopilotEnabled]= useState<boolean>(initial?.copilot_enabled !== false);
+  const [finAudience,   setFinAudience]   = useState<string[]>(
+    Array.isArray(initial?.fin_audience) && initial.fin_audience.length
+      ? initial.fin_audience
+      : ['users','leads','visitors'],
+  );
+  // ── Help-center section ─────────────────────────────────────────────────
+  const [hcStatus, setHcStatus] = useState<'draft' | 'published'>(
+    initial?.helpcenter_status === 'published' ? 'published' : 'draft',
+  );
+  const [hcCollectionId, setHcCollectionId] = useState<string>(initial?.helpcenter_collection_id || '');
+  const [hcAudience, setHcAudience] = useState<string[]>(
+    Array.isArray(initial?.helpcenter_audience) && initial.helpcenter_audience.length
+      ? initial.helpcenter_audience
+      : ['users','leads','visitors'],
+  );
+  // ── Suggestions / tags ──────────────────────────────────────────────────
+  const [excludedFromSuggestions, setExcludedFromSuggestions] = useState<boolean>(!!initial?.excluded_from_suggestions);
+  const [tags, setTags] = useState<string[]>(Array.isArray(initial?.tags) ? initial.tags : []);
+  const [tagDraft, setTagDraft] = useState('');
+  // ── UI shell ────────────────────────────────────────────────────────────
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(true);
+  // Fullscreen toggle — when on, the drawer expands to cover the whole
+  // viewport (no slice of the underlying view remains visible on the left).
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // Auto-focus the title field on first mount when creating a new article.
+  useEffect(() => {
+    if (!initial?.id) titleInputRef.current?.focus();
+  }, [initial?.id]);
+
+  // ── Toolbar insertion helpers ────────────────────────────────────────────
+  // Insert text at the current cursor position (or replace selection) and
+  // restore caret afterwards. caretOffset positions the cursor relative to
+  // the inserted text — handy for putting it inside the brackets after a
+  // [link]() insert, or in the first table cell.
+  function insertAtCursor(text: string, caretOffset?: number) {
+    const ta = bodyRef.current;
+    if (!ta) {
+      // Fallback when ref not bound yet — append at end.
+      setContent(c => (c ? `${c}\n${text}` : text));
+      return;
+    }
+    const start = ta.selectionStart ?? content.length;
+    const end = ta.selectionEnd ?? content.length;
+    const before = content.slice(0, start);
+    const after = content.slice(end);
+    // If we're not at the start of a line and the snippet starts with a
+    // block-level marker (bullet, heading, code fence, etc.), prepend a
+    // newline so we don't mangle the previous line.
+    const startsAtLineStart = start === 0 || before.endsWith('\n');
+    const needsLeadingNl = !startsAtLineStart && /^[-*\d+#>|`!]/.test(text);
+    const finalText = needsLeadingNl ? `\n${text}` : text;
+    const next = `${before}${finalText}${after}`;
+    setContent(next);
+    // Restore cursor on next tick once React has flushed the new value.
+    requestAnimationFrame(() => {
+      const cursor = before.length + finalText.length + (caretOffset ?? 0);
+      try {
+        ta.focus();
+        ta.setSelectionRange(
+          caretOffset != null ? before.length + finalText.length + caretOffset : cursor,
+          caretOffset != null ? before.length + finalText.length + caretOffset : cursor,
+        );
+      } catch { /* ignore */ }
+    });
+  }
+  // Wrap selected text in `prefix` + `suffix`. If nothing is selected, just
+  // insert the prefix+suffix and place the caret in between. Used by the
+  // bold / italic / inline-code buttons (and link with surrounded text).
+  function wrapSelection(prefix: string, suffix: string = prefix) {
+    const ta = bodyRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart ?? content.length;
+    const end = ta.selectionEnd ?? content.length;
+    const selected = content.slice(start, end);
+    const before = content.slice(0, start);
+    const after = content.slice(end);
+    const next = `${before}${prefix}${selected}${suffix}${after}`;
+    setContent(next);
+    requestAnimationFrame(() => {
+      try {
+        ta.focus();
+        if (selected) {
+          ta.setSelectionRange(before.length + prefix.length, before.length + prefix.length + selected.length);
+        } else {
+          const caret = before.length + prefix.length;
+          ta.setSelectionRange(caret, caret);
+        }
+      } catch { /* ignore */ }
+    });
+  }
+  // Toolbar action implementations.
+  async function uploadImage(file: File) {
+    if (!file.type.startsWith('image/')) {
+      onAction('Selecciona un archivo de imagen', 'error');
+      return;
+    }
+    try {
+      // Read as base64 data URL so attachmentsApi.upload can persist it.
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result: any = await attachmentsApi.upload({ name: file.name, type: file.type, dataUrl });
+      const imgUrl = result?.url || result?.signedUrl || result?.publicUrl || dataUrl;
+      const alt = file.name.replace(/\.[^.]+$/, '');
+      insertAtCursor(`![${alt}](${imgUrl})\n`);
+      onAction(`Imagen insertada: ${file.name}`);
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo subir la imagen', 'error');
+    } finally {
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  }
+  function insertVideo() {
+    const url = typeof window !== 'undefined' ? window.prompt('URL del vídeo (YouTube, Vimeo o MP4):') : null;
+    if (!url || !/^https?:\/\//i.test(url.trim())) return;
+    insertAtCursor(`\n[Vídeo](${url.trim()})\n`);
+  }
+  function insertTable() {
+    insertAtCursor(
+      '\n| Columna 1 | Columna 2 | Columna 3 |\n| --- | --- | --- |\n|   |   |   |\n|   |   |   |\n',
+    );
+  }
+  function insertParagraphBreak() {
+    insertAtCursor('\n\n');
+  }
+  async function insertAiSuggestion() {
+    if (!title.trim()) {
+      onAction('Pon un título para que la IA pueda generar contenido', 'error');
+      return;
+    }
+    try {
+      onAction('Generando con IA…');
+      const prompt = `Eres un experto redactando artículos de Centro de ayuda. Redacta una sección breve (3-5 frases) sobre: "${title.trim()}". Devuelve sólo el texto en español, sin encabezados.`;
+      const response: any = await aiApi.copilot('article-editor', prompt, []);
+      const text = response?.answer || response?.message || response?.content || '';
+      if (text.trim()) {
+        insertAtCursor(`\n${text.trim()}\n`);
+        onAction('Sugerencia insertada');
+      } else {
+        onAction('La IA no devolvió contenido', 'error');
+      }
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo generar con IA', 'error');
+    }
+  }
+  function insertQuote() {
+    insertAtCursor('\n> ', 0);
+  }
+  function insertCodeBlock() {
+    // Place caret between the fences.
+    insertAtCursor('\n```\n\n```\n', -5);
+  }
+  function insertList(ordered = false) {
+    insertAtCursor(ordered ? '\n1. ' : '\n- ', 0);
+  }
+  function insertLink() {
+    if (typeof window === 'undefined') return;
+    const url = window.prompt('URL del vínculo (https://…):');
+    if (!url || !/^https?:\/\//i.test(url.trim())) return;
+    const ta = bodyRef.current;
+    const selected = ta ? content.slice(ta.selectionStart ?? 0, ta.selectionEnd ?? 0) : '';
+    if (selected) {
+      // Wrap the selected text as the link label.
+      wrapSelection('[', `](${url.trim()})`);
+    } else {
+      const text = window.prompt('Texto del vínculo:', url.trim()) || url.trim();
+      insertAtCursor(`[${text}](${url.trim()})`);
+    }
+  }
+  async function uploadAttachment(file: File) {
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result: any = await attachmentsApi.upload({ name: file.name, type: file.type, dataUrl });
+      const fileUrl = result?.url || result?.signedUrl || result?.publicUrl || dataUrl;
+      const sizeKb = Math.max(1, Math.round(file.size / 1024));
+      insertAtCursor(`\n📎 [${file.name} · ${sizeKb} KB](${fileUrl})\n`);
+      onAction(`Adjuntado: ${file.name}`);
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo subir el archivo', 'error');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+  // Close on Esc unless the user is typing in a field.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (!inEditable) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  // Read-only metadata helpers.
+  const articleId = initial?.id || initial?.article_id || null;
+  const articleStatus = initial?.status || 'draft';
+  const createdAt = initial?.created_at || null;
+  const updatedAt = initial?.updated_at || null;
+  const reactionsObj = (initial?.reactions || {}) as { happy?: number; neutral?: number; sad?: number };
+  const totalReactions = Math.max(0, (reactionsObj.happy || 0) + (reactionsObj.neutral || 0) + (reactionsObj.sad || 0));
+  const reactionPct = (n?: number) => totalReactions > 0 ? Math.round(((n || 0) / totalReactions) * 100) : 0;
+  const viewCount = initial?.view_count ?? 0;
+  const conversationCount = initial?.conversation_count ?? 0;
+  const finResolutions = initial?.fin_resolutions ?? null;
+  const finParticipations = initial?.fin_participations ?? null;
+  const typeLabel = type === 'POLICY' ? 'Política'
+    : type === 'SNIPPET' ? 'Fragmento'
+    : type === 'PLAYBOOK' ? 'Playbook'
+    : type === 'DOCUMENT' ? 'Documento'
+    : (visibility === 'internal' ? 'Artículo interno' : 'Artículo público');
+  function toggleAudience(setter: (v: string[]) => void, current: string[], token: string) {
+    const next = current.includes(token) ? current.filter(t => t !== token) : [...current, token];
+    setter(next.length === 0 ? current : next);
+  }
+  function addTag() {
+    const t = tagDraft.trim();
+    if (!t || tags.includes(t)) { setTagDraft(''); return; }
+    setTags(prev => [...prev, t]);
+    setTagDraft('');
+  }
+  function removeTag(t: string) { setTags(prev => prev.filter(x => x !== t)); }
+  const audienceLabel = (a: string[]) => {
+    if (a.length === 3) return 'Users, Leads, and Visitors';
+    return a.map(t => t === 'users' ? 'Users' : t === 'leads' ? 'Leads' : 'Visitors').join(', ');
+  };
 
   // ── Knowledge sheet (structured fields the AI agent reads) ────────────────
   // Backend stores them as JSON in content_structured. The simple editor stays
@@ -12462,10 +14410,25 @@ function KnowledgeArticleEditor({
       const payload: Record<string, any> = {
         title: title.trim(),
         content: content,
+        description: description.trim() || null,
         type: type.toLowerCase(),
         visibility,
+        language,
+        // Fin
+        fin_service: finService,
+        fin_sales: finSales,
+        copilot_enabled: copilotEnabled,
+        fin_audience: finAudience,
+        // Help center
+        helpcenter_status: hcStatus,
+        helpcenter_collection_id: hcCollectionId || null,
+        helpcenter_audience: hcAudience,
+        // Suggestions / tags
+        excluded_from_suggestions: excludedFromSuggestions,
+        tags,
       };
       if (domainId) payload.domain_id = domainId;
+      if (authorUserId) payload.author_user_id = authorUserId;
       if (ownerUserId) payload.owner_user_id = ownerUserId;
       const cycleNum = Number(reviewCycleDays);
       if (Number.isFinite(cycleNum) && cycleNum > 0) payload.review_cycle_days = cycleNum;
@@ -12473,7 +14436,7 @@ function KnowledgeArticleEditor({
       if (linkedApprovalPolicyIds.length > 0) payload.linked_approval_policy_ids = linkedApprovalPolicyIds;
       const structured = buildContentStructured();
       if (structured) payload.content_structured = structured;
-      let id = initial?.id;
+      let id = articleId;
       if (id) {
         await knowledgeApi.updateArticle(id, payload);
       } else {
@@ -12484,7 +14447,7 @@ function KnowledgeArticleEditor({
         await knowledgeApi.publishArticle(id);
         onAction('Artículo publicado');
       } else {
-        onAction(initial?.id ? 'Artículo actualizado' : 'Artículo creado');
+        onAction(articleId ? 'Artículo actualizado' : 'Borrador guardado');
       }
       onSaved();
       onClose();
@@ -12493,185 +14456,1018 @@ function KnowledgeArticleEditor({
     } finally { setBusy(false); }
   }
 
+  // Author lookup for the Datos avatar.
+  const authorMember = members.find((m: any) => String(m.id || m.user_id) === String(authorUserId));
+  const authorName = authorMember?.name || authorMember?.full_name || authorMember?.email || 'Sin asignar';
+  const authorInitial = (authorName[0] || '?').toUpperCase();
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+    // Slide-from-right drawer: takes ~70% of the viewport so the LeftNav,
+    // Knowledge sidebar, and a slice of the underlying view remain visible
+    // and live on the left — matches the Intercom screenshot exactly.
+    // Backdrop is transparent (no dimming) and click-outside dismisses.
+    <div className="fixed inset-0 z-50" onClick={onClose}>
       <div
-        className="w-[640px] max-h-[80vh] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5 flex flex-col"
+        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
+          isFullscreen
+            ? 'w-full max-w-none border-l-0 rounded-none'
+            : 'w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]'
+        }`}
         onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">{initial?.id ? 'Editar artículo' : 'Nuevo artículo'}</h3>
-        <input
-          autoFocus
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="Título del artículo"
-          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13.5px] font-semibold focus:outline-none focus:border-[#1a1a1a] mb-3"
-        />
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <select
-            value={type}
-            onChange={e => setType(e.target.value)}
-            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-          >
-            {KH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <select
-            value={visibility}
-            onChange={e => setVisibility(e.target.value as 'public' | 'internal')}
-            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-          >
-            <option value="public">Público</option>
-            <option value="internal">Interno</option>
-          </select>
-          <select
-            value={domainId}
-            onChange={e => setDomainId(e.target.value)}
-            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-          >
-            <option value="">Sin carpeta</option>
-            {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+      {/* Header */}
+      <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-4">
+        <div className="flex-1 flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">{typeLabel}</h2>
         </div>
-        <textarea
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          placeholder="Cuerpo del artículo. Usa Markdown si quieres dar formato."
-          className="flex-1 min-h-[160px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
-        />
-        {/* Estructura para IA — extra fields the AI agent reads. Toggleable so
-            the simple editor stays clean. Each list field is one item per line. */}
-        <button
-          onClick={() => setShowSheet(s => !s)}
-          className="mt-3 self-start text-[12px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1"
-        >
-          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current transition-transform ${showSheet ? 'rotate-90' : ''}`}><path d="M5 4l5 4-5 4z"/></svg>
-          Estructura para la IA (opcional)
-        </button>
-        {showSheet && (
-          <div className="mt-2 grid grid-cols-2 gap-3 max-h-[260px] overflow-y-auto pr-1">
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Resumen ejecutivo</label>
-              <textarea value={sheetSummary} onChange={e => setSheetSummary(e.target.value)} placeholder="Una frase con la idea clave que el agente debe recordar." className="w-full min-h-[44px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Política / regla principal</label>
-              <textarea value={sheetPolicy} onChange={e => setSheetPolicy(e.target.value)} placeholder="La política aplicable, redactada para que el agente la cite literal." className="w-full min-h-[44px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Permitido (uno por línea)</label>
-              <textarea value={sheetAllowed} onChange={e => setSheetAllowed(e.target.value)} placeholder={'Reembolso completo en 14 días\nCambio de talla sin coste'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Bloqueado (uno por línea)</label>
-              <textarea value={sheetBlocked} onChange={e => setSheetBlocked(e.target.value)} placeholder={'Reembolso fuera de plazo\nDescuento sobre artículos en oferta'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Escalación (uno por línea)</label>
-              <textarea value={sheetEscalation} onChange={e => setSheetEscalation(e.target.value)} placeholder={'Pedido > 500€\nCliente VIP'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Evidencia / fuentes (uno por línea)</label>
-              <textarea value={sheetEvidence} onChange={e => setSheetEvidence(e.target.value)} placeholder={'Cláusula 4.2 del contrato\nManual interno OPS-12'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Notas para el agente</label>
-              <textarea value={sheetAgentNotes} onChange={e => setSheetAgentNotes(e.target.value)} placeholder={'Pide siempre nº de pedido antes de empezar.'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Ejemplos de pregunta</label>
-              <textarea value={sheetExamples} onChange={e => setSheetExamples(e.target.value)} placeholder={'¿Puedo devolver un artículo en oferta?\n¿En cuánto recibo el reembolso?'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Palabras clave (separadas por línea o coma)</label>
-              <textarea value={sheetKeywords} onChange={e => setSheetKeywords(e.target.value.replace(/,/g, '\n'))} placeholder={'reembolso\ndevolución\nrefund'} className="w-full min-h-[44px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-          </div>
-        )}
-        {/* Advanced metadata: owner, review cycle, linked workflows + policies. */}
-        <button
-          onClick={() => setShowAdvanced(s => !s)}
-          className="mt-3 self-start text-[12px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1"
-        >
-          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current transition-transform ${showAdvanced ? 'rotate-90' : ''}`}><path d="M5 4l5 4-5 4z"/></svg>
-          Más opciones (propietario, revisión, enlaces)
-        </button>
-        {showAdvanced && (
-          <div className="mt-2 grid grid-cols-2 gap-3 max-h-[260px] overflow-y-auto pr-1">
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Propietario</label>
-              <select value={ownerUserId} onChange={e => setOwnerUserId(e.target.value)} className="w-full h-8 rounded-lg border border-[#e9eae6] px-2 text-[12.5px] focus:outline-none focus:border-[#1a1a1a]">
-                <option value="">Sin asignar</option>
-                {members.map((m: any) => (
-                  <option key={m.id || m.user_id || m.email} value={m.id || m.user_id || ''}>{m.name || m.full_name || m.email || 'Sin nombre'}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Ciclo de revisión (días)</label>
+        <div className="flex items-center gap-2">
+          <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50">Cancelar</button>
+          <button onClick={() => save(false)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar como borrador'}</button>
+          <button onClick={() => save(true)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]">{busy ? '…' : 'Publicar'}</button>
+          <span className="w-px h-6 bg-[#e9eae6]" />
+          <button
+            onClick={() => setIsFullscreen(v => !v)}
+            title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"
+          >
+            {isFullscreen ? (
+              // "compress" icon — four arrows pointing inward
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
+                <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : (
+              // "expand" icon — four arrows pointing outward
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
+                <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </button>
+          <button onClick={() => setInfoPanelOpen(o => !o)} title={infoPanelOpen ? 'Ocultar Información' : 'Mostrar Información'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M11 3v10"/></svg>
+          </button>
+          <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Body — center editor + right Información panel */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Center column */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="max-w-[760px] mx-auto w-full px-12 pt-12 pb-24 flex flex-col gap-4">
               <input
-                type="number" min={7} max={365} step={7}
-                value={reviewCycleDays}
-                onChange={e => setReviewCycleDays(e.target.value)}
-                className="w-full h-8 rounded-lg border border-[#e9eae6] px-2 text-[12.5px] focus:outline-none focus:border-[#1a1a1a]"
+                ref={titleInputRef}
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder={visibility === 'internal' ? 'Artículo interno sin título' : 'Artículo público sin título'}
+                className="w-full text-[32px] font-bold text-[#1a1a1a] tracking-[-0.4px] leading-[40px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent"
+              />
+              <input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Describe tu artículo para que sea más fácil que lo encuentren"
+                className="w-full text-[15px] text-[#646462] leading-[22px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent"
+              />
+              <textarea
+                ref={bodyRef}
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                onKeyDown={e => {
+                  // Markdown power-shortcuts that work like Notion/Slack.
+                  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+                    const k = e.key.toLowerCase();
+                    if (k === 'b') { e.preventDefault(); wrapSelection('**'); return; }
+                    if (k === 'i') { e.preventDefault(); wrapSelection('*'); return; }
+                    if (k === 'k') { e.preventDefault(); insertLink(); return; }
+                  }
+                }}
+                placeholder="Start writing..."
+                className="w-full min-h-[400px] text-[15px] text-[#1a1a1a] leading-[24px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
               />
             </div>
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Workflows vinculados ({linkedWorkflowIds.length})</label>
-              <div className="border border-[#e9eae6] rounded-lg p-2 max-h-[100px] overflow-y-auto flex flex-col gap-0.5">
-                {workflows.length === 0 && <p className="text-[11.5px] text-[#646462] italic px-1">No hay workflows todavía.</p>}
-                {workflows.map((w: any) => (
-                  <label key={w.id} className="flex items-center gap-2 px-1 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
-                    <input type="checkbox" checked={linkedWorkflowIds.includes(w.id)} onChange={() => toggleId(linkedWorkflowIds, setLinkedWorkflowIds, w.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
-                    <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{w.name || w.id}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Políticas de aprobación vinculadas ({linkedApprovalPolicyIds.length})</label>
-              <div className="border border-[#e9eae6] rounded-lg p-2 max-h-[100px] overflow-y-auto flex flex-col gap-0.5">
-                {policies.length === 0 && <p className="text-[11.5px] text-[#646462] italic px-1">No hay políticas creadas todavía.</p>}
-                {policies.map((p: any) => (
-                  <label key={p.id} className="flex items-center gap-2 px-1 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
-                    <input type="checkbox" checked={linkedApprovalPolicyIds.includes(p.id)} onChange={() => toggleId(linkedApprovalPolicyIds, setLinkedApprovalPolicyIds, p.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
-                    <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{p.title || p.name || p.id}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            {/* Read-only metadata when editing an existing article */}
-            {initial?.id && (
-              <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#646462] pt-1 border-t border-[#f1f1ee] mt-1">
-                {initial?.version != null && <span>Versión: <strong className="text-[#1a1a1a]">{initial.version}</strong></span>}
-                {initial?.last_reviewed_at && <span>Revisado: <strong className="text-[#1a1a1a]">{relativeTime(initial.last_reviewed_at)}</strong></span>}
-                {initial?.next_review_at && <span>Próxima revisión: <strong className="text-[#1a1a1a]">{relativeTime(initial.next_review_at)}</strong></span>}
-              </div>
-            )}
           </div>
-        )}
-        <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-[#e9eae6]">
-          <div>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={busy || importing}
-              className="h-8 px-3 rounded-full bg-[#f8f8f7] text-[12.5px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50"
-              title="Importar PDF o Markdown al cuerpo"
-            >
-              📄 {importing ? 'Importando…' : 'Importar archivo'}
+          {/* Bottom toolbar — every button is wired to a real action.
+              Image / Attachment upload through attachmentsApi, Link / Video
+              prompt for URL, AI sparkle calls aiApi.copilot, Table inserts a
+              real markdown table, Quote / List / Code / Lists insert at the
+              cursor (not the end). Cmd/Ctrl+B/I/K work as power-shortcuts. */}
+          <div className="flex-shrink-0 border-t border-[#e9eae6] bg-white px-5 py-2 flex items-center gap-1">
+            <button onClick={() => imageInputRef.current?.click()} title="Insertar imagen" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="7" r="1"/><path d="M2 11l3-3 3 3 3-3 3 3"/></svg>
             </button>
+            <button onClick={insertVideo} title="Insertar vídeo (URL)" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M7 6l3 2-3 2z" fill="currentColor"/></svg>
+            </button>
+            <button onClick={insertTable} title="Tabla 3×3" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 7h12M6 3v10M10 3v10"/></svg>
+            </button>
+            <button onClick={insertParagraphBreak} title="Salto de párrafo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4h10M3 8h6M3 12h10"/></svg>
+            </button>
+            <button onClick={insertAiSuggestion} title="Sugerir con IA (basado en el título)" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4z"/></svg>
+            </button>
+            <button onClick={insertQuote} title="Cita" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4v8M5 4h7M5 8h5M5 12h7"/></svg>
+            </button>
+            <button onClick={insertCodeBlock} title="Bloque de código" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M5 5L2 8l3 3M11 5l3 3-3 3"/></svg>
+            </button>
+            <button onClick={() => insertList(false)} title="Lista" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><circle cx="3" cy="4" r="0.8" fill="currentColor"/><circle cx="3" cy="8" r="0.8" fill="currentColor"/><circle cx="3" cy="12" r="0.8" fill="currentColor"/><path d="M6 4h8M6 8h8M6 12h8"/></svg>
+            </button>
+            <button onClick={() => insertList(true)} title="Lista numerada" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M2 3v3M2 9v3M6 4h8M6 8h8M6 12h8"/></svg>
+            </button>
+            <button onClick={insertLink} title="Insertar vínculo (Cmd/Ctrl+K)" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M6 10l4-4M5 8l-1 1a2.5 2.5 0 003.5 3.5L9 11M11 8l1-1a2.5 2.5 0 00-3.5-3.5L7 5"/></svg>
+            </button>
+            <button onClick={() => fileInputRef.current?.click()} title="Adjuntar archivo" disabled={importing} className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462] disabled:opacity-50">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M11.5 4.5l-6 6a2.5 2.5 0 003.5 3.5l6-6a4 4 0 00-5.7-5.7L3 8"/></svg>
+            </button>
+            {/* Hidden file inputs — image (insert via attachmentsApi.upload),
+                attachment (insert as link), and the legacy importer kept for
+                "Importar PDF / Markdown" via the Avanzado section. */}
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); }}
+            />
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.md,.markdown,.txt,text/markdown,application/pdf,text/plain"
               className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleImport(f); }}
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                // PDF / markdown / txt → import as body content; anything
+                // else → upload + insert as a download link.
+                const ext = (f.name.split('.').pop() || '').toLowerCase();
+                if (['pdf', 'md', 'markdown', 'txt'].includes(ext) || /pdf|markdown|plain/.test(f.type)) {
+                  handleImport(f);
+                } else {
+                  uploadAttachment(f);
+                }
+              }}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
-            <button onClick={() => save(false)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-white border border-[#1a1a1a] text-[13px] font-semibold text-[#1a1a1a] disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar borrador'}</button>
-            <button onClick={() => save(true)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? '…' : 'Publicar'}</button>
+        </div>
+
+        {/* Right Información panel */}
+        {infoPanelOpen ? (
+          <aside className="w-[360px] flex-shrink-0 border-l border-[#e9eae6] bg-white flex flex-col overflow-hidden">
+            <div className="flex-shrink-0 h-[60px] px-5 flex items-center justify-between border-b border-[#e9eae6]">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Información</h3>
+              <button onClick={() => setInfoPanelOpen(false)} title="Ocultar panel" className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M11 3v10"/></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {/* DATOS */}
+              <ArticleEditorSection title="Datos" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5 4l-3 4 3 4M11 4l3 4-3 4" strokeLinecap="round"/></svg>}>
+                <dl className="text-[13px] grid grid-cols-[110px_1fr] gap-y-2 items-center">
+                  <dt className="text-[#646462]">Tipo</dt>
+                  <dd>
+                    <select value={type} onChange={e => setType(e.target.value)} className="w-full h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                      {KH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </dd>
+                  <dt className="text-[#646462]">Visibilidad</dt>
+                  <dd>
+                    <select value={visibility} onChange={e => setVisibility(e.target.value as 'public' | 'internal')} className="w-full h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                      <option value="public">Público</option>
+                      <option value="internal">Interno</option>
+                    </select>
+                  </dd>
+                  <dt className="text-[#646462]">Estado</dt>
+                  <dd className="inline-flex items-center"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${articleStatus === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>{articleStatus === 'published' ? 'Publicado' : 'Borrador'}</span></dd>
+                  {articleId && (<>
+                    <dt className="text-[#646462]">ID del artículo</dt>
+                    <dd className="font-mono text-[12px] text-[#1a1a1a] truncate" title={articleId}>{articleId}</dd>
+                  </>)}
+                  <dt className="text-[#646462]">Idioma</dt>
+                  <dd>
+                    <select value={language} onChange={e => setLanguage(e.target.value)} className="w-full h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                      <option value="en">English</option>
+                      <option value="es">Español</option>
+                      <option value="fr">Français</option>
+                      <option value="de">Deutsch</option>
+                      <option value="pt">Português</option>
+                      <option value="it">Italiano</option>
+                    </select>
+                  </dd>
+                  {createdAt && (<>
+                    <dt className="text-[#646462]">Creado</dt>
+                    <dd className="text-[12.5px] text-[#1a1a1a]">{relativeTime(createdAt)}</dd>
+                  </>)}
+                  {updatedAt && (<>
+                    <dt className="text-[#646462]">Última actualización</dt>
+                    <dd className="text-[12.5px] text-[#1a1a1a]">{relativeTime(updatedAt)}</dd>
+                  </>)}
+                  <dt className="text-[#646462]">Escrito por</dt>
+                  <dd>
+                    <select value={authorUserId} onChange={e => setAuthorUserId(e.target.value)} className="w-full h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                      <option value="">Sin asignar</option>
+                      {members.map((m: any) => (
+                        <option key={m.id || m.user_id || m.email} value={m.id || m.user_id || ''}>{m.name || m.full_name || m.email || 'Sin nombre'}</option>
+                      ))}
+                    </select>
+                  </dd>
+                </dl>
+                {authorUserId && (
+                  <div className="mt-3 flex items-center gap-2 text-[12px] text-[#646462]">
+                    <span className="w-5 h-5 rounded-full bg-[#f1c5a8] flex items-center justify-center text-[10px] font-bold text-[#1a1a1a]">{authorInitial}</span>
+                    <span className="truncate">{authorName}</span>
+                  </div>
+                )}
+                {articleId && initial?.version != null && (
+                  <button className="mt-3 text-[12.5px] font-semibold text-[#1a1a1a] hover:underline">Mostrar historial de versiones (v{initial.version})</button>
+                )}
+              </ArticleEditorSection>
+
+              {/* FIN */}
+              <ArticleEditorSection title="Fin" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>}>
+                <p className="text-[12.5px] text-[#646462] mb-3">Cuando esté habilitado, Fin usará este contenido para generar respuestas de IA.</p>
+                {([
+                  { label: 'Servicio', val: finService,    set: setFinService    },
+                  { label: 'Ventas',   val: finSales,      set: setFinSales      },
+                  { label: 'Copilot',  val: copilotEnabled,set: setCopilotEnabled},
+                ] as const).map(row => (
+                  <div key={row.label} className="flex items-center justify-between py-1.5">
+                    <span className="text-[13px] text-[#1a1a1a]">{row.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] text-[#646462]">{row.val ? 'Habilitado' : 'Deshabilitado'}</span>
+                      <button onClick={() => row.set(!row.val)} className={`relative w-9 h-5 rounded-full transition-colors ${row.val ? 'bg-[#1a1a1a]' : 'bg-[#d4d4d2]'}`}>
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${row.val ? 'left-[18px]' : 'left-0.5'}`} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <p className="mt-4 text-[12.5px] font-semibold text-[#1a1a1a] mb-1.5">Audiencia de Fin</p>
+                <p className="text-[11.5px] text-[#646462] mb-2">Fin AI Agent y Copilot solo utilizarán este artículo para responder preguntas de las audiencias seleccionadas.</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['users', 'leads', 'visitors'] as const).map(t => {
+                    const active = finAudience.includes(t);
+                    return (
+                      <button key={t} onClick={() => toggleAudience(setFinAudience, finAudience, t)} className={`h-7 px-3 rounded-full text-[12px] font-semibold border ${active ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>
+                        {t === 'users' ? 'Users' : t === 'leads' ? 'Leads' : 'Visitors'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </ArticleEditorSection>
+
+              {/* CENTRO DE AYUDA */}
+              <ArticleEditorSection title="Centro de ayuda" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[13px] text-[#1a1a1a]">Estado</span>
+                  <select value={hcStatus} onChange={e => setHcStatus(e.target.value as 'draft' | 'published')} className="h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                    <option value="draft">No establecer en vivo</option>
+                    <option value="published">En vivo</option>
+                  </select>
+                </div>
+                <p className="text-[12.5px] text-[#646462] mb-2">Agregue su artículo a una colección en su Centro de ayuda para que los clientes puedan encontrarlo.</p>
+                <select value={hcCollectionId} onChange={e => setHcCollectionId(e.target.value)} className="w-full h-8 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px] mb-3">
+                  <option value="">Seleccionar colección...</option>
+                  {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+                <p className="text-[12.5px] font-semibold text-[#1a1a1a] mb-1.5">Audiencia del Centro de ayuda</p>
+                <p className="text-[11.5px] text-[#646462] mb-2">Controle quién puede encontrar y consultar este artículo en el Centro de ayuda.</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['users', 'leads', 'visitors'] as const).map(t => {
+                    const active = hcAudience.includes(t);
+                    return (
+                      <button key={t} onClick={() => toggleAudience(setHcAudience, hcAudience, t)} className={`h-7 px-3 rounded-full text-[12px] font-semibold border ${active ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>
+                        {t === 'users' ? 'Users' : t === 'leads' ? 'Leads' : 'Visitors'}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[11px] text-[#646462]">Audiencia activa: {audienceLabel(hcAudience)}.</p>
+              </ArticleEditorSection>
+
+              {/* SUGERENCIAS */}
+              <ArticleEditorSection title="Sugerencias de artículos" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>} defaultOpen={false}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-[#1a1a1a]">Excluir de las sugerencias de artículos</span>
+                  <button onClick={() => setExcludedFromSuggestions(v => !v)} className={`relative w-9 h-5 rounded-full transition-colors ${excludedFromSuggestions ? 'bg-[#1a1a1a]' : 'bg-[#d4d4d2]'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${excludedFromSuggestions ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
+                </div>
+              </ArticleEditorSection>
+
+              {/* INFORMES */}
+              <ArticleEditorSection title="Informes" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>} defaultOpen={false}>
+                <dl className="text-[13px] grid grid-cols-[1fr_auto] gap-y-2 items-center">
+                  <dt className="text-[#646462]">Vistas</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{viewCount || '-'}</dd>
+                  <dt className="text-[#646462]">Conversaciones</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{conversationCount || '-'}</dd>
+                  <dt className="text-[#646462]">Reaccionó</dt>
+                  <dd className="text-[12.5px] flex items-center gap-2">
+                    <span title="Feliz">😀 {reactionPct(reactionsObj.happy)}%</span>
+                    <span title="Neutral">😐 {reactionPct(reactionsObj.neutral)}%</span>
+                    <span title="Triste">😞 {reactionPct(reactionsObj.sad)}%</span>
+                  </dd>
+                  <dt className="text-[#646462]">Resoluciones de Fin</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{finResolutions ?? '-'}</dd>
+                  <dt className="text-[#646462]">Participaciones de Fin</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{finParticipations ?? '-'}</dd>
+                </dl>
+              </ArticleEditorSection>
+
+              {/* ETIQUETAS */}
+              <ArticleEditorSection title="Etiquetas" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 3l5 0L14 9l-5 5-6-6z"/><circle cx="6" cy="6" r="1"/></svg>} defaultOpen={false}>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {tags.length === 0 && <span className="text-[12.5px] text-[#646462] italic">Sin etiquetas todavía.</span>}
+                  {tags.map(t => (
+                    <span key={t} className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-[#f3f3f1] border border-[#e9eae6] text-[11.5px] text-[#1a1a1a]">
+                      {t}
+                      <button onClick={() => removeTag(t)} className="text-[#646462] hover:text-[#1a1a1a]">×</button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-1.5">
+                  <input
+                    value={tagDraft}
+                    onChange={e => setTagDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+                    placeholder="Añadir etiqueta…"
+                    className="flex-1 h-7 px-2 rounded-md border border-[#e9eae6] text-[12.5px] focus:outline-none focus:border-[#1a1a1a]"
+                  />
+                  <button onClick={addTag} disabled={!tagDraft.trim()} className="h-7 px-2 rounded-md bg-[#f8f8f7] border border-[#e9eae6] text-[12px] font-semibold text-[#1a1a1a] disabled:opacity-50">+</button>
+                </div>
+              </ArticleEditorSection>
+
+              {/* CARPETA */}
+              <ArticleEditorSection title="Carpeta" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/></svg>} defaultOpen={false}>
+                <select value={domainId} onChange={e => setDomainId(e.target.value)} className="w-full h-8 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                  <option value="">Sin carpeta</option>
+                  {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </ArticleEditorSection>
+
+              {/* ESTRUCTURA PARA LA IA */}
+              <ArticleEditorSection title="Estructura para la IA" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 3h10v10H3zM3 6h10M6 3v10"/></svg>} defaultOpen={false}>
+                <p className="text-[11.5px] text-[#646462] mb-2">Campos que el agente lee directamente. Una entrada por línea en cada lista.</p>
+                <div className="grid grid-cols-1 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Resumen ejecutivo</label>
+                    <textarea value={sheetSummary} onChange={e => setSheetSummary(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Política / regla principal</label>
+                    <textarea value={sheetPolicy} onChange={e => setSheetPolicy(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Permitido</label>
+                    <textarea value={sheetAllowed} onChange={e => setSheetAllowed(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Bloqueado</label>
+                    <textarea value={sheetBlocked} onChange={e => setSheetBlocked(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Escalación</label>
+                    <textarea value={sheetEscalation} onChange={e => setSheetEscalation(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Evidencia / fuentes</label>
+                    <textarea value={sheetEvidence} onChange={e => setSheetEvidence(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Notas para el agente</label>
+                    <textarea value={sheetAgentNotes} onChange={e => setSheetAgentNotes(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Ejemplos de pregunta</label>
+                    <textarea value={sheetExamples} onChange={e => setSheetExamples(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Palabras clave</label>
+                    <textarea value={sheetKeywords} onChange={e => setSheetKeywords(e.target.value.replace(/,/g,'\n'))} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                </div>
+              </ArticleEditorSection>
+
+              {/* AVANZADO */}
+              <ArticleEditorSection title="Avanzado" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2"/></svg>} defaultOpen={false}>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Propietario</label>
+                    <select value={ownerUserId} onChange={e => setOwnerUserId(e.target.value)} className="w-full h-7 rounded-md border border-[#e9eae6] px-2 text-[12px] focus:outline-none focus:border-[#1a1a1a]">
+                      <option value="">Sin asignar</option>
+                      {members.map((m: any) => (
+                        <option key={m.id || m.user_id || m.email} value={m.id || m.user_id || ''}>{m.name || m.full_name || m.email || 'Sin nombre'}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Ciclo de revisión (días)</label>
+                    <input type="number" min={7} max={365} step={7} value={reviewCycleDays} onChange={e => setReviewCycleDays(e.target.value)} className="w-full h-7 rounded-md border border-[#e9eae6] px-2 text-[12px] focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Workflows vinculados ({linkedWorkflowIds.length})</label>
+                    <div className="border border-[#e9eae6] rounded-md p-2 max-h-[120px] overflow-y-auto">
+                      {workflows.length === 0 && <p className="text-[11.5px] text-[#646462] italic">Sin workflows.</p>}
+                      {workflows.map((w: any) => (
+                        <label key={w.id} className="flex items-center gap-2 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
+                          <input type="checkbox" checked={linkedWorkflowIds.includes(w.id)} onChange={() => toggleId(linkedWorkflowIds, setLinkedWorkflowIds, w.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
+                          <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{w.name || w.id}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Políticas vinculadas ({linkedApprovalPolicyIds.length})</label>
+                    <div className="border border-[#e9eae6] rounded-md p-2 max-h-[120px] overflow-y-auto">
+                      {policies.length === 0 && <p className="text-[11.5px] text-[#646462] italic">Sin políticas.</p>}
+                      {policies.map((p: any) => (
+                        <label key={p.id} className="flex items-center gap-2 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
+                          <input type="checkbox" checked={linkedApprovalPolicyIds.includes(p.id)} onChange={() => toggleId(linkedApprovalPolicyIds, setLinkedApprovalPolicyIds, p.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
+                          <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{p.title || p.name || p.id}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </ArticleEditorSection>
+            </div>
+          </aside>
+        ) : (
+          <button onClick={() => setInfoPanelOpen(true)} title="Mostrar Información" className="w-9 flex-shrink-0 border-l border-[#e9eae6] bg-white hover:bg-[#f8f8f7] flex items-start justify-center pt-4 text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10"/></svg>
+          </button>
+        )}
+      </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KnowledgeWebsiteSyncWizard — 4-step drawer wizard for the
+// "Sincronización de sitio web" card. Persists the sync as a knowledge
+// article of type='website' so it shows up in the article list and Fin
+// can index it like any other piece of content.
+// ─────────────────────────────────────────────────────────────────────────────
+function KnowledgeWebsiteSyncWizard({
+  onClose,
+  onSaved,
+  onAction,
+}: {
+  onClose: () => void;
+  onSaved: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  type Step = 'connect' | 'pages' | 'segmentation' | 'review';
+  const STEPS: { id: Step; label: string }[] = [
+    { id: 'connect',      label: 'Conectar' },
+    { id: 'pages',        label: 'Páginas' },
+    { id: 'segmentation', label: 'Segmentación' },
+    { id: 'review',       label: 'Revisar' },
+  ];
+  const [step, setStep] = useState<Step>('connect');
+  const [url, setUrl] = useState('');
+  const [pages, setPages] = useState<Array<{ url: string; selected: boolean }>>([]);
+  const [audience, setAudience] = useState<string[]>(['users', 'leads', 'visitors']);
+  const [busy, setBusy] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  function isValidUrl(u: string) {
+    try {
+      const x = new URL(u.trim());
+      return x.protocol === 'http:' || x.protocol === 'https:';
+    } catch { return false; }
+  }
+
+  // Heuristic page discovery — produces a sensible list of common
+  // help-center routes anchored on the user's URL so the Páginas step
+  // is something they can edit before persisting.
+  function discoverPages() {
+    if (!isValidUrl(url)) return;
+    const base = url.replace(/\/+$/, '');
+    const guesses = ['', '/faq', '/getting-started', '/account', '/billing', '/troubleshooting', '/api', '/changelog'];
+    setPages(guesses.map(p => ({ url: `${base}${p}`, selected: true })));
+  }
+
+  function next() {
+    if (step === 'connect') {
+      if (!isValidUrl(url)) { onAction('Introduce una URL válida (https://…)', 'error'); return; }
+      discoverPages();
+      setStep('pages');
+    } else if (step === 'pages') setStep('segmentation');
+    else if (step === 'segmentation') setStep('review');
+    else if (step === 'review') void persist();
+  }
+  function back() {
+    if (step === 'pages') setStep('connect');
+    else if (step === 'segmentation') setStep('pages');
+    else if (step === 'review') setStep('segmentation');
+  }
+  function toggleAudience(token: string) {
+    setAudience(prev => {
+      const next = prev.includes(token) ? prev.filter(t => t !== token) : [...prev, token];
+      return next.length === 0 ? prev : next;
+    });
+  }
+  function togglePage(idx: number) {
+    setPages(prev => prev.map((p, i) => i === idx ? { ...p, selected: !p.selected } : p));
+  }
+  async function persist() {
+    if (busy) return;
+    const selectedPages = pages.filter(p => p.selected);
+    if (selectedPages.length === 0) {
+      onAction('Selecciona al menos una página para sincronizar', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const lines = ['# Sincronización de sitio web', '', `Origen: ${url}`, '', '## Páginas sincronizadas'];
+      for (const p of selectedPages) lines.push(`- ${p.url}`);
+      await knowledgeApi.createArticle({
+        title: `Sincronización: ${url.replace(/^https?:\/\//, '')}`,
+        content: lines.join('\n'),
+        description: `Sitio web sincronizado con ${selectedPages.length} página${selectedPages.length === 1 ? '' : 's'}.`,
+        type: 'website',
+        visibility: 'public',
+        helpcenter_status: 'draft',
+        helpcenter_audience: audience,
+        fin_audience: audience,
+        copilot_enabled: true,
+        fin_service: true,
+        tags: ['website-sync'],
+      });
+      onAction(`Sincronizado: ${url}`);
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo crear la sincronización', 'error');
+    } finally { setBusy(false); }
+  }
+
+  // Esc closes when not typing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (!inEditable) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const stepIdx = STEPS.findIndex(s => s.id === step);
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
+          isFullscreen ? 'w-full max-w-none border-l-0 rounded-none' : 'w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]'
+        }`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-4">
+          <h2 className="flex-1 text-[15px] font-bold text-[#1a1a1a]">Sincronizar sitio web</h2>
+          <a href="#" className="inline-flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:underline">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+            <span>Más información</span>
+          </a>
+          <button onClick={() => setIsFullscreen(v => !v)} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
+              {isFullscreen
+                ? <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" strokeLinecap="round" strokeLinejoin="round"/>
+                : <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" strokeLinecap="round" strokeLinejoin="round"/>}
+            </svg>
+          </button>
+          <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex-shrink-0 border-b border-[#e9eae6] flex items-center px-6 gap-6">
+          {STEPS.map((s, idx) => {
+            const active = s.id === step;
+            const reached = idx <= stepIdx;
+            return (
+              <button
+                key={s.id}
+                onClick={() => reached && setStep(s.id)}
+                disabled={!reached}
+                className={`relative h-[44px] text-[13.5px] ${active ? 'text-[#1a1a1a] font-semibold' : reached ? 'text-[#1a1a1a] hover:text-black' : 'text-[#a4a4a2]'}`}
+              >
+                {s.label}
+                {active && <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-[#1a1a1a] rounded-full"/>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {step === 'connect' && (
+            <div className="max-w-[620px] mx-auto px-8 py-10 flex flex-col gap-6">
+              <div className="rounded-[12px] overflow-hidden bg-gradient-to-br from-[#f9d6e0] via-[#f3e0d6] to-[#e6d4c4] aspect-[16/8] relative p-6 flex items-center justify-center">
+                <div className="w-full max-w-[420px] flex flex-col gap-2">
+                  <div className="bg-white rounded-full px-3 py-1.5 flex items-center gap-2 shadow-sm">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12"/></svg>
+                    <span className="text-[12px] font-mono text-[#1a1a1a]">app.com/help</span>
+                  </div>
+                  {['/faq', '/account', '/billing'].map(p => (
+                    <div key={p} className="ml-8 bg-white/80 rounded-full px-3 py-1.5 flex items-center gap-2 shadow-sm">
+                      <span className="text-[#646462]">↳</span>
+                      <span className="text-[12px] font-mono text-[#1a1a1a]">app.com/help{p}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Enlace al sitio web principal</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">
+                  La URL de nivel superior de tu Centro de ayuda o de tu documentación. Se sincronizarán esta página y todas las subpáginas. <a href="#" className="underline">Ver consejos.</a>
+                </p>
+                <div className="h-10 rounded-lg border border-[#e9eae6] bg-white flex items-center px-3 gap-2 focus-within:border-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12"/></svg>
+                  <input
+                    autoFocus
+                    type="url"
+                    value={url}
+                    onChange={e => setUrl(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && isValidUrl(url)) next(); }}
+                    placeholder="https://app.com/help"
+                    className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 'pages' && (
+            <div className="max-w-[720px] mx-auto px-8 py-10">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Páginas detectadas</h3>
+              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">
+                {pages.length} páginas serán sincronizadas. Desmarca las que no quieras importar.
+              </p>
+              <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                {pages.map((p, idx) => (
+                  <label key={p.url} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-[#fafafa] ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}>
+                    <input type="checkbox" checked={p.selected} onChange={() => togglePage(idx)} className="w-4 h-4 accent-[#1a1a1a]"/>
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12"/></svg>
+                    <span className="text-[13px] font-mono text-[#1a1a1a] truncate">{p.url}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 'segmentation' && (
+            <div className="max-w-[620px] mx-auto px-8 py-10">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">¿A quién sirve este contenido?</h3>
+              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">
+                Fin AI Agent y el Centro de ayuda usarán este sitio web para responder a las audiencias seleccionadas.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(['users', 'leads', 'visitors'] as const).map(t => {
+                  const active = audience.includes(t);
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => toggleAudience(t)}
+                      className={`h-9 px-4 rounded-full text-[13px] font-semibold border ${active ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                    >
+                      {t === 'users' ? 'Usuarios' : t === 'leads' ? 'Leads' : 'Visitantes'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {step === 'review' && (
+            <div className="max-w-[620px] mx-auto px-8 py-10">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Revisar y sincronizar</h3>
+              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">Comprueba la configuración antes de iniciar la sincronización.</p>
+              <dl className="bg-white border border-[#e9eae6] rounded-[10px] divide-y divide-[#f1f1ee] text-[13px]">
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">URL principal</dt>
+                  <dd className="text-[#1a1a1a] font-mono truncate">{url}</dd>
+                </div>
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">Páginas a sincronizar</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{pages.filter(p => p.selected).length} de {pages.length}</dd>
+                </div>
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">Audiencia</dt>
+                  <dd className="text-[#1a1a1a]">{audience.length === 3 ? 'Users, Leads, Visitors' : audience.join(', ')}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 border-t border-[#e9eae6] flex items-center justify-between px-6 h-[60px]">
+          <button
+            onClick={back}
+            disabled={step === 'connect' || busy}
+            className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-40"
+          >Atrás</button>
+          <button
+            onClick={next}
+            disabled={busy || (step === 'connect' && !isValidUrl(url))}
+            className="h-8 px-5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]"
+          >
+            {busy ? 'Sincronizando…' : step === 'review' ? 'Sincronizar' : 'Siguiente'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KnowledgeExternalSourcePicker — small centered modal that lists every
+// external source provider Fin can ingest. Picking one routes to the
+// /connectors flow with that provider pre-selected.
+// ─────────────────────────────────────────────────────────────────────────────
+function KnowledgeExternalSourcePicker({
+  onClose,
+  onAction,
+}: {
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  type Source = { id: string; label: string; icon: ReactNode; provider: string };
+  const sources: Source[] = [
+    { id: 'zendesk',     label: 'Desde Zendesk',     provider: 'zendesk',     icon: <span className="text-[14px] font-bold text-[#03363d]">Z</span> },
+    { id: 'guru',        label: 'Desde Guru',        provider: 'guru',        icon: <span className="w-4 h-4 rounded-full bg-[#ff595a] flex items-center justify-center text-white text-[10px] font-bold">G</span> },
+    { id: 'notion',      label: 'Desde Notion',      provider: 'notion',      icon: <span className="text-[14px] font-bold text-[#1a1a1a]">N</span> },
+    { id: 'confluence',  label: 'Desde Confluence',  provider: 'confluence',  icon: <span className="w-4 h-4 rounded-sm bg-[#0052cc] flex items-center justify-center text-white text-[9px] font-bold">C</span> },
+    { id: 'document',    label: 'Cargar un documento', provider: 'upload',    icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 2h6l3 3v9H4z"/><path d="M10 2v3h3"/><path d="M8 7v4M6 9l2-2 2 2" strokeLinecap="round"/></svg> },
+    { id: 'salesforce',  label: 'Desde Salesforce',  provider: 'salesforce',  icon: <span className="text-[12px] text-[#00a1e0] font-bold">SF</span> },
+    { id: 'box',         label: 'De Box',            provider: 'box',         icon: <span className="w-4 h-4 rounded-sm bg-[#0061d5] flex items-center justify-center text-white text-[9px] font-bold">B</span> },
+    { id: 'document360', label: 'Document360',       provider: 'document360', icon: <span className="w-4 h-4 rounded-full bg-[#ec1944] flex items-center justify-center text-white text-[9px] font-bold">D</span> },
+    { id: 'freshdesk',   label: 'De Freshdesk',      provider: 'freshdesk',   icon: <span className="w-4 h-4 rounded-sm bg-[#25c16f] flex items-center justify-center text-white text-[9px] font-bold">F</span> },
+    { id: 'shopify',     label: 'Desde Shopify',     provider: 'shopify',     icon: <span className="w-4 h-4 rounded-sm bg-[#95bf47] flex items-center justify-center text-white text-[9px] font-bold">S</span> },
+  ];
+  function pick(s: Source) {
+    onAction(`Conectando con ${s.label.replace(/^Desde |^De /, '')}…`);
+    onClose();
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'connectors');
+      url.searchParams.set('provider', s.provider);
+      window.location.href = url.toString();
+    }
+  }
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/35 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[760px] max-w-[92vw] max-h-[88vh] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_24px_60px_rgba(20,20,20,0.28)] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex-shrink-0 px-6 py-4 flex items-center justify-between border-b border-[#e9eae6]">
+          <h3 className="text-[15px] font-bold text-[#1a1a1a]">Conecte el contenido de la aplicación externa</h3>
+          <button onClick={onClose} className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#ed621d]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0 p-6">
+          <div className="grid grid-cols-3 gap-3">
+            {sources.map(s => (
+              <button
+                key={s.id}
+                onClick={() => pick(s)}
+                className="h-[52px] bg-white border border-[#e9eae6] rounded-[10px] px-4 flex items-center gap-3 hover:bg-[#f8f8f7]/60 hover:border-[#cfd0cb] transition-colors text-left"
+              >
+                <span className="w-7 h-7 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                  {s.icon}
+                </span>
+                <span className="text-[13px] font-semibold text-[#1a1a1a] truncate">{s.label}</span>
+              </button>
+            ))}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KnowledgeContentLibrary — drawer modal triggered by the "Ver todo" card.
+// Shows every piece of content in the workspace (articles, snippets,
+// website-syncs, documents) with type / status filters + search; clicking
+// a row opens that record in the article editor without leaving Fin.
+// ─────────────────────────────────────────────────────────────────────────────
+function KnowledgeContentLibrary({
+  domains,
+  onOpenArticle,
+  onClose,
+  onAction,
+}: {
+  domains: Array<{ id: string; name: string }>;
+  onOpenArticle: (article: any) => void;
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: articlesData, loading } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
+  const articles: any[] = Array.isArray(articlesData) ? articlesData : [];
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'any' | 'article' | 'snippet' | 'policy' | 'website' | 'document'>('any');
+  const [statusFilter, setStatusFilter] = useState<'any' | 'draft' | 'published'>('any');
+  const [visibilityFilter, setVisibilityFilter] = useState<'any' | 'public' | 'internal'>('any');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return articles.filter((a: any) => {
+      if (typeFilter !== 'any' && String(a.type || '').toLowerCase() !== typeFilter) return false;
+      if (statusFilter !== 'any' && String(a.status || '').toLowerCase() !== statusFilter) return false;
+      if (visibilityFilter !== 'any' && String(a.visibility || '').toLowerCase() !== visibilityFilter) return false;
+      if (!q) return true;
+      const hay = [a.title, a.description, a.content, a.id].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [articles, search, typeFilter, statusFilter, visibilityFilter]);
+
+  function typeLabel(t?: string) {
+    const v = String(t || '').toLowerCase();
+    return v === 'article' ? 'Artículo'
+      : v === 'snippet' ? 'Fragmento'
+      : v === 'policy' ? 'Política'
+      : v === 'website' ? 'Sitio web'
+      : v === 'document' ? 'Documento'
+      : v === 'playbook' ? 'Playbook'
+      : v || 'Artículo';
+  }
+  function domainName(id?: string) {
+    if (!id) return '—';
+    return domains.find(d => d.id === id)?.name || id.slice(0, 8);
+  }
+  async function publishOne(id: string) {
+    try {
+      await knowledgeApi.publishArticle(id);
+      onAction('Artículo publicado');
+      setRefreshKey(k => k + 1);
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo publicar', 'error');
+    }
+  }
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (!inEditable) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
+          isFullscreen ? 'w-full max-w-none border-l-0 rounded-none' : 'w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]'
+        }`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-4">
+          <h2 className="flex-1 text-[15px] font-bold text-[#1a1a1a]">Todo el contenido <span className="text-[#646462] font-normal">· {filtered.length}{filtered.length !== articles.length ? ` de ${articles.length}` : ''}</span></h2>
+          <button onClick={() => setIsFullscreen(v => !v)} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
+              {isFullscreen
+                ? <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" strokeLinecap="round" strokeLinejoin="round"/>
+                : <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" strokeLinecap="round" strokeLinejoin="round"/>}
+            </svg>
+          </button>
+          <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Filter bar */}
+        <div className="flex-shrink-0 border-b border-[#e9eae6] flex items-center px-5 py-3 gap-2 flex-wrap">
+          <div className="flex-1 max-w-[360px] h-8 rounded-[8px] border border-[#e9eae6] bg-white flex items-center px-3 gap-2 focus-within:border-[#1a1a1a]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar en todo el contenido…"
+              className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
+            />
+            {search && <button onClick={() => setSearch('')} title="Limpiar"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>}
+          </div>
+          <Dropdown
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v as any)}
+            items={[
+              { value: 'any',      label: 'Todos los tipos' },
+              { value: 'article',  label: 'Artículos' },
+              { value: 'snippet',  label: 'Fragmentos' },
+              { value: 'policy',   label: 'Políticas' },
+              { value: 'website',  label: 'Sitios web' },
+              { value: 'document', label: 'Documentos' },
+            ]}
+          />
+          <Dropdown
+            value={visibilityFilter}
+            onChange={(v) => setVisibilityFilter(v as any)}
+            items={[
+              { value: 'any',      label: 'Visibilidad' },
+              { value: 'public',   label: 'Público' },
+              { value: 'internal', label: 'Interno' },
+            ]}
+          />
+          <Dropdown
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v as any)}
+            items={[
+              { value: 'any',       label: 'Cualquier estado' },
+              { value: 'published', label: 'Publicados', icon: <span className="w-2 h-2 rounded-full bg-[#15803d]"/> },
+              { value: 'draft',     label: 'Borradores', icon: <span className="w-2 h-2 rounded-full bg-[#a4a4a2]"/> },
+            ]}
+          />
+          {(typeFilter !== 'any' || statusFilter !== 'any' || visibilityFilter !== 'any' || search) && (
+            <button
+              onClick={() => { setSearch(''); setTypeFilter('any'); setStatusFilter('any'); setVisibilityFilter('any'); }}
+              className="h-8 px-2.5 rounded-[8px] text-[12px] text-[#b91c1c] hover:bg-[#fef2f2]"
+            >Limpiar filtros</button>
+          )}
+        </div>
+
+        {/* Body — table */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {loading && articles.length === 0 ? (
+            <p className="p-8 text-[13px] text-[#646462]">Cargando contenido…</p>
+          ) : filtered.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-[13px] text-[#646462]">
+              {articles.length === 0 ? 'No hay contenido todavía. Crea un artículo desde "Agregar contenido".' : 'Ningún elemento coincide con los filtros.'}
+            </div>
+          ) : (
+            <div>
+              <div className="grid grid-cols-[1fr_120px_120px_120px_140px_100px] items-center gap-3 px-5 py-2.5 border-b border-[#e9eae6] text-[11.5px] uppercase tracking-wide font-semibold text-[#646462] sticky top-0 bg-white">
+                <span>Título</span>
+                <span>Tipo</span>
+                <span>Estado</span>
+                <span>Visibilidad</span>
+                <span>Carpeta</span>
+                <span className="text-right">Acción</span>
+              </div>
+              {filtered.map((a: any) => {
+                const status = String(a.status || 'draft').toLowerCase();
+                const visibility = String(a.visibility || 'public').toLowerCase();
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => onOpenArticle(a)}
+                    className="w-full text-left grid grid-cols-[1fr_120px_120px_120px_140px_100px] items-center gap-3 px-5 py-3 border-b border-[#f1f1ee] hover:bg-[#fafafa]"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate">{a.title || 'Sin título'}</p>
+                      {a.description && <p className="text-[12px] text-[#646462] truncate">{a.description}</p>}
+                    </div>
+                    <span className="text-[12.5px] text-[#1a1a1a]">{typeLabel(a.type)}</span>
+                    <span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${status === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                        {status === 'published' ? 'Publicado' : 'Borrador'}
+                      </span>
+                    </span>
+                    <span className="text-[12.5px] text-[#646462]">{visibility === 'internal' ? 'Interno' : 'Público'}</span>
+                    <span className="text-[12.5px] text-[#646462] truncate">{domainName(a.domain_id)}</span>
+                    <div className="flex items-center justify-end gap-2">
+                      {status !== 'published' && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); publishOne(a.id); }}
+                          className="text-[12px] font-semibold text-[#15803d] hover:underline"
+                        >Publicar</span>
+                      )}
+                      <span className="text-[12px] font-semibold text-[#1a1a1a] hover:underline">Editar</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -12823,20 +15619,35 @@ function KnowledgeArticulos({
           placeholder="Buscar por título o contenido…"
           className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
         />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]">
-          <option value="all">Estado: cualquiera</option>
-          <option value="published">Publicado</option>
-          <option value="draft">Borrador</option>
-        </select>
-        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]">
-          <option value="all">Tipo: cualquiera</option>
-          {KH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select value={healthFilter} onChange={e => setHealthFilter(e.target.value as any)} className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]">
-          <option value="all">Salud: cualquiera</option>
-          <option value="ok">Al día</option>
-          <option value="stale">Desactualizados</option>
-        </select>
+        <Dropdown
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v as any)}
+          triggerClassName="h-9 px-3 rounded-lg border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          items={[
+            { value: 'all',       label: 'Estado: cualquiera' },
+            { value: 'published', label: 'Publicado',          icon: <span className="w-2 h-2 rounded-full bg-[#15803d]"/> },
+            { value: 'draft',     label: 'Borrador',           icon: <span className="w-2 h-2 rounded-full bg-[#a4a4a2]"/> },
+          ]}
+        />
+        <Dropdown
+          value={typeFilter}
+          onChange={setTypeFilter}
+          triggerClassName="h-9 px-3 rounded-lg border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          items={[
+            { value: 'all', label: 'Tipo: cualquiera' },
+            ...KH_TYPE_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+          ]}
+        />
+        <Dropdown
+          value={healthFilter}
+          onChange={(v) => setHealthFilter(v as any)}
+          triggerClassName="h-9 px-3 rounded-lg border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          items={[
+            { value: 'all',   label: 'Salud: cualquiera' },
+            { value: 'ok',    label: 'Al día',           icon: <span className="w-2 h-2 rounded-full bg-[#15803d]"/> },
+            { value: 'stale', label: 'Desactualizados',  icon: <span className="w-2 h-2 rounded-full bg-[#dc2626]"/> },
+          ]}
+        />
       </div>
       {/* Bulk-action bar — appears as soon as one or more rows are selected. */}
       {selectedIds.size > 0 && (
@@ -13792,9 +16603,12 @@ const FIN_CONTENIDO_CARDS: { iconAsset: string; iconInset: string; label: string
 ];
 
 function FinContenidoContent() {
-  // Real article inventory feeds the "Fuente de contenido" table at the bottom
-  // of the screen — same data Conocimiento uses, so counts stay in sync.
-  const { data: articles } = useApi(() => knowledgeApi.listArticles(), [], []);
+  // Real article inventory feeds the "Fuente de contenido" table — same
+  // data Conocimiento uses, so counts stay in sync.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: articles } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
+  const domains = Array.isArray(domainsData) ? domainsData : [];
   const counts = useMemo(() => {
     const list = Array.isArray(articles) ? articles : [];
     const total = list.length;
@@ -13802,12 +16616,50 @@ function FinContenidoContent() {
     return { total, published };
   }, [articles]);
   const [search, setSearch] = useState('');
+  // Modal state — every card opens an in-place modal, never navigates away:
+  //   • Artículo público / interno / Fragmento → article editor
+  //   • Sincronización de sitio web            → website-sync wizard
+  //   • Conectar app externa                   → external-source picker
+  //   • Ver todo                               → content-library browser
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorPrefill, setEditorPrefill] = useState<any>(null);
+  const [websiteSyncOpen, setWebsiteSyncOpen] = useState(false);
+  const [externalPickerOpen, setExternalPickerOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    setToast({ msg, type });
+    window.setTimeout(() => setToast(null), 2800);
+  }
+  function openCreateEditor(opts: { type?: string; visibility?: 'public' | 'internal' } = {}) {
+    const visibility = opts.visibility || 'public';
+    setEditorPrefill({
+      type: opts.type || 'ARTICLE',
+      visibility,
+      fin_service: visibility === 'public',
+      copilot_enabled: true,
+    });
+    setEditorOpen(true);
+  }
   function jumpToKnowledge() {
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.set('view', 'knowledge');
       window.location.href = url.toString();
     }
+  }
+  function handleCardClick(label: string) {
+    if (label === 'Artículo público')          openCreateEditor({ type: 'ARTICLE', visibility: 'public' });
+    else if (label === 'Artículo interno')     openCreateEditor({ type: 'ARTICLE', visibility: 'internal' });
+    else if (label === 'Fragmento de texto')   openCreateEditor({ type: 'SNIPPET', visibility: 'internal' });
+    else if (label === 'Sincronización de sitio web') setWebsiteSyncOpen(true);
+    else if (label === 'Ver todo')             setLibraryOpen(true);
+    else openCreateEditor();
+  }
+  function openExistingArticle(article: any) {
+    setLibraryOpen(false);
+    setEditorPrefill(article);
+    setEditorOpen(true);
   }
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -13865,7 +16717,7 @@ function FinContenidoContent() {
             {FIN_CONTENIDO_CARDS.map(c => (
               <button
                 key={c.label}
-                onClick={jumpToKnowledge}
+                onClick={() => handleCardClick(c.label)}
                 className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex flex-col items-start gap-3 hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors"
               >
                 <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
@@ -13876,16 +16728,20 @@ function FinContenidoContent() {
                 <span className="font-['Inter'] font-semibold text-[14px] leading-[20px] text-[#1a1a1a] text-left">{c.label}</span>
               </button>
             ))}
-            {/* AI suggest card (Component 14 — variants 40 left, 41 right) */}
-            <button className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex items-start justify-between hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors">
-              <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
-                <span className="relative w-4 h-4 overflow-hidden block">
-                  <img src={`${FIGMA_CDN}/885021c5-87b2-4496-a7e3-ad160d9b46e1`} alt="" className="absolute" style={{ inset: '-0.01% -0.12% -0.12% 0' }} />
-                </span>
-              </span>
-              <span className="relative w-4 h-4 overflow-hidden block mt-1">
-                <img src={`${FIGMA_CDN}/32bf7a54-7641-4512-b6e6-3ad14d79ee96`} alt="" className="absolute" style={{ inset: '18.75% 18.75% 15% 15%' }} />
-              </span>
+            {/* External sources card — opens the connector picker (Zendesk,
+                Notion, Confluence, Document upload, Salesforce, etc.). */}
+            <button
+              onClick={() => setExternalPickerOpen(true)}
+              title="Conectar contenido de aplicaciones externas"
+              className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex flex-col items-start justify-between hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors"
+            >
+              <div className="flex items-center -space-x-1">
+                <span className="w-7 h-7 rounded-[6px] bg-[#03363d] flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-white">Z</span>
+                <span className="w-7 h-7 rounded-[6px] bg-[#1a1a1a] flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-white">N</span>
+                <span className="w-7 h-7 rounded-[6px] bg-[#0052cc] flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-white">C</span>
+                <span className="w-7 h-7 rounded-[6px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center text-[#646462] text-[11px] font-bold ring-2 ring-white">…</span>
+              </div>
+              <span className="font-['Inter'] font-semibold text-[14px] leading-[20px] text-[#1a1a1a] text-left">Conectar app externa</span>
             </button>
           </div>
 
@@ -13946,12 +16802,371 @@ function FinContenidoContent() {
           </div>
         </div>
       </div>
+
+      {/* In-place modals — article editor, website-sync wizard, external
+          source picker. None of them navigate the user away from Fin. */}
+      {editorOpen && (
+        <KnowledgeArticleEditor
+          initial={editorPrefill}
+          domains={domains}
+          onClose={() => { setEditorOpen(false); setEditorPrefill(null); }}
+          onSaved={() => { setRefreshKey(k => k + 1); }}
+          onAction={showToast}
+        />
+      )}
+      {websiteSyncOpen && (
+        <KnowledgeWebsiteSyncWizard
+          onClose={() => setWebsiteSyncOpen(false)}
+          onSaved={() => { setRefreshKey(k => k + 1); }}
+          onAction={showToast}
+        />
+      )}
+      {externalPickerOpen && (
+        <KnowledgeExternalSourcePicker
+          onClose={() => setExternalPickerOpen(false)}
+          onAction={showToast}
+        />
+      )}
+      {libraryOpen && (
+        <KnowledgeContentLibrary
+          domains={domains}
+          onOpenArticle={openExistingArticle}
+          onClose={() => setLibraryOpen(false)}
+          onAction={showToast}
+        />
+      )}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-full shadow-lg text-[12.5px] font-medium ${toast.type === 'error' ? 'bg-[#fef2f2] text-[#b91c1c] border border-[#fecaca]' : 'bg-[#1a1a1a] text-white'}`}>
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Capacitar > Pautas / Orientación (Figma 1:4825) ─────────────────────────
+const FIN_PAUTA_CATEGORIES: Array<{ id: string; title: string; description: string; icon: ReactNode }> = [
+  {
+    id: 'estilo_comunicacion',
+    title: 'Estilo de comunicación',
+    description: 'Crea una guía personalizada sobre el vocabulario y los términos que Fin debe utilizar.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.5h11v8h-7l-4 3v-11z" strokeLinejoin="round"/></svg>,
+  },
+  {
+    id: 'contexto_aclaraciones',
+    title: 'Contexto y aclaraciones',
+    description: 'Crea una guía personalizada sobre las preguntas de seguimiento que Fin debe hacer.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M6.2 6.4c.3-.9 1.1-1.5 2-1.5 1.1 0 2 .8 2 1.8 0 1-.8 1.5-1.7 1.7-.3 0-.5.3-.5.5v.6M8 11.2v.01" strokeLinecap="round"/></svg>,
+  },
+  {
+    id: 'contenido_fuentes',
+    title: 'Contenido y fuentes',
+    description: 'Crea una pauta personalizada sobre cuándo y cómo Fin debe utilizar artículos o fuentes específicos en las respuestas.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>,
+  },
+  {
+    id: 'correo_no_deseado',
+    title: 'Correo no deseado',
+    description: 'Cree una guía personalizada sobre cómo Fin debe identificar y manejar los mensajes potenciales de spam.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4" strokeLinejoin="round"/></svg>,
+  },
+  {
+    id: 'otros',
+    title: 'Otros',
+    description: 'Cualquier otra pauta que quieras que Fin siga.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg>,
+  },
+];
+
+const FIN_AUDIENCE_ITEMS: DropdownItem[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'users', label: 'Usuarios' },
+  { value: 'leads', label: 'Leads' },
+  { value: 'visitors', label: 'Visitantes' },
+];
+const FIN_AUDIENCE_LABEL: Record<string, string> = {
+  all: 'Todos', users: 'Usuarios', leads: 'Leads', visitors: 'Visitantes',
+};
+const FIN_CHANNEL_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: 'chat', label: 'Chat' },
+  { id: 'email', label: 'Correo electrónico' },
+  { id: 'voice', label: 'Voz' },
+];
+
+const FIN_PAUTA_SUGGESTIONS: Array<{ label: string; text: string }> = [
+  { label: 'Usa un lenguaje sencillo', text: '\n- Usa un lenguaje sencillo en cada respuesta.' },
+  { label: 'Mantén las respuestas concisas', text: '\n- Mantén las respuestas concisas (máximo 3 frases).' },
+  { label: 'No garantices resultados', text: '\n- No garantices resultados ni hagas promesas.' },
+  { label: 'Cita siempre la fuente', text: '\n- Cita siempre la fuente del artículo cuando exista.' },
+];
+const FIN_PAUTA_SUGGESTIONS_EXTRA: Array<{ label: string; text: string }> = [
+  { label: 'Pregunta antes de actuar', text: '\n- Pregunta antes de realizar acciones irreversibles.' },
+  { label: 'Mantén tono amistoso', text: '\n- Mantén un tono amistoso y profesional.' },
+  { label: 'Reconoce limitaciones', text: '\n- Reconoce cuando no sepas la respuesta y escala.' },
+];
+
+// ─── FinPautaEditor: full-drawer create/edit modal for a single Pauta ─────────
+function FinPautaEditor({
+  initial,
+  onSave,
+  onClose,
+  onAction,
+  onToggleEnable,
+}: {
+  initial: FinPauta | null;
+  onSave: (next: FinPauta) => void;
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onToggleEnable: (next: boolean) => void;
+}) {
+  const [title, setTitle] = useState(initial?.title || '');
+  const [body, setBody] = useState(initial?.body || '');
+  const [audience, setAudience] = useState<FinPauta['audience']>(initial?.audience || 'all');
+  const [channels, setChannels] = useState<string[]>(initial?.channels || []);
+  const [enabled, setEnabled] = useState(initial?.enabled ?? false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  // Esc-to-close (skip if user is typing in title/body).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const tag = (t?.tagName || '').toUpperCase();
+      const editing = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (!editing) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function appendSuggestion(text: string) {
+    setBody(prev => prev + text);
+    bodyRef.current?.focus();
+  }
+  function toggleChannel(id: string) {
+    setChannels(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  }
+  function save() {
+    if (!initial) {
+      onAction('No se pudo guardar', 'error');
+      return;
+    }
+    const next: FinPauta = {
+      ...initial,
+      title: title.trim(),
+      body,
+      audience,
+      channels,
+      enabled,
+    };
+    onSave(next);
+    onAction('Pauta guardada');
+  }
+  function handleToggleEnabled() {
+    const next = !enabled;
+    setEnabled(next);
+    onToggleEnable(next);
+  }
+  const channelTriggerLabel = channels.length === 0
+    ? 'Todos los canales'
+    : channels.length === FIN_CHANNEL_OPTIONS.length
+      ? 'Todos los canales'
+      : `${channels.length} canal${channels.length === 1 ? '' : 'es'}`;
+  const metrics = initial?.metrics || {};
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
+          isFullscreen ? 'w-full max-w-none border-l-0 rounded-none' : 'w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]'
+        }`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Sin título"
+            className="flex-1 text-[15px] font-semibold text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent"
+          />
+          <div className="flex items-center gap-2">
+            {enabled ? (
+              <button
+                onClick={handleToggleEnabled}
+                className="h-8 px-3 rounded-full bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c] text-[13px] font-semibold hover:bg-[#fee2e2] flex items-center gap-1.5"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+                Pausar
+              </button>
+            ) : (
+              <button
+                onClick={handleToggleEnabled}
+                className="h-8 px-3 rounded-full bg-[#dcfce7] border border-[#bbf7d0] text-[#15803d] text-[13px] font-semibold hover:bg-[#bbf7d0] flex items-center gap-1.5"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                Habilitar
+              </button>
+            )}
+            <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+            <span className="w-px h-6 bg-[#e9eae6]" />
+            <button onClick={() => setIsFullscreen(v => !v)} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              {isFullscreen
+                ? <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                : <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </button>
+            <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Filter row */}
+        <div className="flex-shrink-0 h-12 px-6 border-b border-[#e9eae6] flex items-center gap-4">
+          <span className="text-[13px] text-[#646462]">Audiencia</span>
+          <Dropdown
+            value={audience}
+            items={FIN_AUDIENCE_ITEMS}
+            onChange={v => setAudience(v as FinPauta['audience'])}
+          />
+          <span className="w-px h-5 bg-[#e9eae6]" />
+          <span className="text-[13px] text-[#646462]">Canales</span>
+          <Dropdown
+            value=""
+            items={[
+              { value: '__all', label: 'Todos los canales' },
+              ...FIN_CHANNEL_OPTIONS.map(c => ({
+                value: c.id,
+                label: `${channels.includes(c.id) ? '✓ ' : ''}${c.label}`,
+              })),
+            ]}
+            onChange={v => {
+              if (v === '__all') setChannels([]);
+              else toggleChannel(v);
+            }}
+            renderTrigger={(_, open) => (
+              <>
+                <span className="truncate">{channelTriggerLabel}</span>
+                {channels.length > 0 && channels.length < FIN_CHANNEL_OPTIONS.length && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#1a1a1a] text-white text-[10px] font-semibold">{channels.length}</span>
+                )}
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+              </>
+            )}
+          />
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-12 py-8 min-h-0">
+          <textarea
+            ref={bodyRef}
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            placeholder="Escriba aquí..."
+            className="w-full min-h-[280px] text-[16px] text-[#1a1a1a] leading-[24px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
+          />
+          <div className="mt-6 flex flex-wrap gap-2">
+            {FIN_PAUTA_SUGGESTIONS.map(s => (
+              <button
+                key={s.label}
+                onClick={() => appendSuggestion(s.text)}
+                className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                + {s.label}
+              </button>
+            ))}
+            <div className="relative">
+              <button
+                onClick={() => setShowMore(v => !v)}
+                className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] text-[#646462] hover:bg-[#f8f8f7]"
+              >...</button>
+              {showMore && (
+                <div className="absolute top-full mt-1 left-0 z-10 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 min-w-[260px]">
+                  {FIN_PAUTA_SUGGESTIONS_EXTRA.map(s => (
+                    <button
+                      key={s.label}
+                      onClick={() => { appendSuggestion(s.text); setShowMore(false); }}
+                      className="w-full px-3 h-9 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                    >+ {s.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 h-12 border-t border-[#e9eae6] px-6 flex items-center gap-6 text-[12.5px] text-[#646462]">
+          <span>Usado · {metrics.used ?? '-'}</span>
+          <span>Resuelto · {metrics.resolved ?? '-'}</span>
+          <span>Canalizado · {metrics.routed ?? '-'}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FinOrientacionContent: real CRUD over Pautas ────────────────────────────
 function FinOrientacionContent() {
+  const pautas = useFinResource<FinPauta>('pautas', []);
+  const toast = useFinToast();
+  const [editing, setEditing] = useState<FinPauta | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [channelFilter, setChannelFilter] = useState<string>('all');
+  const [openCats, setOpenCats] = useState<Record<string, boolean>>(() => Object.fromEntries(FIN_PAUTA_CATEGORIES.map(c => [c.id, true])));
+
+  function startCreate(category: string) {
+    const created = pautas.create({
+      category,
+      title: '',
+      audience: 'all',
+      channels: [],
+      body: '',
+      enabled: false,
+    });
+    setEditing(created);
+    setEditorOpen(true);
+  }
+  function openEdit(p: FinPauta) {
+    setEditing(p);
+    setEditorOpen(true);
+  }
+  function handleSave(next: FinPauta) {
+    pautas.update(next.id, next);
+    setEditing(next);
+  }
+  function handleToggleEnable(next: boolean) {
+    if (!editing) return;
+    pautas.update(editing.id, { enabled: next });
+    setEditing({ ...editing, enabled: next });
+    toast.show(next ? 'Pauta habilitada' : 'Pauta pausada');
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return pautas.items.filter(p => {
+      if (q && !(p.title.toLowerCase().includes(q) || p.body.toLowerCase().includes(q))) return false;
+      if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+      if (channelFilter !== 'all') {
+        if (p.channels.length > 0 && !p.channels.includes(channelFilter)) return false;
+      }
+      return true;
+    });
+  }, [pautas.items, search, categoryFilter, channelFilter]);
+
+  const filterDropdownItems: DropdownItem[] = [
+    { value: '__cat_header', label: '— Categorías —', disabled: true },
+    { value: 'cat:all', label: 'Todas las categorías' },
+    ...FIN_PAUTA_CATEGORIES.map(c => ({ value: `cat:${c.id}`, label: c.title })),
+    { value: '__ch_header', label: '— Canales —', divider: true, disabled: true },
+    { value: 'ch:all', label: 'Todos los canales' },
+    ...FIN_CHANNEL_OPTIONS.map(c => ({ value: `ch:${c.id}`, label: c.label })),
+  ];
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero */}
@@ -13965,7 +17180,6 @@ function FinOrientacionContent() {
               Capacite a Fin para proporcionar respuestas precisas y use su estilo de comunicación, lo que garantiza una asistencia coherente y escalable en todos los flujos de trabajo.
             </p>
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-[#1a1a1a]">
-              {/* Figma 1:4581/1:4586/1:4591/1:4596 — real Figma asset icons (variants 27-30) */}
               <a className="flex items-center gap-1.5 hover:underline" href="#">
                 <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
                   <img src={`${FIGMA_CDN}/ba01950e-55a7-4033-8b44-74d41efa47b8`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
@@ -13992,7 +17206,6 @@ function FinOrientacionContent() {
               </a>
             </div>
           </div>
-          {/* Figma 1:4608 — "Ejemplos de orientación" real image (was dark-green mockup) */}
           <div className="relative w-[388px] h-[160px] rounded-[10px] overflow-hidden flex-shrink-0">
             <img src={`${FIGMA_CDN}/03c7cc8d-8744-4ed2-8846-6cd4be6c593d`} alt="Ejemplos de orientación" className="absolute h-full top-0 left-0 w-full" />
           </div>
@@ -14017,110 +17230,791 @@ function FinOrientacionContent() {
       {/* Body */}
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-6 py-4 flex flex-col gap-3">
-          {/* Básicos accordion */}
-          <button className="w-full bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
-            <div className="flex items-center gap-2">
-              <span className="text-[14px] font-semibold text-[#1a1a1a]">Básicos</span>
-              <span className="text-[13px] text-[#646462]">Tono amistoso, Longitud estándar</span>
-            </div>
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-          </button>
-
           {/* Search + filtrar */}
           <div className="flex items-center gap-3">
             <div className="flex-1 max-w-[420px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
               <input
                 type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
                 placeholder="Busca la guía por título o contenido"
                 className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
               />
             </div>
-            <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-              <span>Filtrar</span>
-            </button>
+            <Dropdown
+              value=""
+              items={filterDropdownItems}
+              onChange={v => {
+                if (v.startsWith('cat:')) setCategoryFilter(v.slice(4));
+                else if (v.startsWith('ch:')) setChannelFilter(v.slice(3));
+              }}
+              renderTrigger={(_, open) => (
+                <>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                  <span>Filtrar</span>
+                  {(categoryFilter !== 'all' || channelFilter !== 'all') && (
+                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#1a1a1a] text-white text-[10px] font-semibold">
+                      {(categoryFilter !== 'all' ? 1 : 0) + (channelFilter !== 'all' ? 1 : 0)}
+                    </span>
+                  )}
+                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+                </>
+              )}
+            />
           </div>
 
-          {/* Estilo de comunicación */}
-          <FinPautaCategory
-            title="Estilo de comunicación"
-            description="Crea una guía personalizada sobre el vocabulario y los términos que Fin debe utilizar."
-            icon={
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.5h11v8h-7l-4 3v-11z" strokeLinejoin="round"/></svg>
-            }
-          />
+          {/* Categorías */}
+          {FIN_PAUTA_CATEGORIES.map(cat => {
+            const items = filtered.filter(p => p.category === cat.id);
+            const isOpen = openCats[cat.id] !== false;
+            return (
+              <div key={cat.id} className="bg-white border border-[#e9eae6] rounded-[12px]">
+                <button
+                  onClick={() => setOpenCats(s => ({ ...s, [cat.id]: !isOpen }))}
+                  className="w-full px-4 py-3 flex items-start justify-between border-b border-[#e9eae6] hover:bg-[#f8f8f7]/40 text-left"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5">{cat.icon}</span>
+                    <div>
+                      <p className="text-[14px] font-semibold text-[#1a1a1a]">
+                        {cat.title} <span className="text-[#646462] font-normal">({items.length})</span>
+                      </p>
+                      <p className="text-[13px] text-[#646462] mt-0.5">{cat.description}</p>
+                    </div>
+                  </div>
+                  <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] mt-1.5 transition-transform ${isOpen ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {isOpen && (
+                  <>
+                    {items.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-[13px] text-[#646462] border-b border-[#e9eae6]">
+                        Aún no hay pautas. Haz clic en Nuevo para crear uno.
+                      </div>
+                    ) : (
+                      items.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => openEdit(p)}
+                          className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] text-left"
+                        >
+                          <p className="text-[13.5px] font-medium text-[#1a1a1a] truncate">{p.title.trim() || 'Sin título'}</p>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
+                            {FIN_AUDIENCE_LABEL[p.audience] || 'Todos'}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
+                            {p.channels.length === 0 ? 'Todos los canales' : `${p.channels.length} canal${p.channels.length === 1 ? '' : 'es'}`}
+                          </span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${p.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
+                            {p.enabled ? 'Habilitado' : 'Pausado'}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                    <div className="px-4 py-2.5">
+                      <button
+                        onClick={() => startCreate(cat.id)}
+                        className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                        <span>Nuevo</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-          {/* Contexto y aclaraciones */}
-          <FinPautaCategory
-            title="Contexto y aclaraciones"
-            description="Crea una guía personalizada sobre las preguntas de seguimiento que Fin debe hacer."
-            icon={
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M6.2 6.4c.3-.9 1.1-1.5 2-1.5 1.1 0 2 .8 2 1.8 0 1-.8 1.5-1.7 1.7-.3 0-.5.3-.5.5v.6M8 11.2v.01" strokeLinecap="round"/></svg>
-            }
-          />
+      {editorOpen && editing && (
+        <FinPautaEditor
+          initial={editing}
+          onSave={handleSave}
+          onClose={() => setEditorOpen(false)}
+          onAction={(m, t) => toast.show(m, t)}
+          onToggleEnable={handleToggleEnable}
+        />
+      )}
+      {toast.node}
+    </div>
+  );
+}
 
-          {/* Contenido y fuentes — Figma 1:4719 */}
-          <FinPautaCategory
-            title="Contenido y fuentes"
-            description="Crea una pauta personalizada sobre cuándo y cómo Fin debe utilizar artículos o fuentes específicos en las respuestas."
-            icon={
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
-            }
-          />
-
-          {/* Correo no deseado — Figma 1:4744 */}
-          <FinPautaCategory
-            title="Correo no deseado"
-            description="Cree una guía personalizada sobre cómo Fin debe identificar y manejar los mensajes potenciales de spam."
-            icon={
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4" strokeLinejoin="round"/></svg>
-            }
-          />
-
-          {/* Otros — Figma 1:4768 */}
-          <FinPautaCategory
-            title="Otros"
-            description="Cualquier otra pauta que quieras que Fin siga."
-            icon={
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg>
-            }
-          />
+// ─── Generic Fin "Nuevo" modal (used by Atributos / Escalamiento / Procedimientos / Audiencias)
+// Matches the KnowledgeFolderModal visual style: 440px white card, h-9 inputs, h-8 rounded-full buttons.
+function FinSimpleCreateModal({
+  title,
+  description,
+  namePlaceholder,
+  descPlaceholder = 'Descripción opcional…',
+  submitLabel = 'Crear',
+  onClose,
+  onSubmit,
+}: {
+  title: string;
+  description?: string;
+  namePlaceholder?: string;
+  descPlaceholder?: string;
+  submitLabel?: string;
+  onClose: () => void;
+  onSubmit: (payload: { name: string; description: string }) => Promise<void> | void;
+}) {
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit() {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    try { await onSubmit({ name: trimmed, description: desc.trim() }); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">{title}</h3>
+        {description && <p className="text-[12.5px] text-[#646462] mb-4">{description}</p>}
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Nombre</label>
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && name.trim()) submit(); }}
+          placeholder={namePlaceholder}
+          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
+        />
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Descripción (opcional)</label>
+        <textarea
+          value={desc}
+          onChange={e => setDesc(e.target.value)}
+          placeholder={descPlaceholder}
+          className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+          <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? 'Guardando…' : submitLabel}</button>
         </div>
       </div>
     </div>
   );
 }
 
-function FinPautaCategory({
-  title,
-  description,
-  icon,
-}: {
-  title: string;
+// Tiny inline toast used by the Fin sub-views below. Self-contained because
+// these views are mounted without an onAction prop.
+function useFinToast() {
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  function show(text: string, type: 'success' | 'error' = 'success') {
+    setMsg({ text, type });
+    window.setTimeout(() => setMsg(null), 3000);
+  }
+  const node = msg ? (
+    <div className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-lg shadow-lg text-[13px] font-medium ${msg.type === 'error' ? 'bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c]' : 'bg-[#1a1a1a] text-white'}`}>
+      {msg.text}
+    </div>
+  ) : null;
+  return { show, node };
+}
+
+// ─── Atributos: templates picker ─────────────────────────────────────────────
+const FIN_ATRIBUTO_TEMPLATES: Array<{
+  name: string;
   description: string;
-  icon: ReactNode;
+  values: Array<{ name: string; description: string }>;
+}> = [
+  { name: 'Sentimiento', description: 'Captura el tono emocional del cliente', values: [
+    { name: 'Negative', description: 'El cliente expresa frustración o enfado.' },
+    { name: 'Neutral', description: 'El tono no es ni positivo ni negativo.' },
+    { name: 'Positive', description: 'El cliente expresa satisfacción o agradecimiento.' },
+  ]},
+  { name: 'Urgencia', description: 'Detecta cuán urgente es la consulta', values: [
+    { name: 'Baja', description: 'Sin presión inmediata.' },
+    { name: 'Media', description: 'Requiere respuesta en horas.' },
+    { name: 'Alta', description: 'Requiere atención inmediata.' },
+  ]},
+  { name: 'Complejidad', description: 'Evalúa el nivel técnico del problema', values: [
+    { name: 'Simple', description: 'Resoluble con un artículo o respuesta directa.' },
+    { name: 'Moderado', description: 'Requiere varios pasos o contexto.' },
+    { name: 'Complejo', description: 'Requiere intervención de un especialista.' },
+  ]},
+  { name: 'Intención', description: 'Tipo de petición', values: [
+    { name: 'Información', description: 'El cliente pregunta o consulta.' },
+    { name: 'Acción', description: 'El cliente pide ejecutar una operación.' },
+    { name: 'Reclamo', description: 'El cliente reporta un problema.' },
+    { name: 'Cancelación', description: 'El cliente quiere cancelar un servicio.' },
+  ]},
+  { name: 'Idioma del cliente', description: 'Idioma detectado', values: [
+    { name: 'Español', description: 'El cliente escribe en español.' },
+    { name: 'Inglés', description: 'El cliente escribe en inglés.' },
+    { name: 'Francés', description: 'El cliente escribe en francés.' },
+    { name: 'Portugués', description: 'El cliente escribe en portugués.' },
+  ]},
+  { name: 'Vencimiento de pedido', description: 'Estado de un pedido pendiente', values: [
+    { name: 'A tiempo', description: 'Llegará en la fecha prevista.' },
+    { name: 'En riesgo', description: 'Puede retrasarse.' },
+    { name: 'Vencido', description: 'Ya superó la fecha prevista.' },
+  ]},
+];
+
+function FinAtributoTemplatesPicker({
+  onPick,
+  onClose,
+}: {
+  onPick: (tpl: typeof FIN_ATRIBUTO_TEMPLATES[number]) => void;
+  onClose: () => void;
 }) {
   return (
-    <div className="bg-white border border-[#e9eae6] rounded-[12px]">
-      <div className="px-4 py-3 flex items-start justify-between border-b border-[#e9eae6]">
-        <div className="flex items-start gap-2">
-          <span className="mt-0.5">{icon}</span>
-          <div>
-            <p className="text-[14px] font-semibold text-[#1a1a1a]">{title}</p>
-            <p className="text-[13px] text-[#646462] mt-0.5">{description}</p>
-          </div>
+    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[760px] max-h-[80vh] rounded-[14px] bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex-shrink-0 h-[56px] px-5 border-b border-[#e9eae6] flex items-center justify-between">
+          <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Plantillas de atributos</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
         </div>
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] mt-1.5"><path d="M4 6l4 4 4-4z"/></svg>
+        <div className="flex-1 overflow-y-auto p-5 grid grid-cols-2 gap-3">
+          {FIN_ATRIBUTO_TEMPLATES.map(tpl => (
+            <button
+              key={tpl.name}
+              onClick={() => onPick(tpl)}
+              className="text-left bg-white border border-[#e9eae6] rounded-[12px] p-4 hover:bg-[#f8f8f7]/40 hover:border-[#1a1a1a] transition-colors"
+            >
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">{tpl.name}</p>
+              <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">{tpl.description}</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {tpl.values.map(v => (
+                  <span key={v.name} className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11.5px] text-[#1a1a1a]">{v.name}</span>
+                ))}
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="px-4 py-8 text-center text-[13px] text-[#646462] border-b border-[#e9eae6]">
-        Aún no hay pautas. Haz clic en Nuevo para crear uno.
-      </div>
-      <div className="px-4 py-2.5">
-        <button className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-          <span>Nuevo</span>
-        </button>
+    </div>
+  );
+}
+
+// ─── FinAtributoEditor: full-drawer create/edit modal for one attribute ──────
+function FinAtributoEditor({
+  initial,
+  allAttributes,
+  onSave,
+  onDelete,
+  onClose,
+  onAction,
+  onToggleEnable,
+}: {
+  initial: FinAtributo;
+  allAttributes: FinAtributo[];
+  onSave: (next: FinAtributo) => void;
+  onDelete: () => void;
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onToggleEnable: (next: boolean) => void;
+}) {
+  // Treat as "new" when the resource has no name yet AND no values/conditions —
+  // this matches the startNewBlank() initialization in FinAtributosContent.
+  const isNew = !initial.name && initial.values.length === 0 && initial.conditions.length === 0;
+  void onDelete;
+  const [name, setName] = useState(initial.name);
+  const [description, setDescription] = useState(initial.description.slice(0, 255));
+  const [audience, setAudience] = useState<FinAtributo['audience']>(initial.audience);
+  const [reDetectOnClose, setReDetectOnClose] = useState(initial.reDetectOnClose);
+  const [values, setValues] = useState<FinAtributoValue[]>(initial.values);
+  const [conditions, setConditions] = useState<FinAtributoCondition[]>(initial.conditions);
+  const [enabled, setEnabled] = useState(initial.enabled);
+  const [visibility, setVisibility] = useState<'all' | 'admins' | 'me'>('all');
+  const [tab, setTab] = useState<'general' | 'values' | 'conditions'>('general');
+  const [valSearch, setValSearch] = useState('');
+  const [valueEditor, setValueEditor] = useState<null | { mode: 'create' } | { mode: 'edit'; id: string }>(null);
+  const [valueName, setValueName] = useState('');
+  const [valueDescription, setValueDescription] = useState('');
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const tag = (t?.tagName || '').toUpperCase();
+      const editing = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (!editing) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function save() {
+    const next: FinAtributo = {
+      ...initial,
+      name: name.trim(),
+      description,
+      audience,
+      reDetectOnClose,
+      values,
+      conditions,
+      enabled,
+    };
+    onSave(next);
+    onAction('Atributo guardado');
+  }
+  function handleToggleEnabled() {
+    const next = !enabled;
+    setEnabled(next);
+    onToggleEnable(next);
+  }
+  function openValueCreate() {
+    setValueName('');
+    setValueDescription('');
+    setValueEditor({ mode: 'create' });
+  }
+  function openValueEdit(id: string) {
+    const v = values.find(x => x.id === id);
+    if (!v) return;
+    setValueName(v.name);
+    setValueDescription(v.description);
+    setValueEditor({ mode: 'edit', id });
+  }
+  function saveValueEditor() {
+    if (!valueEditor) return;
+    if (valueEditor.mode === 'create') {
+      setValues(v => [...v, {
+        id: `val_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+        name: valueName,
+        description: valueDescription,
+      }]);
+    } else {
+      setValues(v => v.map(it => it.id === valueEditor.id ? { ...it, name: valueName, description: valueDescription } : it));
+    }
+    setValueEditor(null);
+  }
+  function removeValue(id: string) {
+    setValues(v => v.filter(it => it.id !== id));
+  }
+  function importCsv() {
+    const raw = window.prompt('Pega el CSV (formato: nombre,descripción por línea)');
+    if (!raw) return;
+    const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const next: FinAtributoValue[] = lines.map((l, i) => {
+      const idx = l.indexOf(',');
+      const n = idx >= 0 ? l.slice(0, idx).trim() : l;
+      const d = idx >= 0 ? l.slice(idx + 1).trim() : '';
+      return { id: `val_${Date.now()}_${i}`, name: n, description: d };
+    });
+    setValues(v => [...v, ...next]);
+    onAction(`${next.length} valores importados`);
+  }
+  function addCondition() {
+    setConditions(c => [...c, { id: `cond_${Date.now()}_${Math.floor(Math.random()*1000)}`, whenValue: '', thenAttributeId: '', usingValues: [] }]);
+  }
+  function updateCondition(id: string, patch: Partial<FinAtributoCondition>) {
+    setConditions(c => c.map(it => it.id === id ? { ...it, ...patch } : it));
+  }
+  function removeCondition(id: string) {
+    setConditions(c => c.filter(it => it.id !== id));
+  }
+
+  const filteredValues = useMemo(() => {
+    const q = valSearch.trim().toLowerCase();
+    if (!q) return values;
+    return values.filter(v => v.name.toLowerCase().includes(q) || v.description.toLowerCase().includes(q));
+  }, [values, valSearch]);
+  const remaining = Math.max(0, 255 - description.length);
+  const valueDescRemaining = Math.max(0, 2500 - valueDescription.length);
+  const valueNameRemaining = Math.max(0, 400 - valueName.length);
+  const otherAttributes = allAttributes.filter(a => a.id !== initial.id);
+
+  const titleText = isNew ? 'Nuevo atributo' : 'Editar atributo';
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className="absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        {valueEditor ? (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <button
+              onClick={() => setValueEditor(null)}
+              title="Volver"
+              className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 text-[13px]">
+              <span className="text-[#646462]">{titleText}</span>
+              <span className="text-[#a4a4a2]">›</span>
+              <span className="font-semibold text-[#1a1a1a] truncate">
+                {valueEditor.mode === 'create' ? 'Nuevo valor' : (valueName || 'Editar valor')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={saveValueEditor} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">{titleText}</h2>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                {enabled ? 'Habilitado' : 'Deshabilitado'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] flex items-center gap-2 hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                Prácticas recomendadas
+              </button>
+              {enabled ? (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#b91c1c] hover:bg-[#991b1b] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+                  Pausar
+                </button>
+              ) : (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#15803d] hover:bg-[#166534] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                  Habilitar
+                </button>
+              )}
+              <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Value editor sub-view (replaces tabs + body when active) */}
+        {valueEditor ? (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+            <div className="w-full px-8 py-8 flex flex-col gap-4">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Elige un nombre corto y claro que indique a Fin exactamente lo que representa este valor.</p>
+                <input
+                  value={valueName}
+                  onChange={e => { if (e.target.value.length <= 400) setValueName(e.target.value); }}
+                  placeholder="Ingresa un nombre, por ejemplo, Negativo"
+                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="mt-1.5 text-[11.5px] text-[#646462]">{valueNameRemaining} caracteres restantes</p>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describe qué representa este valor y cuándo Fin debería elegirlo. Incluye los temas de conversación a los que se aplica, las palabras clave comunes de los clientes o preguntas, y cuándo debe elegirse en lugar de otros valores en el atributo.</p>
+                <textarea
+                  value={valueDescription}
+                  onChange={e => { if (e.target.value.length <= 2500) setValueDescription(e.target.value); }}
+                  placeholder={'Ingrese una descripción, por ejemplo,\n\nEste valor cubre todas las conversaciones en las que un cliente expresa un sentimiento negativo. Ejemplos comunes incluyen:\n• Opinión negativa sobre un producto\n• Frustración con el servicio a clientes recibido\n\nPalabras clave: infeliz, frustrado, reembolso, devolución, decepcionado'}
+                  className="w-full min-h-[420px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="mt-1.5 text-[11.5px] text-[#646462]">{valueDescRemaining.toLocaleString('es-ES')} caracteres restantes</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+        <>
+        {/* Tab strip */}
+        <div className="flex-shrink-0 h-11 border-b border-[#e9eae6] px-5 flex items-end gap-2">
+          {([
+            { id: 'general', label: 'General' },
+            { id: 'values', label: `Valores (${values.length})` },
+            { id: 'conditions', label: `Condiciones (${conditions.length})` },
+          ] as const).map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`h-10 px-3 text-[13px] font-medium border-b-2 transition-colors ${
+                tab === t.id
+                  ? 'text-[#1a1a1a] border-[#1a1a1a]'
+                  : 'text-[#646462] border-transparent hover:text-[#1a1a1a]'
+              }`}
+            >{t.label}</button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+          {tab === 'general' && (
+            <div className="w-full px-8 py-8 flex flex-col gap-4">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Elige un nombre claro y descriptivo que indique a Fin el propósito de este atributo. Por ejemplo, si es para detectar la confianza del cliente, llámalo "Confianza".</p>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Introduzca un nombre..."
+                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describa brevemente el propósito de este atributo y cómo debe usarlo Fin.</p>
+                <textarea
+                  value={description}
+                  onChange={e => { if (e.target.value.length <= 255) setDescription(e.target.value); }}
+                  placeholder={'Ingrese una descripción, por ejemplo,\n\nEste atributo capta el tono emocional general que expresa un cliente en una conversación.'}
+                  className="w-full min-h-[140px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="mt-1.5 text-[11.5px] text-[#646462]">{remaining} caracteres restantes</p>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <div className="flex items-center gap-1.5 mb-4">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Ajustes de Fin</h3>
+                  <span className="w-4 h-4 rounded-full bg-[#1a1a1a] text-white text-[10px] flex items-center justify-center cursor-help" title="Configuración usada por Fin al detectar este atributo">?</span>
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Audiencia</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Elige para qué audiencias debe Fin detectar este atributo</p>
+                  </div>
+                  <Dropdown
+                    value={audience}
+                    items={FIN_AUDIENCE_ITEMS}
+                    onChange={v => setAudience(v as FinAtributo['audience'])}
+                  />
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2 border-t border-[#f1f1ee] mt-2 pt-3 relative">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Reglas de escalamiento</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Usa este atributo para activar el escalamiento</p>
+                  </div>
+                  {!isNew ? (
+                    <a href="#" className="text-[13px] font-medium text-[#1a1a1a] hover:underline flex items-center gap-1 whitespace-nowrap">
+                      {initial.escalationRules} reglas
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M5 4l6 4-6 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center text-[12px] bg-[#1a1a1a]/90 text-white px-2.5 py-1 rounded-md whitespace-nowrap">El atributo debe ser guardado</span>
+                  )}
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2 border-t border-[#f1f1ee] mt-2 pt-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Volver a detectar al cerrar</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5 leading-[16px]">Vuelva a ejecutar la detección cuando un miembro del equipo<br/>o un flujo de trabajo cierre la conversación</p>
+                  </div>
+                  <button
+                    onClick={() => setReDetectOnClose(v => !v)}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${reDetectOnClose ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${reDetectOnClose ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <div className="flex items-center gap-1.5 mb-4">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Ajustes de compañeros de equipo</h3>
+                  <span className="w-4 h-4 rounded-full bg-[#1a1a1a] text-white text-[10px] flex items-center justify-center cursor-help" title="Cómo ven los compañeros de equipo este atributo en Inbox">?</span>
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Visibilidad de datos</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Quién puede ver este atributo en Inbox</p>
+                  </div>
+                  <Dropdown
+                    value={visibility}
+                    items={[
+                      { value: 'all', label: 'Todos' },
+                      { value: 'admins', label: 'Solo administradores' },
+                      { value: 'me', label: 'Sólo yo' },
+                    ]}
+                    onChange={v => setVisibility(v as 'all' | 'admins' | 'me')}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'values' && (
+            values.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center">
+                <h3 className="text-[18px] font-semibold text-[#1a1a1a]">Agregar valores</h3>
+                <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[520px]">
+                  Define los valores que Fin debe seleccionar al detectar este atributo. Por ejemplo, para detectar la confianza, asigna el atributo "Confianza" y crea 3 valores: Positivo, Neutral y Negativo.
+                </p>
+                <div className="mt-6 mb-6 w-[260px] h-[140px] rounded-[12px] border border-[#e9eae6] bg-white shadow-sm relative overflow-hidden">
+                  <div className="absolute inset-3 flex flex-col gap-1.5">
+                    <div className="h-2 bg-[#f1f1ee] rounded w-full"/>
+                    <div className="h-2 bg-[#f1f1ee] rounded w-3/4"/>
+                  </div>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 w-[140px] bg-white border border-[#e9eae6] rounded-[8px] shadow-md p-2 text-left">
+                    <p className="text-[10px] font-bold text-[#1a1a1a]">Fin detected Sentiment as Positive</p>
+                    <p className="text-[9px] text-[#646462] mt-0.5 leading-[12px]">The user shared appreciation for a quick resolution.</p>
+                  </div>
+                  <span className="absolute left-3 bottom-3 w-2 h-2 rounded-full bg-[#0fb87f]"/>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={openValueCreate} className="h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Nuevo valor
+                  </button>
+                  <button onClick={importCsv} className="h-9 px-4 rounded-full bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-2 hover:bg-[#f8f8f7]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 3v8M5 6l3-3 3 3M3 13h10"/></svg>
+                    Cargar CSV
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full px-8 py-6 flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 max-w-[360px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+                    <input
+                      type="text"
+                      value={valSearch}
+                      onChange={e => setValSearch(e.target.value)}
+                      placeholder="Buscar valor"
+                      className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+                    />
+                  </div>
+                  <button title="Ordenar" className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 3v10M4 13l-2-2M4 13l2-2M11 13V3M11 3l2 2M11 3l-2 2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                  <div className="flex-1" />
+                  <button onClick={importCsv} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Cargar CSV
+                  </button>
+                  <button onClick={openValueCreate} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Nuevo valor
+                  </button>
+                </div>
+                <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                  <div className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] bg-[#f8f8f7]/40 text-[12px] font-semibold text-[#646462]">
+                    <div></div>
+                    <div>Nombre</div>
+                    <div>Descripción</div>
+                    <div></div>
+                  </div>
+                  {filteredValues.length === 0 ? (
+                    <div className="px-4 py-10 text-center text-[13px] text-[#646462]">Sin coincidencias para «{valSearch}».</div>
+                  ) : filteredValues.map(v => (
+                    <div
+                      key={v.id}
+                      className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] last:border-b-0 items-center group hover:bg-[#f8f8f7]/30 cursor-pointer"
+                      onClick={() => openValueEdit(v.id)}
+                    >
+                      <span className="text-[#a4a4a2] cursor-grab" title="Arrastrar" onClick={e => e.stopPropagation()}>⋮⋮</span>
+                      <span className="text-[13px] text-[#1a1a1a] truncate">{v.name || <span className="text-[#a4a4a2]">Sin nombre</span>}</span>
+                      <span className="text-[13px] text-[#646462] truncate">{v.description}</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); removeValue(v.id); }}
+                        title="Eliminar"
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          )}
+
+          {tab === 'conditions' && (
+            <div className="w-full px-8 py-6 flex flex-col gap-4">
+              <p className="text-[13px] text-[#646462] leading-[20px] max-w-[760px]">
+                Configura reglas condicionales para controlar cuándo Fin detecta un atributo. Una vez que se han definido las condiciones, Fin espera a que se cumplan antes de intentar la detección.
+              </p>
+              {conditions.length === 0 ? (
+                <div className="bg-white border border-dashed border-[#e9eae6] rounded-[12px] px-4 py-10 text-center text-[13px] text-[#646462]">
+                  Aún no hay condiciones. Pulsa «Añadir condición» para crear una.
+                </div>
+              ) : conditions.map(cond => {
+                const thenAttr = otherAttributes.find(a => a.id === cond.thenAttributeId);
+                const thenValueItems: DropdownItem[] = thenAttr
+                  ? [
+                      { value: '__all', label: 'Todos los valores' },
+                      ...thenAttr.values.map(v => ({ value: v.id, label: `${cond.usingValues.includes(v.id) ? '✓ ' : ''}${v.name || 'Sin nombre'}` })),
+                    ]
+                  : [{ value: '__none', label: 'Selecciona primero un atributo', disabled: true }];
+                const thenValueLabel = cond.usingValues.length === 0
+                  ? 'Todos los valores'
+                  : `${cond.usingValues.length} valor${cond.usingValues.length === 1 ? '' : 'es'}`;
+                return (
+                  <div key={cond.id} className="bg-white border border-[#e9eae6] rounded-[12px] p-4 grid grid-cols-[1fr_1fr_1fr_32px] gap-3 items-end">
+                    <div>
+                      <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Si el atributo se detecta como...</label>
+                      <Dropdown
+                        value={cond.whenValue}
+                        items={values.length === 0
+                          ? [{ value: '__none', label: 'Añade valores primero', disabled: true }]
+                          : values.map(v => ({ value: v.id, label: v.name || 'Sin nombre' }))}
+                        onChange={v => updateCondition(cond.id, { whenValue: v })}
+                        triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Fin también detectará...</label>
+                      <Dropdown
+                        value={cond.thenAttributeId}
+                        items={otherAttributes.length === 0
+                          ? [{ value: '__none', label: 'No hay otros atributos', disabled: true }]
+                          : otherAttributes.map(a => ({ value: a.id, label: a.name || 'Sin nombre' }))}
+                        onChange={v => updateCondition(cond.id, { thenAttributeId: v, usingValues: [] })}
+                        triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Utilizando valores...</label>
+                      <Dropdown
+                        value=""
+                        items={thenValueItems}
+                        onChange={v => {
+                          if (v === '__all') updateCondition(cond.id, { usingValues: [] });
+                          else if (v !== '__none') {
+                            const cur = cond.usingValues;
+                            updateCondition(cond.id, {
+                              usingValues: cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v],
+                            });
+                          }
+                        }}
+                        triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                        renderTrigger={(_, open) => (
+                          <>
+                            <span className="truncate">{thenValueLabel}</span>
+                            <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+                          </>
+                        )}
+                      />
+                    </div>
+                    <button
+                      onClick={() => removeCondition(cond.id)}
+                      title="Eliminar"
+                      className="w-9 h-9 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  </div>
+                );
+              })}
+              <div>
+                <button onClick={addCondition} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                  Añadir condición
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        </>
+        )}
       </div>
     </div>
   );
@@ -14128,11 +18022,69 @@ function FinPautaCategory({
 
 // ─── Capacitar > Atributos (Figma 1:5966) ────────────────────────────────────
 function FinAtributosContent() {
-  const rows: { name: string; count: number }[] = [
-    { name: 'Sentiment', count: 3 },
-    { name: 'Urgency', count: 3 },
-    { name: 'Complexity', count: 3 },
-  ];
+  const atributos = useFinResource<FinAtributo>('atributos', []);
+  const toast = useFinToast();
+  const [editing, setEditing] = useState<FinAtributo | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  function openEdit(a: FinAtributo) {
+    setEditing(a);
+    setEditorOpen(true);
+  }
+  function startNewBlank() {
+    const created = atributos.create({
+      name: '',
+      description: '',
+      audience: 'all',
+      escalationRules: 0,
+      reDetectOnClose: false,
+      values: [],
+      conditions: [],
+      enabled: false,
+    });
+    setEditing(created);
+    setEditorOpen(true);
+  }
+  function startNewFromTemplate(tpl: typeof FIN_ATRIBUTO_TEMPLATES[number]) {
+    const created = atributos.create({
+      name: tpl.name,
+      description: tpl.description,
+      audience: 'all',
+      escalationRules: 0,
+      reDetectOnClose: false,
+      values: tpl.values.map((v, i) => ({
+        id: `val_${Date.now()}_${i}`,
+        name: v.name,
+        description: v.description,
+      })),
+      conditions: [],
+      enabled: false,
+    });
+    setShowTemplates(false);
+    setEditing(created);
+    setEditorOpen(true);
+  }
+  function handleSave(next: FinAtributo) {
+    atributos.update(next.id, next);
+    setEditing(next);
+  }
+  function handleToggleEnable(next: boolean) {
+    if (!editing) return;
+    atributos.update(editing.id, { enabled: next });
+    setEditing({ ...editing, enabled: next });
+    toast.show(next ? 'Atributo habilitado' : 'Atributo pausado');
+  }
+  function handleDelete() {
+    if (!editing) return;
+    if (!window.confirm('¿Eliminar este atributo?')) return;
+    atributos.remove(editing.id);
+    setEditorOpen(false);
+    setEditing(null);
+    toast.show('Atributo eliminado');
+  }
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -14160,7 +18112,6 @@ function FinAtributosContent() {
               </a>
             </div>
           </div>
-          {/* Figma 1:5821/1:5823 — "Categorías de Fin" real image (was dark-green mockup) */}
           <div className="relative w-[300px] h-[144px] rounded-[12px] overflow-hidden border border-[#e9eae6] flex-shrink-0">
             <img src={`${FIGMA_CDN}/66f3ed01-c088-4537-a86a-a7bfc1bf2804`} alt="Categorías de Fin" className="absolute h-[103.89%] left-0 max-w-none top-[-1.95%] w-full" />
           </div>
@@ -14180,10 +18131,10 @@ function FinAtributosContent() {
               <span>Aprender</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-            <button className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
+            <button onClick={() => setShowTemplates(true)} title="Plantillas" className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
             </button>
-            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button onClick={startNewBlank} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo</span>
             </button>
@@ -14191,35 +18142,572 @@ function FinAtributosContent() {
         </div>
       </div>
 
-      {/* Table — Figma 1:5832 has 5 columns: Atributo / estado / Conversaciones / Resuelto / Escalado */}
+      {/* Hierarchical attribute list */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-6 pt-4">
-          <div className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 pb-3 border-b border-[#e9eae6] text-[13px] text-[#646462]">
+        <div className="px-6 pt-4 pb-8">
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-4 px-2 pb-3 border-b border-[#e9eae6] text-[13px] text-[#646462]">
             <div>Atributo</div>
-            <div>estado</div>
-            <div className="flex items-center gap-1">
-              <span>Conversaciones</span>
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3M8 11h.01" strokeLinecap="round"/></svg>
-            </div>
-            <div>Resuelto</div>
-            <div>Escalado</div>
+            <div>Estado</div>
+            <div>Audiencia</div>
+            <div>Valores</div>
+            <div></div>
           </div>
-          {rows.map(r => (
-            <div key={r.name} className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 py-3.5 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a]">
-              <div className="flex items-center gap-2">
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
-                <span>{r.name}</span>
-                <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462]">{r.count}</span>
-              </div>
-              <div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">Deshabilitado</span>
-              </div>
-              <div className="text-[#646462]">—</div>
-              <div className="text-[#646462]">—</div>
-              <div className="text-[#646462]">—</div>
-            </div>
-          ))}
+          {atributos.items.length === 0 ? (
+            <div className="px-2 py-10 text-center text-[13px] text-[#646462]">Aún no hay atributos. Pulsa «Nuevo» para crear uno.</div>
+          ) : atributos.items.map(a => {
+            const open = !!expanded[a.id];
+            return (
+              <Fragment key={a.id}>
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-4 px-2 py-3 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]/40 cursor-pointer" onClick={() => openEdit(a)}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <button
+                      onClick={e => { e.stopPropagation(); setExpanded(s => ({ ...s, [a.id]: !open })); }}
+                      className="w-5 h-5 rounded hover:bg-[#ededea] flex items-center justify-center flex-shrink-0"
+                    >
+                      <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${open ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                    </button>
+                    <span className="font-medium truncate">{a.name.trim() || 'Sin nombre'}</span>
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462] flex-shrink-0">{a.values.length}</span>
+                  </div>
+                  <div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${a.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
+                      {a.enabled ? 'Habilitado' : 'Deshabilitado'}
+                    </span>
+                  </div>
+                  <div className="text-[#646462]">{FIN_AUDIENCE_LABEL[a.audience] || 'Todos'}</div>
+                  <div className="text-[#646462]">{a.values.length}</div>
+                  <div className="flex justify-end">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+                  </div>
+                </div>
+                {open && a.values.map(v => (
+                  <div key={v.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-4 px-2 py-2.5 border-b border-[#e9eae6] items-center text-[13px] text-[#646462] bg-[#fafafa]">
+                    <div className="flex items-center gap-2 pl-7">
+                      <span className="text-[#a4a4a2]">↳</span>
+                      <span>{v.name || 'Sin nombre'}</span>
+                    </div>
+                    <div className="text-[#a4a4a2]">—</div>
+                    <div className="text-[#a4a4a2] truncate">{v.description || '—'}</div>
+                    <div className="text-[#a4a4a2]">—</div>
+                    <div></div>
+                  </div>
+                ))}
+                {open && a.values.length === 0 && (
+                  <div className="px-2 py-3 pl-9 border-b border-[#e9eae6] text-[12.5px] text-[#a4a4a2] bg-[#fafafa]">
+                    Aún no hay valores. Edita el atributo para añadir alguno.
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
         </div>
+      </div>
+
+      {showTemplates && (
+        <FinAtributoTemplatesPicker
+          onPick={startNewFromTemplate}
+          onClose={() => setShowTemplates(false)}
+        />
+      )}
+      {editorOpen && editing && (
+        <FinAtributoEditor
+          initial={editing}
+          allAttributes={atributos.items}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onClose={() => setEditorOpen(false)}
+          onAction={(m, t) => toast.show(m, t)}
+          onToggleEnable={handleToggleEnable}
+        />
+      )}
+      {toast.node}
+    </div>
+  );
+}
+
+// ─── Escalation rule types + field/operator catalog ─────────────────────────
+type FinEscalationOperator =
+  | 'is' | 'is_not' | 'starts_with' | 'ends_with' | 'contains'
+  | 'contains_exact_word' | 'does_not_contain' | 'is_unknown' | 'has_any_value';
+
+type FinEscalationCondition = {
+  id: string;
+  field: string;
+  operator: FinEscalationOperator;
+  value: string;
+};
+
+type FinEscalationRule = {
+  id: string;
+  title: string;
+  enabled: boolean;
+  audience: 'all' | 'users' | 'leads' | 'visitors';
+  channels: string[];
+  conditions: FinEscalationCondition[];
+  metrics?: { used?: number; resolved?: number; routed?: number };
+};
+
+const FIN_ESC_FIELD_ICON_PERSON = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13c1-2.5 3-3.5 5-3.5s4 1 5 3.5"/></svg>
+);
+const FIN_ESC_FIELD_ICON_PEOPLE = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><circle cx="11.5" cy="6.5" r="1.8"/><path d="M2 13c.7-2 2.3-3 4-3s3.3 1 4 3M9.5 13c.4-1.5 1.5-2.3 3-2.3s2.6.8 3 2.3"/></svg>
+);
+const FIN_ESC_FIELD_ICON_ATTR = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M3 8h10M3 11.5h6" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_DATA = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M3 8h10M8 3c1.5 1.5 2.3 3.2 2.3 5S9.5 11.5 8 13c-1.5-1.5-2.3-3.2-2.3-5S6.5 4.5 8 3z"/></svg>
+);
+
+type FinEscField = { key: string; label: string; status?: string; icon: ReactNode };
+
+const FIN_ESCALATION_FIELDS: { conversation: FinEscField[]; finAttributes: FinEscField[]; personData: FinEscField[] } = {
+  conversation: [
+    { key: 'teammate_assigned', label: 'Teammate assigned', icon: FIN_ESC_FIELD_ICON_PERSON },
+    { key: 'team_assigned',     label: 'Team assigned',     icon: FIN_ESC_FIELD_ICON_PEOPLE },
+  ],
+  finAttributes: [
+    { key: 'attr_complexity', label: 'Complexity', status: 'Deshabilitado', icon: FIN_ESC_FIELD_ICON_ATTR },
+    { key: 'attr_sentiment',  label: 'Sentiment',  status: 'Deshabilitado', icon: FIN_ESC_FIELD_ICON_ATTR },
+    { key: 'attr_urgency',    label: 'Urgency',    status: 'Deshabilitado', icon: FIN_ESC_FIELD_ICON_ATTR },
+  ],
+  personData: [
+    { key: 'pd_current_channel',      label: 'Current channel',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_initial_channel',      label: 'Initial channel',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_name',                 label: 'Name',                     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_account',              label: 'Account',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_owner',                label: 'Owner',                    icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_lead_category',        label: 'Lead category',            icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_qualification_status', label: 'Qualification status',     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_conversation_rating',  label: 'Conversation Rating',      icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_email',                label: 'Email',                    icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_email_domain',         label: 'Email domain',             icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_phone',                label: 'Phone',                    icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_user_id',              label: 'User ID',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_first_seen',           label: 'First Seen',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_signed_up',            label: 'Signed up',                icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_seen',            label: 'Last seen',                icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_contacted',       label: 'Last contacted',           icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_heard_from',      label: 'Last heard from',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_opened_email',    label: 'Last opened email',        icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_clicked_link',    label: 'Last clicked on link in email', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_web_sessions',         label: 'Web sessions',             icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_country',              label: 'Country',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_region',               label: 'Region',                   icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_city',                 label: 'City',                     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_timezone',             label: 'Timezone',                 icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_continent_code',       label: 'Continent code',           icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_browser_language',     label: 'Browser Language',         icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_language_override',    label: 'Language Override',        icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_browser',              label: 'Browser',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_browser_version',      label: 'Browser Version',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_os',                   label: 'OS',                       icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_segment',              label: 'Segment',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_person_tag',           label: 'Person tag',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_unsubscribed',         label: 'Unsubscribed from Emails', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_marked_spam',          label: 'Marked email as spam',     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_hard_bounced',         label: 'Has hard bounced',         icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_campaign',         label: 'UTM Campaign',             icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_content',          label: 'UTM Content',              icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_medium',           label: 'UTM Medium',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_source',           label: 'UTM Source',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_term',             label: 'UTM Term',                 icon: FIN_ESC_FIELD_ICON_DATA },
+  ],
+};
+
+const FIN_ESCALATION_OPERATORS: Array<{ value: FinEscalationOperator; label: string; takesValue: boolean }> = [
+  { value: 'is',                    label: 'is',                    takesValue: true  },
+  { value: 'is_not',                label: 'is not',                takesValue: true  },
+  { value: 'starts_with',           label: 'starts with',           takesValue: true  },
+  { value: 'ends_with',             label: 'ends with',             takesValue: true  },
+  { value: 'contains',              label: 'contains',              takesValue: true  },
+  { value: 'contains_exact_word',   label: 'contains exact word',   takesValue: true  },
+  { value: 'does_not_contain',      label: 'does not contain',      takesValue: true  },
+  { value: 'is_unknown',            label: 'is unknown',            takesValue: false },
+  { value: 'has_any_value',         label: 'has any value',         takesValue: false },
+];
+
+function findFinEscField(key: string): FinEscField | undefined {
+  return (
+    FIN_ESCALATION_FIELDS.conversation.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.finAttributes.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.personData.find(f => f.key === key)
+  );
+}
+
+function FinFieldPickerPopover({
+  onPick,
+  onClose,
+}: {
+  onPick: (key: string) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState('');
+  const popRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    function onClick(e: MouseEvent) {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClick);
+    };
+  }, [onClose]);
+  const lower = q.trim().toLowerCase();
+  const filt = (list: FinEscField[]) =>
+    !lower ? list : list.filter(f => f.label.toLowerCase().includes(lower));
+  const conversation = filt(FIN_ESCALATION_FIELDS.conversation);
+  const finAttributes = filt(FIN_ESCALATION_FIELDS.finAttributes);
+  const personData = filt(FIN_ESCALATION_FIELDS.personData);
+  return (
+    <div
+      ref={popRef}
+      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[320px] max-h-[380px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] flex flex-col overflow-hidden"
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="flex-shrink-0 p-2 border-b border-[#e9eae6]">
+        <div className="h-8 rounded-[6px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-2.5 gap-2">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+          <input
+            autoFocus
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search data..."
+            className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+          />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto py-1">
+        {conversation.length > 0 && (
+          <div className="py-1">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Conversation</div>
+            {conversation.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {finAttributes.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Fin Attributes</div>
+            {finAttributes.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+                {f.status && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462] flex-shrink-0">{f.status}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+        {personData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Person data</div>
+            {personData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {conversation.length === 0 && finAttributes.length === 0 && personData.length === 0 && (
+          <div className="px-3 py-6 text-center text-[12.5px] text-[#646462]">No hay coincidencias</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FinOperatorPickerPopover({
+  value,
+  onPick,
+  onClose,
+}: {
+  value: FinEscalationOperator;
+  onPick: (op: FinEscalationOperator) => void;
+  onClose: () => void;
+}) {
+  const popRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    function onClick(e: MouseEvent) {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClick);
+    };
+  }, [onClose]);
+  return (
+    <div
+      ref={popRef}
+      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[220px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1.5"
+      onClick={e => e.stopPropagation()}
+    >
+      {FIN_ESCALATION_OPERATORS.map(op => {
+        const selected = op.value === value;
+        return (
+          <button
+            key={op.value}
+            onClick={() => { onPick(op.value); }}
+            className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          >
+            <span className={`w-3.5 h-3.5 rounded-full border flex-shrink-0 flex items-center justify-center ${selected ? 'border-[#1a1a1a]' : 'border-[#a4a4a2]'}`}>
+              {selected && <span className="w-2 h-2 rounded-full bg-[#1a1a1a]" />}
+            </span>
+            <span className="flex-1 truncate">{op.label}</span>
+          </button>
+        );
+      })}
+      <div className="border-t border-[#f1f1ee] mt-1 pt-1 px-3 pb-1 text-right">
+        <button onClick={onClose} className="text-[12.5px] font-semibold text-[#ed621d] hover:underline">Done</button>
+      </div>
+    </div>
+  );
+}
+
+function FinEscalationChannelsDropdown({
+  channels,
+  onChange,
+}: {
+  channels: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const isAll = channels.length === 0;
+  const label = isAll ? 'Todos los canales' : channels.map(c => {
+    if (c === 'chat') return 'Chat';
+    if (c === 'email') return 'Correo electrónico';
+    if (c === 'voice') return 'Voz';
+    return c;
+  }).join(', ');
+  const items: DropdownItem[] = [
+    { value: 'all',   label: `${isAll ? '✓ ' : ''}Todos los canales` },
+    { value: 'chat',  label: `${channels.includes('chat') ? '✓ ' : ''}Chat` },
+    { value: 'email', label: `${channels.includes('email') ? '✓ ' : ''}Correo electrónico` },
+    { value: 'voice', label: `${channels.includes('voice') ? '✓ ' : ''}Voz` },
+  ];
+  return (
+    <Dropdown
+      value=""
+      items={items}
+      onChange={v => {
+        if (v === 'all') onChange([]);
+        else onChange(channels.includes(v) ? channels.filter(c => c !== v) : [...channels, v]);
+      }}
+      renderTrigger={(_, open) => (
+        <>
+          <span className="truncate">{label}</span>
+          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+        </>
+      )}
+      triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+    />
+  );
+}
+
+function FinEscalationRuleRow({
+  rule,
+  startExpanded,
+  onSave,
+  onDelete,
+  onToggleEnabled,
+}: {
+  rule: FinEscalationRule;
+  startExpanded?: boolean;
+  onSave: (next: FinEscalationRule) => void;
+  onDelete: () => void;
+  onToggleEnabled: () => void;
+}) {
+  const [expanded, setExpanded] = useState<boolean>(!!startExpanded);
+  const [draft, setDraft] = useState<FinEscalationRule>(rule);
+  const [fieldPickerFor, setFieldPickerFor] = useState<string | null>(null);
+  const [opPickerFor, setOpPickerFor] = useState<string | null>(null);
+
+  useEffect(() => { if (!expanded) setDraft(rule); }, [rule, expanded]);
+
+  function patchCondition(id: string, patch: Partial<FinEscalationCondition>) {
+    setDraft(d => ({ ...d, conditions: d.conditions.map(c => c.id === id ? { ...c, ...patch } : c) }));
+  }
+  function addCondition() {
+    setDraft(d => ({
+      ...d,
+      conditions: [...d.conditions, { id: `cond_${Date.now()}_${Math.floor(Math.random()*1000)}`, field: '', operator: 'is', value: '' }],
+    }));
+  }
+  function removeCondition(id: string) {
+    setDraft(d => ({ ...d, conditions: d.conditions.filter(c => c.id !== id) }));
+  }
+  function save() { onSave(draft); setExpanded(false); }
+  function cancel() { setDraft(rule); setExpanded(false); }
+
+  const audienceLabel = FIN_AUDIENCE_LABEL[rule.audience] || 'Todos';
+  const channelsLabel = rule.channels.length === 0 ? 'Todos los canales' : `${rule.channels.length} canal${rule.channels.length === 1 ? '' : 'es'}`;
+  const used = rule.metrics?.used ?? 0;
+  const resolved = rule.metrics?.resolved;
+  const routed = rule.metrics?.routed;
+
+  if (!expanded) {
+    return (
+      <div className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] last:border-b-0 cursor-pointer" onClick={() => setExpanded(true)}>
+        <div className="text-left min-w-0">
+          <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate">{rule.title || 'Ingresa un título'}</p>
+          <p className="text-[12px] text-[#646462] mt-0.5 truncate">
+            Usado: {used} · Resuelto: {resolved ?? '–'} · Escalado: {routed ?? '–'}
+          </p>
+        </div>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${rule.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{rule.enabled ? 'Habilitado' : 'No habilitado'}</span>
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">{audienceLabel} en {channelsLabel}</span>
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4-4 4z"/></svg>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full px-4 py-4 border-b border-[#e9eae6] last:border-b-0 bg-white">
+      <div className="flex items-center gap-3 mb-4">
+        <input
+          value={draft.title}
+          onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+          placeholder="Ingresa un título"
+          className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[14px] font-semibold focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] flex-shrink-0 ${draft.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{draft.enabled ? 'Habilitado' : 'No habilitado'}</span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {draft.conditions.length === 0 && (
+          <p className="text-[12.5px] text-[#646462]">Sin condiciones todavía. Añade una para comenzar.</p>
+        )}
+        {draft.conditions.map(cond => {
+          const f = findFinEscField(cond.field);
+          const op = FIN_ESCALATION_OPERATORS.find(o => o.value === cond.operator) || FIN_ESCALATION_OPERATORS[0];
+          return (
+            <div key={cond.id} className="flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <button
+                  onClick={() => { setFieldPickerFor(cond.id); setOpPickerFor(null); }}
+                  className={`h-8 px-3 rounded-[8px] border bg-white flex items-center gap-2 text-[13px] hover:bg-[#f8f8f7] ${fieldPickerFor === cond.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'} ${f ? 'text-[#1a1a1a]' : 'text-[#646462]'}`}
+                >
+                  {f ? (
+                    <>
+                      <span className="w-4 h-4 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                      <span className="truncate">{f.label}</span>
+                    </>
+                  ) : (
+                    <span>Selecciona un campo</span>
+                  )}
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {fieldPickerFor === cond.id && (
+                  <FinFieldPickerPopover
+                    onPick={(key) => patchCondition(cond.id, { field: key })}
+                    onClose={() => setFieldPickerFor(null)}
+                  />
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  onClick={() => { setOpPickerFor(cond.id); setFieldPickerFor(null); }}
+                  className={`h-8 px-3 rounded-[8px] border bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${opPickerFor === cond.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}
+                >
+                  <span>{op.label}</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {opPickerFor === cond.id && (
+                  <FinOperatorPickerPopover
+                    value={cond.operator}
+                    onPick={(o) => { patchCondition(cond.id, { operator: o, value: FIN_ESCALATION_OPERATORS.find(x => x.value === o)?.takesValue ? cond.value : '' }); }}
+                    onClose={() => setOpPickerFor(null)}
+                  />
+                )}
+              </div>
+
+              {op.takesValue ? (
+                <input
+                  value={cond.value}
+                  onChange={e => patchCondition(cond.id, { value: e.target.value })}
+                  placeholder="Valor"
+                  className="h-8 rounded-[8px] border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] min-w-[160px] flex-1"
+                />
+              ) : (
+                <input
+                  value=""
+                  disabled
+                  placeholder="—"
+                  className="h-8 rounded-[8px] border border-[#e9eae6] px-3 text-[13px] bg-[#f8f8f7] text-[#a4a4a2] min-w-[160px] flex-1 cursor-not-allowed"
+                />
+              )}
+
+              <button
+                onClick={() => removeCondition(cond.id)}
+                title="Eliminar condición"
+                className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0"
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          );
+        })}
+        <div>
+          <button onClick={addCondition} className="text-[13px] font-semibold text-[#ed621d] hover:underline flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+            <span>Añadir condición</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-[#e9eae6] flex items-center gap-2 flex-wrap">
+        <Dropdown
+          value={draft.audience}
+          items={FIN_AUDIENCE_ITEMS}
+          onChange={v => setDraft(d => ({ ...d, audience: v as FinEscalationRule['audience'] }))}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+        />
+        <FinEscalationChannelsDropdown
+          channels={draft.channels}
+          onChange={ch => setDraft(d => ({ ...d, channels: ch }))}
+        />
+        <div className="flex-1" />
+        <button
+          onClick={onDelete}
+          title="Eliminar regla"
+          className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        {draft.enabled ? (
+          <button
+            onClick={onToggleEnabled}
+            className="h-8 px-3 rounded-[8px] bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c] text-[13px] font-semibold hover:bg-[#fee2e2] flex items-center gap-1.5"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+            Pausar
+          </button>
+        ) : (
+          <button
+            onClick={onToggleEnabled}
+            className="h-8 px-3 rounded-[8px] bg-[#dcfce7] border border-[#bbf7d0] text-[#15803d] text-[13px] font-semibold hover:bg-[#bbf7d0] flex items-center gap-1.5"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+            Habilitar
+          </button>
+        )}
+        <button onClick={cancel} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Cancelar</button>
+        <button onClick={save} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="2"><path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span>Guardar</span>
+        </button>
       </div>
     </div>
   );
@@ -14230,6 +18718,53 @@ function FinEscalamientoContent() {
   const IMG_ESCALATION_BANNER = `${FIGMA_CDN}/b1517b7b-b13a-40c8-83a1-46a7a4839098`;
   const IMG_ESCALATION_LINK_BOOK = `${FIGMA_CDN}/34e259b7-ba78-42e5-9f7a-f48a3961b433`;
   const IMG_ESCALATION_CLOSE = `${FIGMA_CDN}/34dfc6d2-2f3f-4639-aa68-6573e7f751a7`;
+  const { data: rulesData, refetch } = useApi<any[]>(
+    () => policyRulesApi.list({ entity_type: 'fin_escalation' }),
+    [],
+    [],
+  );
+  const escalationRules = useFinResource<FinEscalationRule>('escalation_rules', []);
+  const [search, setSearch] = useState('');
+  const [modal, setModal] = useState<null | 'rule' | 'guideline'>(null);
+  const [justCreated, setJustCreated] = useState<string | null>(null);
+  const toast = useFinToast();
+  const all = useMemo(() => Array.isArray(rulesData) ? rulesData : [], [rulesData]);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? all.filter((r: any) => String(r.name || r.title || '').toLowerCase().includes(q)) : all;
+  }, [all, search]);
+  const pautas = filtered.filter((r: any) => (r.category || r.subtype) === 'guideline');
+  const filteredRules = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? escalationRules.items.filter(r => r.title.toLowerCase().includes(q)) : escalationRules.items;
+  }, [escalationRules.items, search]);
+  function createBlankRule() {
+    const created = escalationRules.create({
+      title: '',
+      enabled: false,
+      audience: 'all',
+      channels: [],
+      conditions: [],
+      metrics: { used: 0 },
+    });
+    setJustCreated(created.id);
+  }
+  async function createEscalation(category: 'rule' | 'guideline', payload: { name: string; description: string }) {
+    try {
+      await policyRulesApi.create({
+        entityType: 'fin_escalation',
+        category,
+        name: payload.name,
+        description: payload.description || undefined,
+        isActive: true,
+      });
+      toast.show(category === 'rule' ? 'Regla creada' : 'Pauta creada');
+      setModal(null);
+      refetch();
+    } catch (err: any) {
+      toast.show(err?.message || 'No se pudo crear', 'error');
+    }
+  }
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -14286,6 +18821,8 @@ function FinEscalamientoContent() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
               <input
                 type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar escalaciones por título o contenido"
                 className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
               />
@@ -14313,17 +18850,20 @@ function FinEscalamientoContent() {
               </div>
             </div>
             <div className="mt-3 ml-9 bg-white border border-[#e9eae6] rounded-[12px]">
-              <button className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40">
-                <div className="text-left">
-                  <p className="text-[13.5px] font-semibold text-[#1a1a1a]">Regla de escalamiento</p>
-                  <p className="text-[12px] text-[#646462] mt-0.5">Usado: <span className="text-[#1a1a1a]">0</span> · Resuelto: — · Escalado: —</p>
-                </div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">No habilitado</span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">Todos en Todos los canales</span>
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
-              </button>
+              {filteredRules.length === 0 ? (
+                <div className="w-full px-4 py-6 text-center text-[13px] text-[#646462]">Aún no hay reglas. Pulsa «Nuevo» para crear una.</div>
+              ) : filteredRules.map(rule => (
+                <FinEscalationRuleRow
+                  key={rule.id}
+                  rule={rule}
+                  startExpanded={justCreated === rule.id}
+                  onSave={(next) => { escalationRules.update(rule.id, next); if (justCreated === rule.id) setJustCreated(null); toast.show('Regla guardada'); }}
+                  onDelete={() => { escalationRules.remove(rule.id); toast.show('Regla eliminada'); }}
+                  onToggleEnabled={() => { escalationRules.update(rule.id, { enabled: !rule.enabled }); toast.show(rule.enabled ? 'Regla pausada' : 'Regla habilitada'); }}
+                />
+              ))}
               <div className="px-4 py-2.5 border-t border-[#e9eae6]">
-                <button className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
+                <button onClick={createBlankRule} className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                   <span>Nuevo</span>
                 </button>
@@ -14345,19 +18885,397 @@ function FinEscalamientoContent() {
               </div>
             </div>
             <div className="mt-3 ml-9 flex items-center gap-2 flex-wrap">
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <button onClick={() => setModal('guideline')} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                 <span>Nuevo</span>
               </button>
-              <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px]">
-                Transfiere las solicitudes de VPN o de elusión a un nivel superior
-              </span>
-              <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[160px]">
-                Escala las soli…
-              </span>
+              {pautas.length === 0 ? (
+                <span className="text-[12.5px] text-[#646462]">Aún no hay pautas.</span>
+              ) : pautas.map((p: any) => (
+                <span key={p.id} className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px]">
+                  {p.name || p.title || 'Pauta'}
+                </span>
+              ))}
             </div>
           </div>
         </div>
+      </div>
+      {modal && (
+        <FinSimpleCreateModal
+          title={modal === 'rule' ? 'Nueva regla de escalamiento' : 'Nueva pauta de escalamiento'}
+          description={modal === 'rule'
+            ? 'Define una condición determinista (atributos + datos del cliente) que dispare un escalamiento.'
+            : 'Describe en lenguaje natural cuándo Fin debe transferir la conversación.'}
+          namePlaceholder={modal === 'rule' ? 'Escalar pagos > $1000' : 'Transfiere solicitudes de VPN…'}
+          submitLabel={modal === 'rule' ? 'Crear regla' : 'Crear pauta'}
+          onClose={() => setModal(null)}
+          onSubmit={(payload) => createEscalation(modal, payload)}
+        />
+      )}
+      {toast.node}
+    </div>
+  );
+}
+
+// ─── Capacitar > Procedimientos (Figma 1:9083) ───────────────────────────────
+// ─── FinProcedimientoEditor: full-drawer create/edit modal for one procedure ─
+function FinProcedimientoEditor({
+  initial,
+  onSave,
+  onClose,
+  onAction,
+  onToggleEnable,
+}: {
+  initial: FinProcedimiento;
+  onSave: (next: FinProcedimiento) => void;
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onToggleEnable: (next: boolean) => void;
+}) {
+  const isNew = !initial.name && initial.steps.length === 0 && !initial.prompt;
+  const [name, setName] = useState(initial.name);
+  const [description, setDescription] = useState(initial.description);
+  const [prompt, setPrompt] = useState(initial.prompt);
+  const [steps, setSteps] = useState<FinProcedimientoStep[]>(initial.steps);
+  const [enabled, setEnabled] = useState(initial.enabled);
+  const [aiView, setAiView] = useState<null | { running: boolean; produced: FinProcedimientoStep[] }>(null);
+  const aiCancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const tag = (t?.tagName || '').toUpperCase();
+      const editing = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (!editing) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function save() {
+    const next: FinProcedimiento = {
+      ...initial,
+      name: name.trim(),
+      description,
+      prompt,
+      steps,
+      enabled,
+    };
+    onSave(next);
+    onAction('Procedimiento guardado');
+  }
+  function handleToggleEnabled() {
+    const next = !enabled;
+    setEnabled(next);
+    onToggleEnable(next);
+  }
+  function addStep(kind: FinProcedimientoStep['kind']) {
+    setSteps(s => [...s, {
+      id: `step_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      kind,
+      title: '',
+      body: '',
+    }]);
+  }
+  function updateStep(id: string, patch: Partial<FinProcedimientoStep>) {
+    setSteps(s => s.map(it => it.id === id ? { ...it, ...patch } : it));
+  }
+  function removeStep(id: string) {
+    setSteps(s => s.filter(it => it.id !== id));
+  }
+
+  function fallbackStepsFromPrompt(text: string): FinProcedimientoStep[] {
+    const sentences = text.split(/[\.!?\n]+/).map(s => s.trim()).filter(s => s.length > 4).slice(0, 4);
+    const arr: FinProcedimientoStep[] = (sentences.length ? sentences : [text]).slice(0, 4).map((s, i) => ({
+      id: `step_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
+      kind: 'verification',
+      title: `Verificación ${i + 1}`,
+      body: s,
+    }));
+    while (arr.length < 4) {
+      arr.push({
+        id: `step_${Date.now()}_${arr.length}_${Math.floor(Math.random() * 1000)}`,
+        kind: 'verification',
+        title: `Verificación ${arr.length + 1}`,
+        body: 'Define una comprobación adicional necesaria para completar el procedimiento.',
+      });
+    }
+    return arr;
+  }
+
+  async function startAiGeneration() {
+    if (prompt.trim().length < 10) {
+      onAction('Describe primero qué debe hacer el procedimiento', 'error');
+      return;
+    }
+    aiCancelRef.current = { cancelled: false };
+    setAiView({ running: true, produced: [] });
+    let generated: FinProcedimientoStep[] = [];
+    try {
+      const aiPrompt = `Eres un experto en automatización de soporte. A partir de la siguiente descripción de un procedimiento, devuelve un JSON con la forma {"steps":[{"kind":"verification|action|condition","title":"...","body":"..."}]}. Cada paso debe ser una verificación clara y accionable. Devuelve entre 3 y 7 pasos. Sólo JSON, sin markdown.\n\nDescripción: ${prompt.trim()}`;
+      const response: any = await aiApi.copilot('procedure-generator', aiPrompt, []);
+      const raw = String(response?.answer || response?.message || response?.content || '').trim();
+      const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const arr = Array.isArray(parsed?.steps) ? parsed.steps : [];
+      generated = arr.slice(0, 7).map((it: any, i: number): FinProcedimientoStep => {
+        const k = String(it?.kind || 'verification').toLowerCase();
+        const kind: FinProcedimientoStep['kind'] = k === 'action' ? 'action' : k === 'condition' ? 'condition' : 'verification';
+        return {
+          id: `step_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
+          kind,
+          title: String(it?.title || `Paso ${i + 1}`).slice(0, 200),
+          body: String(it?.body || '').slice(0, 1200),
+        };
+      });
+      if (generated.length === 0) generated = fallbackStepsFromPrompt(prompt);
+    } catch {
+      generated = fallbackStepsFromPrompt(prompt);
+    }
+
+    // Animate insertion
+    let i = 0;
+    function appendNext() {
+      if (aiCancelRef.current.cancelled) return;
+      if (i >= generated.length) {
+        setSteps(prev => [...prev, ...generated]);
+        setAiView(null);
+        onAction('Pasos generados con IA');
+        return;
+      }
+      setAiView(v => v ? { ...v, produced: [...v.produced, generated[i]] } : v);
+      i += 1;
+      window.setTimeout(appendNext, 600);
+    }
+    window.setTimeout(appendNext, 400);
+  }
+
+  function cancelAi() {
+    aiCancelRef.current.cancelled = true;
+    setAiView(null);
+  }
+
+  const titleText = isNew ? 'Nuevo procedimiento' : 'Editar procedimiento';
+
+  function kindBadgeClass(kind: FinProcedimientoStep['kind']) {
+    if (kind === 'action') return 'bg-[#ede9fe] text-[#6d28d9]';
+    if (kind === 'condition') return 'bg-[#fef3c7] text-[#92400e]';
+    return 'bg-[#dbeafe] text-[#1e40af]';
+  }
+  function kindLabel(kind: FinProcedimientoStep['kind']) {
+    if (kind === 'action') return 'Acción';
+    if (kind === 'condition') return 'Condición';
+    return 'Verificación';
+  }
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className="absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]"
+        onClick={e => e.stopPropagation()}
+      >
+        {aiView ? (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <button
+              onClick={cancelAi}
+              title="Volver"
+              className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 text-[13px]">
+              <span className="text-[#646462]">Procedimiento</span>
+              <span className="text-[#a4a4a2]">›</span>
+              <span className="font-semibold text-[#1a1a1a] truncate">Generación con IA</span>
+            </div>
+            <button onClick={cancelAi} className="h-8 px-4 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Cancelar</button>
+            <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        ) : (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">{titleText}</h2>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                {enabled ? 'Habilitado' : 'Deshabilitado'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {enabled ? (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#b91c1c] hover:bg-[#991b1b] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+                  Pausar
+                </button>
+              ) : (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#15803d] hover:bg-[#166534] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                  Habilitar
+                </button>
+              )}
+              <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {aiView ? (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+            <div className="w-full px-8 py-12 flex flex-col items-center gap-6">
+              <div className="bg-white border border-[#e9eae6] rounded-[14px] p-8 w-full max-w-[640px] flex flex-col items-center gap-5">
+                <div className="w-12 h-12 rounded-full border-2 border-[#e9eae6] border-t-[#ed621d] animate-spin" />
+                <div className="text-center">
+                  <h3 className="text-[18px] font-bold text-[#1a1a1a]">Generando pasos…</h3>
+                  <p className="mt-1 text-[13px] text-[#646462]">La IA está analizando tu instrucción y dividiéndola en verificaciones.</p>
+                </div>
+                <div className="w-full flex flex-col gap-2 mt-2">
+                  {aiView.produced.map((step, idx) => (
+                    <div key={step.id} className="flex items-start gap-3 p-3 bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] animate-in fade-in" style={{ animation: 'fadeIn 0.3s ease' }}>
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#15803d] text-white text-[11px] font-bold flex-shrink-0">✓</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a]">Paso {idx + 1}: {step.title}</p>
+                        <p className="text-[12px] text-[#646462] mt-0.5 line-clamp-2">{step.body}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {aiView.produced.length === 0 && (
+                    <p className="text-center text-[12.5px] text-[#a4a4a2]">Esperando primer paso…</p>
+                  )}
+                </div>
+                <button
+                  onClick={cancelAi}
+                  className="mt-2 h-9 px-4 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+            <div className="w-full px-8 py-8 flex flex-col gap-4">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Da un nombre claro al procedimiento. Por ejemplo, "Reembolso por daños".</p>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Reembolso por daños, Validación de cuenta…"
+                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Resume brevemente cuándo Fin debe ejecutar este procedimiento.</p>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Por ejemplo, cuando el cliente reporte un producto recibido en mal estado…"
+                  className="w-full min-h-[100px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Instrucciones para Fin</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describe qué debe hacer Fin paso a paso. Si lo prefieres, deja que la IA lo redacte por ti.</p>
+                <textarea
+                  value={prompt}
+                  onChange={e => setPrompt(e.target.value)}
+                  placeholder="Por ejemplo: Si el cliente reporta un producto dañado, primero pídele el número de pedido, luego una foto del daño, comprueba si está dentro del plazo de devolución y si todo es correcto, ofrece un reembolso o un reemplazo."
+                  className="w-full min-h-[160px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-[11.5px] text-[#646462]">{prompt.length} caracteres</p>
+                  <button
+                    onClick={startAiGeneration}
+                    className="h-9 px-4 rounded-full bg-[#ed621d] hover:bg-[#d4541a] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                  >
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
+                    Escribir con IA
+                  </button>
+                </div>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Pasos de verificación</h3>
+                    <p className="text-[12.5px] text-[#646462] leading-[18px]">Define cada comprobación o acción que Fin debe ejecutar en orden.</p>
+                  </div>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11.5px] text-[#646462]">{steps.length} {steps.length === 1 ? 'paso' : 'pasos'}</span>
+                </div>
+                {steps.length === 0 ? (
+                  <div className="border border-dashed border-[#e9eae6] rounded-[10px] px-4 py-6 text-center text-[12.5px] text-[#646462] bg-[#fafaf8]">
+                    Aún no hay pasos. Escribe instrucciones y pulsa "Escribir con IA", o agrega un paso manualmente.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {steps.map((step, idx) => (
+                      <div key={step.id} className="bg-white border border-[#e9eae6] rounded-[10px] p-3 flex items-start gap-3 hover:border-[#1a1a1a]/30 transition-colors">
+                        <span className="text-[#a4a4a2] text-[14px] mt-1 cursor-grab select-none" title="Arrastrar">⋮⋮</span>
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#1a1a1a] text-white text-[11px] font-bold flex-shrink-0 mt-1">{idx + 1}</span>
+                        <div className="flex-1 min-w-0 flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${kindBadgeClass(step.kind)}`}>{kindLabel(step.kind)}</span>
+                            <Dropdown
+                              value={step.kind}
+                              items={[
+                                { value: 'verification', label: 'Verificación' },
+                                { value: 'action', label: 'Acción' },
+                                { value: 'condition', label: 'Condición' },
+                              ]}
+                              onChange={v => updateStep(step.id, { kind: v as FinProcedimientoStep['kind'] })}
+                              triggerClassName="h-7 px-2 rounded-md border border-[#e9eae6] bg-white flex items-center gap-1 text-[12px] text-[#646462] hover:bg-[#f8f8f7]"
+                            />
+                          </div>
+                          <input
+                            value={step.title}
+                            onChange={e => updateStep(step.id, { title: e.target.value })}
+                            placeholder="Título del paso (ej. Verificar número de pedido)"
+                            className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] font-medium focus:outline-none focus:border-[#1a1a1a]"
+                          />
+                          <textarea
+                            value={step.body}
+                            onChange={e => updateStep(step.id, { body: e.target.value })}
+                            placeholder="Describe qué debe verificar o ejecutar Fin en este paso."
+                            className="w-full min-h-[64px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                          />
+                        </div>
+                        <button
+                          onClick={() => removeStep(step.id)}
+                          title="Eliminar paso"
+                          className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  <Dropdown
+                    value=""
+                    items={[
+                      { value: 'verification', label: 'Verificación' },
+                      { value: 'action', label: 'Acción' },
+                      { value: 'condition', label: 'Condición' },
+                    ]}
+                    onChange={v => addStep(v as FinProcedimientoStep['kind'])}
+                    triggerLabel="+ Nuevo paso"
+                    triggerClassName="h-9 px-4 rounded-full border border-dashed border-[#1a1a1a]/40 bg-white flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -14370,10 +19288,48 @@ function FinProcedimientosContent() {
   const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
   const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
   const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
-  const procedures: { title: string; status: 'Draft' }[] = [
-    { title: 'Untitled', status: 'Draft' },
-    { title: 'Untitled', status: 'Draft' },
-  ];
+  const procedimientos = useFinResource<FinProcedimiento>('procedimientos', []);
+  const [search, setSearch] = useState('');
+  const toast = useFinToast();
+  const [editing, setEditing] = useState<FinProcedimiento | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const procedures = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return procedimientos.items;
+    return procedimientos.items.filter(p => p.name.toLowerCase().includes(q));
+  }, [procedimientos.items, search]);
+  function startNewBlank() {
+    const created = procedimientos.create({
+      name: '',
+      description: '',
+      prompt: '',
+      steps: [],
+      enabled: false,
+      createdAt: Date.now(),
+    });
+    setEditing(created);
+    setEditorOpen(true);
+  }
+  function openEdit(p: FinProcedimiento) {
+    setEditing(p);
+    setEditorOpen(true);
+  }
+  function handleSave(next: FinProcedimiento) {
+    procedimientos.update(next.id, next);
+    setEditing(next);
+  }
+  function handleToggleEnable(next: boolean) {
+    if (!editing) return;
+    procedimientos.update(editing.id, { enabled: next });
+    setEditing({ ...editing, enabled: next });
+    toast.show(next ? 'Procedimiento habilitado' : 'Procedimiento pausado');
+  }
+  function handleDelete(p: FinProcedimiento, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!window.confirm(`¿Eliminar el procedimiento "${p.name || 'Sin nombre'}"?`)) return;
+    procedimientos.remove(p.id);
+    toast.show('Procedimiento eliminado');
+  }
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
@@ -14389,7 +19345,7 @@ function FinProcedimientosContent() {
               <span>Aprender</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button onClick={startNewBlank} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo procedimiento</span>
             </button>
@@ -14400,6 +19356,8 @@ function FinProcedimientosContent() {
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
             <input
               type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
               placeholder="Buscar..."
               className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
             />
@@ -14456,28 +19414,39 @@ function FinProcedimientosContent() {
             <h3 className="text-[14px] font-bold text-[#1a1a1a]">Procedimientos</h3>
             <p className="mt-0.5 text-[13px] text-[#646462]">Automatice las consultas complejas con instrucciones paso a paso para Fin.</p>
             <div className="mt-3 flex flex-col gap-2">
-              {procedures.map((p, i) => (
-                <div key={i} className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.title}</p>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462]">{p.status}</span>
-                    </div>
-                    <p className="text-[12.5px] text-[#646462] mt-0.5">No se ha añadido ninguna descripción.</p>
-                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-[#646462]">
-                      <span>Activado: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Pendiente: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Resuelto: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Entregado: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Escalado: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Errores: <span className="text-[#1a1a1a]">0</span></span>
-                    </div>
-                  </div>
-                  <button className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
-                  </button>
+              {procedures.length === 0 ? (
+                <div className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-6 text-center text-[13px] text-[#646462]">
+                  {search ? 'Ningún procedimiento coincide con la búsqueda.' : 'Aún no hay procedimientos. Pulsa «Nuevo procedimiento» para crear uno.'}
                 </div>
-              ))}
+              ) : procedures.map(p => {
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => openEdit(p)}
+                    className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40 cursor-pointer"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.name.trim() || 'Sin nombre'}</p>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f1f1ee] border border-[#e9eae6] text-[#646462]'}`}>
+                          {p.enabled ? 'Habilitado' : 'Deshabilitado'}
+                        </span>
+                      </div>
+                      <p className="text-[12.5px] text-[#646462] mt-0.5">{p.description || 'No se ha añadido ninguna descripción.'}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-[#646462]">
+                        <span>{p.steps.length} {p.steps.length === 1 ? 'paso' : 'pasos'}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={e => handleDelete(p, e)}
+                      title="Eliminar"
+                      className="w-8 h-8 rounded-[7px] flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -14501,6 +19470,16 @@ function FinProcedimientosContent() {
           </div>
         </div>
       </div>
+      {editorOpen && editing && (
+        <FinProcedimientoEditor
+          initial={editing}
+          onSave={handleSave}
+          onClose={() => setEditorOpen(false)}
+          onAction={(m, t) => toast.show(m, t)}
+          onToggleEnable={handleToggleEnable}
+        />
+      )}
+      {toast.node}
     </div>
   );
 }
@@ -14847,7 +19826,36 @@ function FinPruebasContent() {
 }
 
 // ─── Desplegar / Chat (Figma 1:12035) ────────────────────────────────────────
+// Helper used by Despliegue* views: read connectors and pick the freshest one
+// matching a set of channel keywords. Returns a status string for the pill.
+function useChannelDeploymentStatus(matchKeywords: string[]) {
+  const { data } = useApi<any[]>(() => connectorsApi.list(), [], []);
+  return useMemo(() => {
+    const list = Array.isArray(data) ? data : [];
+    const matches = list.filter((c: any) => {
+      const blob = `${c.kind || ''} ${c.type || ''} ${c.provider || ''} ${c.channel || ''} ${c.name || ''}`.toLowerCase();
+      return matchKeywords.some(k => blob.includes(k));
+    });
+    if (matches.length === 0) return { label: 'No establecer en vivo', live: false, count: 0 };
+    const live = matches.find((c: any) => {
+      const status = String(c.status || c.connectionStatus || '').toLowerCase();
+      return status === 'connected' || status === 'live' || status === 'active' || c.isActive === true;
+    });
+    if (live) {
+      const updated = live.updatedAt || live.updated_at || live.lastSyncedAt || live.last_synced_at;
+      const updatedTxt = updated ? new Date(updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : null;
+      return {
+        label: updatedTxt ? `Conectado · actualizado ${updatedTxt}` : 'Conectado',
+        live: true,
+        count: matches.length,
+      };
+    }
+    return { label: 'No establecer en vivo', live: false, count: matches.length };
+  }, [data, matchKeywords]);
+}
+
 function FinDespliegueChatContent() {
+  const status = useChannelDeploymentStatus(['chat', 'messenger', 'slack', 'whatsapp', 'sms', 'facebook', 'instagram']);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -14889,8 +19897,9 @@ function FinDespliegueChatContent() {
         <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
           <div className="flex items-center gap-3">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
-            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
-              <span>No establecer en vivo</span>
+            <button className={`h-7 px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[12px] ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-white border-[#e9eae6] text-[#1a1a1a]'}`}>
+              {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
+              <span>{status.label}</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
           </div>
@@ -14948,6 +19957,7 @@ function FinDespliegueChatContent() {
 
 // ─── Desplegar / Correo electrónico (Figma 1:13680) ──────────────────────────
 function FinDespliegueEmailContent() {
+  const status = useChannelDeploymentStatus(['email', 'mail', 'gmail', 'outlook', 'imap', 'smtp']);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -14993,8 +20003,9 @@ function FinDespliegueEmailContent() {
         <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
           <div className="flex items-center gap-3">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
-            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
-              <span>No establecer en vivo</span>
+            <button className={`h-7 px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[12px] ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-white border-[#e9eae6] text-[#1a1a1a]'}`}>
+              {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
+              <span>{status.label}</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
           </div>
@@ -15054,12 +20065,20 @@ function FinDespliegueEmailContent() {
 
 // ─── Desplegar / Teléfono (Figma 1:14559) ────────────────────────────────────
 function FinDespliegueTelefonoContent() {
+  const status = useChannelDeploymentStatus(['phone', 'voice', 'aircall', 'twilio', 'telnyx', 'voip']);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Top section header */}
-      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
-        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
-        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Teléfono</h2>
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Teléfono</h2>
+        </div>
+        <button className={`h-7 px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[12px] ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-white border-[#e9eae6] text-[#1a1a1a]'}`}>
+          {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
+          <span>{status.label}</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
       </div>
 
       {/* Body */}
@@ -15720,6 +20739,15 @@ function FinMonitoresContent() {
 
 // ─── Registro de cambios (1:19066) ──────────────────────────────────────────
 function FinChangelogContent() {
+  const { data: auditData, loading } = useApi<any[]>(() => auditApi.workspaceAll(), [], []);
+  const [search, setSearch] = useState('');
+  const entries = useMemo(() => {
+    const list = Array.isArray(auditData) ? auditData : [];
+    const q = search.trim().toLowerCase();
+    return q
+      ? list.filter((e: any) => `${e.action || ''} ${e.entityType || e.entity_type || ''} ${e.actorName || e.actor_name || ''} ${JSON.stringify(e.payload || {})}`.toLowerCase().includes(q))
+      : list;
+  }, [auditData, search]);
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
@@ -15731,18 +20759,53 @@ function FinChangelogContent() {
       <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3 border-b border-[#e9eae6]">
         <div className="relative flex-1 max-w-[320px]">
           <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
-          <input type="text" placeholder="Buscar elementos..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar elementos..."
+            className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
+          />
         </div>
         <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
           <span>Cualquier cambio</span>
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 flex items-start justify-center pt-24 px-6">
-        <div className="text-center max-w-[420px]">
-          <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
-          <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en su agente de IA Fin</p>
-        </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {loading ? (
+          <div className="flex items-start justify-center pt-24 px-6">
+            <p className="text-[13px] text-[#646462]">Cargando…</p>
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="flex items-start justify-center pt-24 px-6">
+            <div className="text-center max-w-[420px]">
+              <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
+              <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en su agente de IA Fin</p>
+            </div>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#e9eae6]">
+            {entries.map((e: any, i: number) => {
+              const when = e.createdAt || e.created_at || e.timestamp;
+              const whenTxt = when ? new Date(when).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+              const actor = e.actorName || e.actor_name || e.userId || e.user_id || 'Sistema';
+              const action = e.action || e.event || 'cambio';
+              const entity = e.entityType || e.entity_type || '';
+              return (
+                <div key={e.id || i} className="px-6 py-3 flex items-start gap-3 hover:bg-[#fafafa]">
+                  <span className="w-7 h-7 rounded-full bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0 text-[10px] font-semibold text-[#646462]">
+                    {String(actor)[0]?.toUpperCase() || '?'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-[#1a1a1a]"><span className="font-semibold">{actor}</span> · {action}{entity ? ` · ${entity}` : ''}</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">{whenTxt}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -15750,19 +20813,33 @@ function FinChangelogContent() {
 
 // ─── Ajustes de Fin · General (1:20145) ─────────────────────────────────────
 function FinSettingsContent() {
-  type Row = { icon: ReactNode; title: string; desc: string; cta?: string };
+  type Row = { icon: ReactNode; title: string; desc: string; cta?: string; meta?: string };
+  const { data: ctx } = useApi<any>(() => workspacesApi.currentContext(), [], null);
+  // Pull live numbers (workspace name, plan, tokens used, trial days left) from
+  // the workspace context. Numbers fall back to '—' when the field is absent.
+  const wsCtx: any = ctx || {};
+  const ws = wsCtx.workspace || wsCtx;
+  const planName = ws.planName || ws.plan_name || ws.plan || wsCtx.plan;
+  const tokensUsed = ws.tokensUsed ?? ws.tokens_used ?? wsCtx.tokensUsed ?? wsCtx.usage?.usedThisPeriod;
+  const tokensLimit = ws.tokensLimit ?? ws.tokens_limit ?? wsCtx.tokensLimit ?? wsCtx.usage?.included;
+  const trialEnd = ws.trialEndsAt || ws.trial_ends_at || wsCtx.trialEndsAt;
+  const trialDaysLeft = trialEnd ? Math.max(0, Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000)) : null;
 
   const usoRows: Row[] = [
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M8 2.5l1.6 4 4.4.4-3.4 3 1.1 4.3L8 12l-3.7 2.2L5.4 9.9 2 6.9l4.4-.4z"/></svg>,
       title: 'Alertas y límites',
       desc: 'Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto.',
+      meta: trialDaysLeft != null ? `Prueba: ${trialDaysLeft} días` : (planName ? `Plan: ${planName}` : undefined),
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>,
       title: 'Supervisar el uso',
       desc: 'Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo.',
       cta: 'Ver uso',
+      meta: tokensUsed != null
+        ? (tokensLimit ? `${tokensUsed.toLocaleString?.('es-ES') ?? tokensUsed} / ${tokensLimit.toLocaleString?.('es-ES') ?? tokensLimit} tokens` : `${tokensUsed.toLocaleString?.('es-ES') ?? tokensUsed} tokens`)
+        : undefined,
     },
   ];
 
@@ -15799,6 +20876,9 @@ function FinSettingsContent() {
           <span className="block text-[13.5px] font-semibold text-[#1a1a1a]">{r.title}</span>
           <span className="block mt-0.5 text-[12.5px] text-[#646462] leading-[18px]">{r.desc}</span>
         </span>
+        {r.meta && (
+          <span className="text-[12px] font-mono text-[#1a1a1a] bg-[#f8f8f7] border border-[#e9eae6] rounded-md px-2 py-1 mr-2 whitespace-nowrap">{r.meta}</span>
+        )}
         {r.cta ? (
           <span className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1">
             {r.cta}
@@ -15829,6 +20909,30 @@ function FinSettingsContent() {
 
 // ─── Ajustes de Fin · Audiencias (1:21030) ──────────────────────────────────
 function FinAudiencesContent() {
+  // Audiences = teams (iam) + customer segments (customers). The "Nueva audiencia"
+  // modal currently surfaces a "próximamente" toast because iamApi has no
+  // teams.create endpoint yet — segments are managed elsewhere.
+  const { data: teamsData } = useApi<any[]>(() => iamApi.teams(), [], []);
+  const { data: customersData } = useApi<any[]>(() => customersApi.list(), [], []);
+  const [showModal, setShowModal] = useState(false);
+  const toast = useFinToast();
+  const teams = Array.isArray(teamsData) ? teamsData : [];
+  const segments = useMemo(() => {
+    const list = Array.isArray(customersData) ? customersData : [];
+    const counts = new Map<string, number>();
+    for (const c of list) {
+      const seg = String(c.segment || '').trim();
+      if (!seg) continue;
+      counts.set(seg, (counts.get(seg) || 0) + 1);
+    }
+    return Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
+  }, [customersData]);
+  async function createAudience(_payload: { name: string; description: string }) {
+    // iamApi has no teams.create today — surface a friendly toast instead of
+    // pretending to persist. The modal still closes so the user has feedback.
+    toast.show('Creación de audiencias estará disponible próximamente.');
+    setShowModal(false);
+  }
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between">
@@ -15836,9 +20940,9 @@ function FinAudiencesContent() {
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>
           <h2 className="text-[15px] font-bold text-[#1a1a1a]">Audiencias</h2>
         </div>
-        <button className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+        <button onClick={() => setShowModal(true)} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
           <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
-          <span>Nuevo</span>
+          <span>Nueva audiencia</span>
         </button>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 p-6">
@@ -15852,7 +20956,45 @@ function FinAudiencesContent() {
             <span>Cómo usar las audiencias para segmentar a Fin</span>
           </button>
         </div>
+
+        {/* Live audiences: equipos (iam.teams) + segmentos de clientes */}
+        <div className="mt-6 max-w-[820px]">
+          <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-3">Equipos ({teams.length})</h3>
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
+            {teams.length === 0 ? (
+              <div className="px-4 py-4 text-[13px] text-[#646462]">Aún no hay equipos.</div>
+            ) : teams.map((t: any) => (
+              <div key={t.id || t.name} className="px-4 py-3 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">{t.name || 'Sin nombre'}</span>
+                <span className="text-[12px] text-[#646462]">{t.memberCount ?? t.member_count ?? 0} miembros</span>
+              </div>
+            ))}
+          </div>
+
+          <h3 className="text-[14px] font-bold text-[#1a1a1a] mt-6 mb-3">Segmentos de clientes ({segments.length})</h3>
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
+            {segments.length === 0 ? (
+              <div className="px-4 py-4 text-[13px] text-[#646462]">Aún no hay segmentos.</div>
+            ) : segments.map(s => (
+              <div key={s.name} className="px-4 py-3 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">{s.name}</span>
+                <span className="text-[12px] text-[#646462]">{s.count} clientes</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
+      {showModal && (
+        <FinSimpleCreateModal
+          title="Nueva audiencia"
+          description="Las audiencias agrupan usuarios por equipo o segmento de cliente para personalizar el comportamiento de Fin."
+          namePlaceholder="VIP, Premium, Onboarding…"
+          submitLabel="Crear audiencia"
+          onClose={() => setShowModal(false)}
+          onSubmit={createAudience}
+        />
+      )}
+      {toast.node}
     </div>
   );
 }
@@ -16525,6 +21667,19 @@ function PrototypeApp() {
       window.history.replaceState({}, '', url.toString());
     }
   }, [view]);
+
+  // Agent activity heartbeat — fires every 60 s while the tab is visible.
+  // Increments active_minutes in agent_daily_activity so Reports > Teammate
+  // can show "conversations per active hour" metrics.
+  useEffect(() => {
+    const sendHeartbeat = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetch('/api/workspaces/heartbeat', { method: 'POST' }).catch(() => {/* best-effort */});
+    };
+    sendHeartbeat(); // fire immediately on mount
+    const id = window.setInterval(sendHeartbeat, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   function renderView() {
     switch (view) {
