@@ -203,6 +203,8 @@ interface WorkflowDiagnostic {
 interface WorkflowsProps {
   onNavigate?: NavigateFn;
   focusWorkflowId?: string | null;
+  initialView?: WorkflowView;
+  createNewOnMount?: boolean;
 }
 
 type FlowNodeData = {
@@ -1692,9 +1694,9 @@ function WorkflowEdgeButton(props: EdgeProps) {
 const nodeTypes = { workflowNode: WorkflowNodeCard };
 const edgeTypes = { workflowEdge: WorkflowEdgeButton };
 
-export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: WorkflowsProps) {
+export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId, initialView, createNewOnMount }: WorkflowsProps) {
   const onNavigate = _onNavigate;
-  const [view, setView] = useState<WorkflowView>('list');
+  const [view, setView] = useState<WorkflowView>(initialView ?? 'list');
   const [activeTab, setActiveTab] = useState<WorkflowTab>('overview');
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [librarySection, setLibrarySection] = useState<WorkflowLibrarySection>('workflows');
@@ -1907,6 +1909,15 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     const target = workflows.find((workflow) => workflow.id === focusWorkflowId);
     if (target) void openWorkflow(target);
   }, [focusWorkflowId, workflows.length]);
+
+  // When mounted with createNewOnMount=true, immediately seed a new workflow
+  // draft and open the builder. Gated by a ref so it only fires once per mount.
+  const createNewFiredRef = useRef(false);
+  useEffect(() => {
+    if (!createNewOnMount || createNewFiredRef.current) return;
+    createNewFiredRef.current = true;
+    void createFromTemplate(TEMPLATES[0]);
+  }, []);
 
   // Dispatch deferred card action after the workflow is loaded into editor state
   useEffect(() => {

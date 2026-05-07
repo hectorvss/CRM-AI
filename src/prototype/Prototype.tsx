@@ -21284,6 +21284,8 @@ function FinFlujosTrabajoContent() {
         <div className="flex-1 min-h-0 overflow-hidden">
           <Workflows
             focusWorkflowId={builderId === '' ? undefined : builderId}
+            initialView="builder"
+            createNewOnMount={builderId === ''}
             onNavigate={(target: any) => {
               // The embedded Workflows component fires onNavigate with various
               // section targets. Treat any "leave the workflow" intent as
