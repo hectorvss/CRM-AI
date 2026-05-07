@@ -386,6 +386,21 @@ export default function App() {
     }
   }, [navigationTarget]);
 
+  // Redirect to /#/signin when we know we're unauthenticated and supabase auth
+  // is enabled. Lives in an effect (not in the render path) so we don't
+  // re-trigger navigation on every render while the redirect is in flight.
+  // Guarded against the case where we're already on /signin to avoid bouncing
+  // the landing page back onto itself.
+  useEffect(() => {
+    if (!authReady || authenticated === null) return;
+    if (!supabaseAuthEnabled) return;
+    if (authenticated) return;
+    if (typeof window === 'undefined') return;
+    const onSignin = window.location.hash.startsWith('#/signin');
+    if (onSignin) return;
+    window.location.href = '/#/signin';
+  }, [authReady, authenticated]);
+
   const pageFocus = useMemo(
     () => ({
       caseId: navigationTarget.entityType === 'case' ? navigationTarget.entityId : null,
@@ -411,9 +426,13 @@ export default function App() {
   // Unauthenticated — redirect back to the landing if auth is enabled.
   // supabaseAuthEnabled is updated at runtime after ensureSupabaseClient().
   const hasSupabaseAuth = supabaseAuthEnabled;
+  // CRITICAL: do the redirect inside a useEffect (see hook below). Performing
+  // `window.location.href = ...` directly in render is a side effect during
+  // render — React's StrictMode (and any re-render that hits this branch
+  // before the navigation completes) would re-fire the assignment, kicking off
+  // a new navigation each render. That manifests to the user as the page
+  // "reloading constantly" while the auth state is briefly false.
   if (hasSupabaseAuth && !authenticated) {
-    // If we're at /app and not logged in, send them to the landing signin
-    window.location.href = '/#/signin';
     return (
       <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />

@@ -80,7 +80,13 @@ export default function PersonalProfileView({ onNavigate, showHeader = false }: 
   const { data: teams } = useApi<any[]>(iamApi.teams, [], [] as any[]);
 
   const preferences = useMemo(() => parsePreferences(user?.preferences), [user]);
-  const profilePrefs = preferences.profile || {};
+  // Memoise — `preferences.profile || {}` would create a new {} on every render
+  // when no profile prefs exist, destabilising the `persist` callback and any
+  // effect dep that includes it.
+  const profilePrefs = useMemo<Record<string, any>>(
+    () => preferences.profile || {},
+    [preferences],
+  );
 
   // Pending profile patches accumulator. Between a successful PATCH and the
   // refetched user landing, `profilePrefs` is stale (still the pre-save

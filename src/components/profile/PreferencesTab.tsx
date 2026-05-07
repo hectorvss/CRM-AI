@@ -85,7 +85,11 @@ export default function PreferencesTab({ onSaveReady }: Props) {
   const { data: user, loading } = useApi<any>(iamApi.me);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
-  const ui = preferences.ui || {};
+  // Memoise — `preferences.ui || {}` creates a new {} every render when no UI
+  // prefs are stored, which makes `handleSave`/`hasChanges` unstable and causes
+  // an infinite re-render loop via the parent's setSaveHandler (looks like a
+  // page reload to the user).
+  const ui = useMemo<Record<string, any>>(() => preferences.ui || {}, [preferences]);
 
   const [theme, setTheme]               = useState('system');
   const [density, setDensity]           = useState('comfortable');

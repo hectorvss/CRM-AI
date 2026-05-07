@@ -62,7 +62,14 @@ export default function NotificationsTab({ onSaveReady }: Props) {
   const { data: user, loading } = useApi<any>(iamApi.me);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
-  const stored = preferences.notifications || {};
+  // Memoise — `preferences.notifications || {}` creates a new {} every render
+  // when no notifications are stored. That fresh ref makes `handleSave` and
+  // `hasChanges` unstable, which causes the parent's setSaveHandler to fire on
+  // every render and triggers an infinite re-render loop (looks like a reload).
+  const stored = useMemo<Record<string, any>>(
+    () => preferences.notifications || {},
+    [preferences],
+  );
 
   const [matrix, setMatrix] = useState<Matrix>(DEFAULT_MATRIX);
   const [dailyDigestEnabled, setDailyDigestEnabled] = useState(true);

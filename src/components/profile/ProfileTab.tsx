@@ -131,7 +131,16 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
   const { data: user, loading } = useApi<any>(iamApi.me);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
-  const profilePrefs = preferences.profile || {};
+  // CRITICAL: must memoise on `preferences` — a bare `preferences.profile || {}`
+  // creates a NEW empty object on every render when there are no stored profile
+  // prefs. That fresh ref propagates into `handleSave`/`hasChanges` via their
+  // dep arrays, which forces parent (Profile.tsx) `setSaveHandler` to fire on
+  // every render, re-rendering this tab, which loops forever and looks like a
+  // page reload to the user.
+  const profilePrefs = useMemo<Record<string, any>>(
+    () => preferences.profile || {},
+    [preferences],
+  );
 
   const [name, setName]               = useState('');
   const [phone, setPhone]             = useState('');
