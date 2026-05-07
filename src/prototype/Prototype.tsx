@@ -9800,6 +9800,189 @@ const FAQS = [
   { q: '¿Hay descuentos disponibles?', a: '20% de descuento anual. Las startups de menos de 2 años obtienen un 50% de descuento el primer año.' },
 ];
 
+const CREDIT_PACKS = [
+  {
+    id: 'pack-5k',
+    label: '5.000 créditos',
+    credits: '5.000',
+    price: '€79',
+    pricePerK: '€15,8/k',
+    tagline: 'Para equipos pequeños',
+    detail: {
+      headline: '5.000 créditos adicionales — €79',
+      models: 'GPT-4o mini, Claude 3 Haiku, Gemini 1.5 Flash',
+      capacity: 'Up to 5M tokens / ~10k automated tasks',
+      includes: [
+        '~10.000 tareas automatizadas',
+        'Hasta 5M tokens procesados',
+        'Modelos rápidos y eficientes en coste',
+        'Se consumen después de agotar la cuota mensual del plan',
+      ],
+      bestFor: 'Startups o equipos pequeños que quieren ampliar su cuota puntualmente sin sobrepasar su presupuesto.',
+      note: 'Los créditos del pack permanecen disponibles mientras tu suscripción esté activa.',
+    },
+  },
+  {
+    id: 'pack-20k',
+    label: '20.000 créditos',
+    credits: '20.000',
+    price: '€249',
+    pricePerK: '€12,45/k',
+    tagline: 'El más popular',
+    popular: true,
+    detail: {
+      headline: '20.000 créditos adicionales — €249',
+      models: 'GPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro',
+      capacity: 'Up to 20M tokens / ~40k automated tasks',
+      includes: [
+        '~40.000 tareas automatizadas',
+        'Hasta 20M tokens procesados',
+        'Acceso a modelos de gama alta (GPT-4o, Claude 3.5 Sonnet)',
+        'Ideal para picos de demanda o campañas de soporte',
+      ],
+      bestFor: 'Equipos en crecimiento con volumen variable que necesitan potencia de modelos premium.',
+      note: 'El pack más comprado. Un 21% más barato por crédito que el pack de 5.000.',
+    },
+  },
+  {
+    id: 'pack-50k',
+    label: '50.000 créditos',
+    credits: '50.000',
+    price: '€549',
+    pricePerK: '€10,98/k',
+    tagline: 'Mayor capacidad',
+    detail: {
+      headline: '50.000 créditos adicionales — €549',
+      models: 'All models + Custom fine-tuned models',
+      capacity: 'Up to 50M tokens / ~100k automated tasks',
+      includes: [
+        '~100.000 tareas automatizadas',
+        'Hasta 50M tokens procesados',
+        'Acceso a todos los modelos, incluidos los fine-tuned personalizados',
+        'Máxima capacidad para operaciones de soporte intensivas',
+      ],
+      bestFor: 'Operaciones de soporte grandes con alto volumen y constante. El precio por crédito más bajo disponible.',
+      note: 'Un 31% más barato por crédito que el pack de 5.000. Disponible facturación anual con descuento adicional.',
+    },
+  },
+  {
+    id: 'flexible',
+    label: 'Uso Flexible',
+    credits: null as string | null,
+    price: '€19',
+    pricePerK: '€19 / 1.000 créd.',
+    tagline: 'Sin compromiso',
+    detail: {
+      headline: '€19 por cada 1.000 créditos extra',
+      models: 'Todos los modelos disponibles en tu plan',
+      capacity: 'Sin límite de tokens — paga solo lo que uses',
+      includes: [
+        'Se activa solo después de agotar los créditos mensuales incluidos',
+        'Facturado mensualmente según el uso real extra',
+        'Protección de gasto máximo mensual y alertas de uso',
+        'Activa y desactiva cuando quieras desde Facturación',
+      ],
+      bestFor: 'Equipos con volumen impredecible o que quieren validar el ROI del AI antes de comprometerse con un pack fijo.',
+      note: 'No hay coste si no superas tu cuota mensual. Solo pagas por los créditos extra realmente consumidos.',
+    },
+  },
+];
+
+function BillingCreditsBlock({ selectedPack, setSelectedPack, currentPlan }: {
+  selectedPack: string;
+  setSelectedPack: (id: string) => void;
+  currentPlan: string;
+}) {
+  const pack = CREDIT_PACKS.find(p => p.id === selectedPack) || CREDIT_PACKS[1];
+  return (
+    <div style={{ borderBottom: `1px solid ${LC.border}` }}>
+      {/* Header */}
+      <div style={{ padding: '32px 64px 24px', borderBottom: `1px solid ${LC.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+          <p style={{ fontSize: 20, fontWeight: 800, color: LC.text }}>Créditos AI</p>
+          <span style={{ fontSize: 11, fontWeight: 700, background: LC.accent, color: '#fff', padding: '2px 8px', letterSpacing: '0.04em' }}>COMPARTIDOS POR EQUIPO</span>
+        </div>
+        <p style={{ fontSize: 13, color: LC.text60, lineHeight: '1.7', maxWidth: 680 }}>
+          Cada plan incluye una asignación mensual de créditos AI <strong style={{ color: LC.text }}>compartida entre todo el equipo</strong>, no por puesto. Añadir puestos <strong style={{ color: LC.text }}>no añade créditos</strong> — los packs adicionales se compran aparte.
+        </p>
+      </div>
+      {/* Body */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.8fr' }}>
+        {/* Left — selector */}
+        <div style={{ borderRight: `1px solid ${LC.border}`, padding: '24px 0' }}>
+          <p style={{ fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.1em', padding: '0 28px', marginBottom: 12 }}>Selecciona un pack</p>
+          {CREDIT_PACKS.map(pk => {
+            const sel = pk.id === selectedPack;
+            return (
+              <button key={pk.id} onClick={() => setSelectedPack(pk.id)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', border: 'none', background: sel ? LC.bg2 : 'transparent', borderLeft: sel ? `3px solid ${LC.accent}` : '3px solid transparent', cursor: 'pointer', textAlign: 'left', gap: 12 }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <p style={{ fontSize: 13, fontWeight: sel ? 700 : 500, color: LC.text, marginBottom: 2 }}>{pk.label}</p>
+                    {pk.popular && <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: LC.accent, padding: '1px 5px', letterSpacing: '0.04em' }}>POPULAR</span>}
+                  </div>
+                  <p style={{ fontSize: 11, color: LC.text60 }}>{pk.tagline}</p>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <p style={{ fontSize: 16, fontWeight: 700, color: LC.text }}>{pk.price}</p>
+                  {pk.pricePerK && <p style={{ fontSize: 10, color: LC.text60 }}>{pk.pricePerK}</p>}
+                </div>
+              </button>
+            );
+          })}
+          {/* Subscription allowances */}
+          <div style={{ margin: '20px 28px 0', padding: '16px', background: LC.bg2, border: `1px solid ${LC.border}` }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Incluido en tu suscripción</p>
+            {[
+              { plan: 'Starter', credits: '5.000/mes',  cur: currentPlan.toLowerCase().includes('starter') },
+              { plan: 'Growth',  credits: '20.000/mes', cur: currentPlan.toLowerCase().includes('growth') },
+              { plan: 'Scale',   credits: '60.000/mes', cur: currentPlan.toLowerCase().includes('scale') },
+            ].map(r => (
+              <div key={r.plan} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: `1px solid ${LC.border}` }}>
+                <span style={{ fontSize: 12, color: LC.text, fontWeight: r.cur ? 700 : 400 }}>
+                  {r.plan}{r.cur && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: LC.accent }}>TU PLAN</span>}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: LC.text }}>{r.credits}</span>
+              </div>
+            ))}
+            <p style={{ fontSize: 11, color: LC.text60, marginTop: 10 }}>Los créditos no usados <strong style={{ color: LC.text }}>no se acumulan</strong>.</p>
+          </div>
+        </div>
+        {/* Right — detail */}
+        <div style={{ padding: '28px 40px', display: 'flex', flexDirection: 'column' }}>
+          <p style={{ fontSize: 22, fontWeight: 800, color: LC.text, marginBottom: 8 }}>{pack.detail.headline}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            <p style={{ fontSize: 13, color: LC.text60 }}><strong style={{ color: LC.text }}>Modelos:</strong> {pack.detail.models}</p>
+            <p style={{ fontSize: 13, color: LC.text60 }}><strong style={{ color: LC.text }}>Capacidad:</strong> {pack.detail.capacity}</p>
+          </div>
+          <p style={{ fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Qué incluye</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+            {pack.detail.includes.map(item => (
+              <div key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <span style={{ color: LC.accent, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✓</span>
+                <span style={{ fontSize: 13, color: LC.text, lineHeight: '1.5' }}>{item}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: LC.bg2, border: `1px solid ${LC.border}`, padding: '16px 20px', marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Ideal para</p>
+            <p style={{ fontSize: 13, color: LC.text, lineHeight: '1.6' }}>{pack.detail.bestFor}</p>
+          </div>
+          <p style={{ fontSize: 12, color: LC.text60, lineHeight: '1.6', marginBottom: 24 }}>
+            <strong style={{ color: LC.text }}>Nota: </strong>{pack.detail.note}
+          </p>
+          <div style={{ marginTop: 'auto' }}>
+            <button style={{ height: 44, padding: '0 28px', fontSize: 14, fontWeight: 700, background: LC.text, color: '#fff', border: 'none', cursor: 'pointer' }}>
+              {pack.id === 'flexible' ? 'Activar uso flexible' : `Comprar ${pack.label}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BillingFaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -9822,34 +10005,54 @@ function BillingPlanCard({ plan, billing, current, isLaunch }: { plan: typeof PL
   // Launch mode pins the discounted annual rate regardless of billing cadence
   const price = isLaunch ? plan.annualPrice : (billing === 'annual' ? plan.annualPrice : plan.monthlyPrice);
   const isCurrent = current.toLowerCase().includes(plan.id);
+  const borderColor = plan.badge ? LC.accent : LC.border;
   return (
-    <div style={{ position: 'relative', border: `1px solid ${plan.badge ? LC.accent : LC.border}`, background: plan.badge ? LC.bg2 : LC.bg, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <LandingCornerDots color={plan.badge ? LC.accent : LC.border} />
+    <div style={{ position: 'relative', border: `1px solid ${borderColor}`, background: plan.badge ? LC.bg2 : LC.bg, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <LandingCornerDots color={borderColor} />
       {plan.badge && (
         <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: LC.accent, color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 10px', whiteSpace: 'nowrap' }}>
           {plan.badge}
         </div>
       )}
-      <div style={{ padding: '24px 24px 20px', borderBottom: `1px solid ${plan.badge ? LC.accent : LC.border}` }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{plan.name}</p>
-        <p style={{ fontSize: 12, color: LC.text60, marginBottom: 20, minHeight: 36, lineHeight: '1.5' }}>{plan.desc}</p>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-          <span style={{ fontSize: 36, fontWeight: 800, color: LC.text }}>€{price}</span>
-          <span style={{ fontSize: 13, color: LC.text60 }}>/mes</span>
+      {/* ① Fixed-height info block — same height on every card → price row always aligns */}
+      <div style={{ height: 268, padding: '24px 24px 0', display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${borderColor}` }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{plan.name}</p>
+        <p style={{ fontSize: 12, color: LC.text, marginBottom: 6 }}>{plan.subtitle}</p>
+        <p style={{ fontSize: 12, color: LC.text60, lineHeight: '1.5', marginBottom: 0, flex: 1 }}>{plan.desc}</p>
+        {/* Price pinned to bottom of fixed block */}
+        <div style={{ marginTop: 'auto', paddingBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>Desde</span>
+              {plan.originalPrice && (
+                <span style={{ fontSize: 15, color: LC.text60, textDecoration: 'line-through' }}>€{plan.originalPrice}/mes</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+              <span style={{ fontSize: 36, fontWeight: 800, color: LC.text, letterSpacing: '-0.6px', lineHeight: 1 }}>€{price}</span>
+              <span style={{ fontSize: 12, color: LC.text80 }}>{plan.seatLabel}</span>
+            </div>
+          </div>
+          {billing === 'annual' && !isLaunch && (
+            <p style={{ fontSize: 11, color: LC.text60, marginTop: 6 }}>Facturado anualmente · €{plan.monthlyPrice}/mes si mensual</p>
+          )}
+          {isLaunch && (
+            <p style={{ fontSize: 11, color: LC.accent, marginTop: 6, fontWeight: 600 }}>Precio lanzamiento · 73% de descuento hasta 31 dic 2026</p>
+          )}
         </div>
-        {billing === 'annual' && (
-          <p style={{ fontSize: 11, color: LC.text60 }}>Facturado anualmente. €{plan.monthlyPrice}/mes si factura mensual.</p>
-        )}
       </div>
-      <div style={{ padding: '20px 24px', flex: 1 }}>
-        {plan.features.map(f => <LandingBullet key={f}>{f}</LandingBullet>)}
-      </div>
-      <div style={{ padding: '0 24px 24px' }}>
-        <button
-          style={{ width: '100%', padding: '10px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${isCurrent ? LC.border : LC.accent}`, background: isCurrent ? LC.bg2 : LC.accent, color: isCurrent ? LC.text60 : '#fff', transition: 'opacity 0.15s' }}
-        >
+      {/* ② CTA — fixed height so buttons always align */}
+      <div style={{ height: 68, padding: '12px 24px', display: 'flex', alignItems: 'center', borderBottom: `1px solid ${borderColor}` }}>
+        <button style={{ width: '100%', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${isCurrent ? LC.border : LC.accent}`, background: isCurrent ? LC.bg2 : LC.accent, color: isCurrent ? LC.text60 : '#fff' }}>
           {isCurrent ? 'Plan actual' : plan.cta}
         </button>
+      </div>
+      {/* ③ Features — flex:1 fills remaining height */}
+      <div style={{ padding: '20px 24px 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <p style={{ fontSize: 10, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 18 }}>{plan.featuresLabel}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {plan.features.map(f => <LandingBullet key={f}>{f}</LandingBullet>)}
+        </div>
       </div>
     </div>
   );
@@ -9857,6 +10060,7 @@ function BillingPlanCard({ plan, billing, current, isLaunch }: { plan: typeof PL
 
 function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [billing, setBilling] = useState<'monthly' | 'annual'>('annual');
+  const [selectedPack, setSelectedPack] = useState('pack-20k');
   // Launch-pricing toggle: when on, all plans show their 73%-off launch rate
   // until 31 dic 2026. Independent from monthly/annual billing cadence.
   const [isLaunch, setIsLaunch] = useState(false);
@@ -9918,37 +10122,40 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
                 <BillingPlanCard plan={plan} billing={billing} current={currentPlan} isLaunch={isLaunch} />
               </Fragment>
             ))}
-            {/* Business column */}
+            {/* Business column — same 3-section structure as BillingPlanCard */}
             <div style={{ width: 1, background: LC.border, flexShrink: 0 }} />
             <div style={{ position: 'relative', border: 'none', background: LC.bg, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
               <LandingCornerDots color={LC.border} />
-              <div style={{ padding: '24px 24px 20px', borderBottom: `1px solid ${LC.border}` }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{BUSINESS_PLAN.name}</p>
-                <p style={{ fontSize: 12, color: LC.text60, marginBottom: 20, minHeight: 36, lineHeight: '1.5' }}>{BUSINESS_PLAN.desc}</p>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', height: 56 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>Precio</span>
-                    <span style={{ fontSize: 15, color: LC.text60 }}>por contrato</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                    <span style={{ fontSize: 32, fontWeight: 700, color: LC.text, letterSpacing: '-0.6px' }}>Custom</span>
-                    <span style={{ fontSize: 13, color: LC.text80 }}>negociado</span>
+              {/* ① Fixed-height info block — matches BillingPlanCard height:268 */}
+              <div style={{ height: 268, padding: '24px 24px 0', display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${LC.border}` }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{BUSINESS_PLAN.name}</p>
+                <p style={{ fontSize: 12, color: LC.text, marginBottom: 6 }}>{BUSINESS_PLAN.subtitle}</p>
+                <p style={{ fontSize: 12, color: LC.text60, lineHeight: '1.5', marginBottom: 0, flex: 1 }}>{BUSINESS_PLAN.desc}</p>
+                <div style={{ marginTop: 'auto', paddingBottom: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>Precio</span>
+                      <span style={{ fontSize: 15, color: LC.text60 }}>por contrato</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                      <span style={{ fontSize: 36, fontWeight: 800, color: LC.text, letterSpacing: '-0.6px', lineHeight: 1 }}>Custom</span>
+                      <span style={{ fontSize: 12, color: LC.text80 }}>negociado</span>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div style={{ padding: '16px 24px' }}>
-                <button style={{ width: '100%', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: 'none', background: LC.text, color: '#fff' }}>
+              {/* ② CTA — same fixed height as BillingPlanCard */}
+              <div style={{ height: 68, padding: '12px 24px', display: 'flex', alignItems: 'center', borderBottom: `1px solid ${LC.border}` }}>
+                <button style={{ width: '100%', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${LC.accent}`, background: LC.accent, color: '#fff' }}>
                   Hablar con ventas
                 </button>
               </div>
-              <div style={{ padding: '4px 24px', flex: 1 }}>
-                <p style={{ fontSize: 10, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 20 }}>{BUSINESS_PLAN.featuresLabel}</p>
-                {BUSINESS_PLAN.features.map(f => (
-                  <div key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16 }}>
-                    <span style={{ width: 4, height: 4, marginTop: 8, flexShrink: 0, background: 'rgba(17,17,17,0.3)', display: 'inline-block' }} />
-                    <span style={{ fontSize: 13, color: LC.text, lineHeight: '1.6' }}>{f}</span>
-                  </div>
-                ))}
+              {/* ③ Features */}
+              <div style={{ padding: '20px 24px 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 18 }}>{BUSINESS_PLAN.featuresLabel}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {BUSINESS_PLAN.features.map(f => <LandingBullet key={f}>{f}</LandingBullet>)}
+                </div>
               </div>
             </div>
           </div>
@@ -9964,26 +10171,8 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
           </div>
         </div>
 
-        {/* Credits & Seats */}
-        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 20 }}>Créditos AI &amp; Puestos</p>
-          <div style={{ display: 'flex', gap: 0, border: `1px solid ${LC.border}` }}>
-            {[
-              { title: 'Créditos AI', desc: 'Cada interacción con AI Copilot o Fin AI consume créditos. Los créditos se renuevan mensualmente según tu plan.', price: '+€19', unit: '/1.000 créditos extra' },
-              { title: 'Puestos adicionales', desc: 'Añade puestos para más agentes en cualquier momento. El coste se prorratea hasta tu próxima fecha de renovación.', price: '+€29', unit: '/puesto/mes' },
-            ].map((item, i) => (
-              <Fragment key={item.title}>
-                {i > 0 && <div style={{ width: 1, background: LC.border }} />}
-                <div style={{ flex: 1, padding: '24px', position: 'relative' }}>
-                  <LandingCornerDots />
-                  <p style={{ fontSize: 14, fontWeight: 700, color: LC.text, marginBottom: 8 }}>{item.title}</p>
-                  <p style={{ fontSize: 13, color: LC.text60, marginBottom: 20, lineHeight: '1.5' }}>{item.desc}</p>
-                  <p style={{ fontSize: 28, fontWeight: 800, color: LC.text }}>{item.price} <span style={{ fontSize: 12, fontWeight: 400, color: LC.text60 }}>{item.unit}</span></p>
-                </div>
-              </Fragment>
-            ))}
-          </div>
-        </div>
+        {/* AI Credits — selector + detail (real packs €79 / €249 / €549 / flexible) */}
+        <BillingCreditsBlock selectedPack={selectedPack} setSelectedPack={setSelectedPack} currentPlan={currentPlan} />
 
         {/* FAQs */}
         <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
