@@ -979,68 +979,27 @@ export async function executeWorkflowNode(
     return buildSimulatedNodeResult(node, config, context);
   }
 
-  // ── case.*, order.*, payment.*, return.*, approval.*
-  //    extracted to server/runtime/adapters/actions.ts (Phase 3d)
-
-  // ── policy.evaluate, core.audit_log, core.idempotency_check, core.rate_limit
-  // extracted to server/runtime/adapters/core.ts (Phase 3b)
-
-  // ── knowledge.* extracted to server/runtime/adapters/knowledge.ts (Phase 3c)
-
-  // ── agent.* extracted to server/runtime/adapters/ai.ts (Phase 3g)
-
-  // ── connector.* extracted to server/runtime/adapters/connectors.ts (Phase 3h)
-
-  // ── notification.* extracted to server/runtime/adapters/notifications.ts (Phase 3e)
-
-  // ── ai.generate_text extracted to server/runtime/adapters/ai.ts (Phase 3g)
-
-  // ── core.code, core.data_table_op, core.respond_webhook
-  //    extracted to server/runtime/adapters/core.ts (Phase 3b)
-
-  // ── AI: Information extractor (structured output) ───────────────────────────
-  // ── ai.information_extractor extracted to server/runtime/adapters/ai.ts (Phase 3g)
-
-  // ── resolveAiProviderKey extracted to server/runtime/adapters/ai.ts (Phase 3g)
-
-  // ── ai.anthropic extracted to server/runtime/adapters/ai.ts (Phase 3g)
-
-  // ── ai.openai extracted to server/runtime/adapters/ai.ts (Phase 3g)
-
-  // ── ai.ollama extracted to server/runtime/adapters/ai.ts (Phase 3g)
-
-  // Guardrails: a lightweight safety filter using Gemini (or pattern matching as
-  // fallback) to detect PII / toxicity / prompt injection / off-topic content.
-  // ── ai.guardrails extracted to server/runtime/adapters/ai.ts (Phase 3g)
-
-  // ── Google Gemini (explicit AI provider node) ───────────────────────────────
-  // ── ai.gemini extracted to server/runtime/adapters/ai.ts (Phase 3g)
-
-  // ── message.* extracted to server/runtime/adapters/messaging.ts (Phase 3f)
-
-
-  // ── data.http_request extracted to server/runtime/adapters/data.ts (Phase 3a)
-
+  // ── All side-effectful node families now live under server/runtime/adapters/:
+  //   case.* / order.* / payment.* / return.* / approval.*  → adapters/actions.ts (Phase 3d)
+  //   policy.* / core.audit_log / core.idempotency_check / core.rate_limit
+  //     / core.code / core.data_table_op / core.respond_webhook → adapters/core.ts (Phase 3b)
+  //   knowledge.*                                              → adapters/knowledge.ts (Phase 3c)
+  //   notification.*                                           → adapters/notifications.ts (Phase 3e)
+  //   message.*                                                → adapters/messaging.ts (Phase 3f)
+  //   ai.*  + agent.*                                          → adapters/ai.ts (Phase 3g)
+  //   connector.*                                              → adapters/connectors.ts (Phase 3h)
+  //   data.* + data.http_request                               → adapters/data.ts (Phase 3a)
+  //   flow.wait/delay/merge/loop/subworkflow                   → adapters/flowScheduler.ts (Phase 4b)
+  //
+  // The early adapter dispatch above handles them all.
   if (['agent', 'integration', 'knowledge'].includes(node.type)) {
     return { status: 'failed', error: `Unsupported ${node.type} node key: ${node.key}` };
   }
 
-  // ── flow.wait, delay, flow.merge, flow.loop, flow.subworkflow extracted to
-  //    server/runtime/adapters/flowScheduler.ts (Phase 4b). Early adapter
-  //    dispatch above handles all 5 keys.
-
-  if (node.key === 'flow.stop_error') {
-    return { status: 'failed', error: config.errorMessage || 'Stopped by flow.stop_error', output: { stopped: true } };
-  }
-
-  if (node.key === 'flow.noop') {
-    return { status: 'completed', output: { passedThrough: true } };
-  }
-
-  if (node.key === 'stop') {
-    return { status: 'stopped', output: { stopped: true } };
-  }
-
+  // All flow.*, stop, flow.noop, flow.stop_error keys are handled by the
+  // adapter registry (server/runtime/adapters/flow.ts + flowScheduler.ts).
+  // Anything that reaches this point is a node key with no handler — return
+  // a synthesised completion (matches the pre-extraction fallback).
   return { status: 'completed', output: { simulated: true, key: node.key } };
 }
 
