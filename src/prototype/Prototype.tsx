@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, workflowsApi } from '../api/client';
+import { agentsApi, aiApi, attachmentsApi, auditApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, operationsApi, policyRulesApi, reportsApi, workflowsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
@@ -790,6 +790,30 @@ function titleCase(value?: string | null) {
   return (value || 'Sin dato')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+// Module-level helper used across Fin views to push the user to a top-level
+// CRM view (channel settings, connectors, etc.) by rewriting `?view=...`.
+function openCrmView(view: string) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('view', view);
+  window.location.href = url.toString();
+}
+
+// Hook for hero-card dismiss state, persisted in localStorage. Used across
+// every Fin/Knowledge page that has a closable promo banner.
+function useDismissibleHero(key: string) {
+  const lsKey = `clain.fin.hero.${key}`;
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try { return typeof window !== 'undefined' && window.localStorage.getItem(lsKey) === '1'; }
+    catch { return false; }
+  });
+  function dismiss() {
+    setDismissed(true);
+    try { window.localStorage.setItem(lsKey, '1'); } catch { /* ignore */ }
+  }
+  return { dismissed, dismiss };
 }
 
 function relativeTime(value?: string | null) {
@@ -13952,6 +13976,71 @@ function FinContenidoContent() {
 
 // ─── Capacitar > Pautas / Orientación (Figma 1:4825) ─────────────────────────
 function FinOrientacionContent() {
+  // Pautas live as rows in policy_rules with kind = 'fin_guidance'. We pull
+  // every guidance the workspace has, group by `category`, and render them
+  // inside the right FinPautaCategory section. The "Nuevo" button on each
+  // section opens a tiny inline modal that POSTs back via policyRulesApi.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: rulesData } = useApi(
+    () => policyRulesApi.list({ entity_type: 'fin_guidance' as any }),
+    [refreshKey],
+    [],
+  );
+  const allRules: any[] = useMemo(() => {
+    const raw = rulesData as any;
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw?.items)) return raw.items;
+    return [];
+  }, [rulesData]);
+  const [search, setSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<'any' | 'active' | 'inactive'>('any');
+  const [basicsOpen, setBasicsOpen] = useState(true);
+  // Modal state for creating a new pauta inside any category.
+  const [createModal, setCreateModal] = useState<null | { category: string }>(null);
+  const [createBody, setCreateBody] = useState('');
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  function rulesFor(category: string) {
+    return allRules.filter((r: any) => {
+      const cat = String(r.category || r.payload?.category || r.metadata?.category || '').toLowerCase();
+      if (cat !== category.toLowerCase()) return false;
+      const q = search.trim().toLowerCase();
+      if (q && !JSON.stringify(r).toLowerCase().includes(q)) return false;
+      const isActive = !!(r.is_active ?? r.isActive ?? true);
+      if (filterStatus === 'active' && !isActive) return false;
+      if (filterStatus === 'inactive' && isActive) return false;
+      return true;
+    });
+  }
+  async function submitCreate() {
+    if (!createModal || createBusy) return;
+    const body = createBody.trim();
+    if (!body) { setCreateError('La pauta no puede estar vacía'); return; }
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      await policyRulesApi.create({
+        entity_type: 'fin_guidance',
+        category: createModal.category,
+        body,
+        is_active: true,
+      });
+      setCreateModal(null);
+      setCreateBody('');
+      setRefreshKey(k => k + 1);
+    } catch (err: any) {
+      setCreateError(err?.message || 'No se pudo crear la pauta');
+    } finally { setCreateBusy(false); }
+  }
+  async function toggleRule(r: any) {
+    const id = String(r.id);
+    const next = !(r.is_active ?? r.isActive ?? true);
+    try {
+      await policyRulesApi.update(id, { is_active: next });
+      setRefreshKey(k => k + 1);
+    } catch { /* surface via reload */ }
+  }
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero */}
@@ -14018,13 +14107,27 @@ function FinOrientacionContent() {
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-6 py-4 flex flex-col gap-3">
           {/* Básicos accordion */}
-          <button className="w-full bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
-            <div className="flex items-center gap-2">
-              <span className="text-[14px] font-semibold text-[#1a1a1a]">Básicos</span>
-              <span className="text-[13px] text-[#646462]">Tono amistoso, Longitud estándar</span>
-            </div>
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-          </button>
+          <div className="bg-white border border-[#e9eae6] rounded-[12px]">
+            <button onClick={() => setBasicsOpen(o => !o)} className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] font-semibold text-[#1a1a1a]">Básicos</span>
+                <span className="text-[13px] text-[#646462]">Tono amistoso, Longitud estándar</span>
+              </div>
+              <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${basicsOpen ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            {basicsOpen && (
+              <div className="px-4 pb-3 -mt-1 grid grid-cols-2 gap-3 text-[13px]">
+                <div className="bg-[#f8f8f7] rounded-[8px] px-3 py-2">
+                  <p className="text-[12px] text-[#646462]">Tono</p>
+                  <p className="text-[#1a1a1a] font-medium">Amistoso</p>
+                </div>
+                <div className="bg-[#f8f8f7] rounded-[8px] px-3 py-2">
+                  <p className="text-[12px] text-[#646462]">Longitud</p>
+                  <p className="text-[#1a1a1a] font-medium">Estándar</p>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Search + filtrar */}
           <div className="flex items-center gap-3">
@@ -14032,14 +14135,32 @@ function FinOrientacionContent() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
               <input
                 type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
                 placeholder="Busca la guía por título o contenido"
                 className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
               />
+              {search && (
+                <button onClick={() => setSearch('')} title="Limpiar">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                </button>
+              )}
             </div>
-            <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+            <button onClick={() => setShowFilters(s => !s)} className={`h-8 px-3 rounded-[8px] border flex items-center gap-2 text-[13px] ${showFilters || filterStatus !== 'any' ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Filtrar</span>
             </button>
+            {showFilters && (
+              <select
+                value={filterStatus}
+                onChange={e => setFilterStatus(e.target.value as 'any' | 'active' | 'inactive')}
+                className="h-8 px-2 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a]"
+              >
+                <option value="any">Cualquier estado</option>
+                <option value="active">Activas</option>
+                <option value="inactive">Inactivas</option>
+              </select>
+            )}
           </div>
 
           {/* Estilo de comunicación */}
@@ -14049,6 +14170,9 @@ function FinOrientacionContent() {
             icon={
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.5h11v8h-7l-4 3v-11z" strokeLinejoin="round"/></svg>
             }
+            items={rulesFor('estilo_comunicacion')}
+            onNew={() => { setCreateModal({ category: 'estilo_comunicacion' }); setCreateBody(''); setCreateError(null); }}
+            onToggle={toggleRule}
           />
 
           {/* Contexto y aclaraciones */}
@@ -14058,6 +14182,9 @@ function FinOrientacionContent() {
             icon={
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M6.2 6.4c.3-.9 1.1-1.5 2-1.5 1.1 0 2 .8 2 1.8 0 1-.8 1.5-1.7 1.7-.3 0-.5.3-.5.5v.6M8 11.2v.01" strokeLinecap="round"/></svg>
             }
+            items={rulesFor('contexto_aclaraciones')}
+            onNew={() => { setCreateModal({ category: 'contexto_aclaraciones' }); setCreateBody(''); setCreateError(null); }}
+            onToggle={toggleRule}
           />
 
           {/* Contenido y fuentes — Figma 1:4719 */}
@@ -14067,6 +14194,9 @@ function FinOrientacionContent() {
             icon={
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
             }
+            items={rulesFor('contenido_fuentes')}
+            onNew={() => { setCreateModal({ category: 'contenido_fuentes' }); setCreateBody(''); setCreateError(null); }}
+            onToggle={toggleRule}
           />
 
           {/* Correo no deseado — Figma 1:4744 */}
@@ -14076,6 +14206,9 @@ function FinOrientacionContent() {
             icon={
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4" strokeLinejoin="round"/></svg>
             }
+            items={rulesFor('correo_no_deseado')}
+            onNew={() => { setCreateModal({ category: 'correo_no_deseado' }); setCreateBody(''); setCreateError(null); }}
+            onToggle={toggleRule}
           />
 
           {/* Otros — Figma 1:4768 */}
@@ -14085,9 +14218,35 @@ function FinOrientacionContent() {
             icon={
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg>
             }
+            items={rulesFor('otros')}
+            onNew={() => { setCreateModal({ category: 'otros' }); setCreateBody(''); setCreateError(null); }}
+            onToggle={toggleRule}
           />
         </div>
       </div>
+
+      {/* Create-pauta modal */}
+      {createModal && (
+        <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={() => !createBusy && setCreateModal(null)}>
+          <div className="w-[480px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Nueva pauta</h3>
+            <p className="text-[12.5px] text-[#646462] mb-4">Categoría: <strong>{createModal.category.replace(/_/g, ' ')}</strong>. Fin aplicará esta pauta en cada respuesta.</p>
+            <textarea
+              autoFocus
+              value={createBody}
+              onChange={e => setCreateBody(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitCreate(); if (e.key === 'Escape') setCreateModal(null); }}
+              placeholder="Por ejemplo: «Si el cliente pregunta por reembolsos, redirige a la política /docs/refunds antes de responder»"
+              className="w-full min-h-[120px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+            />
+            {createError && <p className="mt-2 text-[12px] text-[#b91c1c]">{createError}</p>}
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button onClick={() => setCreateModal(null)} disabled={createBusy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+              <button onClick={submitCreate} disabled={createBusy || !createBody.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]">{createBusy ? 'Creando…' : 'Crear pauta'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -14096,32 +14255,63 @@ function FinPautaCategory({
   title,
   description,
   icon,
+  items = [],
+  onNew,
+  onToggle,
 }: {
   title: string;
   description: string;
   icon: ReactNode;
+  items?: any[];
+  onNew?: () => void;
+  onToggle?: (rule: any) => void;
 }) {
+  const [open, setOpen] = useState(true);
   return (
     <div className="bg-white border border-[#e9eae6] rounded-[12px]">
-      <div className="px-4 py-3 flex items-start justify-between border-b border-[#e9eae6]">
-        <div className="flex items-start gap-2">
+      <button onClick={() => setOpen(o => !o)} className="w-full px-4 py-3 flex items-start justify-between border-b border-[#e9eae6] hover:bg-[#f8f8f7]/40">
+        <div className="flex items-start gap-2 text-left">
           <span className="mt-0.5">{icon}</span>
           <div>
-            <p className="text-[14px] font-semibold text-[#1a1a1a]">{title}</p>
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">{title} {items.length > 0 && <span className="text-[12px] text-[#646462] font-normal">({items.length})</span>}</p>
             <p className="text-[13px] text-[#646462] mt-0.5">{description}</p>
           </div>
         </div>
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] mt-1.5"><path d="M4 6l4 4 4-4z"/></svg>
-      </div>
-      <div className="px-4 py-8 text-center text-[13px] text-[#646462] border-b border-[#e9eae6]">
-        Aún no hay pautas. Haz clic en Nuevo para crear uno.
-      </div>
-      <div className="px-4 py-2.5">
-        <button className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-          <span>Nuevo</span>
-        </button>
-      </div>
+        <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] mt-1.5 transition-transform ${open ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
+      </button>
+      {open && (
+        <>
+          {items.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[13px] text-[#646462] border-b border-[#e9eae6]">
+              Aún no hay pautas. Haz clic en Nuevo para crear una.
+            </div>
+          ) : (
+            <div className="border-b border-[#e9eae6]">
+              {items.map((r: any) => {
+                const body = r.body || r.text || r.description || JSON.stringify(r.payload || {}).slice(0, 200);
+                const active = !!(r.is_active ?? r.isActive ?? true);
+                return (
+                  <div key={r.id} className="px-4 py-3 flex items-start justify-between gap-3 border-t border-[#f1f1ee] first:border-t-0">
+                    <p className="flex-1 text-[13px] text-[#1a1a1a] leading-[18px]">{body}</p>
+                    <button
+                      onClick={() => onToggle?.(r)}
+                      className={`h-6 px-2 rounded-full text-[11px] font-semibold flex-shrink-0 ${active ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}
+                    >
+                      {active ? 'Activa' : 'Inactiva'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="px-4 py-2.5">
+            <button onClick={onNew} className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+              <span>Nuevo</span>
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -14180,10 +14370,14 @@ function FinAtributosContent() {
               <span>Aprender</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-            <button className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
+            <button
+              onClick={() => openCrmView('automation')}
+              title="Generar atributo con IA"
+              className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]"
+            >
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
             </button>
-            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button onClick={() => openCrmView('automation')} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo</span>
             </button>
@@ -14308,7 +14502,7 @@ function FinEscalamientoContent() {
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
                 </button>
                 <p className="mt-0.5 text-[13px] text-[#646462] leading-[18px] max-w-[600px]">
-                  Utilice <a href="#" className="text-[#1a1a1a] underline">atributos</a> y otros datos de los clientes para definir de manera determinista las condiciones de escalamiento.
+                  Utilice <button onClick={() => { /* Jump to the Capacitar › Atributos sub-view via the Fin sidebar URL hash. */ if (typeof window !== 'undefined') { const url = new URL(window.location.href); url.searchParams.set('view', 'fin'); url.searchParams.set('sub', 'capAttributes'); window.location.href = url.toString(); } }} className="text-[#1a1a1a] underline hover:text-black">atributos</button> y otros datos de los clientes para definir de manera determinista las condiciones de escalamiento.
                 </p>
               </div>
             </div>
@@ -14370,10 +14564,65 @@ function FinProcedimientosContent() {
   const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
   const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
   const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
-  const procedures: { title: string; status: 'Draft' }[] = [
-    { title: 'Untitled', status: 'Draft' },
-    { title: 'Untitled', status: 'Draft' },
-  ];
+  const { dismissed: heroDismissed, dismiss: dismissHero } = useDismissibleHero('procedures');
+  // Live procedures from workflowsApi filtered to kind=procedure. Search,
+  // state and "primero los activos" filters all run client-side. Tags filter
+  // is just a multi-select on tag values present in the workflow rows.
+  const { data: workflowsData } = useApi(() => workflowsApi.list(), [], []);
+  const [search, setSearch] = useState('');
+  const [stateFilter, setStateFilter] = useState<'any' | 'published' | 'draft' | 'archived'>('any');
+  const [activeFirst, setActiveFirst] = useState(false);
+  const [tagFilter, setTagFilter] = useState<string | 'any'>('any');
+  const allProcedures = useMemo(() => {
+    const list = Array.isArray(workflowsData) ? workflowsData : [];
+    return list.filter((w: any) => {
+      const kind = String(w.kind || w.type || '').toLowerCase();
+      const tags = Array.isArray(w.tags) ? w.tags.map((t: any) => String(t).toLowerCase()) : [];
+      return kind === 'procedure' || tags.includes('procedure');
+    });
+  }, [workflowsData]);
+  const allTags = useMemo(() => {
+    const s = new Set<string>();
+    for (const w of allProcedures) {
+      const tags = Array.isArray((w as any).tags) ? (w as any).tags : [];
+      for (const t of tags) s.add(String(t));
+    }
+    return Array.from(s).sort();
+  }, [allProcedures]);
+  const procedures = useMemo(() => {
+    let list: any[] = allProcedures;
+    const q = search.trim().toLowerCase();
+    if (q) list = list.filter(w => JSON.stringify(w).toLowerCase().includes(q));
+    if (stateFilter !== 'any') {
+      list = list.filter(w => String(w.status || w.state || 'draft').toLowerCase() === stateFilter);
+    }
+    if (tagFilter !== 'any') {
+      list = list.filter(w => Array.isArray(w.tags) && w.tags.includes(tagFilter));
+    }
+    if (activeFirst) {
+      list = [...list].sort((a, b) => {
+        const aa = ['published', 'active'].includes(String(a.status || '').toLowerCase()) ? 0 : 1;
+        const bb = ['published', 'active'].includes(String(b.status || '').toLowerCase()) ? 0 : 1;
+        return aa - bb;
+      });
+    }
+    if (list.length === 0) {
+      // Always show two visible drafts when empty so the table never blanks.
+      return [
+        { id: '__draft1', title: 'Untitled', status: 'Draft' },
+        { id: '__draft2', title: 'Untitled', status: 'Draft' },
+      ];
+    }
+    return list.map((w: any) => ({
+      id: String(w.id),
+      title: w.name || w.title || 'Sin título',
+      status: String(w.status || 'draft').toLowerCase() === 'published' ? 'Activo' : 'Draft',
+    }));
+  }, [allProcedures, search, stateFilter, tagFilter, activeFirst]);
+  // Dropdown open state for the 3 filter chips.
+  const [stateMenuOpen, setStateMenuOpen] = useState(false);
+  const [activeMenuOpen, setActiveMenuOpen] = useState(false);
+  const [tagMenuOpen, setTagMenuOpen] = useState(false);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
@@ -14389,7 +14638,7 @@ function FinProcedimientosContent() {
               <span>Aprender</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button onClick={() => openCrmView('automation')} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo procedimiento</span>
             </button>
@@ -14400,16 +14649,57 @@ function FinProcedimientosContent() {
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
             <input
               type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
               placeholder="Buscar..."
               className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
             />
+            {search && (
+              <button onClick={() => setSearch('')} title="Limpiar"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+            )}
           </div>
-          {(['State is any', 'Primero los activos', 'Etiquetas'] as const).map(label => (
-            <button key={label} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-              <span>{label}</span>
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          {/* State filter chip */}
+          <div className="relative">
+            <button onClick={() => setStateMenuOpen(o => !o)} className={`h-8 px-3 rounded-[8px] border flex items-center gap-1.5 text-[13px] ${stateFilter === 'any' ? 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]' : 'bg-[#1a1a1a] border-[#1a1a1a] text-white'}`}>
+              <span>Estado: {stateFilter === 'any' ? 'cualquiera' : stateFilter}</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-          ))}
+            {stateMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setStateMenuOpen(false)} />
+                <div className="absolute z-20 left-0 top-9 w-[160px] bg-white border border-[#e9eae6] rounded-[10px] shadow-lg py-1">
+                  {(['any', 'published', 'draft', 'archived'] as const).map(s => (
+                    <button key={s} onClick={() => { setStateFilter(s); setStateMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-[13px] hover:bg-[#f8f8f7] ${s === stateFilter ? 'bg-[#f8f8f7] font-semibold' : ''}`}>
+                      {s === 'any' ? 'Cualquiera' : s === 'published' ? 'Publicado' : s === 'draft' ? 'Borrador' : 'Archivado'}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          {/* Active-first chip — toggle */}
+          <button onClick={() => setActiveFirst(v => !v)} className={`h-8 px-3 rounded-[8px] border flex items-center gap-1.5 text-[13px] ${activeFirst ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>
+            <span>Primero los activos</span>
+          </button>
+          {/* Tags chip */}
+          <div className="relative">
+            <button onClick={() => setTagMenuOpen(o => !o)} className={`h-8 px-3 rounded-[8px] border flex items-center gap-1.5 text-[13px] ${tagFilter === 'any' ? 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]' : 'bg-[#1a1a1a] border-[#1a1a1a] text-white'}`}>
+              <span>Etiqueta: {tagFilter === 'any' ? 'cualquiera' : tagFilter}</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            {tagMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setTagMenuOpen(false)} />
+                <div className="absolute z-20 left-0 top-9 w-[200px] bg-white border border-[#e9eae6] rounded-[10px] shadow-lg py-1 max-h-[240px] overflow-y-auto">
+                  <button onClick={() => { setTagFilter('any'); setTagMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-[13px] hover:bg-[#f8f8f7] ${tagFilter === 'any' ? 'bg-[#f8f8f7] font-semibold' : ''}`}>Cualquiera</button>
+                  {allTags.length === 0 && <p className="px-3 py-2 text-[12px] text-[#646462]">Sin etiquetas todavía.</p>}
+                  {allTags.map(t => (
+                    <button key={t} onClick={() => { setTagFilter(t); setTagMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-[13px] hover:bg-[#f8f8f7] ${t === tagFilter ? 'bg-[#f8f8f7] font-semibold' : ''}`}>{t}</button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -14417,6 +14707,7 @@ function FinProcedimientosContent() {
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-6 py-5 flex flex-col gap-5">
           {/* Hero card peach */}
+          {!heroDismissed && (
           <div className="relative bg-[#ffccb2] rounded-[16px] px-8 pt-[54px] pb-12 flex gap-8 items-start overflow-hidden">
             <div className="flex-1 min-w-0 max-w-[605px] flex flex-col gap-[15.4px]">
               <h2 className="text-[40px] text-[#1a1a1a] leading-[40px] tracking-[-1.2px]" style={{ fontFamily: "'Segoe UI', sans-serif" }}>
@@ -14446,18 +14737,23 @@ function FinProcedimientosContent() {
             <div className="relative w-[400px] h-[264px] rounded-[8px] overflow-hidden flex-shrink-0">
               <img src={IMG_PROCEDURES_BANNER} alt="Procedimientos" className="absolute inset-0 w-full h-full object-cover" />
             </div>
-            <button aria-label="Cerrar" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+            <button onClick={dismissHero} aria-label="Cerrar" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
               <span className="w-4 h-4" style={{ backgroundImage: `url(${IMG_PROCEDURES_CLOSE})`, backgroundSize: 'cover' }} />
             </button>
           </div>
+          )}
 
           {/* Procedimientos list */}
           <div>
             <h3 className="text-[14px] font-bold text-[#1a1a1a]">Procedimientos</h3>
             <p className="mt-0.5 text-[13px] text-[#646462]">Automatice las consultas complejas con instrucciones paso a paso para Fin.</p>
             <div className="mt-3 flex flex-col gap-2">
-              {procedures.map((p, i) => (
-                <div key={i} className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
+              {procedures.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => openCrmView('automation')}
+                  className="w-full text-left bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40"
+                >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.title}</p>
@@ -14473,10 +14769,20 @@ function FinProcedimientosContent() {
                       <span>Errores: <span className="text-[#1a1a1a]">0</span></span>
                     </div>
                   </div>
-                  <button className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]">
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (p.id.startsWith('__')) return;
+                      if (typeof window !== 'undefined' && !window.confirm(`¿Archivar el procedimiento "${p.title}"?`)) return;
+                      try { await workflowsApi.archive(p.id); window.location.reload(); } catch { /* surface via reload */ }
+                    }}
+                    className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462] flex-shrink-0"
+                  >
                     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
-                  </button>
-                </div>
+                  </span>
+                </button>
               ))}
             </div>
           </div>
@@ -14496,7 +14802,7 @@ function FinProcedimientosContent() {
                 <span className="w-6 h-6 rounded-[6px] bg-[#3b9dff] flex items-center justify-center text-white text-[10px] font-bold ring-2 ring-white">T</span>
                 <span className="w-6 h-6 rounded-[6px] bg-[#f1f1ee] border border-[#e9eae6] flex items-center justify-center text-[#646462] text-[10px] font-bold ring-2 ring-white">+</span>
               </div>
-              <a href="#" className="text-[13px] font-semibold text-[#1a1a1a] hover:underline whitespace-nowrap">Administrar conectores de datos →</a>
+              <button onClick={() => openCrmView('connectors')} className="text-[13px] font-semibold text-[#1a1a1a] hover:underline whitespace-nowrap">Administrar conectores de datos →</button>
             </div>
           </div>
         </div>
@@ -14520,10 +14826,55 @@ function FinPruebasContent() {
   const [batchRunning, setBatchRunning] = useState(false);
   const [note, setNote] = useState('');
   const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
+  const agentsList = useMemo(() => (Array.isArray(agentsData) ? agentsData : []), [agentsData]);
+  // Selected agent — defaults to whichever has "fin" in its slug, then first.
+  // Persisted in localStorage so the bench remembers the user's preference.
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(() => {
+    try { return typeof window !== 'undefined' ? window.localStorage.getItem('clain.fin.pruebas.agentId') : null; }
+    catch { return null; }
+  });
   const finAgent = useMemo(() => {
-    const list = Array.isArray(agentsData) ? agentsData : [];
-    return list.find((a: any) => String(a.slug || a.id || '').toLowerCase().includes('fin')) || list[0] || null;
-  }, [agentsData]);
+    if (selectedAgentId) {
+      const hit = agentsList.find((a: any) => String(a.id) === selectedAgentId);
+      if (hit) return hit;
+    }
+    return agentsList.find((a: any) => String(a.slug || a.id || '').toLowerCase().includes('fin')) || agentsList[0] || null;
+  }, [agentsList, selectedAgentId]);
+  function pickAgent(id: string) {
+    setSelectedAgentId(id);
+    try { window.localStorage.setItem('clain.fin.pruebas.agentId', id); } catch { /* ignore */ }
+    setAgentMenuOpen(false);
+  }
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false);
+  // Audience — persona Fin should impersonate when running tests. Drives the
+  // `audience` field passed to knowledgeApi.test so the agent receives the
+  // correct persona context.
+  const AUDIENCES = ['Vista previa del usuario', 'Usuarios', 'Leads', 'Visitantes'] as const;
+  const [audience, setAudience] = useState<typeof AUDIENCES[number]>('Vista previa del usuario');
+  const [audienceMenuOpen, setAudienceMenuOpen] = useState(false);
+  // Test name — editable inline. Persisted so the user's name survives reloads.
+  const [testName, setTestName] = useState<string>(() => {
+    try { return (typeof window !== 'undefined' && window.localStorage.getItem('clain.fin.pruebas.testName')) || 'Creado mediante entrada manual'; }
+    catch { return 'Creado mediante entrada manual'; }
+  });
+  const [editingName, setEditingName] = useState(false);
+  function commitName(next: string) {
+    const trimmed = next.trim() || 'Sin nombre';
+    setTestName(trimmed);
+    try { window.localStorage.setItem('clain.fin.pruebas.testName', trimmed); } catch { /* ignore */ }
+    setEditingName(false);
+  }
+  // Right-panel close → clear selection so the placeholder bubble shows again.
+  function closeRightPanel() { setSelectedId(''); }
+  // "Refresh" on the right panel re-runs the currently-selected question.
+  function refreshSelected() { if (selected) runOne(selected.id); }
+  // Header X (top-right) clears the whole bench. Confirms first.
+  function clearBench() {
+    if (typeof window !== 'undefined' && !window.confirm('¿Vaciar el banco de pruebas? Se eliminarán todas las preguntas.')) return;
+    setQuestions([]);
+    setSelectedId('');
+    setNote('');
+  }
   const selected = questions.find(q => q.id === selectedId) || questions[0];
 
   async function runOne(id: string) {
@@ -14535,6 +14886,7 @@ function FinPruebasContent() {
         question: target.q,
         agent_id: finAgent?.id,
         agent_slug: finAgent?.slug,
+        audience,
       });
       setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'done', result } : q));
     } catch (err: any) {
@@ -14586,7 +14938,7 @@ function FinPruebasContent() {
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M5 3l8 5-8 5z"/></svg>
             {batchRunning ? 'Ejecutando…' : `Probar todas (${questions.length})`}
           </button>
-          <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#f8f8f7] text-[#646462]">
+          <button onClick={clearBench} title="Vaciar banco de pruebas" className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#f8f8f7] text-[#646462]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4">
               <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
             </svg>
@@ -14602,14 +14954,27 @@ function FinPruebasContent() {
           <div className="flex-shrink-0 px-6 pt-6 pb-2">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <button className="flex items-center gap-2 text-[22px] font-bold text-[#1a1a1a] tracking-[-0.2px] hover:bg-[#f8f8f7] -mx-1 px-1 rounded">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4">
-                    <rect x="2.5" y="2.5" width="11" height="11" rx="1.4" />
-                    <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" strokeLinecap="round" />
-                  </svg>
-                  <span className="truncate">Creado mediante entrada manual</span>
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z" /></svg>
-                </button>
+                {editingName ? (
+                  <input
+                    autoFocus
+                    defaultValue={testName}
+                    onBlur={e => commitName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitName((e.target as HTMLInputElement).value);
+                      if (e.key === 'Escape') setEditingName(false);
+                    }}
+                    className="text-[22px] font-bold text-[#1a1a1a] tracking-[-0.2px] -mx-1 px-1 rounded border border-[#e9eae6] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  />
+                ) : (
+                  <button onClick={() => setEditingName(true)} title="Renombrar prueba" className="flex items-center gap-2 text-[22px] font-bold text-[#1a1a1a] tracking-[-0.2px] hover:bg-[#f8f8f7] -mx-1 px-1 rounded">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4">
+                      <rect x="2.5" y="2.5" width="11" height="11" rx="1.4" />
+                      <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" strokeLinecap="round" />
+                    </svg>
+                    <span className="truncate">{testName}</span>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z" /></svg>
+                  </button>
+                )}
                 <div className="mt-2 flex items-center gap-1.5 text-[12.5px] text-[#646462]">
                   <span>Actualizado hace hace 10 horas por</span>
                   <span className="w-4 h-4 rounded-full bg-[#f1c5a8] flex items-center justify-center text-[8px] font-bold text-[#1a1a1a]">H</span>
@@ -14617,10 +14982,36 @@ function FinPruebasContent() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                  <span>{finAgent?.name || finAgent?.slug || 'Fin'}</span>
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
-                </button>
+                {/* Agent selector — opens a dropdown of every agent from
+                    agentsApi.list(). Persists the user's pick in localStorage. */}
+                <div className="relative">
+                  <button
+                    onClick={() => setAgentMenuOpen(o => !o)}
+                    className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                  >
+                    <span>{finAgent?.name || finAgent?.slug || 'Fin'}</span>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
+                  </button>
+                  {agentMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setAgentMenuOpen(false)} />
+                      <div className="absolute z-20 right-0 top-9 w-[260px] bg-white border border-[#e9eae6] rounded-[10px] shadow-lg py-1 max-h-[280px] overflow-y-auto">
+                        {agentsList.length === 0 ? (
+                          <p className="px-3 py-2 text-[12.5px] text-[#646462]">Sin agentes — crea uno en Studio.</p>
+                        ) : agentsList.map((a: any) => (
+                          <button
+                            key={a.id}
+                            onClick={() => pickAgent(String(a.id))}
+                            className={`w-full text-left px-3 py-2 hover:bg-[#f8f8f7] flex items-center justify-between gap-2 ${String(a.id) === String(finAgent?.id) ? 'bg-[#f8f8f7]' : ''}`}
+                          >
+                            <span className="text-[13px] text-[#1a1a1a] truncate">{a.name || a.slug || a.id}</span>
+                            {a.slug && <span className="text-[11px] text-[#646462] flex-shrink-0">{a.slug}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
                 <button onClick={() => setShowAdd(s => !s)} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                   <span>Agregar preguntas</span>
@@ -14647,11 +15038,34 @@ function FinPruebasContent() {
           <div className="flex-shrink-0 px-6 pt-4 pb-3 flex flex-col gap-3">
             <div className="flex items-center gap-3">
               <span className="text-[13px] text-[#1a1a1a]">Probando como</span>
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.5 13c.6-2 2.3-3.2 4.5-3.2S12 11 12.6 13" strokeLinecap="round"/></svg>
-                <span>Vista previa del usuario</span>
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
-              </button>
+              {/* Audience selector — value passed straight to knowledgeApi.test
+                  so the agent runs against the right persona context. */}
+              <div className="relative">
+                <button
+                  onClick={() => setAudienceMenuOpen(o => !o)}
+                  className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.5 13c.6-2 2.3-3.2 4.5-3.2S12 11 12.6 13" strokeLinecap="round"/></svg>
+                  <span>{audience}</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
+                </button>
+                {audienceMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setAudienceMenuOpen(false)} />
+                    <div className="absolute z-20 left-0 top-9 w-[220px] bg-white border border-[#e9eae6] rounded-[10px] shadow-lg py-1">
+                      {AUDIENCES.map(a => (
+                        <button
+                          key={a}
+                          onClick={() => { setAudience(a); setAudienceMenuOpen(false); }}
+                          className={`w-full text-left px-3 py-2 hover:bg-[#f8f8f7] text-[13px] text-[#1a1a1a] ${a === audience ? 'bg-[#f8f8f7] font-semibold' : ''}`}
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white border border-[#e9eae6] text-[12.5px] text-[#1a1a1a]">
@@ -14726,10 +15140,19 @@ function FinPruebasContent() {
           <div className="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-[#e9eae6]">
             <h2 className="text-[16px] font-bold text-[#1a1a1a]">Evaluar la respuesta</h2>
             <div className="flex items-center gap-1">
-              <button className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f1f1ee] text-[#646462]">
+              <button
+                onClick={refreshSelected}
+                disabled={!selected || selected.status === 'running'}
+                title="Volver a ejecutar"
+                className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f1f1ee] text-[#646462] disabled:opacity-40"
+              >
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M13 6.5A5 5 0 1 0 13 9.5M13 4v3.5h-3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f1f1ee] text-[#646462]">
+              <button
+                onClick={closeRightPanel}
+                title="Cerrar evaluación"
+                className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f1f1ee] text-[#646462]"
+              >
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" /></svg>
               </button>
             </div>
