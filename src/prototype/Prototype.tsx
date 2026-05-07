@@ -9911,6 +9911,7 @@ function OutboundView() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ReportsSubView =
+  | 'overview' | 'aiResumen' | 'areasNegocio' | 'agentesPerf' | 'aprobacionesRisk' | 'costesRoi'
   | 'temas' | 'sugerencias' | 'export' | 'horarios'
   | 'finAgent' | 'copilot'
   | 'calls' | 'conversations' | 'csat' | 'effectiveness'
@@ -9919,7 +9920,8 @@ type ReportsSubView =
 
 type ReportsItemIcon = 'topic' | 'export' | 'schedule' | 'folder' | 'admin'
   | 'lightbulb' | 'sparkles' | 'fin' | 'copilot' | 'phone' | 'chat' | 'star'
-  | 'zap' | 'clock' | 'sla' | 'inbox' | 'user' | 'ticket' | 'doc' | 'globe';
+  | 'zap' | 'clock' | 'sla' | 'inbox' | 'user' | 'ticket' | 'doc' | 'globe'
+  | 'chart' | 'ai' | 'area' | 'robot' | 'approve' | 'coin';
 
 type ReportsNavGroup = {
   key?: ReportsSubView;
@@ -9928,16 +9930,594 @@ type ReportsNavGroup = {
   items?: { key: ReportsSubView; label: string; icon?: ReportsItemIcon }[];
 };
 
+// ── Reports Analysis helpers ──────────────────────────────────────────────────
+function rsparkPath(vals: number[]): string {
+  if (vals.length < 2) return 'M0,20 L100,20';
+  const max = Math.max(...vals, 1), min = Math.min(...vals, 0), rng = max - min || 1;
+  return vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${((i / (vals.length - 1)) * 100).toFixed(1)},${(20 - ((v - min) / rng) * 17).toFixed(1)}`).join(' ');
+}
+function rsparkArea(vals: number[]): string { return `${rsparkPath(vals)} L100,22 L0,22 Z`; }
+function rsparkDerive(valueStr: string | number, trend: string, idx: number): number[] {
+  const base = Math.max(parseFloat(String(valueStr).replace(/[^0-9.]/g, '')) || 10, 1);
+  const dir = trend === 'up' ? 1 : trend === 'down' ? -1 : 0;
+  return Array.from({ length: 8 }, (_, i) => Math.max(0, base + dir * base * 0.18 * (i / 7) + ((idx + i) % 3) * base * 0.03));
+}
+function ReportsAnalysisKpiCard({ label, value, change, trend, sub, idx }: { label: string; value: string; change?: string; trend?: string; sub?: string; idx: number }) {
+  const vals = rsparkDerive(value, trend ?? 'neutral', idx);
+  const color = trend === 'up' ? '#16a34a' : trend === 'down' ? '#dc2626' : '#6366f1';
+  const badgeCls = trend === 'up' ? 'text-[#16a34a] bg-[#dcfce7]' : trend === 'down' ? 'text-[#dc2626] bg-[#fee2e2]' : 'text-[#646462] bg-[#f3f3f1]';
+  return (
+    <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4 relative overflow-hidden min-h-[110px]">
+      <div className="flex items-start justify-between mb-1 relative z-10">
+        <p className="text-[12px] text-[#646462] leading-tight max-w-[75%]">{label}</p>
+        {change && <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${badgeCls}`}>{change}</span>}
+      </div>
+      <p className="text-[28px] font-bold text-[#1a1a1a] leading-none relative z-10">{value}</p>
+      {sub && <p className="text-[11px] text-[#646462] mt-1 relative z-10">{sub}</p>}
+      <div className="absolute bottom-0 left-0 right-0 h-10 opacity-30 pointer-events-none">
+        <svg className="w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 22">
+          <path d={rsparkArea(vals)} fill={color} opacity="0.3"/>
+          <path d={rsparkPath(vals)} fill="none" stroke={color} strokeWidth="1.5"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+// ── 1. Visión general ─────────────────────────────────────────────────────────
+function ReportsOverviewContent({ period, channel }: { period: string; channel: string }) {
+  const { data: ov, loading } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
+  const { data: sla } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
+  const kpis: any[] = ov?.kpis ?? [];
+  const improved = kpis.filter((m: any) => m.trend === 'up').slice(0, 3);
+  const worsened = kpis.filter((m: any) => m.trend === 'down').slice(0, 3);
+  const dist: any[] = sla?.distribution ?? [];
+  const distTotal = dist.reduce((s, d) => s + (d.count ?? 0), 0);
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Visión general</h1>
+          <p className="text-[12.5px] text-[#646462]">Métricas principales del workspace en el período seleccionado.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {loading && !kpis.length ? (
+          <div className="grid grid-cols-2 gap-3">{['Total','Resolución','SLA','Auto-IA','Riesgo'].map((l, i) => <div key={i} className="border border-[#e9eae6] rounded-[10px] bg-white h-[110px] animate-pulse" />)}</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {kpis.map((m: any, i: number) => <ReportsAnalysisKpiCard key={i} idx={i} label={m.label} value={m.value} change={m.change} trend={m.trend} sub={m.sub} />)}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+            <h2 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Cambios de rendimiento</h2>
+            <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-wide mb-2 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#16a34a] inline-block"/>Mejoras</p>
+            {improved.length ? improved.map((m: any, i: number) => (
+              <div key={i} className="text-[12px] text-[#646462] mb-1.5 flex items-start gap-1.5">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a] flex-shrink-0 mt-0.5"><path d="M3 11l5-7 5 7z"/></svg>
+                <span><strong className="text-[#1a1a1a]">{m.label}</strong>: {m.value}{m.change ? ` (${m.change})` : ''}</span>
+              </div>
+            )) : <p className="text-[12px] text-[#646462] mb-3">Sin KPIs al alza en este rango.</p>}
+            <div className="border-t border-[#e9eae6] pt-3 mt-3">
+              <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-wide mb-2 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#dc2626] inline-block"/>Caídas</p>
+              {worsened.length ? worsened.map((m: any, i: number) => (
+                <div key={i} className="text-[12px] text-[#646462] mb-1.5 flex items-start gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#dc2626] flex-shrink-0 mt-0.5"><path d="M3 5l5 7 5-7z"/></svg>
+                  <span><strong className="text-[#1a1a1a]">{m.label}</strong>: {m.value}{m.change ? ` (${m.change})` : ''}</span>
+                </div>
+              )) : <p className="text-[12px] text-[#646462]">Sin KPIs a la baja en este rango.</p>}
+            </div>
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+            <h2 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Distribución SLA</h2>
+            {dist.length ? dist.map((d: any, i: number) => {
+              const pct = distTotal > 0 ? Math.round((d.count / distTotal) * 100) : 0;
+              const bar = d.status === 'breached' ? 'bg-[#dc2626]' : d.status === 'at_risk' ? 'bg-[#f97316]' : 'bg-[#16a34a]';
+              return (
+                <div key={i} className="mb-3">
+                  <div className="flex justify-between text-[12px] mb-1">
+                    <span className="text-[#1a1a1a] capitalize">{String(d.status).replace(/_/g,' ')}</span>
+                    <span className="text-[#646462]">{d.count} ({pct}%)</span>
+                  </div>
+                  <div className="w-full bg-[#f3f3f1] rounded-full h-1.5"><div className={`${bar} h-1.5 rounded-full`} style={{ width: `${pct}%` }}/></div>
+                </div>
+              );
+            }) : <p className="text-[12px] text-[#646462]">Sin datos SLA para este filtro.</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 2. Resumen IA ─────────────────────────────────────────────────────────────
+type GeneratedAiReport = { id: string; title: string; date: string; audience: string; executiveSummary: string[]; positiveSignals: {title:string;detail:string}[]; riskFlags: {title:string;detail:string}[]; businessImpact: {title:string;detail:string}[]; recommendations: string[]; costSummary: {title:string;detail:string}[]; rangeLabel: string; channelLabel: string; };
+function ReportsAiResumenContent({ period, channel }: { period: string; channel: string }) {
+  const [audience, setAudience] = useState('Executive / C-Suite');
+  const [generating, setGenerating] = useState(false);
+  const [reports, setReports] = useState<GeneratedAiReport[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = reports.find(r => r.id === selectedId) ?? null;
+  const generate = async () => {
+    if (generating) return;
+    setGenerating(true);
+    try {
+      const s = await reportsApi.summary(period, channel, audience);
+      const now = new Date();
+      const r: GeneratedAiReport = {
+        id: String(Date.now()),
+        title: `${audience} — ${now.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })}`,
+        date: now.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
+        audience,
+        executiveSummary: Array.isArray(s?.executiveSummary) ? s.executiveSummary : [],
+        positiveSignals: Array.isArray(s?.positiveSignals) ? s.positiveSignals : [],
+        riskFlags: Array.isArray(s?.riskFlags) ? s.riskFlags : [],
+        businessImpact: Array.isArray(s?.businessImpact) ? s.businessImpact : [],
+        recommendations: Array.isArray(s?.recommendations) ? s.recommendations : [],
+        costSummary: Array.isArray(s?.costSummary) ? s.costSummary : [],
+        rangeLabel: s?.rangeLabel ?? period,
+        channelLabel: s?.channelLabel ?? channel,
+      };
+      setReports(prev => [r, ...prev]);
+      setSelectedId(r.id);
+    } finally { setGenerating(false); }
+  };
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0 gap-4">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Resumen IA</h1>
+          <p className="text-[12.5px] text-[#646462]">Genera un informe narrativo basado en los datos reales del período.</p>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <select value={audience} onChange={e => setAudience(e.target.value)} className="text-[13px] border border-[#e9eae6] rounded-[8px] px-3 py-1.5 bg-white text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a]">
+            <option>Executive / C-Suite</option>
+            <option>Support Lead</option>
+            <option>Technical Team</option>
+          </select>
+          <button onClick={generate} disabled={generating} className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-black disabled:opacity-50">
+            <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-current ${generating ? 'animate-spin' : ''}`}><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>
+            {generating ? 'Generando…' : 'Generar informe'}
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-1 min-h-0">
+        {/* Left panel: list */}
+        <div className="w-[240px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col bg-[#f8f8f7]">
+          <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Informes generados</span>
+            <span className="bg-[#e9eae6] text-[#646462] text-[11px] font-bold px-1.5 py-0.5 rounded-full">{reports.length}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2">
+            {reports.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full py-10 text-center px-3">
+                <svg viewBox="0 0 16 16" className="w-8 h-8 fill-[#e9eae6] mb-2"><path d="M3 2a1 1 0 011-1h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2zm6.5 0v3h3l-3-3z" fillRule="evenodd"/></svg>
+                <p className="text-[12px] text-[#646462]">Genera tu primer informe pulsando el botón.</p>
+              </div>
+            ) : reports.map(r => (
+              <button key={r.id} onClick={() => setSelectedId(r.id)} className={`w-full text-left p-3 rounded-[8px] mb-1 transition-colors ${selectedId === r.id ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_rgba(20,20,20,0.10)]' : 'hover:bg-[#e9eae6]/40'}`}>
+                <p className="text-[12.5px] font-semibold text-[#1a1a1a] truncate">{r.title}</p>
+                <p className="text-[11px] text-[#646462] mt-0.5">{r.date}</p>
+                <span className="mt-1 inline-block bg-[#dcfce7] text-[#16a34a] text-[10px] font-bold px-1.5 py-0.5 rounded uppercase">Generado</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Right panel: report detail */}
+        <div className="flex-1 overflow-y-auto">
+          {!selected ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-10">
+              <svg viewBox="0 0 16 16" className="w-12 h-12 fill-[#e9eae6] mb-3"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>
+              <h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-1">Sin informe seleccionado</h3>
+              <p className="text-[13px] text-[#646462] max-w-xs">Genera un informe IA para obtener un resumen narrativo de actividad real del período.</p>
+            </div>
+          ) : (
+            <div className="p-6 space-y-5">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="bg-[#ede9fe] text-[#6d28d9] text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">Informe IA</span>
+                  <span className="bg-[#f3f3f1] text-[#646462] text-[10px] font-bold px-2 py-0.5 rounded uppercase">{selected.audience}</span>
+                  <span className="text-[12px] text-[#646462]">{selected.rangeLabel} · {selected.channelLabel}</span>
+                </div>
+                <h1 className="text-[22px] font-bold text-[#1a1a1a]">{selected.title}</h1>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+                <p className="text-[12px] font-bold text-[#1a1a1a] uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Resumen ejecutivo
+                </p>
+                {selected.executiveSummary.map((l, i) => <p key={i} className="text-[13px] text-[#1a1a1a] leading-relaxed mb-1">{l}</p>)}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1 mb-3"><span className="w-2 h-2 rounded-full bg-[#16a34a]"/>Señales positivas</p>
+                  {(selected.positiveSignals.length ? selected.positiveSignals : [{title:'Sin señal',detail:'No se detectó ninguna mejora significativa.'}]).map((item, i) => (
+                    <div key={i} className="flex items-start gap-2 mb-2 text-[12.5px]">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a] flex-shrink-0 mt-0.5"><path d="M3 11l5-7 5 7z"/></svg>
+                      <div><strong className="text-[#1a1a1a]">{item.title}</strong><br/><span className="text-[#646462]">{item.detail}</span></div>
+                    </div>
+                  ))}
+                </div>
+                <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1 mb-3"><span className="w-2 h-2 rounded-full bg-[#dc2626]"/>Riesgos detectados</p>
+                  {(selected.riskFlags.length ? selected.riskFlags : [{title:'Sin riesgos',detail:'No se detectaron bloqueos en este rango.'}]).map((item, i) => (
+                    <div key={i} className="flex items-start gap-2 mb-2 text-[12.5px]">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#dc2626] flex-shrink-0 mt-0.5"><path d="M8 2l6 12H2L8 2z"/></svg>
+                      <div><strong className="text-[#1a1a1a]">{item.title}</strong><br/><span className="text-[#646462]">{item.detail}</span></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] mb-3">Recomendaciones</p>
+                <ul className="space-y-1.5">
+                  {selected.recommendations.map((r, i) => <li key={i} className="text-[12.5px] text-[#646462] flex items-start gap-2"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#6366f1] flex-shrink-0 mt-0.5"><path d="M6.5 11.5L3 8l1-1 2.5 2.5 6-6 1 1z"/></svg>{r}</li>)}
+                </ul>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {selected.businessImpact.slice(0,2).map((item, i) => (
+                  <div key={i} className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
+                    <p className="text-[12.5px] font-semibold text-[#1a1a1a] mb-1">{item.title}</p>
+                    <p className="text-[12px] text-[#646462]">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 3. Áreas de negocio ───────────────────────────────────────────────────────
+function ReportsAreasNegocioContent({ period, channel }: { period: string; channel: string }) {
+  const { data: ov, loading: ovLoad } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
+  const { data: intents, loading: intLoad } = useApi(() => reportsApi.intents(period, channel), [period, channel], null);
+  const { data: approvals } = useApi(() => reportsApi.approvals(period, channel), [period, channel], null);
+  const kpiMap = Object.fromEntries((ov?.kpis ?? []).map((m: any) => [m.key, m]));
+  const intentList: any[] = intents?.intents ?? [];
+  const topIntent = intentList[0];
+  const weakest = [...intentList].sort((a, b) => parseFloat(a.handled) - parseFloat(b.handled))[0];
+  const cards = [
+    { label: 'Tasa resolución IA', value: kpiMap.auto_resolution?.value ?? kpiMap.resolution_rate?.value ?? '—', trend: kpiMap.auto_resolution?.trend ?? 'neutral', sub: 'Resoluciones automatizadas' },
+    { label: 'Tasa aprobación', value: approvals?.rates?.approvalRate ?? '—', trend: 'neutral', sub: 'Aprobadas vs. total' },
+    { label: 'Tiempo decisión medio', value: approvals?.rates?.avgDecisionHours != null ? `${approvals.rates.avgDecisionHours}h` : '—', trend: 'neutral', sub: 'Mediana de aprobaciones' },
+    { label: 'Cumplimiento SLA', value: kpiMap.sla_compliance?.value ?? '—', trend: kpiMap.sla_compliance?.trend ?? 'neutral', sub: 'Dentro del SLA' },
+    { label: 'Casos de alto riesgo', value: kpiMap.high_risk?.value ?? '—', trend: 'down', sub: 'Marcados críticos/altos' },
+    { label: 'Total casos', value: kpiMap.total_cases?.value ?? '—', change: kpiMap.total_cases?.change, trend: kpiMap.total_cases?.trend ?? 'neutral', sub: kpiMap.total_cases?.sub ?? '' },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Áreas de negocio</h1>
+          <p className="text-[12.5px] text-[#646462]">Demanda por intención y señales de cobertura de IA.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        <div className="grid grid-cols-3 gap-3">
+          {cards.map((c, i) => <ReportsAnalysisKpiCard key={i} idx={i} label={c.label} value={String(c.value)} change={(c as any).change} trend={c.trend} sub={c.sub} />)}
+        </div>
+        <div className="grid grid-cols-[1fr_280px] gap-3">
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-[#1a1a1a]">Intenciones principales</span>
+            </div>
+            <table className="w-full text-left">
+              <thead><tr className="bg-[#f8f8f7] border-b border-[#e9eae6] text-[11px] text-[#646462] uppercase tracking-wide font-semibold">
+                <th className="px-5 py-2">Intención</th>
+                <th className="px-5 py-2 text-right">Volumen</th>
+                <th className="px-5 py-2 text-right">IA manejó</th>
+                <th className="px-5 py-2 w-1/4">Cuota</th>
+              </tr></thead>
+              <tbody className="text-[12.5px] divide-y divide-[#f3f3f1]">
+                {intLoad && !intentList.length ? (
+                  <tr><td colSpan={4} className="px-5 py-6 text-center text-[#646462]">Cargando intenciones…</td></tr>
+                ) : !intentList.length ? (
+                  <tr><td colSpan={4} className="px-5 py-6 text-center text-[#646462]">Sin intenciones detectadas en este rango.</td></tr>
+                ) : intentList.map((intent: any, i: number) => (
+                  <tr key={i} className="hover:bg-[#f8f8f7] transition-colors">
+                    <td className="px-5 py-2.5 font-medium text-[#1a1a1a] capitalize">{String(intent.name).replace(/_/g,' ')}</td>
+                    <td className="px-5 py-2.5 text-right text-[#646462]">{intent.volume}</td>
+                    <td className="px-5 py-2.5 text-right font-medium text-[#16a34a]">{intent.handled}</td>
+                    <td className="px-5 py-2.5">
+                      <div className="w-full bg-[#f3f3f1] rounded-full h-1.5"><div className="bg-[#6366f1] h-1.5 rounded-full" style={{ width: intent.shareOfTotal }}/></div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-col gap-3">
+            <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1.5 mb-2">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Micro-resumen IA
+              </p>
+              <p className="text-[12.5px] text-[#646462] leading-relaxed">
+                {topIntent ? `${String(topIntent.name).replace(/_/g,' ')} lidera la demanda con ${topIntent.volume} casos y ${topIntent.handled} gestión IA.` : 'Sin área de negocio dominante en este rango.'}
+                {weakest ? ` El flujo con menor cobertura es ${String(weakest.name).replace(/_/g,' ')} — revisar.` : ''}
+              </p>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4 flex-1">
+              <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Acciones recomendadas</p>
+              {[topIntent, weakest].filter(Boolean).map((intent, i) => (
+                <div key={i} className="flex items-start gap-2 p-2.5 rounded-[8px] border border-[#e9eae6] hover:bg-[#f8f8f7] mb-2 cursor-pointer">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0 mt-0.5"><path d="M3 3h10v1.5H8.5v9.5h-1V4.5H3z"/></svg>
+                  <div>
+                    <p className="text-[12px] font-medium text-[#1a1a1a]">{i === 0 ? 'Auditar' : 'Mejorar'} {String(intent.name).replace(/_/g,' ')}</p>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#fef3c7] text-[#92400e]">{i === 0 ? 'Alto impacto' : 'Medio impacto'}</span>
+                  </div>
+                </div>
+              ))}
+              {!topIntent && <p className="text-[12px] text-[#646462]">Sin recomendaciones para este rango.</p>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 4. Agentes ────────────────────────────────────────────────────────────────
+function ReportsAgentesContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.agents(period, channel), [period, channel], null);
+  const agents: any[] = (data?.agents ?? []).slice(0, 6).map((a: any, i: number) => ({
+    ...a, idx: i,
+    successNum: parseFloat(String(a.successRate).replace(/[^0-9.]/g, '')) || 0,
+    trend: parseFloat(String(a.successRate)) >= 90 ? 'up' : parseFloat(String(a.successRate)) >= 70 ? 'neutral' : 'down',
+  }));
+  const spotlight = [...agents].sort((a, b) => a.successNum - b.successNum)[0] ?? null;
+  const avg = agents.length ? Math.round(agents.reduce((s, a) => s + a.successNum, 0) / agents.length) : null;
+  const AGENT_ICON_MAP: Record<string, string> = { orchestration:'supervisor_account', ingest:'merge_type', intelligence:'psychology', resolution:'build', communication:'edit_document', observability:'visibility', connectors:'cable' };
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Agentes</h1>
+          <p className="text-[12.5px] text-[#646462]">Rendimiento de cada agente IA en el período seleccionado.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {loading && !agents.length ? (
+          <div className="grid grid-cols-2 gap-3">{Array.from({length:4}).map((_,i) => <div key={i} className="border border-[#e9eae6] rounded-[10px] h-[110px] animate-pulse bg-white"/>)}</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {agents.map((a, i) => <ReportsAnalysisKpiCard key={i} idx={i} label={a.name} value={a.successRate ?? '—'} change={a.failedRuns ? `${a.failedRuns} fallidos` : undefined} trend={a.trend} sub={`${a.totalRuns} ejecuciones · ${Number(a.tokensUsed||0).toLocaleString()} tokens`}/>)}
+          </div>
+        )}
+        <div className="grid grid-cols-[1fr_260px] gap-3">
+          {spotlight ? (
+            <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-[8px] bg-[#6366f1] flex items-center justify-center flex-shrink-0">
+                  <span className="material-symbols-outlined text-white text-[18px]">{AGENT_ICON_MAP[spotlight.category] || 'smart_toy'}</span>
+                </div>
+                <div>
+                  <h2 className="text-[14px] font-bold text-[#1a1a1a]">{spotlight.name}</h2>
+                  <p className="text-[12px] text-[#646462]">Tasa más baja del período — revisar primero</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {[
+                  { label: 'Tasa éxito', value: spotlight.successRate ?? '—', bad: spotlight.successNum < 80 },
+                  { label: 'Ejecuciones', value: spotlight.totalRuns ?? '—', bad: false },
+                  { label: 'Categoría', value: String(spotlight.category ?? '—').replace(/_/g,' '), bad: false },
+                ].map((s, i) => (
+                  <div key={i} className="bg-[#f8f8f7] rounded-[8px] p-3 border border-[#e9eae6]">
+                    <p className="text-[11px] text-[#646462] mb-1">{s.label}</p>
+                    <p className={`text-[15px] font-bold capitalize ${s.bad ? 'text-[#dc2626]' : 'text-[#1a1a1a]'}`}>{String(s.value)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-[#fef9ee] border border-[#fde68a] rounded-[8px] p-3 text-[12.5px] text-[#1a1a1a]">
+                <strong>Spotlight:</strong> {spotlight.name} tiene una tasa del {spotlight.successRate} en {spotlight.totalRuns} ejecuciones.{spotlight.failedRuns ? ` ${spotlight.failedRuns} ejecuciones fallidas requieren revisión.` : ' Sin ejecuciones fallidas.'}
+              </div>
+            </div>
+          ) : (
+            <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 flex items-center justify-center text-[#646462] text-[13px]">Sin datos de agentes para este filtro.</div>
+          )}
+          <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1.5 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Resumen de agentes
+            </p>
+            <p className="text-[12.5px] text-[#646462] leading-relaxed">
+              {agents.length ? `${agents.length} agentes activos este período. Tasa media de éxito: ${avg}% en el canal ${channel === 'all' ? 'global' : channel}.` : 'Sin actividad de agentes en el rango seleccionado.'}
+            </p>
+            {avg !== null && (
+              <div className="mt-3">
+                <div className="flex justify-between text-[12px] mb-1"><span className="text-[#646462]">Media</span><span className="font-semibold text-[#1a1a1a]">{avg}%</span></div>
+                <div className="w-full bg-[#e9eae6] rounded-full h-2">
+                  <div className={`h-2 rounded-full ${avg >= 80 ? 'bg-[#16a34a]' : avg >= 60 ? 'bg-[#f97316]' : 'bg-[#dc2626]'}`} style={{ width: `${avg}%` }}/>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 5. Aprobaciones y riesgo ──────────────────────────────────────────────────
+function ReportsAprobacionesContent({ period, channel }: { period: string; channel: string }) {
+  const { data: ap, loading } = useApi(() => reportsApi.approvals(period, channel), [period, channel], null);
+  const { data: sla } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
+  const funnel: any[] = ap?.funnel ?? [];
+  const triggered = funnel.find((s: any) => s.label === 'Triggered')?.val ?? '—';
+  const pending   = funnel.find((s: any) => s.label === 'Pending')?.val ?? '—';
+  const approved  = ap?.rates?.approvalRate ?? '—';
+  const rejected  = ap?.rates?.rejectionRate ?? '—';
+  const avgDec    = ap?.rates?.avgDecisionHours != null ? `${ap.rates.avgDecisionHours}h` : '—';
+  const highRisk  = ap?.byRisk?.find((r: any) => r.riskLevel === 'high')?.count ?? 0;
+  const breached  = sla?.distribution?.find((d: any) => d.status === 'breached')?.count ?? 0;
+  const cards = [
+    { label: 'Solicitudes de aprobación', value: String(triggered), sub: 'Total del período' },
+    { label: 'Pendientes de revisión', value: String(pending), sub: 'En espera', trend: 'down' },
+    { label: 'Tasa de aprobación', value: String(approved), sub: 'Aprobadas / total', trend: 'up' },
+    { label: 'Tasa de rechazo', value: String(rejected), sub: 'Rechazadas / total', trend: 'down' },
+    { label: 'Tiempo medio decisión', value: avgDec, sub: 'Solicitud a decisión' },
+    { label: 'Incumplimientos SLA', value: String(breached), sub: 'Casos fuera de SLA', trend: breached > 0 ? 'down' : 'neutral' },
+    { label: 'Elementos alto riesgo', value: String(highRisk), sub: 'Requieren revisión humana', trend: highRisk > 0 ? 'down' : 'neutral' },
+    { label: 'Ejecutados tras aprobación', value: String(approved), sub: 'Flujos aprobados que continúan' },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Aprobaciones y riesgo</h1>
+          <p className="text-[12.5px] text-[#646462]">Estado del backlog de aprobaciones y métricas de riesgo operativo.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {loading && !ap ? (
+          <div className="grid grid-cols-2 gap-3">{Array.from({length:4}).map((_,i) => <div key={i} className="border border-[#e9eae6] rounded-[10px] h-[110px] animate-pulse bg-white"/>)}</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {cards.map((c, i) => <ReportsAnalysisKpiCard key={i} idx={i} label={c.label} value={c.value} trend={(c as any).trend} sub={c.sub}/>)}
+          </div>
+        )}
+        <div className="grid grid-cols-[1fr_260px] gap-3">
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <h2 className="text-[13px] font-semibold text-[#1a1a1a] mb-4">Embudo de aprobaciones</h2>
+            {!funnel.length ? (
+              <p className="text-[12.5px] text-[#646462] text-center py-6">Sin solicitudes de aprobación en este filtro.</p>
+            ) : (
+              <div className="flex items-center justify-between">
+                {funnel.map((step: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="text-center">
+                      <p className="text-[26px] font-bold text-[#1a1a1a]">{step.val}</p>
+                      <p className="text-[12px] text-[#646462]">{step.label}</p>
+                    </div>
+                    {i < funnel.length - 1 && (
+                      <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#e9eae6] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1.5 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Resumen de riesgo IA
+            </p>
+            <p className="text-[12.5px] text-[#646462] leading-relaxed">
+              {ap?.rates?.avgDecisionHours != null
+                ? `Tiempo medio de decisión: ${avgDec}. Tasa aprobación: ${approved}, rechazo: ${rejected}.${breached > 0 ? ` ${breached} casos incumplieron el SLA.` : ' Sin incumplimientos SLA.'}`
+                : 'Sin datos de decisión disponibles para este rango.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 6. Costes y ROI ───────────────────────────────────────────────────────────
+function ReportsCostesRoiContent({ period, channel }: { period: string; channel: string }) {
+  const { data: costs, loading } = useApi(() => reportsApi.costs(period, channel), [period, channel], null);
+  const { data: ov } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
+  const summary = costs?.summary ?? {};
+  const byAgent: any[] = costs?.byAgent ?? [];
+  const kpis = ov?.kpis ?? [];
+  const totalCasesKpi = kpis.find((m: any) => m.key === 'total_cases');
+  const resolutionKpi = kpis.find((m: any) => m.key === 'resolution_rate');
+  const slaKpi = kpis.find((m: any) => m.key === 'sla_compliance');
+  const nCases = parseFloat(String(totalCasesKpi?.value ?? '0').replace(/[^0-9.]/g, '')) || 0;
+  const creditsUsed = summary.creditsUsed != null ? String(summary.creditsUsed) : '—';
+  const creditsAdded = summary.creditsAdded != null ? String(summary.creditsAdded) : '—';
+  const tokens = summary.totalTokens != null ? Number(summary.totalTokens).toLocaleString() : '—';
+  const autoResolved = summary.autoResolvedCases != null ? String(summary.autoResolvedCases) : '—';
+  const costPerCase = nCases > 0 && summary.creditsUsed != null ? `${(summary.creditsUsed / nCases).toFixed(4)} cr` : '—';
+  const cards = [
+    { label: 'Créditos usados', value: creditsUsed, sub: 'Coste IA procesamiento', trend: 'neutral' as const },
+    { label: 'Créditos añadidos', value: creditsAdded, sub: 'Recargas del workspace', trend: 'up' as const },
+    { label: 'Total tokens', value: tokens, sub: 'Tokens LLM consumidos', trend: 'neutral' as const },
+    { label: 'Casos auto-resueltos IA', value: autoResolved, sub: 'Completados por IA', trend: 'up' as const },
+    { label: 'Coste por caso', value: costPerCase, sub: 'Coste IA / caso medio', trend: 'neutral' as const },
+    { label: 'Total casos', value: totalCasesKpi?.value ?? '—', change: totalCasesKpi?.change, trend: totalCasesKpi?.trend ?? 'neutral' },
+    { label: 'Tasa resolución', value: resolutionKpi?.value ?? '—', change: resolutionKpi?.change, trend: resolutionKpi?.trend ?? 'neutral' },
+    { label: 'Cumplimiento SLA', value: slaKpi?.value ?? '—', change: slaKpi?.change, trend: slaKpi?.trend ?? 'neutral' },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Costes y ROI</h1>
+          <p className="text-[12.5px] text-[#646462]">Créditos IA consumidos, tokens y retorno de automatización.</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {loading && !costs ? (
+          <div className="grid grid-cols-2 gap-3">{Array.from({length:4}).map((_,i) => <div key={i} className="border border-[#e9eae6] rounded-[10px] h-[110px] animate-pulse bg-white"/>)}</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {cards.map((c, i) => <ReportsAnalysisKpiCard key={i} idx={i} label={c.label} value={c.value} change={(c as any).change} trend={c.trend} sub={c.sub}/>)}
+          </div>
+        )}
+        <div className="grid grid-cols-[1fr_260px] gap-3">
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#e9eae6]">
+              <span className="text-[13px] font-semibold text-[#1a1a1a]">Coste por agente</span>
+            </div>
+            <table className="w-full text-left">
+              <thead><tr className="bg-[#f8f8f7] border-b border-[#e9eae6] text-[11px] text-[#646462] uppercase tracking-wide font-semibold">
+                <th className="px-5 py-2">Agente</th>
+                <th className="px-5 py-2 text-right">Tokens</th>
+                <th className="px-5 py-2 text-right">Créditos</th>
+              </tr></thead>
+              <tbody className="text-[12.5px] divide-y divide-[#f3f3f1]">
+                {!byAgent.length ? (
+                  <tr><td colSpan={3} className="px-5 py-6 text-center text-[#646462]">Sin datos de coste por agente para este filtro.</td></tr>
+                ) : byAgent.map((a: any, i: number) => (
+                  <tr key={i} className="hover:bg-[#f8f8f7] transition-colors">
+                    <td className="px-5 py-2.5 font-medium text-[#1a1a1a]">{a.name}</td>
+                    <td className="px-5 py-2.5 text-right text-[#646462]">{Number(a.tokens).toLocaleString()}</td>
+                    <td className="px-5 py-2.5 text-right font-semibold text-[#6366f1]">{a.cost}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-[#f8f8f7] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a1a1a] flex items-center gap-1.5 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#6366f1]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>Resumen de costes
+            </p>
+            <p className="text-[12.5px] text-[#646462] leading-relaxed">
+              {summary.creditsUsed != null
+                ? <>{creditsUsed} créditos consumidos en {tokens} tokens y {autoResolved} ejecuciones completadas.<br/><br/><strong className="text-[#1a1a1a]">Filtro:</strong> {period === '7d' ? 'Últimos 7 días' : period === '90d' ? 'Últimos 90 días' : 'Últimos 30 días'} · {channel === 'all' ? 'Todos los canales' : channel}</>
+                : 'Sin datos de coste disponibles para este rango.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: ReportsSubView) => void }) {
   // All groups collapsed by default — user opens what they need via chevron click.
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    'Análisis': true,
     'Temas de informes': false,
-    'IA y automatización': true,
+    'IA y automatización': false,
     'Soporte humano': false,
     'Proactivo': false,
   });
   const toggleGroup = (label: string) => setOpenGroups(s => ({ ...s, [label]: !s[label] }));
   const groups: ReportsNavGroup[] = [
+    {
+      label: 'Análisis', icon: 'chart',
+      items: [
+        { key: 'overview',         label: 'Visión general',        icon: 'chart' },
+        { key: 'aiResumen',        label: 'Resumen IA',            icon: 'ai' },
+        { key: 'areasNegocio',     label: 'Áreas de negocio',      icon: 'area' },
+        { key: 'agentesPerf',      label: 'Agentes',               icon: 'robot' },
+        { key: 'aprobacionesRisk', label: 'Aprobaciones y riesgo', icon: 'approve' },
+        { key: 'costesRoi',        label: 'Costes y ROI',          icon: 'coin' },
+      ],
+    },
     {
       label: 'Temas de informes', icon: 'topic',
       items: [
@@ -10001,6 +10581,12 @@ function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: 
       case 'ticket':    return <svg viewBox="0 0 16 16" className={cls}><path d="M2 5a1 1 0 011-1h10a1 1 0 011 1v2a1 1 0 100 2v2a1 1 0 01-1 1H3a1 1 0 01-1-1V9a1 1 0 100-2V5z"/></svg>;
       case 'doc':       return <svg viewBox="0 0 16 16" className={cls}><path d="M3 2a1 1 0 011-1h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2zm6.5 0v3h3l-3-3z" fillRule="evenodd"/></svg>;
       case 'globe':     return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM2.5 8c0-.7.1-1.4.3-2H6c-.1.6-.1 1.3-.1 2 0 .7 0 1.4.1 2H2.8c-.2-.6-.3-1.3-.3-2zm5.5 5.5c-.8 0-1.6-1.5-1.9-3.5h3.8c-.3 2-1.1 3.5-1.9 3.5zM6 6c.3-2 1.1-3.5 1.9-3.5S9.7 4 10 6H6zm5.7 4c.1-.6.1-1.3.1-2 0-.7 0-1.4-.1-2h2.9c.2.6.3 1.3.3 2s-.1 1.4-.3 2h-2.9z"/></svg>;
+      case 'chart':     return <svg viewBox="0 0 16 16" className={cls}><path d="M2 13V9h2.5v4H2zm3.5 0V6.5H8V13H5.5zm3.5 0V4h2.5v9H9zm3.5 0V7.5H15V13h-2.5z"/></svg>;
+      case 'ai':        return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5L9.5 6 14 7.5 9.5 9 8 13.5 6.5 9 2 7.5 6.5 6 8 1.5zM12.5 10l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/></svg>;
+      case 'area':      return <svg viewBox="0 0 16 16" className={cls}><path d="M2 13l3-4 3 2 3-5 3 3V13H2z"/></svg>;
+      case 'robot':     return <svg viewBox="0 0 16 16" className={cls}><path d="M6 1.5h4v2H7.75v.75H10a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2h2.25V3.5H6v-2zM5.75 9a.75.75 0 101.5 0 .75.75 0 00-1.5 0zm4 0a.75.75 0 101.5 0 .75.75 0 00-1.5 0zM5 12.5h2V14H5v-1.5zm4 0h2V14H9v-1.5z"/></svg>;
+      case 'approve':   return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5l5.5 2.5v4c0 3-2.3 5.7-5.5 6.5C4.8 13.7 2.5 11 2.5 8V4L8 1.5zM6.5 8.7L5.5 9.7l2 2 3.5-4-1-1-2.5 2.7-1-.7z"/></svg>;
+      case 'coin':      return <svg viewBox="0 0 16 16" className={cls}><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v1M8 10.5v1M6 7.5C6 6.7 6.9 6 8 6s2 .7 2 1.5S9.1 9 8 9s-2 .7-2 1.5S6.9 12 8 12" fill="none" stroke="#fff" strokeWidth="1.2" strokeLinecap="round"/></svg>;
     }
   }
 
@@ -11339,17 +11925,27 @@ function ReportsOutboundEngagementContent() {
 }
 
 function ReportsView() {
-  const [sub, setSub] = useState<ReportsSubView>('finAgent');
+  const [sub, setSub] = useState<ReportsSubView>('overview');
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
   const [channel, setChannel] = useState('all');
   function renderSub() {
     switch (sub) {
+      // ── Análisis (from original Reports.tsx) ────────────────────────────
+      case 'overview':         return <ReportsOverviewContent period={period} channel={channel} />;
+      case 'aiResumen':        return <ReportsAiResumenContent period={period} channel={channel} />;
+      case 'areasNegocio':     return <ReportsAreasNegocioContent period={period} channel={channel} />;
+      case 'agentesPerf':      return <ReportsAgentesContent period={period} channel={channel} />;
+      case 'aprobacionesRisk': return <ReportsAprobacionesContent period={period} channel={channel} />;
+      case 'costesRoi':        return <ReportsCostesRoiContent period={period} channel={channel} />;
+      // ── Temas & misc ────────────────────────────────────────────────────
       case 'temas':         return <ReportsTopicsContent />;
       case 'sugerencias':   return <ReportsSugerenciasContent />;
       case 'export':        return <ReportsExportContent />;
       case 'horarios':      return <ReportsHorariosContent />;
+      // ── IA y automatización ─────────────────────────────────────────────
       case 'finAgent':      return <ReportsFinAgentContent period={period} channel={channel} />;
       case 'copilot':       return <ReportsCustomReport title="Copilot" description="Analyze and report on how Copilot is used by teammates in your workspace." />;
+      // ── Soporte humano ──────────────────────────────────────────────────
       case 'calls':         return <ReportsCallsContent />;
       case 'conversations': return <ReportsConversationsContent period={period} channel={channel} />;
       case 'csat':          return <ReportsCsatContent period={period} channel={channel} />;
@@ -11359,6 +11955,7 @@ function ReportsView() {
       case 'teamInbox':     return <ReportsTeamInboxContent />;
       case 'teammate':      return <ReportsTeammateContent period={period} channel={channel} />;
       case 'tickets':       return <ReportsTicketsContent period={period} channel={channel} />;
+      // ── Proactivo ───────────────────────────────────────────────────────
       case 'articles':      return <ReportsArticlesContent period={period} channel={channel} />;
       case 'outboundEng':   return <ReportsOutboundEngagementContent />;
       case 'administrar':   return <KnowledgePlaceholder title="Administrar" subtitle="Configuración avanzada de informes, propietarios y permisos." />;
