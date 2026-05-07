@@ -11251,7 +11251,7 @@ function ReportsEffectivenessContent({ period, channel }: { period: string; chan
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
         <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.conversations_replied_to ?? '—')} />
         <ReportsKpiCard label="Closed conversations on first contact rate" value={loading ? '…' : kpis.first_contact_resolution ?? '0%'} sub={kpis.first_contact_total != null ? `${kpis.first_contact_resolved ?? 0} de ${kpis.first_contact_total}` : undefined} />
-        <ReportsKpiCard label="Median replies to close a conversation" value={kpis.median_replies_to_close ?? '—'} />
+        <ReportsKpiCard label="Median replies to close a conversation" value={loading ? '…' : (kpis.median_replies_to_close != null ? String(kpis.median_replies_to_close) : '—')} />
         <ReportsKpiCard label="Conversations reassigned" value={loading ? '…' : String(kpis.conversations_reassigned ?? 0)} />
         <ReportsKpiCard label="Median time to first assignment" value="—" />
         <ReportsKpiCard label="Median time from first assignment to close" value="—" />
@@ -11272,6 +11272,7 @@ function ReportsEffectivenessContent({ period, channel }: { period: string; chan
 function ReportsResponsivenessContent({ period, channel }: { period: string; channel: string }) {
   const { data, loading } = useApi(() => reportsApi.responsiveness(period, channel), [period, channel], null);
   const kpis = data?.kpis ?? {};
+  const dist: { bucket: string; count: number }[] = data?.distribution ?? [];
   return (
     <>
       <ReportShellHeader title="Responsiveness" description="See how quickly your team respond to, and close conversations with the Responsiveness report." />
@@ -11291,11 +11292,16 @@ function ReportsResponsivenessContent({ period, channel }: { period: string; cha
             <div className="grid grid-cols-2 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
               <div>Intervalos de tiempo</div><div>% replies</div>
             </div>
-            {['< 30s','30s - 2m','2m - 5m','5m - 10m','10m - 30m','30m - 1h','> 1h'].map(row => (
-              <div key={row} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-                <div>{row}</div><div className="text-[#646462]">—</div>
-              </div>
-            ))}
+            {(dist.length > 0 ? dist : ['< 5m','5m - 15m','15m - 30m','30m - 1h','1h - 3h','3h - 8h','> 8h'].map(b => ({ bucket: b, count: 0 }))).map((row: any) => {
+              const total = dist.reduce((s: number, r: any) => s + (r.count || 0), 0);
+              const pctVal = total > 0 && typeof row === 'object' ? `${Math.round((row.count / total) * 100)}%` : '—';
+              const label = typeof row === 'string' ? row : row.bucket;
+              return (
+                <div key={label} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+                  <div>{label}</div><div className="text-[#646462]">{loading ? '…' : pctVal}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="col-span-3 grid grid-cols-2 gap-4">
@@ -11308,11 +11314,16 @@ function ReportsResponsivenessContent({ period, channel }: { period: string; cha
             <div className="grid grid-cols-2 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
               <div>Intervalos de tiempo</div><div>% conversations</div>
             </div>
-            {['< 5m','5m - 15m','15m - 30m','30m - 1h','1h - 3h','3h - 8h','> 8h'].map(row => (
-              <div key={row} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-                <div>{row}</div><div className="text-[#646462]">—</div>
-              </div>
-            ))}
+            {(dist.length > 0 ? dist : ['< 5m','5m - 15m','15m - 30m','30m - 1h','1h - 3h','3h - 8h','> 8h'].map(b => ({ bucket: b, count: 0 }))).map((row: any) => {
+              const total = dist.reduce((s: number, r: any) => s + (r.count || 0), 0);
+              const pctVal = total > 0 && typeof row === 'object' ? `${Math.round((row.count / total) * 100)}%` : '—';
+              const label = typeof row === 'string' ? row : row.bucket;
+              return (
+                <div key={label} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+                  <div>{label}</div><div className="text-[#646462]">{loading ? '…' : pctVal}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
         <ReportEmptyChart label="Median hourly distribution of response times: including time assigned to bot" span={3} />
@@ -11507,22 +11518,26 @@ function ReportsTeammateContent({ period, channel }: { period: string; channel: 
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">Comparison of Teammate performance</span>
           </div>
-          <div className="grid grid-cols-4 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+          <div className="grid grid-cols-6 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
             <div>Compañero de equipo</div>
             <div>Rol</div>
-            <div>Casos asignados</div>
-            <div>Casos cerrados</div>
+            <div>Asignados</div>
+            <div>Respondidos</div>
+            <div>Cerrados</div>
+            <div>Tiempo medio gestión</div>
           </div>
           {loading ? (
             <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
           ) : isEmpty ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay datos de compañeros de equipo disponibles. La tabla workspace_members puede no estar configurada.</div>
-          ) : members.map((m, i) => (
-            <div key={i} className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-              <div>{m.name ?? m.userId ?? 'Miembro'}</div>
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay miembros activos en el workspace. Añade agentes en workspace_members para ver datos aquí.</div>
+          ) : members.map((m: any, i: number) => (
+            <div key={i} className="grid grid-cols-6 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a] hover:bg-[#fafaf9]">
+              <div className="font-medium">{m.name ?? m.userId ?? 'Miembro'}{m.team ? <span className="ml-1 text-[11px] text-[#646462]">· {m.team}</span> : null}</div>
               <div className="text-[#646462] capitalize">{m.role ?? '—'}</div>
               <div>{m.casesAssigned ?? 0}</div>
+              <div>{m.casesReplied ?? 0}</div>
               <div>{m.casesClosed ?? 0}</div>
+              <div className="text-[#646462]">{m.medianHandleTime ?? '—'}</div>
             </div>
           ))}
         </div>
@@ -11736,6 +11751,7 @@ function ReportsHorariosContent() {
 function ReportsArticlesContent({ period, channel }: { period: string; channel: string }) {
   const { data, loading } = useApi(() => reportsApi.articles(period, channel), [period, channel], null);
   const kpis = data?.kpis ?? {};
+  const topArticles: { title: string; views: number; helpful: number; unhelpful: number; deflected: number }[] = data?.topArticles ?? [];
   return (
     <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
@@ -11769,6 +11785,10 @@ function ReportsArticlesContent({ period, channel }: { period: string; channel: 
           <ReportsKpiCard label="Total artículos" value={loading ? '…' : String(kpis.total_articles ?? 0)} />
           <ReportsKpiCard label="Artículos publicados" value={loading ? '…' : String(kpis.published_articles ?? 0)} />
           <ReportsKpiCard label="Borradores" value={loading ? '…' : String(kpis.draft_articles ?? 0)} />
+          <ReportsKpiCard label="Visualizaciones" value={loading ? '…' : String(kpis.view_count_total ?? 0)} />
+          <ReportsKpiCard label="Búsquedas totales" value={loading ? '…' : String(kpis.search_hits_total ?? 0)} />
+          <ReportsKpiCard label="Tasa de utilidad" value={loading ? '…' : (kpis.helpfulness_rate ?? '0%')} sub={kpis.helpful_total != null ? `${kpis.helpful_total} útil / ${kpis.unhelpful_total ?? 0} no útil` : undefined} />
+          <ReportsKpiCard label="Conversaciones desviadas" value={loading ? '…' : String(kpis.deflected_total ?? 0)} />
         </div>
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
           <div className="flex items-center justify-between mb-3">
@@ -11821,10 +11841,22 @@ function ReportsArticlesContent({ period, channel }: { period: string; channel: 
               <div>Conversaciones</div>
               <div>última actualización</div>
             </div>
-            <div className="h-[160px] flex flex-col items-center justify-center text-center">
-              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-              <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
-            </div>
+            {topArticles.length > 0 ? topArticles.map((art, i) => (
+              <div key={i} className="grid grid-cols-7 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a] hover:bg-[#fafaf9]">
+                <div className="truncate pr-2" title={art.title}>{art.title}</div>
+                <div>{art.views}</div>
+                <div className="text-[#16a34a]">{art.helpful}</div>
+                <div className="text-[#a16207]">0</div>
+                <div className="text-[#dc2626]">{art.unhelpful}</div>
+                <div>{art.deflected}</div>
+                <div className="text-[#646462]">—</div>
+              </div>
+            )) : (
+              <div className="h-[160px] flex flex-col items-center justify-center text-center">
+                <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+                <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
+              </div>
+            )}
           </div>
         </div>
         <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
