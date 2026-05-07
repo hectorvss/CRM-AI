@@ -6,7 +6,8 @@
  */
 
 import type { NodeAdapter } from '../workflowExecutor.js';
+import { flowAdapters } from './flow.js';
 
 export const ALL_ADAPTERS: Record<string, NodeAdapter> = {
-  // Phase 2 will spread `...flowAdapters` here, etc.
+  ...flowAdapters,
 };

@@ -24,6 +24,7 @@ import { config as appConfig } from '../config.js';
 import { getRefundThreshold } from '../utils/refundThreshold.js';
 import { logger } from '../utils/logger.js';
 import { broadcastSSE } from './sse.js';
+import { executeNode as runAdapter } from '../runtime/workflowExecutor.js';
 
 const router = Router();
 const workflowRepository = createWorkflowRepository();
@@ -1002,6 +1003,20 @@ export async function executeWorkflowNode(
 
   if (node.type === 'trigger') {
     return { status: 'completed', output: { accepted: true, trigger: node.key } };
+  }
+
+  // ── Early adapter dispatch (Turno 5/D2 — Phase 2) ────────────────────────
+  // For node keys that have been migrated to `server/runtime/adapters/`,
+  // delegate here before falling through to the legacy inline branches.
+  // `runAdapter` returns `undefined` when no adapter is registered, in
+  // which case we keep the original control flow intact.
+  {
+    const adapterResult = await runAdapter(
+      { scope, context, services },
+      node,
+      config,
+    );
+    if (adapterResult !== undefined) return adapterResult;
   }
 
   if (node.type === 'condition') {
