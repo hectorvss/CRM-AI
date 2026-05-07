@@ -12,6 +12,7 @@ import { coreAdapters } from './core.js';
 import { knowledgeAdapters } from './knowledge.js';
 import { actionsAdapters } from './actions.js';
 import { notificationsAdapters } from './notifications.js';
+import { messagingAdapters } from './messaging.js';
 
 export const ALL_ADAPTERS: Record<string, NodeAdapter> = {
   ...flowAdapters,
@@ -20,4 +21,5 @@ export const ALL_ADAPTERS: Record<string, NodeAdapter> = {
   ...knowledgeAdapters,
   ...actionsAdapters,
   ...notificationsAdapters,
+  ...messagingAdapters,
 };
