@@ -22079,6 +22079,569 @@ function IconLibraryGalleryV2() {
   );
 }
 
+// ─── WorkspaceGeneralView ────────────────────────────────────────────────────
+function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { if (ws) { setName((ws as any).name ?? ''); setSlug((ws as any).slug ?? ''); } }, [ws]);
+  async function handleSave() {
+    setSaving(true);
+    try { await workspacesApi.update((ws as any)?.id ?? '', { name, slug }); setSaved(true); setTimeout(() => setSaved(false), 2000); }
+    catch {}
+    finally { setSaving(false); }
+  }
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[640px] mx-auto py-10 px-6 flex flex-col gap-8">
+        <div>
+          <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">General</h1>
+          <p className="text-[13.5px] text-[#646462]">Ajustes generales del espacio de trabajo.</p>
+        </div>
+        <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#e9eae6]">
+          {[
+            { label: 'Nombre del espacio de trabajo', value: name, set: setName, hint: 'Visible para todos los compañeros.' },
+            { label: 'Identificador (slug)', value: slug, set: setSlug, hint: 'URL única: app.intercom.com/a/apps/[slug]' },
+          ].map(({ label, value, set, hint }) => (
+            <div key={label} className="px-5 py-4">
+              <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">{label}</p>
+              <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/30" value={value} onChange={e => set(e.target.value)} />
+              <p className="text-[12px] text-[#646462] mt-1">{hint}</p>
+            </div>
+          ))}
+          <div className="px-5 py-4">
+            <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Zona horaria</p>
+            <select className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none bg-white">
+              {['(UTC+01:00) Europa/Madrid', '(UTC+00:00) UTC', '(UTC-05:00) América/Nueva_York', '(UTC-08:00) América/Los_Ángeles'].map(tz => <option key={tz}>{tz}</option>)}
+            </select>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Idioma del espacio de trabajo</p>
+            <select className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none bg-white">
+              {['Español', 'English', 'Français', 'Deutsch', 'Português'].map(l => <option key={l}>{l}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50">
+            {saved ? '✓ Guardado' : saving ? 'Guardando…' : 'Guardar cambios'}
+          </button>
+        </div>
+        <div className="bg-white border border-[#fca5a5] rounded-xl p-5">
+          <h2 className="text-[14px] font-bold text-[#b91c1c] mb-2">Zona de peligro</h2>
+          <p className="text-[13px] text-[#646462] mb-3">Eliminar este espacio de trabajo borrará todos los datos permanentemente.</p>
+          <button className="px-4 py-2 border border-[#fca5a5] text-[#b91c1c] text-[13px] font-semibold rounded-lg hover:bg-[#fef2f2]">Eliminar espacio de trabajo</button>
+        </div>
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── WorkspaceTeammatesView ──────────────────────────────────────────────────
+function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: members, loading } = useApi(() => iamApi.members(), [], []);
+  const [search, setSearch] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const rows = ((members as any[]) ?? []).filter((m: any) => !search || (m.name ?? m.email ?? '').toLowerCase().includes(search.toLowerCase()));
+  const ROLE_COLORS: Record<string, string> = { admin: 'bg-[#fef9c3] text-[#854d0e]', owner: 'bg-[#ede9fe] text-[#6d28d9]', agent: 'bg-[#f0fdf4] text-[#15803d]' };
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Compañeros de equipo</h1>
+            <p className="text-[13.5px] text-[#646462]">Gestiona los miembros y sus roles.</p>
+          </div>
+          <button onClick={() => setInviteOpen(true)} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">+ Invitar</button>
+        </div>
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a4a4a2]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+          <input className="w-full pl-9 pr-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] focus:outline-none" placeholder="Buscar compañero…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        {loading ? (
+          <div className="h-40 flex items-center justify-center text-[13px] text-[#a4a4a2]">Cargando…</div>
+        ) : (
+          <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead className="bg-[#f8f8f7]">
+                <tr>{['Nombre', 'Correo', 'Rol', 'Último acceso', ''].map(h => <th key={h} className="text-left px-4 py-2.5 font-semibold text-[#646462] border-b border-[#e9eae6]">{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {rows.length === 0 ? (
+                  <tr><td colSpan={5} className="text-center py-10 text-[#a4a4a2]">Sin resultados</td></tr>
+                ) : rows.map((m: any) => (
+                  <tr key={m.id ?? m.email} className="hover:bg-[#f8f8f7]">
+                    <td className="px-4 py-3 font-medium text-[#1a1a1a]">{m.name ?? '—'}</td>
+                    <td className="px-4 py-3 text-[#646462]">{m.email ?? '—'}</td>
+                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${ROLE_COLORS[m.role] ?? 'bg-[#f1f1ee] text-[#646462]'}`}>{m.role ?? 'agente'}</span></td>
+                    <td className="px-4 py-3 text-[#a4a4a2]">{m.last_seen ? new Date(m.last_seen).toLocaleDateString('es') : '—'}</td>
+                    <td className="px-4 py-3 text-right"><button className="text-[12px] text-[#646462] hover:text-[#b91c1c] border border-[#e9eae6] rounded px-2 py-0.5">Eliminar</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {inviteOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setInviteOpen(false)}>
+            <div className="bg-white rounded-2xl p-6 w-[380px] shadow-xl" onClick={e => e.stopPropagation()}>
+              <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-4">Invitar compañero</h2>
+              <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] mb-4" placeholder="correo@empresa.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setInviteOpen(false)} className="px-4 py-2 text-[13px] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7]">Cancelar</button>
+                <button onClick={() => setInviteOpen(false)} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Enviar invitación</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── AuthSettingsView ────────────────────────────────────────────────────────
+function AuthSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [googleOn, setGoogleOn] = useState(false);
+  const [samlOn, setSamlOn] = useState(false);
+  const [mfaOn, setMfaOn] = useState(false);
+  const [minLen, setMinLen] = useState(8);
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[640px] mx-auto py-10 px-6 flex flex-col gap-8">
+        <div>
+          <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Autenticación</h1>
+          <p className="text-[13.5px] text-[#646462]">Configura cómo acceden los compañeros de equipo.</p>
+        </div>
+        <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">Google Sign-In</p>
+              <p className="text-[12.5px] text-[#646462]">Permite iniciar sesión con cuentas de Google Workspace.</p>
+            </div>
+            <button onClick={() => setGoogleOn(v => !v)} className={`w-10 h-6 rounded-full transition-colors ${googleOn ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} flex items-center`}>
+              <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${googleOn ? 'translate-x-5' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </div>
+        <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">SAML 2.0 SSO</p>
+              <p className="text-[12.5px] text-[#646462]">Integra con Okta, Azure AD u otros proveedores de identidad.</p>
+            </div>
+            <button onClick={() => setSamlOn(v => !v)} className={`w-10 h-6 rounded-full transition-colors ${samlOn ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} flex items-center`}>
+              <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${samlOn ? 'translate-x-5' : 'translate-x-1'}`} />
+            </button>
+          </div>
+          {samlOn && (
+            <div className="mt-4 border-t border-[#e9eae6] pt-4 flex flex-col gap-3">
+              {['URL de inicio de sesión (SSO)', 'URL del emisor del IdP', 'Certificado X.509'].map(label => (
+                <div key={label}>
+                  <label className="block text-[12px] font-medium text-[#646462] mb-1">{label}</label>
+                  <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] focus:outline-none" placeholder={label === 'Certificado X.509' ? '-----BEGIN CERTIFICATE-----' : 'https://'} />
+                </div>
+              ))}
+              <button className="self-start px-4 py-2 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333]">Guardar configuración SAML</button>
+            </div>
+          )}
+        </div>
+        <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">Exigir autenticación de dos factores</p>
+              <p className="text-[12.5px] text-[#646462]">Todos los compañeros deberán activar 2FA.</p>
+            </div>
+            <button onClick={() => setMfaOn(v => !v)} className={`w-10 h-6 rounded-full transition-colors ${mfaOn ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} flex items-center`}>
+              <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${mfaOn ? 'translate-x-5' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </div>
+        <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
+          <p className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Política de contraseñas</p>
+          <label className="block text-[12px] font-medium text-[#646462] mb-1">Longitud mínima</label>
+          <div className="flex items-center gap-3">
+            <input type="number" min={6} max={64} value={minLen} onChange={e => setMinLen(+e.target.value)} className="w-20 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none" />
+            <span className="text-[12.5px] text-[#646462]">caracteres</span>
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Guardar cambios</button>
+        </div>
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DeveloperView ───────────────────────────────────────────────────────────
+function DeveloperView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'keys' | 'webhooks'>('keys');
+  const [webhooks, setWebhooks] = useState([
+    { id: 1, url: 'https://mi-app.com/webhook/intercom', events: ['conversation.created', 'conversation.closed'], active: true },
+  ]);
+  const [addUrl, setAddUrl] = useState('');
+  const API_REFERENCE = [
+    { method: 'GET', path: '/me', desc: 'Devuelve el app de la API key' },
+    { method: 'GET', path: '/contacts', desc: 'Lista contactos' },
+    { method: 'POST', path: '/contacts', desc: 'Crea un contacto' },
+    { method: 'GET', path: '/conversations', desc: 'Lista conversaciones' },
+    { method: 'POST', path: '/conversations', desc: 'Crea una conversación' },
+    { method: 'GET', path: '/admins', desc: 'Lista administradores' },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-6">
+        <div>
+          <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Centro para desarrolladores</h1>
+          <p className="text-[13.5px] text-[#646462]">API keys y webhooks para integraciones personalizadas.</p>
+        </div>
+        <div className="flex gap-1 border-b border-[#e9eae6]">
+          {(['keys', 'webhooks'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#1a1a1a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+              {t === 'keys' ? 'Claves de API' : 'Webhooks'}
+            </button>
+          ))}
+        </div>
+        {tab === 'keys' && (
+          <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+            <div className="px-5 py-3 bg-[#f8f8f7] border-b border-[#e9eae6]">
+              <p className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Referencia de la API REST</p>
+            </div>
+            <table className="w-full text-[13px]">
+              <thead className="bg-[#f8f8f7]">
+                <tr>{['Método', 'Endpoint', 'Descripción'].map(h => <th key={h} className="text-left px-4 py-2.5 font-semibold text-[#646462] border-b border-[#e9eae6]">{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {API_REFERENCE.map(r => (
+                  <tr key={r.path} className="hover:bg-[#f8f8f7]">
+                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[11px] font-bold ${r.method === 'GET' ? 'bg-[#dbeafe] text-[#1d4ed8]' : 'bg-[#dcfce7] text-[#15803d]'}`}>{r.method}</span></td>
+                    <td className="px-4 py-2.5 font-mono text-[12px] text-[#646462]">{r.path}</td>
+                    <td className="px-4 py-2.5 text-[#1a1a1a]">{r.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {tab === 'webhooks' && (
+          <div className="flex flex-col gap-4">
+            <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#e9eae6]">
+              {webhooks.map(wh => (
+                <div key={wh.id} className="px-5 py-4 flex items-start gap-3">
+                  <div className="flex-1">
+                    <p className="text-[13px] font-medium text-[#1a1a1a] font-mono">{wh.url}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">{wh.events.map(ev => <span key={ev} className="px-2 py-0.5 bg-[#f1f1ee] rounded-full text-[11px] text-[#646462]">{ev}</span>)}</div>
+                  </div>
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${wh.active ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f1f1ee] text-[#646462]'}`}>{wh.active ? 'Activo' : 'Inactivo'}</span>
+                  <button onClick={() => setWebhooks(ws => ws.filter(w => w.id !== wh.id))} className="text-[12px] text-[#b91c1c] hover:underline">Eliminar</button>
+                </div>
+              ))}
+              {webhooks.length === 0 && <div className="px-5 py-8 text-center text-[13px] text-[#a4a4a2]">Sin webhooks configurados</div>}
+            </div>
+            <div className="flex gap-2">
+              <input className="flex-1 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none" placeholder="https://tu-app.com/webhook" value={addUrl} onChange={e => setAddUrl(e.target.value)} />
+              <button
+                onClick={() => { if (addUrl.trim()) { setWebhooks(ws => [...ws, { id: Date.now(), url: addUrl.trim(), events: ['conversation.created'], active: true }]); setAddUrl(''); } }}
+                className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]"
+              >Añadir</button>
+            </div>
+          </div>
+        )}
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CustomObjectsView ───────────────────────────────────────────────────────
+function CustomObjectsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const OBJECTS = [
+    { name: 'Pedido', key: 'order', fields: 8, records: 1240 },
+    { name: 'Suscripción', key: 'subscription', fields: 5, records: 432 },
+    { name: 'Ticket de soporte', key: 'support_ticket', fields: 12, records: 3871 },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Objetos personalizados</h1>
+            <p className="text-[13.5px] text-[#646462]">Define estructuras de datos propias asociadas a tus contactos.</p>
+          </div>
+          <button className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">+ Nuevo objeto</button>
+        </div>
+        <div className="grid grid-cols-1 gap-3">
+          {OBJECTS.map(obj => (
+            <div key={obj.key} className="bg-white border border-[#e9eae6] rounded-xl px-5 py-4 flex items-center gap-4 hover:shadow-sm transition-shadow cursor-pointer">
+              <div className="w-10 h-10 rounded-xl bg-[#f1f1ee] flex items-center justify-center text-[20px]">📦</div>
+              <div className="flex-1">
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">{obj.name}</p>
+                <p className="text-[12px] text-[#646462]">Clave: <span className="font-mono">{obj.key}</span></p>
+              </div>
+              <div className="text-right">
+                <p className="text-[13px] font-medium text-[#1a1a1a]">{obj.fields} campos</p>
+                <p className="text-[12px] text-[#a4a4a2]">{obj.records.toLocaleString('es')} registros</p>
+              </div>
+              <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#a4a4a2]" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 3l5 5-5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+          ))}
+        </div>
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TopicsView ──────────────────────────────────────────────────────────────
+function TopicsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'];
+  const [topics, setTopics] = useState<{ id: string; name: string; color: string }[]>([
+    { id: '1', name: 'Soporte técnico', color: '#6366f1' },
+    { id: '2', name: 'Facturación', color: '#10b981' },
+    { id: '3', name: 'Onboarding', color: '#f59e0b' },
+    { id: '4', name: 'Ventas', color: '#3b82f6' },
+  ]);
+  const [newName, setNewName] = useState('');
+  function addTopic() {
+    if (!newName.trim()) return;
+    setTopics(ts => [...ts, { id: String(Date.now()), name: newName.trim(), color: COLORS[ts.length % COLORS.length] }]);
+    setNewName('');
+  }
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[640px] mx-auto py-10 px-6 flex flex-col gap-6">
+        <div>
+          <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Temas</h1>
+          <p className="text-[13.5px] text-[#646462]">Organiza las conversaciones por temática.</p>
+        </div>
+        <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#e9eae6] overflow-hidden">
+          {topics.map(t => (
+            <div key={t.id} className="flex items-center gap-3 px-5 py-3">
+              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: t.color }} />
+              <span className="flex-1 text-[13px] text-[#1a1a1a]">{t.name}</span>
+              <button onClick={() => setTopics(ts => ts.filter(x => x.id !== t.id))} className="text-[12px] text-[#a4a4a2] hover:text-[#b91c1c]">Archivar</button>
+            </div>
+          ))}
+          {topics.length === 0 && <div className="px-5 py-8 text-center text-[13px] text-[#a4a4a2]">Sin temas creados</div>}
+        </div>
+        <div className="flex gap-2">
+          <input className="flex-1 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none" placeholder="Nombre del tema" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTopic()} />
+          <button onClick={addTopic} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Añadir</button>
+        </div>
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SwitchChannelView ───────────────────────────────────────────────────────
+function SwitchChannelView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [token, setToken] = useState('');
+  const [connected, setConnected] = useState(false);
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[640px] mx-auto py-10 px-6 flex flex-col gap-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#fef3c7] flex items-center justify-center text-xl">🔄</div>
+          <div>
+            <h1 className="text-[22px] font-bold text-[#1a1a1a]">Switch</h1>
+            <p className="text-[13px] text-[#646462]">Permite a los clientes pasar de una cola telefónica a un chat.</p>
+          </div>
+        </div>
+        {connected ? (
+          <div className="bg-white border border-[#e9eae6] rounded-xl p-5 flex items-center gap-4">
+            <span className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">Switch conectado</p>
+              <p className="text-[12.5px] text-[#646462] font-mono">Token: ••••••••{token.slice(-4)}</p>
+            </div>
+            <button onClick={() => { setConnected(false); setToken(''); }} className="text-[13px] text-[#b91c1c] border border-[#fca5a5] rounded-lg px-3 py-1.5 hover:bg-[#fef2f2]">Desconectar</button>
+          </div>
+        ) : (
+          <div className="bg-white border border-[#e9eae6] rounded-xl p-5 flex flex-col gap-4">
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">Conectar Switch</p>
+            <ol className="text-[13px] text-[#646462] list-decimal list-inside space-y-1">
+              <li>Obtén tu token de API de Switch en el panel de administración.</li>
+              <li>Pégalo en el campo de abajo y haz clic en Conectar.</li>
+              <li>Configura los números de teléfono que redirigirán al chat.</li>
+            </ol>
+            <input className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] font-mono focus:outline-none" placeholder="swt_XXXXXXXXXXXX" value={token} onChange={e => setToken(e.target.value)} />
+            <button onClick={() => { if (token.trim()) setConnected(true); }} className="self-start px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Conectar</button>
+          </div>
+        )}
+        <div className="bg-[#fef9c3] border border-[#fde047] rounded-xl p-4 text-[12.5px] text-[#854d0e]">
+          <strong>Nota:</strong> Switch está disponible solo en planes avanzados. Contacta con ventas para actualizar.
+        </div>
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SlackChannelView ────────────────────────────────────────────────────────
+function SlackChannelView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [workspace, setWorkspace] = useState('');
+  const [connected, setConnected] = useState(false);
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[640px] mx-auto py-10 px-6 flex flex-col gap-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#ede9fe] flex items-center justify-center text-xl">💬</div>
+          <div>
+            <h1 className="text-[22px] font-bold text-[#1a1a1a]">Slack</h1>
+            <p className="text-[13px] text-[#646462]">Responde a mensajes de Slack desde tu Inbox.</p>
+          </div>
+        </div>
+        {connected ? (
+          <div className="bg-white border border-[#e9eae6] rounded-xl p-5 flex items-center gap-4">
+            <span className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">Slack conectado</p>
+              <p className="text-[12.5px] text-[#646462]">Espacio de trabajo: <strong>{workspace}</strong></p>
+            </div>
+            <button onClick={() => { setConnected(false); setWorkspace(''); }} className="text-[13px] text-[#b91c1c] border border-[#fca5a5] rounded-lg px-3 py-1.5 hover:bg-[#fef2f2]">Desconectar</button>
+          </div>
+        ) : (
+          <div className="bg-white border border-[#e9eae6] rounded-xl p-5 flex flex-col gap-4">
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">Conectar Slack</p>
+            <p className="text-[13px] text-[#646462]">Introduce el nombre de tu espacio de trabajo de Slack para continuar la autenticación OAuth.</p>
+            <input className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none" placeholder="mi-empresa.slack.com" value={workspace} onChange={e => setWorkspace(e.target.value)} />
+            <button onClick={() => { if (workspace.trim()) setConnected(true); }} className="self-start px-4 py-2 rounded-lg text-[13px] font-semibold text-white hover:opacity-90" style={{ background: '#4a154b' }}>
+              Conectar con Slack
+            </button>
+          </div>
+        )}
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── HelpCenterSettingsView ──────────────────────────────────────────────────
+function HelpCenterSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [published, setPublished] = useState(true);
+  const [domain, setDomain] = useState('soporte.miempresa.com');
+  const [color, setColor] = useState('#6366f1');
+  const STATS = [
+    { label: 'Artículos publicados', value: '84' },
+    { label: 'Búsquedas este mes', value: '3.2K' },
+    { label: 'Tasa de resolución', value: '67%' },
+    { label: 'Valoración media', value: '4.6 ★' },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Centro de ayuda</h1>
+            <p className="text-[13.5px] text-[#646462]">Configura tu portal de autoservicio.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-[#646462]">{published ? 'Publicado' : 'No publicado'}</span>
+            <button onClick={() => setPublished(v => !v)} className={`w-10 h-6 rounded-full transition-colors ${published ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} flex items-center`}>
+              <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${published ? 'translate-x-5' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {STATS.map(s => (
+            <div key={s.label} className="bg-white border border-[#e9eae6] rounded-xl p-4 text-center">
+              <p className="text-[22px] font-bold text-[#1a1a1a]">{s.value}</p>
+              <p className="text-[11px] text-[#646462] mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+        <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#e9eae6]">
+          <div className="px-5 py-4">
+            <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Dominio personalizado</label>
+            <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/30" value={domain} onChange={e => setDomain(e.target.value)} />
+            <p className="text-[12px] text-[#646462] mt-1">Añade un registro CNAME en tu DNS apuntando a <span className="font-mono">help.intercom.com</span></p>
+          </div>
+          <div className="px-5 py-4 flex items-center gap-4">
+            <div className="flex-1">
+              <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Color de marca</label>
+              <p className="text-[12px] text-[#646462]">Personaliza el color principal del portal.</p>
+            </div>
+            <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-10 rounded-lg border border-[#e9eae6] cursor-pointer p-0.5" />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Guardar cambios</button>
+        </div>
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Prototype() {
   // ?icons=v2 → render the icon-library gallery instead of the app shell.
   // Computed once per page-load (URL doesn't change without a reload), so the
