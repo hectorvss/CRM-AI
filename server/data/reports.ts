@@ -648,14 +648,25 @@ async function getFinAgentSupabase(scope: ReportScope, period: string, channel?:
 async function getTeammateSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
+  const sinceDate = since.slice(0, 10); // YYYY-MM-DD for agent_daily_activity
   const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
   const normalizedChannel = normalizeChannel(channel);
   const baseMs = Date.now() - days * 86_400_000;
   let members: any[] = [];
   const teamTimeSeries: { day: number; count: number }[] = Array.from({ length: days }, (_, i) => ({ day: i, count: 0 }));
 
+  const msToStr = (ms: number) => {
+    const h = ms / 3_600_000;
+    return h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
+  };
+  const medianMs = (arr: number[]) => {
+    if (!arr.length) return null;
+    const s = [...arr].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+  };
+
   try {
-    // Load workspace members
+    // ── 1. Workspace members ──────────────────────────────────────────────────
     const { data: wmData, error: wmErr } = await supabase
       .from('workspace_members')
       .select('user_id, display_name, email, role, team, is_active')
@@ -668,25 +679,34 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
       return { period, members: [], isEmpty: true, teamTimeSeries };
     }
 
-    // Load cases for the period grouped by assigned_user_id
+    // ── 2. Cases in period ────────────────────────────────────────────────────
     let casesQ = supabase
       .from('cases')
-      .select('assigned_user_id, status, created_at, closed_at, first_response_at, satisfaction_score')
+      .select('id, assigned_user_id, status, created_at, closed_at, assigned_at, first_response_at, satisfaction_score')
       .eq('tenant_id', scope.tenantId)
       .gte('created_at', since);
     if (normalizedChannel) casesQ = casesQ.eq('source_channel', normalizedChannel);
     const { data: casesData } = await casesQ;
 
-    // Aggregate per user
+    // Map caseId → assigned_at for subsequent-response join
+    const caseAssignedAt = new Map<string, string>();
     const userMetrics = new Map<string, {
       assigned: number; replied: number; closed: number;
-      durs: number[]; firstResp: number[];
+      durMs: number[]; firstRespMs: number[]; subsequentRespMs: number[];
       csatSum: number; csatCount: number;
     }>();
+
     for (const row of (casesData || [])) {
       const uid = row.assigned_user_id;
       if (!uid) continue;
-      const m = userMetrics.get(uid) ?? { assigned: 0, replied: 0, closed: 0, durs: [], firstResp: [], csatSum: 0, csatCount: 0 };
+      if (row.id && (row.assigned_at || row.created_at)) {
+        caseAssignedAt.set(row.id, row.assigned_at ?? row.created_at);
+      }
+      const m = userMetrics.get(uid) ?? {
+        assigned: 0, replied: 0, closed: 0,
+        durMs: [], firstRespMs: [], subsequentRespMs: [],
+        csatSum: 0, csatCount: 0,
+      };
       m.assigned++;
       if (!['open', 'pending'].includes(row.status)) m.replied++;
       if (['resolved', 'closed'].includes(row.status)) {
@@ -694,17 +714,17 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
         const closeTs = row.closed_at || null;
         if (closeTs && row.created_at) {
           const d = new Date(closeTs).getTime() - new Date(row.created_at).getTime();
-          if (d > 0) m.durs.push(d);
+          if (d > 0) m.durMs.push(d);
         }
-        // count closed cases per day for team time series
         if (row.closed_at) {
           const dayIdx = Math.floor((new Date(row.closed_at).getTime() - baseMs) / 86_400_000);
           if (dayIdx >= 0 && dayIdx < days) teamTimeSeries[dayIdx].count++;
         }
       }
-      if (row.first_response_at && row.created_at) {
-        const d = new Date(row.first_response_at).getTime() - new Date(row.created_at).getTime();
-        if (d > 0) m.firstResp.push(d);
+      if (row.first_response_at && (row.assigned_at || row.created_at)) {
+        const base = new Date(row.assigned_at ?? row.created_at).getTime();
+        const d = new Date(row.first_response_at).getTime() - base;
+        if (d > 0) m.firstRespMs.push(d);
       }
       if (row.satisfaction_score != null) {
         const s = Number(row.satisfaction_score);
@@ -713,20 +733,54 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
       userMetrics.set(uid, m);
     }
 
-    const msToStr = (ms: number) => {
-      const h = ms / 3_600_000;
-      return h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
-    };
-    const median = (arr: number[]) => {
-      if (!arr.length) return null;
-      const s = [...arr].sort((a, b) => a - b);
-      return s[Math.floor(s.length / 2)];
-    };
+    // ── 3. Subsequent replies (reply_number = 2) from case_replies ────────────
+    try {
+      const { data: repliesData } = await supabase
+        .from('case_replies')
+        .select('case_id, user_id, replied_at, reply_number')
+        .eq('tenant_id', scope.tenantId)
+        .eq('reply_number', 2)
+        .gte('replied_at', since);
+      for (const r of (repliesData || [])) {
+        const uid = r.user_id;
+        if (!uid) continue;
+        const assignedAt = caseAssignedAt.get(r.case_id);
+        if (!assignedAt) continue;
+        const d = new Date(r.replied_at).getTime() - new Date(assignedAt).getTime();
+        if (d > 0) {
+          const m = userMetrics.get(uid);
+          if (m) m.subsequentRespMs.push(d);
+        }
+      }
+    } catch (_) { /* case_replies not yet accessible */ }
 
+    // ── 4. Active hours from agent_daily_activity ─────────────────────────────
+    const activeMinutesMap = new Map<string, number>();
+    try {
+      const { data: actData } = await supabase
+        .from('agent_daily_activity')
+        .select('user_id, active_minutes')
+        .eq('tenant_id', scope.tenantId)
+        .gte('activity_date', sinceDate);
+      for (const row of (actData || [])) {
+        const prev = activeMinutesMap.get(row.user_id) ?? 0;
+        activeMinutesMap.set(row.user_id, prev + (row.active_minutes ?? 0));
+      }
+    } catch (_) { /* table not yet accessible */ }
+
+    // ── 5. Build per-member rows ──────────────────────────────────────────────
     members = memberList.map((m: any) => {
-      const met = userMetrics.get(m.user_id) ?? { assigned: 0, replied: 0, closed: 0, durs: [], firstResp: [], csatSum: 0, csatCount: 0 };
-      const medDur = median(met.durs);
-      const medFirst = median(met.firstResp);
+      const met = userMetrics.get(m.user_id) ?? {
+        assigned: 0, replied: 0, closed: 0,
+        durMs: [], firstRespMs: [], subsequentRespMs: [],
+        csatSum: 0, csatCount: 0,
+      };
+      const medDur = medianMs(met.durMs);
+      const medFirst = medianMs(met.firstRespMs);
+      const medSubseq = medianMs(met.subsequentRespMs);
+      const activeMinutes = activeMinutesMap.get(m.user_id) ?? 0;
+      const activeHours = activeMinutes / 60;
+
       return {
         userId: m.user_id,
         name: m.display_name || m.user_id,
@@ -740,6 +794,11 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
         medianFirstResponse: medFirst ? msToStr(medFirst) : null,
         medianAssignToClose: medDur ? msToStr(medDur) : null,
         medianAssignToFirstResp: medFirst ? msToStr(medFirst) : null,
+        medianAssignToSubsequentResp: medSubseq ? msToStr(medSubseq) : null,
+        activeMinutes,
+        closedPerActiveHour: activeHours > 0 ? Math.round((met.closed / activeHours) * 10) / 10 : null,
+        assignedPerActiveHour: activeHours > 0 ? Math.round((met.assigned / activeHours) * 10) / 10 : null,
+        repliedPerActiveHour: activeHours > 0 ? Math.round((met.replied / activeHours) * 10) / 10 : null,
         avgCsat: met.csatCount > 0 ? `${Math.round((met.csatSum / met.csatCount / 5) * 100)}%` : null,
       };
     }).sort((a: any, b: any) => b.casesAssigned - a.casesAssigned);
@@ -747,11 +806,40 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
     // workspace_members not accessible — return empty
   }
 
+  // ── 6. Aggregate KPIs across all members ───────────────────────────────────
+  const medArr = <T,>(arr: T[], pick: (x: T) => number | null): number | null => {
+    const vals = arr.map(pick).filter((v): v is number => v !== null);
+    if (!vals.length) return null;
+    return vals.sort((a, b) => a - b)[Math.floor(vals.length / 2)];
+  };
+
+  const aggSubsequentMs = medArr(members, m =>
+    m.medianAssignToSubsequentResp
+      ? (() => {
+          const s = String(m.medianAssignToSubsequentResp);
+          if (s.endsWith('d')) return Number.parseFloat(s) * 86_400_000;
+          if (s.endsWith('h')) return Number.parseFloat(s) * 3_600_000;
+          if (s.endsWith('m')) return Number.parseFloat(s) * 60_000;
+          return null;
+        })()
+      : null
+  );
+
+  const totalActiveHours = members.reduce((s, m) => s + (m.activeMinutes ?? 0), 0) / 60;
+  const totalClosed = members.reduce((s, m) => s + m.casesClosed, 0);
+  const totalAssigned = members.reduce((s, m) => s + m.casesAssigned, 0);
+  const totalReplied = members.reduce((s, m) => s + m.casesReplied, 0);
+
   return {
     period,
     members,
     isEmpty: members.length === 0,
     teamTimeSeries,
+    aggMedianSubsequentResp: aggSubsequentMs ? msToStr(aggSubsequentMs) : null,
+    totalActiveHours: Math.round(totalActiveHours * 10) / 10,
+    closedPerActiveHour: totalActiveHours > 0 ? Math.round((totalClosed / totalActiveHours) * 10) / 10 : null,
+    assignedPerActiveHour: totalActiveHours > 0 ? Math.round((totalAssigned / totalActiveHours) * 10) / 10 : null,
+    repliedPerActiveHour: totalActiveHours > 0 ? Math.round((totalReplied / totalActiveHours) * 10) / 10 : null,
   };
 }
 
@@ -1064,6 +1152,9 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
   let negativeCount = 0;
   let requestRate = '0%';
   let responseRate = '0%';
+  let surveySentCount = 0;
+  let surveyRespondedCount = 0;
+  let closedCount = 0;
   const scoreDistribution = [1, 2, 3, 4, 5].map(s => ({ score: s, count: 0 }));
 
   try {
@@ -1080,6 +1171,10 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
       const surveySent = data.filter((r: any) => r.survey_sent_at != null);
       const surveyResponded = data.filter((r: any) => r.survey_responded_at != null);
       const withScore = data.filter((r: any) => r.satisfaction_score != null);
+
+      closedCount = closed.length;
+      surveySentCount = surveySent.length;
+      surveyRespondedCount = surveyResponded.length;
 
       // request_rate = % of closed cases that got a survey
       requestRate = pct(surveySent.length, closed.length || 1);
@@ -1168,6 +1263,9 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
       negative_count: negativeCount,
       request_rate: requestRate,
       response_rate: responseRate,
+      survey_sent_count: surveySentCount,
+      survey_responded_count: surveyRespondedCount,
+      closed_count: closedCount,
       teammate_csat: teammateCsatCount > 0 ? Math.round((teammateCsatScore / teammateCsatCount / 5) * 100) : null,
       teammate_csat_count: teammateCsatCount,
       fin_csat: finCsatCount > 0 ? Math.round((finCsatScore / finCsatCount / 5) * 100) : null,

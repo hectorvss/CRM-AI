@@ -11417,8 +11417,8 @@ function ReportsCsatContent({ period, channel }: { period: string; channel: stri
           </div>
         </div>
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">CSAT survey</h3>
-        <ReportsKpiCard label="CSAT request rate" value={loading ? '…' : kpis.request_rate ?? '0%'} sub="0 de 0" />
-        <ReportsKpiCard label="CSAT response rate" value={loading ? '…' : kpis.response_rate ?? '0%'} sub="0 de 0" />
+        <ReportsKpiCard label="CSAT request rate" value={loading ? '…' : kpis.request_rate ?? '0%'} sub={loading ? undefined : `${kpis.survey_sent_count ?? 0} de ${kpis.closed_count ?? 0}`} />
+        <ReportsKpiCard label="CSAT response rate" value={loading ? '…' : kpis.response_rate ?? '0%'} sub={loading ? undefined : `${kpis.survey_responded_count ?? 0} de ${kpis.survey_sent_count ?? 0}`} />
         <div className="col-span-1" />
         {/* CSAT survey rates over time — would need per-conversation survey tracking */}
         <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
@@ -11875,15 +11875,28 @@ function ReportsTeammateContent({ period, channel }: { period: string; channel: 
   const isEmpty = data?.isEmpty !== false || members.length === 0;
   const teamTimeSeries: { day: number; count: number }[] = data?.teamTimeSeries ?? [];
   const maxTts = Math.max(...teamTimeSeries.map(t => t.count), 1);
-  // Derive aggregate medians and CSAT from members array
+
+  // Aggregate KPIs — prefer backend-computed values, fall back to client-side median
   const handleTimes = members.filter((m: any) => m.medianHandleTime).map((m: any) => m.medianHandleTime as string);
   const aggHandleTime = handleTimes.length > 0 ? handleTimes[Math.floor(handleTimes.length / 2)] : null;
   const assignToCloseTimes = members.filter((m: any) => m.medianAssignToClose).map((m: any) => m.medianAssignToClose as string);
   const aggAssignToClose = assignToCloseTimes.length > 0 ? assignToCloseTimes[Math.floor(assignToCloseTimes.length / 2)] : null;
   const assignToFirstRespTimes = members.filter((m: any) => m.medianAssignToFirstResp).map((m: any) => m.medianAssignToFirstResp as string);
   const aggAssignToFirstResp = assignToFirstRespTimes.length > 0 ? assignToFirstRespTimes[Math.floor(assignToFirstRespTimes.length / 2)] : null;
+  // Subsequent response — use backend aggregate
+  const aggSubsequentResp: string | null = data?.aggMedianSubsequentResp ?? null;
+  // Per-active-hour — from backend totals
+  const closedPerHour: number | null = data?.closedPerActiveHour ?? null;
+  const assignedPerHour: number | null = data?.assignedPerActiveHour ?? null;
+  const repliedPerHour: number | null = data?.repliedPerActiveHour ?? null;
+  const totalActiveHours: number = data?.totalActiveHours ?? 0;
+
   const csatScores = members.filter((m: any) => m.avgCsat).map((m: any) => Number.parseFloat(String(m.avgCsat).replace('%', '')));
   const aggTeammateCsat = csatScores.length > 0 ? `${Math.round(csatScores.reduce((s, v) => s + v, 0) / csatScores.length)}%` : null;
+
+  const fmtRate = (r: number | null) => r !== null ? String(r) : '—';
+  const activeHoursSub = totalActiveHours > 0 ? `${totalActiveHours}h activas totales` : undefined;
+
   return (
     <>
       <ReportShellHeader title="Teammate performance" description="Check in on teammate performance with accurate metrics and insights." />
@@ -11892,10 +11905,10 @@ function ReportsTeammateContent({ period, channel }: { period: string; channel: 
         <div className="col-span-2"><ReportsKpiCard label="Median teammate handling time" value={loading ? '…' : aggHandleTime ?? '—'} /></div>
         <ReportsKpiCard label="Median teammate assignment to close" value={loading ? '…' : aggAssignToClose ?? '—'} />
         <ReportsKpiCard label="Median teammate assignment to first response" value={loading ? '…' : aggAssignToFirstResp ?? '—'} />
-        <ReportsKpiCard label="Median teammate assignment to subsequent response" value="—" />
-        <ReportsKpiCard label="Conversations closed per active hour" value="—" />
-        <ReportsKpiCard label="Conversations assigned per active hour" value="—" />
-        <ReportsKpiCard label="Conversations replied to per active hour" value="—" />
+        <ReportsKpiCard label="Median teammate assignment to subsequent response" value={loading ? '…' : aggSubsequentResp ?? '—'} />
+        <ReportsKpiCard label="Conversations closed per active hour" value={loading ? '…' : fmtRate(closedPerHour)} sub={activeHoursSub} />
+        <ReportsKpiCard label="Conversations assigned per active hour" value={loading ? '…' : fmtRate(assignedPerHour)} sub={activeHoursSub} />
+        <ReportsKpiCard label="Conversations replied to per active hour" value={loading ? '…' : fmtRate(repliedPerHour)} sub={activeHoursSub} />
         <div className="col-span-1" />
         {/* Teammate productivity chart — cases closed per day */}
         <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
