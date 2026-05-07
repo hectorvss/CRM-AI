@@ -6,7 +6,12 @@ import LoadingState from '../LoadingState';
 import { DetailSection } from './sections';
 
 type SaveHandler = (() => Promise<void> | void) | null;
-type Props = { onSaveReady?: (handler: SaveHandler) => void };
+type Props = {
+  // Parent does the single iamApi.me fetch — see Profile.tsx.
+  user: any | null;
+  userLoading?: boolean;
+  onSaveReady?: (handler: SaveHandler) => void;
+};
 
 function passwordStrength(pw: string): { score: number; label: string; color: string } {
   if (!pw) return { score: 0, label: '—', color: '#e9eae6' };
@@ -46,8 +51,11 @@ const ACTION_LABELS: Record<string, string> = {
   'profile.updated': 'Perfil actualizado',
 };
 
-export default function SecurityTab({ onSaveReady }: Props) {
-  const { data: user, loading: userLoading } = useApi<any>(iamApi.me);
+export default function SecurityTab({ user, userLoading: userLoadingProp, onSaveReady }: Props) {
+  // `user` is just used for fallback display; SecurityTab only really needs
+  // sessions + activity, both of which it fetches directly.
+  void user;
+  const userLoading = Boolean(userLoadingProp);
   const { data: sessionsRaw, refetch: refetchSessions } = useApi<any[]>(iamApi.mySessions, []);
   const { data: activityRaw, refetch: refetchActivity } = useApi<any[]>(() => iamApi.myActivity(10), []);
   const sessions = Array.isArray(sessionsRaw) ? sessionsRaw : [];

@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
 import LoadingState from '../LoadingState';
 import { DetailSection, DetailRow } from './sections';
 
 type SaveHandler = (() => Promise<void> | void) | null;
-type Props = { onSaveReady?: (handler: SaveHandler) => void };
+type Props = {
+  // Parent does the single iamApi.me fetch — see Profile.tsx.
+  user: any | null;
+  userLoading?: boolean;
+  onSaveReady?: (handler: SaveHandler) => void;
+};
 
 const FALLBACK_USER = { preferences: {}, name: '', email: '' };
 
@@ -58,8 +62,8 @@ const DEFAULT_MATRIX: Matrix = {
   slack: { assigned: true,  mentioned: true,  sla: false, daily: false },
 };
 
-export default function NotificationsTab({ onSaveReady }: Props) {
-  const { data: user, loading } = useApi<any>(iamApi.me);
+export default function NotificationsTab({ user, userLoading, onSaveReady }: Props) {
+  const loading = Boolean(userLoading);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
   // Memoise — `preferences.notifications || {}` creates a new {} every render

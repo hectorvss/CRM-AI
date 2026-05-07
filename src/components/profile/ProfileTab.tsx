@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
 import { supabase } from '../../api/supabase';
 import LoadingState from '../LoadingState';
@@ -8,6 +7,12 @@ import { DetailSection, DetailRow } from './sections';
 type SaveHandler = (() => Promise<void> | void) | null;
 
 type ProfileTabProps = {
+  // Parent (Profile.tsx) does ONE fetch and passes user down — eliminates the
+  // duplicate `useApi(iamApi.me)` calls each tab used to do, which were
+  // multiplying 401 events into a redirect storm.
+  user: any | null;
+  userLoading?: boolean;
+  refetchUser?: () => void;
   onSaveReady?: (handler: SaveHandler) => void;
 };
 
@@ -127,8 +132,8 @@ const STYLES = [
   { value: 'bullets',  label: 'Viñetas' },
 ];
 
-export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
-  const { data: user, loading } = useApi<any>(iamApi.me);
+export default function ProfileTab({ user, userLoading, onSaveReady }: ProfileTabProps) {
+  const loading = Boolean(userLoading);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
   // CRITICAL: must memoise on `preferences` — a bare `preferences.profile || {}`

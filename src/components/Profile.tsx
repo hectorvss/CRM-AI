@@ -57,9 +57,13 @@ export default function Profile({ onNavigate, initialSection }: ProfileProps) {
     setSaveHandlerRaw(() => h);
   }, []);
 
-  // Pull user once at the shell level so the header card has avatar/name/role
-  // without each tab re-fetching just to render its own breadcrumb.
-  const { data: user } = useApi<any>(iamApi.me, []);
+  // Pull user ONCE at the shell level — we then pass `user` + `refetchUser`
+  // down to each tab. Previously every tab also called `useApi(iamApi.me)`
+  // independently (six total fetches per page render). On any 401 each one
+  // emitted `crmai:unauthorized`, which compounded with StrictMode's double
+  // mount and any token-refresh race produced a redirect storm that looked
+  // to the user like the page was constantly reloading.
+  const { data: user, loading: userLoading, refetch: refetchUser } = useApi<any>(iamApi.me, []);
 
   useEffect(() => {
     setSaveHandler(null);
@@ -178,10 +182,10 @@ export default function Profile({ onNavigate, initialSection }: ProfileProps) {
               transition={{ duration: 0.18 }}
               className="pb-32"
             >
-              {activeTab === 'profile'            && <ProfileTab            onSaveReady={setSaveHandler} />}
-              {activeTab === 'security'           && <SecurityTab           onSaveReady={setSaveHandler} />}
-              {activeTab === 'notifications'      && <NotificationsTab      onSaveReady={setSaveHandler} />}
-              {activeTab === 'preferences'        && <PreferencesTab        onSaveReady={setSaveHandler} />}
+              {activeTab === 'profile'            && <ProfileTab            user={user} userLoading={userLoading} refetchUser={refetchUser} onSaveReady={setSaveHandler} />}
+              {activeTab === 'security'           && <SecurityTab           user={user} userLoading={userLoading} onSaveReady={setSaveHandler} />}
+              {activeTab === 'notifications'      && <NotificationsTab      user={user} userLoading={userLoading} onSaveReady={setSaveHandler} />}
+              {activeTab === 'preferences'        && <PreferencesTab        user={user} userLoading={userLoading} onSaveReady={setSaveHandler} />}
               {activeTab === 'activity'           && <ActivityTab           onNavigate={onNavigate} />}
               {activeTab === 'access_permissions' && <AccessPermissionsTab  />}
             </motion.div>

@@ -29,9 +29,29 @@ const MEMBERSHIP_CACHE_KEY = 'crmai.membership.v1';
  * Guarded by `redirecting` — multiple in-flight 401s only redirect once.
  */
 let redirecting = false;
+const LAST_REDIRECT_KEY = 'crmai.lastUnauthRedirect';
 async function handleUnauthorized() {
   if (redirecting) return;
+
+  // Throttle: if we just redirected within the last 10s, skip. This breaks the
+  // page-reload loop that happens when a 401 fires immediately after the user
+  // lands back on the page (token refresh race / session not yet hydrated).
+  // Without this, the user sees the page constantly "reload".
+  try {
+    const recent = sessionStorage.getItem(LAST_REDIRECT_KEY);
+    if (recent) {
+      const ageMs = Date.now() - parseInt(recent, 10);
+      if (Number.isFinite(ageMs) && ageMs < 10000) {
+        console.warn('[auth] Skipping unauthorized redirect — fired again within 10s. Possible token refresh race.');
+        return;
+      }
+    }
+  } catch { /* sessionStorage may be unavailable */ }
+
   redirecting = true;
+  try {
+    sessionStorage.setItem(LAST_REDIRECT_KEY, String(Date.now()));
+  } catch { /* sessionStorage may be unavailable */ }
 
   try {
     localStorage.removeItem(MEMBERSHIP_CACHE_KEY);
