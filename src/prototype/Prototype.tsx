@@ -13981,7 +13981,7 @@ function KnowledgeWebsiteSyncWizard({
     <div className="fixed inset-0 z-50" onClick={onClose}>
       <div
         className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
-          isFullscreen ? 'w-full max-w-none border-l-0' : 'w-[70%] min-w-[920px] max-w-[1500px]'
+          isFullscreen ? 'w-full max-w-none border-l-0 rounded-none' : 'w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]'
         }`}
         onClick={e => e.stopPropagation()}
       >
