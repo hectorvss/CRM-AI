@@ -11404,6 +11404,8 @@ function ReportsResponsivenessContent({ period, channel }: { period: string; cha
   const { data, loading } = useApi(() => reportsApi.responsiveness(period, channel), [period, channel], null);
   const kpis = data?.kpis ?? {};
   const dist: { bucket: string; count: number }[] = data?.distribution ?? [];
+  const respTimeSeries: { day: number; avgMinutes: number }[] = data?.timeSeries ?? [];
+  const maxRespMin = Math.max(...respTimeSeries.map(t => t.avgMinutes), 1);
   return (
     <>
       <ReportShellHeader title="Responsiveness" description="See how quickly your team respond to, and close conversations with the Responsiveness report." />
@@ -11412,7 +11414,25 @@ function ReportsResponsivenessContent({ period, channel }: { period: string; cha
         <ReportsKpiCard label="Median response time: including time assigned to bot" value={loading ? '…' : kpis.median_response_time ?? '—'} />
         <ReportsKpiCard label="Median first response time: including time assigned to bot" value={loading ? '…' : kpis.median_first_response ?? '—'} />
         <ReportsKpiCard label="Median time to close: including time assigned to bot" value={loading ? '…' : kpis.median_time_to_close ?? '—'} />
-        <ReportEmptyChart label="Median response time: including time assigned to bot - by time" span={3} />
+        {/* Response time by day */}
+        {respTimeSeries.some(t => t.avgMinutes > 0) ? (
+          <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Avg first response time by day (minutes)</span>
+            </div>
+            <div className="h-[140px] flex items-end gap-0.5 px-2">
+              {respTimeSeries.map((t, i) => (
+                <div key={i} style={{ height: t.avgMinutes ? `${(t.avgMinutes / maxRespMin) * 100}%` : '4px' }} className={`flex-1 ${t.avgMinutes ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} title={`${t.avgMinutes}m`} />
+              ))}
+            </div>
+            <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-2">
+              <span>Día 1</span><span>Día {Math.round(respTimeSeries.length / 2)}</span><span>Día {respTimeSeries.length}</span>
+            </div>
+          </div>
+        ) : (
+          <ReportEmptyChart label="Median response time: including time assigned to bot - by time" span={3} />
+        )}
         <div className="col-span-3 grid grid-cols-2 gap-4">
           <ReportEmptyChart label="Median first response time: including time assigned to bot - by time" />
           <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
@@ -11564,7 +11584,42 @@ function ReportsSlasContent({ period, channel }: { period: string; channel: stri
             </div>
           </div>
         )}
-        <ReportEmptyChart label="Targets hit over time" span={3} />
+        {/* SLA targets hit over time */}
+        {slaTimeSeries.some(t => t.compliant > 0 || t.breached > 0) ? (
+          <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Targets hit over time</span>
+              <span className="ml-auto flex items-center gap-3 text-[11px] text-[#646462]">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#16a34a] inline-block" />Compliant</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#dc2626] inline-block" />Breached</span>
+              </span>
+            </div>
+            <div className="h-[140px] flex items-end gap-0.5 px-2">
+              {slaTimeSeries.map((t, i) => {
+                const total = t.compliant + t.breached;
+                const maxH = Math.max(...slaTimeSeries.map(x => x.compliant + x.breached), 1);
+                return (
+                  <div key={i} className="flex-1 flex flex-col-reverse" style={{ height: total ? `${(total / maxH) * 100}%` : '4px' }}>
+                    {total > 0 ? (
+                      <>
+                        <div style={{ height: `${(t.compliant / total) * 100}%` }} className="bg-[#16a34a] rounded-t-sm w-full" />
+                        <div style={{ height: `${(t.breached / total) * 100}%` }} className="bg-[#dc2626] w-full" />
+                      </>
+                    ) : (
+                      <div className="bg-[#f3f3f1] w-full h-full rounded-t" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-2">
+              <span>Día 1</span><span>Día {Math.round(slaTimeSeries.length / 2)}</span><span>Día {slaTimeSeries.length}</span>
+            </div>
+          </div>
+        ) : (
+          <ReportEmptyChart label="Targets hit over time" span={3} />
+        )}
       </div>
     </>
   );
@@ -12129,6 +12184,8 @@ function ReportsCopilotContent({ period, channel }: { period: string; channel: s
   // Copilot usage is derived from AI agent runs — we reuse the agents endpoint
   const { data, loading } = useApi(() => reportsApi.agents(period, channel), [period, channel], null);
   const agents: any[] = data?.agents ?? [];
+  const agentTimeSeries: { day: number; runs: number }[] = data?.timeSeries ?? [];
+  const maxAgentRuns = Math.max(...agentTimeSeries.map(t => t.runs), 1);
   const totalRuns = agents.reduce((s, a) => s + (a.totalRuns ?? 0), 0);
   const totalTokens = agents.reduce((s, a) => s + (a.tokensUsed ?? 0), 0);
   const avgSuccessRate = agents.length > 0
@@ -12179,7 +12236,25 @@ function ReportsCopilotContent({ period, channel }: { period: string; channel: s
             </div>
           ))}
         </div>
-        <ReportEmptyChart label="Uso de Copilot por tiempo" span={3} />
+        {/* Agent runs over time */}
+        {agentTimeSeries.some(t => t.runs > 0) ? (
+          <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Uso de Copilot por tiempo</span>
+            </div>
+            <div className="h-[140px] flex items-end gap-0.5 px-2">
+              {agentTimeSeries.map((t, i) => (
+                <div key={i} style={{ height: t.runs ? `${(t.runs / maxAgentRuns) * 100}%` : '4px' }} className={`flex-1 ${t.runs ? 'bg-[#8b5cf6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+              ))}
+            </div>
+            <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-2">
+              <span>Día 1</span><span>Día {Math.round(agentTimeSeries.length / 2)}</span><span>Día {agentTimeSeries.length}</span>
+            </div>
+          </div>
+        ) : (
+          <ReportEmptyChart label="Uso de Copilot por tiempo" span={3} />
+        )}
       </div>
     </>
   );

@@ -253,6 +253,10 @@ async function getAgentsSupabase(scope: ReportScope, period: string, channel?: s
   if (runsError) throw runsError;
 
   const agentMetrics = new Map<string, any>();
+  const tsByDay = new Map<number, number>();
+  const daysNum = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+  const baseMs = Date.now() - daysNum * 86_400_000;
+
   for (const run of (runs || [])) {
     const m = agentMetrics.get(run.agent_id) || { total_runs: 0, completed: 0, failed: 0, tokens_total: 0, cost_total: 0, total_dur: 0, dur_count: 0 };
     m.total_runs += 1;
@@ -266,7 +270,14 @@ async function getAgentsSupabase(scope: ReportScope, period: string, channel?: s
       m.dur_count += 1;
     }
     agentMetrics.set(run.agent_id, m);
+
+    if (run.started_at) {
+      const dayIdx = Math.floor((new Date(run.started_at).getTime() - baseMs) / 86_400_000);
+      if (dayIdx >= 0 && dayIdx < daysNum) tsByDay.set(dayIdx, (tsByDay.get(dayIdx) ?? 0) + 1);
+    }
   }
+
+  const timeSeries = Array.from({ length: daysNum }, (_, i) => ({ day: i, runs: tsByDay.get(i) ?? 0 }));
 
   const rows = (agents || []).map(a => {
     const m = agentMetrics.get(a.id) || { total_runs: 0, completed: 0, failed: 0, tokens_total: 0, cost_total: 0, total_dur: 0, dur_count: 0 };
@@ -283,7 +294,7 @@ async function getAgentsSupabase(scope: ReportScope, period: string, channel?: s
     };
   }).sort((a, b) => b.totalRuns - a.totalRuns);
 
-  return { period, agents: rows };
+  return { period, agents: rows, timeSeries };
 }
 
 async function getApprovalsSupabase(scope: ReportScope, period: string, channel?: string) {
@@ -441,9 +452,11 @@ async function getCostsSupabase(scope: ReportScope, period: string, channel?: st
 async function getSLASupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+  const baseMs = Date.now() - days * 86_400_000;
   let query = supabase
     .from('cases')
-    .select('sla_status, priority, type')
+    .select('sla_status, priority, type, created_at')
     .eq('tenant_id', scope.tenantId)
     .gte('created_at', since);
   const normalizedChannel = normalizeChannel(channel);
@@ -454,11 +467,12 @@ async function getSLASupabase(scope: ReportScope, period: string, channel?: stri
   const distMap = new Map<string, number>();
   const prioMap = new Map<string, number>();
   const typeMap = new Map<string, number>();
+  const tsByDay = new Map<number, { compliant: number; breached: number }>();
 
   for (const row of (data || [])) {
     const s = row.sla_status || 'unknown';
     distMap.set(s, (distMap.get(s) || 0) + 1);
-    
+
     const pk = `${row.priority}:${s}`;
     prioMap.set(pk, (prioMap.get(pk) || 0) + 1);
 
@@ -466,7 +480,23 @@ async function getSLASupabase(scope: ReportScope, period: string, channel?: stri
       const t = row.type || 'unknown';
       typeMap.set(t, (typeMap.get(t) || 0) + 1);
     }
+
+    // time series
+    if (row.created_at && (row.sla_status === 'compliant' || row.sla_status === 'breached')) {
+      const dayIdx = Math.floor((new Date(row.created_at).getTime() - baseMs) / 86_400_000);
+      if (dayIdx >= 0 && dayIdx < days) {
+        const b = tsByDay.get(dayIdx) ?? { compliant: 0, breached: 0 };
+        if (row.sla_status === 'compliant') b.compliant++;
+        else b.breached++;
+        tsByDay.set(dayIdx, b);
+      }
+    }
   }
+
+  const timeSeries = Array.from({ length: days }, (_, i) => {
+    const b = tsByDay.get(i) ?? { compliant: 0, breached: 0 };
+    return { day: i, compliant: b.compliant, breached: b.breached };
+  });
 
   return {
     period,
@@ -475,7 +505,8 @@ async function getSLASupabase(scope: ReportScope, period: string, channel?: stri
       const [priority, slaStatus] = k.split(':');
       return { priority, slaStatus, count };
     }),
-    breachedByType: Array.from(typeMap.entries()).map(([type, count]) => ({ type, count })).sort((a,b) => b.count - a.count).slice(0, 10)
+    breachedByType: Array.from(typeMap.entries()).map(([type, count]) => ({ type, count })).sort((a,b) => b.count - a.count).slice(0, 10),
+    timeSeries,
   };
 }
 
@@ -617,8 +648,11 @@ async function getFinAgentSupabase(scope: ReportScope, period: string, channel?:
 async function getTeammateSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
   const normalizedChannel = normalizeChannel(channel);
+  const baseMs = Date.now() - days * 86_400_000;
   let members: any[] = [];
+  const teamTimeSeries: { day: number; count: number }[] = Array.from({ length: days }, (_, i) => ({ day: i, count: 0 }));
 
   try {
     // Load workspace members
@@ -631,13 +665,13 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
 
     const memberList = wmData || [];
     if (memberList.length === 0) {
-      return { period, members: [], isEmpty: true };
+      return { period, members: [], isEmpty: true, teamTimeSeries };
     }
 
     // Load cases for the period grouped by assigned_user_id
     let casesQ = supabase
       .from('cases')
-      .select('assigned_user_id, status, created_at, closed_at, first_response_at')
+      .select('assigned_user_id, status, created_at, closed_at, first_response_at, satisfaction_score')
       .eq('tenant_id', scope.tenantId)
       .gte('created_at', since);
     if (normalizedChannel) casesQ = casesQ.eq('source_channel', normalizedChannel);
@@ -647,11 +681,12 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
     const userMetrics = new Map<string, {
       assigned: number; replied: number; closed: number;
       durs: number[]; firstResp: number[];
+      csatSum: number; csatCount: number;
     }>();
     for (const row of (casesData || [])) {
       const uid = row.assigned_user_id;
       if (!uid) continue;
-      const m = userMetrics.get(uid) ?? { assigned: 0, replied: 0, closed: 0, durs: [], firstResp: [] };
+      const m = userMetrics.get(uid) ?? { assigned: 0, replied: 0, closed: 0, durs: [], firstResp: [], csatSum: 0, csatCount: 0 };
       m.assigned++;
       if (!['open', 'pending'].includes(row.status)) m.replied++;
       if (['resolved', 'closed'].includes(row.status)) {
@@ -661,10 +696,19 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
           const d = new Date(closeTs).getTime() - new Date(row.created_at).getTime();
           if (d > 0) m.durs.push(d);
         }
+        // count closed cases per day for team time series
+        if (row.closed_at) {
+          const dayIdx = Math.floor((new Date(row.closed_at).getTime() - baseMs) / 86_400_000);
+          if (dayIdx >= 0 && dayIdx < days) teamTimeSeries[dayIdx].count++;
+        }
       }
       if (row.first_response_at && row.created_at) {
         const d = new Date(row.first_response_at).getTime() - new Date(row.created_at).getTime();
         if (d > 0) m.firstResp.push(d);
+      }
+      if (row.satisfaction_score != null) {
+        const s = Number(row.satisfaction_score);
+        if (!isNaN(s)) { m.csatSum += s; m.csatCount++; }
       }
       userMetrics.set(uid, m);
     }
@@ -680,7 +724,7 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
     };
 
     members = memberList.map((m: any) => {
-      const met = userMetrics.get(m.user_id) ?? { assigned: 0, replied: 0, closed: 0, durs: [], firstResp: [] };
+      const met = userMetrics.get(m.user_id) ?? { assigned: 0, replied: 0, closed: 0, durs: [], firstResp: [], csatSum: 0, csatCount: 0 };
       const medDur = median(met.durs);
       const medFirst = median(met.firstResp);
       return {
@@ -694,6 +738,9 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
         casesClosed: met.closed,
         medianHandleTime: medDur ? msToStr(medDur) : null,
         medianFirstResponse: medFirst ? msToStr(medFirst) : null,
+        medianAssignToClose: medDur ? msToStr(medDur) : null,
+        medianAssignToFirstResp: medFirst ? msToStr(medFirst) : null,
+        avgCsat: met.csatCount > 0 ? `${Math.round((met.csatSum / met.csatCount / 5) * 100)}%` : null,
       };
     }).sort((a: any, b: any) => b.casesAssigned - a.casesAssigned);
   } catch (_) {
@@ -704,59 +751,141 @@ async function getTeammateSupabase(scope: ReportScope, period: string, channel?:
     period,
     members,
     isEmpty: members.length === 0,
+    teamTimeSeries,
   };
 }
 
 async function getTicketsSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
   const normalizedChannel = normalizeChannel(channel);
 
   let query = supabase
     .from('cases')
-    .select('type, status, created_at')
+    .select('id, type, status, created_at, closed_at, assigned_user_id')
     .eq('tenant_id', scope.tenantId)
     .gte('created_at', since);
   if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
-  // ticket-like types
   query = query.or("type.like.%ticket%,type.eq.technical_support");
 
   const { data, error } = await query;
   if (error) {
-    // if query fails (e.g. no rows matching), return zeros
     return {
       period,
-      kpis: { new_tickets: 0, resolved_tickets: 0, open_tickets: 0, median_resolution: null },
+      kpis: { new_tickets: 0, resolved_tickets: 0, open_tickets: 0, median_resolution: null, median_time_submitted: null, median_time_in_progress: null, median_time_waiting: null },
       byType: [],
-      timeSeries: Array.from({ length: 28 }, (_, i) => ({ day: i, count: 0 })),
+      byTeam: [],
+      byAssignee: [],
+      timeSeries: Array.from({ length: days }, (_, i) => ({ day: i, count: 0 })),
     };
   }
 
   const rows = data || [];
   const newTickets = rows.length;
-  const resolvedTickets = rows.filter(r => ['resolved', 'closed'].includes(r.status)).length;
-  const openTickets = rows.filter(r => !['resolved', 'closed', 'cancelled'].includes(r.status)).length;
+  const resolvedTickets = rows.filter((r: any) => ['resolved', 'closed'].includes(r.status)).length;
+  const openTickets = rows.filter((r: any) => !['resolved', 'closed', 'cancelled'].includes(r.status)).length;
+
+  // median_resolution = median(closed_at - created_at) for resolved tickets
+  let median_resolution: string | null = null;
+  const resolvedDurations: number[] = [];
+  for (const r of rows) {
+    if (['resolved', 'closed'].includes(r.status) && r.closed_at && r.created_at) {
+      const ms = new Date(r.closed_at).getTime() - new Date(r.created_at).getTime();
+      if (ms > 0) resolvedDurations.push(ms);
+    }
+  }
+  if (resolvedDurations.length > 0) {
+    const sorted = [...resolvedDurations].sort((a, b) => a - b);
+    const medMs = sorted[Math.floor(sorted.length / 2)];
+    const h = medMs / 3_600_000;
+    median_resolution = h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
+  }
+
+  // Try status history for time-in-state KPIs
+  let median_time_submitted: string | null = null;
+  let median_time_in_progress: string | null = null;
+  let median_time_waiting: string | null = null;
+  const caseIds = rows.map((r: any) => r.id).filter(Boolean);
+  if (caseIds.length > 0) {
+    try {
+      const { data: histData } = await supabase
+        .from('case_status_history')
+        .select('case_id, from_status, to_status, created_at')
+        .eq('tenant_id', scope.tenantId)
+        .in('case_id', caseIds.slice(0, 500));
+
+      if (histData && histData.length > 0) {
+        // Group by case_id, sort by created_at, compute time in each state
+        const byCase = new Map<string, any[]>();
+        for (const h of histData) {
+          const arr = byCase.get(h.case_id) ?? [];
+          arr.push(h);
+          byCase.set(h.case_id, arr);
+        }
+
+        const submittedMs: number[] = [];
+        const inProgressMs: number[] = [];
+        const waitingMs: number[] = [];
+
+        for (const [, events] of byCase) {
+          const sorted = events.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          for (let i = 0; i < sorted.length - 1; i++) {
+            const dur = new Date(sorted[i + 1].created_at).getTime() - new Date(sorted[i].created_at).getTime();
+            if (dur <= 0) continue;
+            const toStatus = sorted[i].to_status?.toLowerCase() ?? '';
+            if (!sorted[i].from_status || sorted[i].from_status === 'open') submittedMs.push(dur);
+            if (toStatus.includes('progress') || toStatus === 'processing') inProgressMs.push(dur);
+            if (toStatus.includes('wait')) waitingMs.push(dur);
+          }
+        }
+
+        const msToStr = (ms: number) => { const h = ms / 3_600_000; return h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`; };
+
+        if (submittedMs.length > 0) {
+          const s = [...submittedMs].sort((a, b) => a - b);
+          median_time_submitted = msToStr(s[Math.floor(s.length / 2)]);
+        }
+        if (inProgressMs.length > 0) {
+          const s = [...inProgressMs].sort((a, b) => a - b);
+          median_time_in_progress = msToStr(s[Math.floor(s.length / 2)]);
+        }
+        if (waitingMs.length > 0) {
+          const s = [...waitingMs].sort((a, b) => a - b);
+          median_time_waiting = msToStr(s[Math.floor(s.length / 2)]);
+        }
+      }
+    } catch (_) { /* case_status_history not ready */ }
+  }
 
   const typeCounts = new Map<string, number>();
+  const assigneeCounts = new Map<string, number>();
   for (const row of rows) {
     const t = row.type || 'ticket';
     typeCounts.set(t, (typeCounts.get(t) || 0) + 1);
+    if (row.assigned_user_id) {
+      const short = String(row.assigned_user_id).slice(0, 8);
+      assigneeCounts.set(short, (assigneeCounts.get(short) || 0) + 1);
+    }
   }
   const byType = Array.from(typeCounts.entries()).map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count);
+  const byAssignee = Array.from(assigneeCounts.entries()).map(([assignee, count]) => ({ assignee, count })).sort((a, b) => b.count - a.count).slice(0, 8);
 
   const sinceMs = new Date(since).getTime();
   const buckets: Record<string, number> = {};
   for (const row of rows) {
     const dayIndex = Math.floor((new Date(row.created_at).getTime() - sinceMs) / 86_400_000);
-    const key = String(Math.min(Math.max(dayIndex, 0), 27));
+    const key = String(Math.min(Math.max(dayIndex, 0), days - 1));
     buckets[key] = (buckets[key] || 0) + 1;
   }
-  const timeSeries = Array.from({ length: 28 }, (_, i) => ({ day: i, count: buckets[String(i)] || 0 }));
+  const timeSeries = Array.from({ length: days }, (_, i) => ({ day: i, count: buckets[String(i)] || 0 }));
 
   return {
     period,
-    kpis: { new_tickets: newTickets, resolved_tickets: resolvedTickets, open_tickets: openTickets, median_resolution: null },
+    kpis: { new_tickets: newTickets, resolved_tickets: resolvedTickets, open_tickets: openTickets, median_resolution, median_time_submitted, median_time_in_progress, median_time_waiting },
     byType,
+    byTeam: [],
+    byAssignee,
     timeSeries,
   };
 }
@@ -827,7 +956,9 @@ async function getArticlesSupabase(scope: ReportScope, period: string, _channel?
 async function getResponsivenessSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
   const normalizedChannel = normalizeChannel(channel);
+  const baseMs = Date.now() - days * 86_400_000;
 
   let medianFirstResponse: string | null = null;
   let medianTimeToClose: string | null = null;
@@ -840,6 +971,7 @@ async function getResponsivenessSupabase(scope: ReportScope, period: string, cha
     { bucket: '3h - 8h', count: 0 },
     { bucket: '> 8h', count: 0 },
   ];
+  const tsByDay = new Map<number, { sum: number; count: number }>();
 
   try {
     let query = supabase
@@ -851,14 +983,13 @@ async function getResponsivenessSupabase(scope: ReportScope, period: string, cha
     const { data } = await query;
 
     if (data && data.length > 0) {
-      // First response times (all cases that have first_response_at)
+      // First response times
       const firstRespMs: number[] = [];
       for (const row of data) {
         if (row.first_response_at && row.created_at) {
           const ms = new Date(row.first_response_at).getTime() - new Date(row.created_at).getTime();
           if (ms > 0) {
             firstRespMs.push(ms);
-            // bucket by first response time
             const mins = ms / 60_000;
             if (mins < 5) dist[0].count++;
             else if (mins < 15) dist[1].count++;
@@ -867,6 +998,15 @@ async function getResponsivenessSupabase(scope: ReportScope, period: string, cha
             else if (mins < 180) dist[4].count++;
             else if (mins < 480) dist[5].count++;
             else dist[6].count++;
+
+            // time series — avg first response per day
+            const dayIdx = Math.floor((new Date(row.created_at).getTime() - baseMs) / 86_400_000);
+            if (dayIdx >= 0 && dayIdx < days) {
+              const b = tsByDay.get(dayIdx) ?? { sum: 0, count: 0 };
+              b.sum += ms / 60_000; // minutes
+              b.count++;
+              tsByDay.set(dayIdx, b);
+            }
           }
         }
       }
@@ -877,7 +1017,7 @@ async function getResponsivenessSupabase(scope: ReportScope, period: string, cha
         medianFirstResponse = h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
       }
 
-      // Time to close (closed cases with closed_at)
+      // Time to close
       const closeMs: number[] = [];
       for (const row of data) {
         if (['resolved', 'closed'].includes(row.status) && row.closed_at && row.created_at) {
@@ -896,6 +1036,11 @@ async function getResponsivenessSupabase(scope: ReportScope, period: string, cha
     // column or table issue — keep null
   }
 
+  const timeSeries = Array.from({ length: days }, (_, i) => {
+    const b = tsByDay.get(i) ?? { sum: 0, count: 0 };
+    return { day: i, avgMinutes: b.count > 0 ? Math.round(b.sum / b.count) : 0 };
+  });
+
   return {
     period,
     kpis: {
@@ -904,6 +1049,7 @@ async function getResponsivenessSupabase(scope: ReportScope, period: string, cha
       median_time_to_close: medianTimeToClose,
     },
     distribution: dist,
+    timeSeries,
   };
 }
 
@@ -961,8 +1107,13 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
   let teammateCsatCount = 0;
   let finCsatScore = 0;
   let finCsatCount = 0;
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+  const baseMs = Date.now() - days * 86_400_000;
+  const tsByDay = new Map<number, { sum: number; count: number }>();
+  const userCsatMap = new Map<string, { sum: number; count: number }>();
+
   try {
-    let qh = supabase.from('cases').select('satisfaction_score, assigned_user_id, execution_state').eq('tenant_id', scope.tenantId).gte('created_at', since).not('satisfaction_score', 'is', null);
+    let qh = supabase.from('cases').select('satisfaction_score, assigned_user_id, execution_state, created_at').eq('tenant_id', scope.tenantId).gte('created_at', since).not('satisfaction_score', 'is', null);
     if (normalizedChannel) qh = qh.eq('source_channel', normalizedChannel);
     const { data: csatRows } = await qh;
     if (csatRows) {
@@ -974,10 +1125,39 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
           } else if (r.assigned_user_id) {
             teammateCsatScore += score; teammateCsatCount++;
           }
+
+          // time series by day
+          if (r.created_at) {
+            const dayIdx = Math.floor((new Date(r.created_at).getTime() - baseMs) / 86_400_000);
+            if (dayIdx >= 0 && dayIdx < days) {
+              const b = tsByDay.get(dayIdx) ?? { sum: 0, count: 0 };
+              b.sum += score; b.count++;
+              tsByDay.set(dayIdx, b);
+            }
+          }
+
+          // per-user CSAT
+          if (r.assigned_user_id) {
+            const m = userCsatMap.get(r.assigned_user_id) ?? { sum: 0, count: 0 };
+            m.sum += score; m.count++;
+            userCsatMap.set(r.assigned_user_id, m);
+          }
         }
       }
     }
   } catch (_) { /* satisfaction_score not ready */ }
+
+  const timeSeries = Array.from({ length: days }, (_, i) => {
+    const b = tsByDay.get(i) ?? { sum: 0, count: 0 };
+    return { day: i, avgScore: b.count > 0 ? Math.round((b.sum / b.count) * 10) / 10 : 0, count: b.count };
+  });
+
+  const teammateCsatBreakdown = Array.from(userCsatMap.entries()).map(([uid, m]) => ({
+    userId: uid,
+    name: uid,
+    avgCsat: Math.round((m.sum / m.count / 5) * 100),
+    count: m.count,
+  })).sort((a, b) => b.avgCsat - a.avgCsat);
 
   return {
     period,
@@ -994,12 +1174,15 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
       fin_csat_count: finCsatCount,
     },
     scoreDistribution,
+    timeSeries,
+    teammateCsatBreakdown,
   };
 }
 
 async function getEffectivenessSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
   const normalizedChannel = normalizeChannel(channel);
 
   const caseCount = (extraFilter?: (q: any) => any) => {
@@ -1026,6 +1209,10 @@ async function getEffectivenessSupabase(scope: ReportScope, period: string, chan
   let firstContactTotal = 0;
   let totalReassigned = 0;
   let medianRepliesToClose: number | null = null;
+  let median_time_to_first_assignment: string | null = null;
+  let median_time_from_assign_to_close: string | null = null;
+  const baseMs = Date.now() - days * 86_400_000;
+  const fcrByDay = new Map<number, { resolved: number; total: number }>();
 
   try {
     let query = supabase
@@ -1045,6 +1232,53 @@ async function getEffectivenessSupabase(scope: ReportScope, period: string, chan
         return diffMs > 0 && diffMs < 3_600_000 && (r.reassigned_count ?? 0) === 0;
       }).length;
       totalReassigned = data.reduce((s: number, r: any) => s + Number(r.reassigned_count || 0), 0);
+
+      // median_time_to_first_assignment = median(first_response_at - created_at) as proxy
+      const assignDeltas: number[] = [];
+      for (const r of data) {
+        if (r.first_response_at && r.created_at) {
+          const ms = new Date(r.first_response_at).getTime() - new Date(r.created_at).getTime();
+          if (ms > 0) assignDeltas.push(ms);
+        }
+      }
+      if (assignDeltas.length > 0) {
+        const sorted = [...assignDeltas].sort((a, b) => a - b);
+        const medMs = sorted[Math.floor(sorted.length / 2)];
+        const h = medMs / 3_600_000;
+        median_time_to_first_assignment = h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
+      }
+
+      // median_time_from_assign_to_close = median(closed_at - first_response_at) for closed cases
+      const assignToCloseDeltas: number[] = [];
+      for (const r of data) {
+        if (['resolved', 'closed'].includes(r.status) && r.closed_at && r.first_response_at) {
+          const ms = new Date(r.closed_at).getTime() - new Date(r.first_response_at).getTime();
+          if (ms > 0) assignToCloseDeltas.push(ms);
+        }
+      }
+      if (assignToCloseDeltas.length > 0) {
+        const sorted = [...assignToCloseDeltas].sort((a, b) => a - b);
+        const medMs = sorted[Math.floor(sorted.length / 2)];
+        const h = medMs / 3_600_000;
+        median_time_from_assign_to_close = h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
+      }
+
+      // FCR per day time series
+      for (const r of data) {
+        if (!r.created_at) continue;
+        const dayIdx = Math.floor((new Date(r.created_at).getTime() - baseMs) / 86_400_000);
+        if (dayIdx < 0 || dayIdx >= days) continue;
+        const bucket = fcrByDay.get(dayIdx) ?? { resolved: 0, total: 0 };
+        if (['resolved', 'closed'].includes(r.status)) {
+          bucket.total++;
+          const closeTs = r.closed_at || null;
+          if (closeTs && r.created_at) {
+            const diffMs = new Date(closeTs).getTime() - new Date(r.created_at).getTime();
+            if (diffMs > 0 && diffMs < 3_600_000 && (r.reassigned_count ?? 0) === 0) bucket.resolved++;
+          }
+        }
+        fcrByDay.set(dayIdx, bucket);
+      }
     }
   } catch (_) {
     // column missing — use safe defaults
@@ -1072,6 +1306,10 @@ async function getEffectivenessSupabase(scope: ReportScope, period: string, chan
   const nTotal = total || 0;
   const nReplied = replied || 0;
   const fcrRate = firstContactTotal > 0 ? pct(firstContactResolved, firstContactTotal) : '0%';
+  const timeSeries = Array.from({ length: days }, (_, i) => {
+    const b = fcrByDay.get(i) ?? { resolved: 0, total: 0 };
+    return { day: i, fcr_rate: b.total > 0 ? Math.round((b.resolved / b.total) * 100) : 0 };
+  });
 
   return {
     period,
@@ -1083,7 +1321,10 @@ async function getEffectivenessSupabase(scope: ReportScope, period: string, chan
       conversations_reassigned: totalReassigned,
       median_replies_to_close: medianRepliesToClose,
       total_conversations: nTotal,
+      median_time_to_first_assignment,
+      median_time_from_assign_to_close,
     },
+    timeSeries,
   };
 }
 
@@ -1184,18 +1425,22 @@ async function getCallsSupabase(scope: ReportScope, period: string, channel?: st
 async function getTeamInboxSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
   const normalizedChannel = normalizeChannel(channel);
 
   let conversationsAssigned = 0;
   let conversationsReplied = 0;
   let closedConversations = 0;
   let medianAssignToClose: string | null = null;
+  let median_assign_to_first_response: string | null = null;
   const inboxBreakdown: { inbox: string; assigned: number; replied: number; closed: number; medianClose: string }[] = [];
+  const baseMs = Date.now() - days * 86_400_000;
+  const countByDay = new Map<number, number>();
 
   try {
     let baseQuery = supabase
       .from('cases')
-      .select('id, status, created_at, closed_at, assigned_user_id')
+      .select('id, status, created_at, closed_at, assigned_user_id, first_response_at')
       .eq('tenant_id', scope.tenantId)
       .gte('created_at', since);
     if (normalizedChannel) baseQuery = baseQuery.eq('source_channel', normalizedChannel);
@@ -1206,7 +1451,7 @@ async function getTeamInboxSupabase(scope: ReportScope, period: string, channel?
       conversationsReplied = data.filter((r: any) => !['open', 'pending'].includes(r.status)).length;
       closedConversations = data.filter((r: any) => ['resolved', 'closed'].includes(r.status)).length;
 
-      // Median time to close using closed_at (preferred) or fallback to status-based estimate
+      // Median time to close using closed_at
       const closedRows = data.filter((r: any) =>
         ['resolved', 'closed'].includes(r.status) && r.created_at && r.closed_at
       );
@@ -1222,7 +1467,29 @@ async function getTeamInboxSupabase(scope: ReportScope, period: string, channel?
         }
       }
 
-      // Group by assigned_user_id (treat each unique assignee as a "team inbox")
+      // median_assign_to_first_response = median(first_response_at - created_at) for assigned cases
+      const assignFirstRespMs: number[] = [];
+      for (const r of data) {
+        if (r.assigned_user_id && r.first_response_at && r.created_at) {
+          const ms = new Date(r.first_response_at).getTime() - new Date(r.created_at).getTime();
+          if (ms > 0) assignFirstRespMs.push(ms);
+        }
+      }
+      if (assignFirstRespMs.length > 0) {
+        const sorted = [...assignFirstRespMs].sort((a, b) => a - b);
+        const medMs = sorted[Math.floor(sorted.length / 2)];
+        const h = medMs / 3_600_000;
+        median_assign_to_first_response = h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
+      }
+
+      // Cases per day time series
+      for (const r of data) {
+        if (!r.created_at) continue;
+        const dayIdx = Math.floor((new Date(r.created_at).getTime() - baseMs) / 86_400_000);
+        if (dayIdx >= 0 && dayIdx < days) countByDay.set(dayIdx, (countByDay.get(dayIdx) ?? 0) + 1);
+      }
+
+      // Group by assigned_user_id
       const byAssignee: Record<string, { assigned: number; replied: number; closed: number; durs: number[] }> = {};
       for (const row of data) {
         const key = String(row.assigned_user_id ?? 'Unassigned');
@@ -1250,10 +1517,12 @@ async function getTeamInboxSupabase(scope: ReportScope, period: string, channel?
     // graceful — all zeros
   }
 
+  const timeSeries = Array.from({ length: days }, (_, i) => ({ day: i, count: countByDay.get(i) ?? 0 }));
+
   return {
     period,
     kpis: {
-      median_assign_to_first_response: null,
+      median_assign_to_first_response,
       median_assign_to_subsequent_response: null,
       median_assign_to_close: medianAssignToClose,
       conversations_assigned: conversationsAssigned,
@@ -1261,6 +1530,7 @@ async function getTeamInboxSupabase(scope: ReportScope, period: string, channel?
       closed_conversations: closedConversations,
     },
     inboxBreakdown,
+    timeSeries,
     isEmpty: conversationsAssigned === 0,
   };
 }
