@@ -10,7 +10,7 @@ import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -452,31 +452,14 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
       </div>
 
       <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
-        {/* Pasa a Pro — upgrade CTA card */}
-        {expanded ? (
-          <button
-            type="button"
-            onClick={() => onNavigate('billing')}
-            className="w-full mb-1 rounded-[10px] bg-gradient-to-br from-[#e7e2fd] to-[#f4f4ff] border border-[#d6d0f8] hover:border-[#b09efa] px-2.5 py-2 flex items-center gap-2 text-left transition-colors"
-          >
-            <span className="w-6 h-6 rounded-md bg-[#5b21b6] flex items-center justify-center flex-shrink-0">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-[12.5px] font-semibold text-[#1a1a1a]">Pasa a Pro</span>
-              <span className="block text-[11px] text-[#646462] truncate">Desbloquea funciones premium</span>
-            </span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            title="Pasa a Pro"
-            onClick={() => onNavigate('billing')}
-            className="w-full h-9 mb-1 flex items-center justify-center rounded-lg bg-gradient-to-br from-[#e7e2fd] to-[#f4f4ff] border border-[#d6d0f8] hover:border-[#b09efa]"
-          >
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#5b21b6]"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>
-          </button>
-        )}
+        {/* Upgrade — lightning bolt button */}
+        <button
+          onClick={() => onNavigate('billing')}
+          className={`w-full h-9 flex items-center rounded-lg ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${view === 'billing' || view === 'featuresComparison' ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"}`}
+        >
+          <svg viewBox="0 0 16 16" className="w-5 h-5 flex-shrink-0 fill-[#111]"><path d="M9.5 1 L4 9h4.5L6.5 15 13 7H8.5z"/></svg>
+          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Upgrade</span>}
+        </button>
 
         {/* Buscar */}
         <button className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}>
@@ -8170,181 +8153,625 @@ function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View
 // ── AppStoreView ──────────────────────────────────────────────────────────────
 
 const STORE_INTEGRATIONS = [
-  // CRM
-  { id: 'salesforce',  name: 'Salesforce',        category: 'CRM',           desc: 'Sincroniza contactos, oportunidades y casos con Salesforce.', domain: 'salesforce.com',   connected: false, auth: 'oauth',  color: '#00A1E0' },
-  { id: 'hubspot',     name: 'HubSpot',            category: 'CRM',           desc: 'Sincroniza contactos y deals de HubSpot con el inbox.',       domain: 'hubspot.com',       connected: true,  auth: 'apikey', color: '#FF7A59' },
-  { id: 'zendesk',     name: 'Zendesk',            category: 'CRM',           desc: 'Importa tickets de Zendesk y gestiona todo desde Clain.',      domain: 'zendesk.com',       connected: false, auth: 'apikey', color: '#03363D' },
-  { id: 'freshdesk',   name: 'Freshdesk',          category: 'CRM',           desc: 'Centraliza tickets de Freshdesk en la bandeja de Clain.',      domain: 'freshdesk.com',     connected: false, auth: 'apikey', color: '#2DC26B' },
-  // Canales
-  { id: 'whatsapp',    name: 'WhatsApp Business',  category: 'Canales',       desc: 'Recibe y responde mensajes de WhatsApp desde el inbox.',        domain: 'whatsapp.com',      connected: true,  auth: 'oauth',  color: '#25D366' },
-  { id: 'instagram',   name: 'Instagram',          category: 'Canales',       desc: 'Gestiona DMs de Instagram desde tu bandeja de entrada.',        domain: 'instagram.com',     connected: true,  auth: 'oauth',  color: '#E1306C' },
-  { id: 'slack',       name: 'Slack',              category: 'Canales',       desc: 'Notificaciones de conversaciones y escalados en Slack.',        domain: 'slack.com',         connected: true,  auth: 'oauth',  color: '#4A154B' },
-  { id: 'twilio',      name: 'SMS · Twilio',       category: 'Canales',       desc: 'Envía y recibe SMS a través de Twilio en el workspace.',        domain: 'twilio.com',        connected: false, auth: 'apikey', color: '#F22F46' },
-  // Pagos
-  { id: 'stripe',      name: 'Stripe',             category: 'Pagos',         desc: 'Consulta suscripciones, pagos y facturas desde cada caso.',    domain: 'stripe.com',        connected: true,  auth: 'apikey', color: '#635BFF' },
-  { id: 'shopify',     name: 'Shopify',            category: 'Comercio',      desc: 'Accede a pedidos y clientes de Shopify en conversaciones.',     domain: 'shopify.com',       connected: false, auth: 'oauth',  color: '#96BF48' },
-  // Productividad
-  { id: 'jira',        name: 'Jira',               category: 'Productividad', desc: 'Crea issues de Jira desde conversaciones y sincroniza estado.', domain: 'atlassian.com',     connected: false, auth: 'oauth',  color: '#0052CC' },
-  { id: 'linear',      name: 'Linear',             category: 'Productividad', desc: 'Crea y enlaza issues de Linear desde el inbox de soporte.',     domain: 'linear.app',        connected: true,  auth: 'oauth',  color: '#5E6AD2' },
-  { id: 'notion',      name: 'Notion',             category: 'Productividad', desc: 'Guarda notas de conversaciones y crea páginas de Notion.',      domain: 'notion.so',         connected: false, auth: 'oauth',  color: '#000000' },
-  { id: 'github',      name: 'GitHub',             category: 'Productividad', desc: 'Vincula issues de GitHub a conversaciones para bugs.',          domain: 'github.com',        connected: false, auth: 'oauth',  color: '#24292E' },
-  // Analítica
-  { id: 'ga',          name: 'Google Analytics',  category: 'Analítica',     desc: 'Mide el impacto del widget de chat en las conversiones.',       domain: 'google.com',        connected: false, auth: 'oauth',  color: '#E37400' },
-  { id: 'delighted',   name: 'Delighted',          category: 'Analítica',     desc: 'Dispara encuestas CSAT y NPS basadas en conversaciones.',       domain: 'delighted.com',     connected: false, auth: 'apikey', color: '#FF6E6E' },
-  // IA
-  { id: 'openai',      name: 'OpenAI',             category: 'IA',            desc: 'Conecta GPT-4o para respuestas generativas en el workspace.',   domain: 'openai.com',        connected: true,  auth: 'apikey', color: '#10A37F' },
-  { id: 'anthropic',   name: 'Anthropic',          category: 'IA',            desc: 'Usa Claude como modelo base para el agente AI de Clain.',       domain: 'anthropic.com',     connected: true,  auth: 'apikey', color: '#D97706' },
-  { id: 'zapier',      name: 'Zapier',             category: 'IA',            desc: 'Conecta Clain con miles de apps a través de Zaps automáticos.', domain: 'zapier.com',        connected: false, auth: 'oauth',  color: '#FF4A00' },
+  // ── CRM ────────────────────────────────────────────────────────────────────
+  {
+    id: 'salesforce', name: 'Salesforce', category: 'CRM',
+    desc: 'Sincroniza contactos, oportunidades y casos con Salesforce.',
+    domain: 'salesforce.com', connected: false, color: '#00A1E0', backendLive: true,
+    // OAuth popup → /api/integrations/salesforce/install
+    auth: 'oauth', connectRoute: '/api/integrations/salesforce/install',
+    permissions: ['Leer y escribir contactos, cuentas y oportunidades','Crear y actualizar casos de soporte (Salesforce Cases)','Registrar actividades y tareas desde conversaciones','Acceder a campos personalizados del objeto Contact'],
+    fields: [],
+  },
+  {
+    id: 'hubspot', name: 'HubSpot', category: 'CRM',
+    desc: 'Sincroniza contactos y deals de HubSpot con el inbox.',
+    domain: 'hubspot.com', connected: true, color: '#FF7A59', backendLive: true,
+    // OAuth popup → /api/integrations/hubspot/install
+    auth: 'oauth', connectRoute: '/api/integrations/hubspot/install',
+    permissions: ['Leer y escribir contactos, empresas y deals','Sincronizar pipelines de ventas y etapas de negocio','Crear notas y tareas vinculadas a contactos','Acceder al historial de actividad del contacto'],
+    fields: [],
+  },
+  {
+    id: 'zendesk', name: 'Zendesk', category: 'CRM',
+    desc: 'Importa tickets de Zendesk y gestiona todo desde Clain.',
+    domain: 'zendesk.com', connected: false, color: '#03363D', backendLive: true,
+    // OAuth popup → /api/integrations/zendesk/install?subdomain=<value>
+    auth: 'oauth', connectRoute: '/api/integrations/zendesk/install',
+    permissions: ['Leer y crear tickets de soporte','Actualizar estado, prioridad y asignatario de tickets','Acceder a datos del usuario y organización','Sincronizar comentarios entre Zendesk y Clain'],
+    fields: [
+      { key: 'subdomain', label: 'Subdominio de Zendesk', placeholder: 'mi-empresa', type: 'text', hint: 'Solo el prefijo — de mi-empresa.zendesk.com', required: true, queryParam: true },
+    ],
+  },
+  {
+    id: 'freshdesk', name: 'Freshdesk', category: 'CRM',
+    desc: 'Centraliza tickets de Freshdesk en la bandeja de Clain.',
+    domain: 'freshdesk.com', connected: false, color: '#2DC26B', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Leer y crear tickets de Freshdesk','Actualizar estado, prioridad y agente asignado','Acceder a datos de contacto y empresa del cliente','Ver el historial de conversaciones previas'],
+    fields: [
+      { key: 'subdomain', label: 'Subdominio de Freshdesk', placeholder: 'mi-empresa', type: 'text', hint: 'Solo el prefijo — de mi-empresa.freshdesk.com', required: true },
+      { key: 'api_key',   label: 'API Key',                 placeholder: 'Pega tu API key de Freshdesk…', type: 'password', hint: 'Profile Settings → Your API Key (esquina inferior izquierda en Freshdesk)', required: true },
+    ],
+  },
+  // ── Canales ─────────────────────────────────────────────────────────────────
+  {
+    id: 'whatsapp', name: 'WhatsApp Business', category: 'Canales',
+    desc: 'Recibe y responde mensajes de WhatsApp desde el inbox.',
+    domain: 'whatsapp.com', connected: true, color: '#25D366', backendLive: true,
+    // POST /api/integrations/whatsapp/connect  { phone_number_id, access_token, waba_id, app_secret, verify_token }
+    auth: 'apikey', connectRoute: '/api/integrations/whatsapp/connect',
+    permissions: ['Enviar y recibir mensajes desde tu número de negocio','Gestionar plantillas de mensajes aprobadas por Meta','Acceder al perfil de contacto del cliente en WhatsApp','Ver estado de entrega y lectura de mensajes'],
+    fields: [
+      { key: 'phone_number_id', label: 'Phone Number ID',              placeholder: '102938475610293',           type: 'text',     hint: 'Meta for Developers → Tu App → WhatsApp → Configuración del teléfono', required: true },
+      { key: 'waba_id',         label: 'WhatsApp Business Account ID', placeholder: '109283746150293',           type: 'text',     hint: 'Meta Business Manager → Cuentas de WhatsApp → ID de cuenta', required: true },
+      { key: 'access_token',    label: 'System User Access Token',     placeholder: 'EAAxxxxx…',                 type: 'password', hint: 'Meta Business Manager → Usuarios del sistema → Generar token (permanente)', required: true },
+      { key: 'app_secret',      label: 'App Secret',                   placeholder: 'Desde configuración App Meta', type: 'password', hint: 'Meta for Developers → Tu App → Configuración → App Secret', required: true },
+      { key: 'verify_token',    label: 'Verify Token (webhook)',        placeholder: 'mi-token-secreto-123',      type: 'text',     hint: 'Cadena que eliges tú — se usará para verificar el webhook de Meta', required: false },
+    ],
+  },
+  {
+    id: 'instagram', name: 'Instagram', category: 'Canales',
+    desc: 'Gestiona DMs de Instagram desde tu bandeja de entrada.',
+    domain: 'instagram.com', connected: true, color: '#E1306C', backendLive: true,
+    // POST /api/integrations/instagram/connect  { ig_user_id, page_id, page_access_token, app_secret }
+    auth: 'apikey', connectRoute: '/api/integrations/instagram/connect',
+    permissions: ['Leer y responder mensajes directos de la cuenta de negocio','Acceder al perfil público del remitente','Ver menciones y comentarios en publicaciones (solo lectura)','Recibir notificaciones de nuevos mensajes en tiempo real'],
+    fields: [
+      { key: 'ig_user_id',        label: 'Instagram Business Account ID', placeholder: '17841400123456789', type: 'text',     hint: 'Meta Business Suite → Configuración → Cuenta de Instagram → ID', required: true },
+      { key: 'page_id',           label: 'Facebook Page ID',              placeholder: '123456789012345',   type: 'text',     hint: 'Tu cuenta de Instagram de negocio debe estar vinculada a una Facebook Page. ID en Configuración → Información de la página', required: true },
+      { key: 'page_access_token', label: 'Page Access Token',             placeholder: 'EAAxxxxx…',         type: 'password', hint: 'Graph API Explorer → selecciona tu página → genera token con instagram_basic + instagram_manage_messages', required: true },
+      { key: 'app_secret',        label: 'App Secret',                    placeholder: 'Desde Meta App',    type: 'password', hint: 'Meta for Developers → Tu App → Configuración básica → App Secret', required: true },
+    ],
+  },
+  {
+    id: 'slack', name: 'Slack', category: 'Canales',
+    desc: 'Notificaciones de conversaciones y escalados en Slack.',
+    domain: 'slack.com', connected: true, color: '#4A154B', backendLive: true,
+    // OAuth popup → /api/integrations/slack/install
+    auth: 'oauth', connectRoute: '/api/integrations/slack/install',
+    permissions: ['Enviar notificaciones a canales y usuarios seleccionados','Crear canales de escalado automático por equipo','Leer mensajes en canales de Slack conectados','Acceder al directorio de miembros del workspace'],
+    fields: [],
+  },
+  {
+    id: 'twilio', name: 'SMS · Twilio', category: 'Canales',
+    desc: 'Envía y recibe SMS a través de Twilio en el workspace.',
+    domain: 'twilio.com', connected: false, color: '#F22F46', backendLive: true,
+    // POST /api/integrations/twilio/connect  { account_sid, auth_token, default_sms_from }
+    auth: 'apikey', connectRoute: '/api/integrations/twilio/connect',
+    permissions: ['Enviar y recibir SMS desde números Twilio asignados','Acceder al historial de mensajes de la cuenta','Gestionar números de teléfono y rutas de entrada','Ver estado de entrega de cada mensaje enviado'],
+    fields: [
+      { key: 'account_sid',      label: 'Account SID',            placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', type: 'text',     hint: 'Twilio Console → Dashboard → Account SID (empieza por AC)', required: true },
+      { key: 'auth_token',       label: 'Auth Token',             placeholder: '••••••••••••••••••••••••••••••••',   type: 'password', hint: 'Twilio Console → Dashboard → Auth Token (junto al Account SID)', required: true },
+      { key: 'default_sms_from', label: 'Número SMS por defecto', placeholder: '+34600000000',                       type: 'text',     hint: 'Twilio Console → Phone Numbers → Tu número comprado (formato E.164)', required: false },
+    ],
+  },
+  // ── Pagos ───────────────────────────────────────────────────────────────────
+  {
+    id: 'stripe', name: 'Stripe', category: 'Pagos',
+    desc: 'Consulta suscripciones, pagos y facturas desde cada caso.',
+    domain: 'stripe.com', connected: true, color: '#635BFF', backendLive: true,
+    // Two options: OAuth Connect → /api/integrations/stripe/install
+    //              Manual API key → POST /api/integrations/stripe/manual-connect
+    auth: 'stripe', connectRoute: '/api/integrations/stripe/install',
+    permissions: ['Leer datos de clientes, suscripciones y planes (solo lectura)','Consultar historial de pagos, facturas y reembolsos','Ver estado de disputas y chargebacks activos','Acceder a metadatos de productos y precios configurados'],
+    fields: [
+      { key: 'secret_key',     label: 'Secret Key',      placeholder: 'sk_live_•••••• o rk_live_••••••', type: 'password', hint: 'Stripe Dashboard → Developers → API keys → Secret key', required: true },
+      { key: 'webhook_secret', label: 'Webhook Secret',  placeholder: 'whsec_••••••••••••••••••••',        type: 'password', hint: 'Stripe Dashboard → Developers → Webhooks → Signing secret del endpoint apuntando a tu dominio', required: false },
+    ],
+  },
+  {
+    id: 'shopify', name: 'Shopify', category: 'Comercio',
+    desc: 'Accede a pedidos y clientes de Shopify en conversaciones.',
+    domain: 'shopify.com', connected: false, color: '#96BF48', backendLive: true,
+    // OAuth popup → /api/integrations/shopify/install?shop=<shop>
+    auth: 'oauth', connectRoute: '/api/integrations/shopify/install',
+    permissions: ['Leer pedidos, estado de envío y devoluciones','Acceder al catálogo de productos y variantes','Consultar datos del cliente y su historial de compras','Ver inventario y estado de stock por producto'],
+    fields: [
+      { key: 'shop', label: 'Dominio de tu tienda Shopify', placeholder: 'mi-tienda.myshopify.com', type: 'text', hint: 'El dominio .myshopify.com de tu tienda (Shopify Admin → Settings → Domains)', required: true, queryParam: true },
+    ],
+  },
+  // ── Productividad ───────────────────────────────────────────────────────────
+  {
+    id: 'jira', name: 'Jira', category: 'Productividad',
+    desc: 'Crea issues de Jira desde conversaciones y sincroniza estado.',
+    domain: 'atlassian.com', connected: false, color: '#0052CC', backendLive: true,
+    auth: 'oauth', connectRoute: '/api/integrations/jira/install',
+    permissions: ['Crear y actualizar issues en proyectos seleccionados','Leer estado, prioridad y asignatario de issues','Adjuntar conversaciones de Clain a issues existentes','Sincronizar cambios de estado entre Jira y Clain'],
+    fields: [],
+  },
+  {
+    id: 'linear', name: 'Linear', category: 'Productividad',
+    desc: 'Crea y enlaza issues de Linear desde el inbox de soporte.',
+    domain: 'linear.app', connected: true, color: '#5E6AD2', backendLive: true,
+    auth: 'oauth', connectRoute: '/api/integrations/linear/install',
+    permissions: ['Crear y actualizar issues en equipos seleccionados','Leer proyectos, ciclos y estados del workspace','Vincular conversaciones de soporte a issues de Linear','Sincronizar resolución de issues con cierre de conversación'],
+    fields: [],
+  },
+  {
+    id: 'notion', name: 'Notion', category: 'Productividad',
+    desc: 'Guarda notas de conversaciones y crea páginas de Notion.',
+    domain: 'notion.so', connected: false, color: '#000000', backendLive: true,
+    auth: 'oauth', connectRoute: '/api/integrations/notion/install',
+    permissions: ['Crear páginas en bases de datos seleccionadas','Leer y escribir bloques en páginas compartidas contigo','Guardar transcripciones y resúmenes de conversaciones','Acceder a bases de datos del workspace compartidas'],
+    fields: [],
+  },
+  {
+    id: 'github', name: 'GitHub', category: 'Productividad',
+    desc: 'Vincula issues de GitHub a conversaciones para bugs.',
+    domain: 'github.com', connected: false, color: '#24292E', backendLive: true,
+    auth: 'oauth', connectRoute: '/api/integrations/github/install',
+    permissions: ['Crear issues en repositorios seleccionados','Leer título, estado, etiquetas y comentarios de issues','Vincular conversaciones de soporte a issues existentes','Ver pull requests relacionados con issues abiertos'],
+    fields: [],
+  },
+  // ── Analítica ───────────────────────────────────────────────────────────────
+  {
+    id: 'ga', name: 'Google Analytics', category: 'Analítica',
+    desc: 'Mide el impacto del widget de chat en las conversiones.',
+    domain: 'google.com', connected: false, color: '#E37400', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Leer métricas de sesiones y eventos del sitio web','Acceder a datos de conversión vinculados al widget de chat','Ver informes de tráfico y fuentes de adquisición','Leer objetivos y embudos de conversión configurados'],
+    fields: [
+      { key: 'measurement_id', label: 'Measurement ID (GA4)', placeholder: 'G-XXXXXXXXXX', type: 'text', hint: 'Google Analytics → Admin → Data Streams → Tu stream → Measurement ID', required: true },
+    ],
+  },
+  {
+    id: 'delighted', name: 'Delighted', category: 'Analítica',
+    desc: 'Dispara encuestas CSAT y NPS basadas en conversaciones.',
+    domain: 'delighted.com', connected: false, color: '#FF6E6E', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Enviar encuestas CSAT y NPS al cerrar conversaciones','Leer respuestas y puntuaciones de encuestas enviadas','Acceder a datos de personas encuestadas','Crear y gestionar campañas de encuesta por segmento'],
+    fields: [
+      { key: 'api_key', label: 'API Key', placeholder: 'Pega tu API key de Delighted…', type: 'password', hint: 'Delighted → Settings → API → Your API Key', required: true },
+    ],
+  },
+  // ── IA ──────────────────────────────────────────────────────────────────────
+  {
+    id: 'openai', name: 'OpenAI', category: 'IA',
+    desc: 'Conecta GPT-4o para respuestas generativas en el workspace.',
+    domain: 'openai.com', connected: true, color: '#10A37F', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Llamar a modelos GPT-4o y GPT-4o mini vía API','Enviar el contexto de la conversación como prompt','Usar function calling para automatizaciones del agente','Procesar imágenes adjuntas en conversaciones (visión)'],
+    fields: [
+      { key: 'api_key', label: 'API Key', placeholder: 'sk-proj-••••••••••••••••••••••••••••••••', type: 'password', hint: 'platform.openai.com → API keys → Create new secret key', required: true },
+    ],
+  },
+  {
+    id: 'anthropic', name: 'Anthropic', category: 'IA',
+    desc: 'Usa Claude como modelo base para el agente AI de Clain.',
+    domain: 'anthropic.com', connected: true, color: '#D97706', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Llamar a Claude 3.5 Sonnet y Claude 3 Haiku vía API','Enviar historial de conversación como contexto del modelo','Ejecutar herramientas personalizadas del agente AI','Procesar documentos y archivos adjuntos en conversaciones'],
+    fields: [
+      { key: 'api_key', label: 'API Key', placeholder: 'sk-ant-api03-••••••••••••••••••••••••••••••', type: 'password', hint: 'console.anthropic.com → API Keys → Create Key', required: true },
+    ],
+  },
+  {
+    id: 'zapier', name: 'Zapier', category: 'IA',
+    desc: 'Conecta Clain con miles de apps a través de Zaps automáticos.',
+    domain: 'zapier.com', connected: false, color: '#FF4A00', backendLive: false,
+    auth: 'oauth', connectRoute: null,
+    permissions: ['Activar Zaps desde eventos de conversaciones (trigger)','Enviar datos de contacto, caso y etiquetas a Zapier','Recibir acciones de Zapier en el inbox de Clain','Acceder a la lista de Zaps activos en tu cuenta'],
+    fields: [],
+  },
 ];
 
 const STORE_CATS = ['Todas', 'CRM', 'Canales', 'Pagos', 'Comercio', 'Productividad', 'Analítica', 'IA'];
 
-// ── Connect Modal (LC design tokens) ─────────────────────────────────────────
-function ConnectModal({ integ, onClose }: { integ: typeof STORE_INTEGRATIONS[0]; onClose: () => void }) {
-  const LC = { text: '#111111', text60: 'rgba(17,17,17,0.6)', border: '#d3cec6', bg: '#faf9f6', bg2: '#f5f1ea', accent: '#0007cb' };
-  const [apiKey, setApiKey] = useState('');
-  const [step, setStep] = useState<'form' | 'done'>('form');
+// ── Logo sources: Figma MCP primary, Clearbit + Google S2 as fallbacks ─────────
+const INTEG_LOGO_OVERRIDES: Record<string, string> = {
+  salesforce:  IMG_APP_SALESFORCE,
+  instagram:   IMG_APP_INSTAGRAM,
+  ga:          IMG_APP_GA,
+  jira:        IMG_APP_JIRA,
+  whatsapp:    IMG_APP_WHATSAPP,
+  delighted:   IMG_APP_DELIGHTED,
+  stripe:      IMG_APP_STRIPE,
+};
+
+// Three-level logo with graceful degradation
+function AppLogoImg({ id, domain, name, color, size = 36 }: {
+  id: string; domain: string; name: string; color: string; size?: number;
+}) {
+  // source index: 0 = Figma MCP, 1 = Clearbit, 2 = Google S2 favicon, 3 = letter fallback
+  const sources = [
+    INTEG_LOGO_OVERRIDES[id] ?? null,
+    `https://logo.clearbit.com/${domain}`,
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+  ].filter(Boolean) as string[];
+
+  const [idx, setIdx] = useState(0);
+
+  if (idx >= sources.length) {
+    return (
+      <div style={{
+        width: size, height: size,
+        borderRadius: Math.round(size * 0.22),
+        background: color,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <span style={{ color: '#fff', fontWeight: 800, fontSize: Math.round(size * 0.5) }}>{name[0]}</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      key={sources[idx]}
+      src={sources[idx]}
+      alt={name}
+      style={{ width: size, height: size, objectFit: 'contain', borderRadius: Math.round(size * 0.15) }}
+      onError={() => setIdx(i => i + 1)}
+    />
+  );
+}
+
+// ── Connect Modal — real backend integration ─────────────────────────────────
+type IntegField = {
+  key: string; label: string; placeholder: string;
+  type: 'text' | 'password'; hint?: string;
+  required: boolean; queryParam?: boolean;
+};
+
+/** Open OAuth popup and resolve when the backend redirects back */
+function openOAuthPopup(url: string): Promise<'connected' | 'error' | 'closed'> {
+  return new Promise(resolve => {
+    const w = 520, h = 700;
+    const left = window.screenX + (window.outerWidth - w) / 2;
+    const top  = window.screenY + (window.outerHeight - h) / 2;
+    const popup = window.open(url, 'clain_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0`);
+    if (!popup) { resolve('error'); return; }
+
+    // Listen for postMessage (oauthConnectors.ts uses window.opener.postMessage)
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'oauth_success') { cleanup(); resolve('connected'); }
+      if (e.data?.type === 'oauth_error')   { cleanup(); resolve('error'); }
+    };
+    window.addEventListener('message', onMsg);
+
+    // Poll popup URL for the individual route pattern (?connected= / ?error=)
+    const poll = window.setInterval(() => {
+      if (!popup || popup.closed) { cleanup(); resolve('closed'); return; }
+      try {
+        const href = popup.location.href;
+        if (href.includes('connected=')) { cleanup(); popup.close(); resolve('connected'); }
+        else if (href.includes('error=')) { cleanup(); popup.close(); resolve('error'); }
+      } catch { /* cross-origin — still navigating to provider */ }
+    }, 500);
+
+    function cleanup() {
+      window.clearInterval(poll);
+      window.removeEventListener('message', onMsg);
+    }
+  });
+}
+
+function ConnectModal({ integ, onClose, onConnected }: {
+  integ: typeof STORE_INTEGRATIONS[0];
+  onClose: () => void;
+  onConnected: () => void;
+}) {
+  const [vals, setVals]           = useState<Record<string, string>>({});
+  const [step, setStep]           = useState<'form' | 'loading' | 'done' | 'error'>('form');
+  const [errorMsg, setErrorMsg]   = useState('');
+  const [errors, setErrors]       = useState<Record<string, boolean>>({});
+  // Stripe: show oauth-vs-manual tabs
+  const [stripeTab, setStripeTab] = useState<'oauth' | 'manual'>('oauth');
+
+  const isOAuth   = integ.auth === 'oauth' || integ.auth === 'stripe';
+  const isStripe  = integ.auth === 'stripe';
+
+  const setVal = (key: string, v: string) => {
+    setVals(p => ({ ...p, [key]: v }));
+    setErrors(p => ({ ...p, [key]: false }));
+  };
+
+  const requiredFields = (integ.fields as IntegField[]).filter(f => f.required && !f.queryParam);
+  const canSubmit = requiredFields.every(f => (vals[f.key] ?? '').trim() !== '');
+
+  // ── OAuth (popup) ──────────────────────────────────────────────────────────
+  const handleOAuth = async () => {
+    if (!integ.connectRoute) return;
+
+    // Build query params from fields marked queryParam:true
+    let url = integ.connectRoute as string;
+    const paramFields = (integ.fields as IntegField[]).filter(f => f.queryParam);
+    if (paramFields.length > 0) {
+      // Validate pre-params
+      const newErrs: Record<string, boolean> = {};
+      let ok = true;
+      paramFields.forEach(f => {
+        if (f.required && !(vals[f.key] ?? '').trim()) { newErrs[f.key] = true; ok = false; }
+      });
+      if (!ok) { setErrors(newErrs); return; }
+      const qs = paramFields.map(f => `${f.key}=${encodeURIComponent(vals[f.key] ?? '')}`).join('&');
+      url = `${url}?${qs}`;
+    }
+
+    setStep('loading');
+    const result = await openOAuthPopup(url);
+    if (result === 'connected') {
+      setStep('done');
+      onConnected();
+    } else if (result === 'closed') {
+      setStep('form'); // user closed popup manually
+    } else {
+      setErrorMsg('La autorización falló o fue cancelada. Inténtalo de nuevo.');
+      setStep('error');
+    }
+  };
+
+  // ── API Key POST /connect ──────────────────────────────────────────────────
+  const handleApiKey = async (overrideRoute?: string) => {
+    const route = overrideRoute ?? integ.connectRoute;
+
+    // Validate
+    const newErrs: Record<string, boolean> = {};
+    let ok = true;
+    (integ.fields as IntegField[]).forEach(f => {
+      if (f.required && !(vals[f.key] ?? '').trim()) { newErrs[f.key] = true; ok = false; }
+    });
+    if (!ok) { setErrors(newErrs); return; }
+
+    if (!route) {
+      // No backend yet — just simulate
+      setStep('done'); onConnected(); return;
+    }
+
+    setStep('loading');
+    try {
+      const res = await fetch(route, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(vals),
+      });
+      if (res.ok) {
+        setStep('done'); onConnected();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setErrorMsg(body.error ?? `Error ${res.status}`);
+        setStep('error');
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? 'Error de red. Verifica que el servidor está activo.');
+      setStep('error');
+    }
+  };
+
+  // ── Stripe manual-connect ──────────────────────────────────────────────────
+  const handleStripeManual = () => handleApiKey('/api/integrations/stripe/manual-connect');
+
+  const handleConnect = () => {
+    if (integ.auth === 'oauth') return handleOAuth();
+    if (integ.auth === 'stripe') {
+      return stripeTab === 'oauth' ? handleOAuth() : handleStripeManual();
+    }
+    return handleApiKey();
+  };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }} onClick={onClose}>
-      <div style={{ width: 480, background: LC.bg, border: `1px solid ${LC.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', position: 'relative' }} onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
-        <div style={{ padding: '28px 32px 20px', borderBottom: `1px solid ${LC.border}`, display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ width: 52, height: 52, background: LC.bg2, border: `1px solid ${LC.border}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-            <img
-              src={`https://logo.clearbit.com/${integ.domain}`}
-              alt={integ.name}
-              style={{ width: 36, height: 36, objectFit: 'contain' }}
-              onError={e => {
-                const el = e.target as HTMLImageElement;
-                el.style.display = 'none';
-                if (el.parentElement) {
-                  el.parentElement.style.background = integ.color;
-                  el.parentElement.innerHTML = `<span style="color:#fff;font-size:22px;font-weight:700">${integ.name[0]}</span>`;
-                }
-              }}
-            />
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+      onClick={step === 'loading' ? undefined : onClose}
+    >
+      <div
+        className="bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col"
+        style={{ width: 520, maxHeight: '90vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* ── Loading overlay ── */}
+        {step === 'loading' && (
+          <div className="flex flex-col items-center justify-center gap-4 py-16 px-10">
+            <div className="w-10 h-10 rounded-full border-4 border-[#e9eae6] border-t-[#1a1a1a] animate-spin" />
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">
+              {integ.auth === 'oauth' || (integ.auth === 'stripe' && stripeTab === 'oauth')
+                ? 'Esperando autorización en la ventana emergente…'
+                : 'Validando credenciales…'}
+            </p>
+            <p className="text-[12px] text-[#646462] text-center">
+              {integ.auth === 'oauth' || (integ.auth === 'stripe' && stripeTab === 'oauth')
+                ? `Completa el proceso en la ventana de ${integ.name} y vuelve aquí.`
+                : 'Conectando con el servidor de ' + integ.name + '…'}
+            </p>
           </div>
-          <div>
-            <p style={{ fontSize: 18, fontWeight: 800, color: LC.text }}>{integ.name}</p>
-            <p style={{ fontSize: 12, color: LC.text60, marginTop: 2 }}>{integ.category}</p>
-          </div>
-          <button onClick={onClose} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: LC.text60, fontSize: 20, lineHeight: 1, padding: 4 }}>✕</button>
-        </div>
+        )}
 
-        {/* Body */}
-        {step === 'form' ? (
-          <div style={{ padding: '24px 32px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <p style={{ fontSize: 13, color: LC.text60, lineHeight: '1.7' }}>{integ.desc}</p>
-
-            {/* Permissions / scopes */}
-            <div style={{ background: LC.bg2, border: `1px solid ${LC.border}`, padding: '16px 20px' }}>
-              <p style={{ fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Permisos solicitados</p>
-              {[
-                integ.auth === 'oauth' ? 'Leer y escribir datos de contactos' : 'Acceso de solo lectura a datos',
-                'Ver conversaciones y tickets',
-                integ.connected ? 'Revocar acceso en cualquier momento' : 'Sincronización en tiempo real',
-              ].map(p => (
-                <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: `1px solid ${LC.border}` }}>
-                  <span style={{ color: '#22c55e', fontWeight: 700, fontSize: 13 }}>✓</span>
-                  <span style={{ fontSize: 13, color: LC.text }}>{p}</span>
-                </div>
-              ))}
+        {/* ── Error ── */}
+        {step === 'error' && (
+          <div className="flex flex-col items-center gap-4 px-10 py-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#fee2e2] flex items-center justify-center mb-1">
+              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
+                <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#dc2626" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
             </div>
+            <p className="text-[18px] font-bold text-[#1a1a1a]">Error al conectar</p>
+            <p className="text-[13px] text-[#646462] leading-[1.6] max-w-[340px]">{errorMsg}</p>
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => setStep('form')} className="h-10 px-6 rounded-full bg-[#222] text-white text-[13px] font-semibold hover:bg-black">Reintentar</button>
+              <button onClick={onClose} className="h-10 px-6 rounded-full border border-[#e9eae6] text-[13px] font-semibold text-[#646462] hover:border-[#c8c9c4]">Cerrar</button>
+            </div>
+          </div>
+        )}
 
-            {/* Auth form */}
-            {integ.auth === 'apikey' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.08em' }}>API Key</label>
-                <input
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder={`Pega tu API key de ${integ.name}...`}
-                  style={{ padding: '10px 14px', border: `1px solid ${LC.border}`, background: '#fff', fontSize: 13, color: LC.text, outline: 'none', fontFamily: 'monospace', letterSpacing: '0.02em' }}
-                />
-                <p style={{ fontSize: 11, color: LC.text60 }}>
-                  Encriptada en reposo. Revoca el acceso en cualquier momento desde esta pantalla.
+        {/* ── Success ── */}
+        {step === 'done' && (
+          <div className="flex flex-col items-center gap-4 px-10 py-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#dcfce7] flex items-center justify-center mb-1">
+              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
+                <path d="M5 12l5 5L19 7" stroke="#15803d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <p className="text-[20px] font-bold text-[#1a1a1a]">{integ.name} conectado</p>
+            <p className="text-[13.5px] text-[#646462] leading-[1.65] max-w-[320px]">
+              La integración está activa. Los datos comenzarán a sincronizarse en los próximos minutos.
+            </p>
+            <button onClick={onClose} className="mt-3 h-10 px-8 rounded-full bg-[#222] text-white text-[13px] font-semibold hover:bg-black">Listo</button>
+          </div>
+        )}
+
+        {/* ── Form ── */}
+        {step === 'form' && (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-4 px-7 pt-6 pb-5 border-b border-[#e9eae6] flex-shrink-0">
+              <div className="w-[52px] h-[52px] rounded-[14px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center overflow-hidden flex-shrink-0">
+                <AppLogoImg id={integ.id} domain={integ.domain} name={integ.name} color={integ.color} size={36} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-[18px] font-bold text-[#1a1a1a] leading-tight">{integ.name}</p>
+                  {integ.backendLive ? (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#15803d] bg-[#dcfce7] px-2 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" /> Disponible
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-[#b45309] bg-[#fef3c7] px-2 py-0.5 rounded-full">Próximamente</span>
+                  )}
+                </div>
+                <p className="text-[12px] text-[#646462] mt-0.5">
+                  {integ.category} · {isOAuth ? 'OAuth 2.0' : 'API Key'}
                 </p>
               </div>
-            ) : (
-              <div style={{ background: LC.bg2, border: `1px solid ${LC.border}`, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 32, height: 32, background: integ.color, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{integ.name[0]}</span>
-                </div>
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: LC.text }}>Autenticación OAuth 2.0</p>
-                  <p style={{ fontSize: 11, color: LC.text60, marginTop: 2 }}>
-                    Se abrirá una ventana segura de {integ.name} para autorizar el acceso.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* CTA */}
-            <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
-              <button
-                onClick={() => setStep('done')}
-                style={{ height: 42, flex: 1, fontSize: 14, fontWeight: 700, background: LC.accent, color: '#fff', border: 'none', cursor: 'pointer' }}
-              >
-                {integ.auth === 'oauth' ? `Conectar con ${integ.name}` : 'Guardar y conectar'}
+              <button onClick={onClose} className="w-8 h-8 rounded-full bg-[#f3f3f1] hover:bg-[#e9e9e7] flex items-center justify-center flex-shrink-0 transition-colors">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none">
+                  <path d="M3 3l10 10M13 3L3 13" stroke="#646462" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
               </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <div className="px-7 py-5 flex flex-col gap-5">
+                <p className="text-[13.5px] text-[#646462] leading-[1.65]">{integ.desc}</p>
+
+                {/* Permissions */}
+                <div className="bg-[#f8f8f7] rounded-[12px] p-4">
+                  <p className="text-[11px] font-semibold text-[#646462] uppercase tracking-wider mb-3">Acceso que se concede</p>
+                  <div className="flex flex-col gap-2">
+                    {(integ.permissions as string[]).map(p => (
+                      <div key={p} className="flex items-start gap-2.5">
+                        <div className="w-4 h-4 rounded-full bg-[#dcfce7] flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <svg viewBox="0 0 10 10" className="w-2.5 h-2.5" fill="none">
+                            <path d="M2 5l2 2 4-4" stroke="#15803d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                        <span className="text-[13px] text-[#1a1a1a] leading-[1.45]">{p}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Stripe: toggle OAuth vs manual */}
+                {isStripe && (
+                  <div className="flex gap-1 border-b border-[#e9eae6]">
+                    {(['oauth', 'manual'] as const).map(t => (
+                      <button key={t} onClick={() => setStripeTab(t)}
+                        className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${stripeTab === t ? 'border-[#1a1a1a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+                        {t === 'oauth' ? 'Stripe Connect (recomendado)' : 'API Key manual'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Fields / OAuth explanation */}
+                {(integ.auth === 'apikey' || (isStripe && stripeTab === 'manual')) ? (
+                  // API key fields
+                  <div className="flex flex-col gap-4">
+                    {(integ.auth === 'apikey' || (isStripe && stripeTab === 'manual')) && (
+                      <p className="text-[11px] font-semibold text-[#646462] uppercase tracking-wider -mb-1">Credenciales de acceso</p>
+                    )}
+                    {(integ.fields as IntegField[])
+                      .filter(f => !f.queryParam)
+                      .map(f => (
+                      <div key={f.key} className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[13px] font-semibold text-[#1a1a1a]">
+                            {f.label}{f.required && <span className="text-[#e53e3e] ml-0.5">*</span>}
+                          </label>
+                          {!f.required && <span className="text-[11px] text-[#646462]">Opcional</span>}
+                        </div>
+                        <input
+                          type={f.type === 'password' ? 'password' : 'text'}
+                          value={vals[f.key] ?? ''}
+                          onChange={e => setVal(f.key, e.target.value)}
+                          placeholder={f.placeholder}
+                          className={`w-full border rounded-[10px] px-3.5 py-2.5 text-[13px] focus:outline-none bg-[#fafaf9] ${
+                            errors[f.key] ? 'border-[#e53e3e]' : 'border-[#e9eae6] focus:border-[#222]'
+                          } ${f.type === 'password' ? 'font-mono' : ''}`}
+                        />
+                        {f.hint && <p className="text-[11.5px] text-[#646462] leading-[1.5]"><span className="font-semibold">Dónde encontrarlo: </span>{f.hint}</p>}
+                        {errors[f.key] && <p className="text-[11.5px] text-[#e53e3e]">Este campo es obligatorio</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  // OAuth explanation + pre-params if needed
+                  <div className="flex flex-col gap-4">
+                    {/* Pre-OAuth query-param inputs (e.g. Zendesk subdomain, Shopify shop) */}
+                    {(integ.fields as IntegField[]).filter(f => f.queryParam).map(f => (
+                      <div key={f.key} className="flex flex-col gap-1.5">
+                        <label className="text-[13px] font-semibold text-[#1a1a1a]">
+                          {f.label}{f.required && <span className="text-[#e53e3e] ml-0.5">*</span>}
+                        </label>
+                        <input
+                          type="text"
+                          value={vals[f.key] ?? ''}
+                          onChange={e => setVal(f.key, e.target.value)}
+                          placeholder={f.placeholder}
+                          className={`w-full border rounded-[10px] px-3.5 py-2.5 text-[13px] focus:outline-none bg-[#fafaf9] ${
+                            errors[f.key] ? 'border-[#e53e3e]' : 'border-[#e9eae6] focus:border-[#222]'
+                          }`}
+                        />
+                        {f.hint && <p className="text-[11.5px] text-[#646462]"><span className="font-semibold">Dónde: </span>{f.hint}</p>}
+                        {errors[f.key] && <p className="text-[11.5px] text-[#e53e3e]">Este campo es obligatorio</p>}
+                      </div>
+                    ))}
+                    {/* OAuth card */}
+                    <div className="flex items-center gap-3 bg-[#f8f8f7] rounded-[12px] px-4 py-3.5">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-[14px]" style={{ background: integ.color }}>
+                        {integ.name[0]}
+                      </div>
+                      <div>
+                        <p className="text-[13px] font-semibold text-[#1a1a1a]">
+                          {isStripe && stripeTab === 'oauth' ? 'Stripe Connect OAuth' : 'Autenticación OAuth 2.0'}
+                        </p>
+                        <p className="text-[12px] text-[#646462] mt-0.5">
+                          Se abrirá una ventana segura de {integ.name} para autorizar el acceso. No almacenamos tu contraseña.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-7 pb-6 pt-4 border-t border-[#e9eae6] flex gap-2.5 flex-shrink-0">
               <button
-                onClick={onClose}
-                style={{ height: 42, padding: '0 20px', fontSize: 14, fontWeight: 600, background: 'transparent', color: LC.text60, border: `1px solid ${LC.border}`, cursor: 'pointer' }}
+                onClick={handleConnect}
+                className="flex-1 h-10 rounded-full bg-[#222] text-white text-[13px] font-semibold hover:bg-black transition-colors"
               >
+                {integ.auth === 'oauth' || (isStripe && stripeTab === 'oauth')
+                  ? `Conectar con ${integ.name}`
+                  : 'Guardar y conectar'}
+              </button>
+              <button onClick={onClose} className="h-10 px-5 rounded-full border border-[#e9eae6] text-[13px] font-semibold text-[#646462] hover:border-[#c8c9c4] hover:text-[#1a1a1a] transition-colors">
                 Cancelar
               </button>
             </div>
-          </div>
-        ) : (
-          /* Success state */
-          <div style={{ padding: '40px 32px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center' }}>
-            <div style={{ width: 56, height: 56, background: '#dcfce7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ color: '#15803d', fontSize: 26, fontWeight: 700 }}>✓</span>
-            </div>
-            <p style={{ fontSize: 18, fontWeight: 800, color: LC.text }}>{integ.name} conectado</p>
-            <p style={{ fontSize: 13, color: LC.text60, lineHeight: '1.7', maxWidth: 340 }}>
-              La integración está activa. Los datos se sincronizarán automáticamente en los próximos minutos.
-            </p>
-            <button
-              onClick={onClose}
-              style={{ marginTop: 8, height: 42, padding: '0 32px', fontSize: 14, fontWeight: 700, background: LC.text, color: '#fff', border: 'none', cursor: 'pointer' }}
-            >
-              Listo
-            </button>
-          </div>
+          </>
         )}
       </div>
     </div>
   );
 }
 
-// ── AppLogoImg — Clearbit logo with colored-letter fallback ───────────────────
-function AppLogoImg({ domain, name, color, size = 36 }: { domain: string; name: string; color: string; size?: number }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <div style={{ width: size, height: size, borderRadius: 6, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: Math.round(size * 0.55) }}>{name[0]}</span>
-      </div>
-    );
-  }
-  return (
-    <img
-      src={`https://logo.clearbit.com/${domain}`}
-      alt={name}
-      style={{ width: size, height: size, objectFit: 'contain' }}
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
 function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [search, setSearch]           = useState('');
-  const [category, setCategory]       = useState('Todas');
-  const [connecting, setConnecting]   = useState<typeof STORE_INTEGRATIONS[0] | null>(null);
-  const [connected, setConnected]     = useState<Set<string>>(
+  const [search, setSearch]         = useState('');
+  const [category, setCategory]     = useState('Todas');
+  const [connecting, setConnecting] = useState<typeof STORE_INTEGRATIONS[0] | null>(null);
+  const [connected, setConnected]   = useState<Set<string>>(
     () => new Set(STORE_INTEGRATIONS.filter(i => i.connected).map(i => i.id))
   );
 
@@ -8353,13 +8780,6 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
     const matchQ   = !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.desc.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchQ;
   });
-
-  const handleClose = (connected_?: boolean) => {
-    if (connecting && connected_) {
-      setConnected(prev => new Set([...prev, connecting.id]));
-    }
-    setConnecting(null);
-  };
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
@@ -8384,7 +8804,7 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar integración..."
-                className="border border-[#e9eae6] rounded-full pl-8 pr-3 py-[6px] text-[13px] w-52 focus:outline-none focus:border-[#0007cb]"
+                className="border border-[#e9eae6] rounded-full pl-8 pr-3 py-[6px] text-[13px] w-52 focus:outline-none focus:border-[#222]"
               />
             </div>
           </div>
@@ -8394,10 +8814,10 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
             <div className="flex gap-2 flex-wrap mb-3">
               {STORE_CATS.map(cat => (
                 <button key={cat} onClick={() => setCategory(cat)}
-                  className={`px-3 py-1.5 text-[12px] font-semibold border transition-colors ${
+                  className={`px-3.5 py-1.5 text-[12px] font-semibold rounded-full border transition-colors ${
                     category === cat
-                      ? 'bg-[#111] text-white border-[#111]'
-                      : 'bg-white text-[#646462] border-[#e9eae6] hover:border-[#111] hover:text-[#111]'
+                      ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]'
+                      : 'bg-white text-[#646462] border-[#e9eae6] hover:border-[#1a1a1a] hover:text-[#1a1a1a]'
                   }`}>
                   {cat}
                 </button>
@@ -8405,8 +8825,9 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
             </div>
             <div className="flex items-center gap-4">
               <span className="text-[12px] text-[#646462]">{filtered.length} integraciones</span>
-              <span className="text-[12px] font-semibold" style={{ color: '#15803d' }}>
-                ● {filtered.filter(i => connected.has(i.id)).length} conectadas
+              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-[#15803d]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" />
+                {filtered.filter(i => connected.has(i.id)).length} conectadas
               </span>
             </div>
           </div>
@@ -8417,40 +8838,40 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
               {filtered.map(integ => {
                 const isConn = connected.has(integ.id);
                 return (
-                  <div key={integ.id}
-                    className="bg-white border border-[#e9eae6] p-5 flex flex-col gap-3 hover:border-[#c8c9c4] hover:shadow-sm transition-all cursor-pointer"
+                  <div
+                    key={integ.id}
+                    className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex flex-col gap-3 hover:border-[#c8c9c4] hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer"
                   >
-                    {/* Logo row */}
+                    {/* Logo + badge */}
                     <div className="flex items-start justify-between">
-                      <div className="w-12 h-12 rounded-[8px] border border-[#f0f0ee] flex items-center justify-center bg-[#fafaf9] overflow-hidden flex-shrink-0">
-                        <AppLogoImg domain={integ.domain} name={integ.name} color={integ.color} size={34} />
+                      <div className="w-[48px] h-[48px] rounded-[12px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <AppLogoImg id={integ.id} domain={integ.domain} name={integ.name} color={integ.color} size={32} />
                       </div>
                       {isConn && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
-                          CONECTADO
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-[#15803d] bg-[#dcfce7] px-2 py-0.5 rounded-full">
+                          <span className="w-1 h-1 rounded-full bg-[#22c55e] inline-block" />
+                          Conectado
                         </span>
                       )}
                     </div>
 
-                    {/* Info */}
-                    <div>
+                    {/* Name + desc */}
+                    <div className="flex-1">
                       <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">{integ.name}</p>
                       <p className="text-[12px] text-[#646462] leading-[1.55] line-clamp-2">{integ.desc}</p>
                     </div>
 
                     {/* CTA */}
-                    <div className="mt-auto pt-1">
-                      <button
-                        onClick={() => setConnecting(integ)}
-                        className={`w-full h-[34px] text-[12px] font-semibold border transition-colors ${
-                          isConn
-                            ? 'border-[#e9eae6] text-[#646462] hover:border-[#111] hover:text-[#111]'
-                            : 'bg-[#0007cb] border-[#0007cb] text-white hover:bg-[#0005a0]'
-                        }`}
-                      >
-                        {isConn ? 'Configurar' : 'Conectar'}
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => setConnecting(integ)}
+                      className={`w-full h-[34px] rounded-full text-[12px] font-semibold border transition-colors ${
+                        isConn
+                          ? 'border-[#e9eae6] text-[#646462] hover:border-[#1a1a1a] hover:text-[#1a1a1a] bg-white'
+                          : 'bg-[#1a1a1a] border-[#1a1a1a] text-white hover:bg-black'
+                      }`}
+                    >
+                      {isConn ? 'Configurar' : 'Conectar'}
+                    </button>
                   </div>
                 );
               })}
@@ -8463,7 +8884,8 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
       {connecting && (
         <ConnectModal
           integ={connecting}
-          onClose={() => handleClose(true)}
+          onClose={() => setConnecting(null)}
+          onConnected={() => setConnected(prev => new Set([...prev, connecting!.id]))}
         />
       )}
     </div>
@@ -9325,6 +9747,9 @@ const FAQS = [
 
 function BillingView({ view: _view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [isAnnual, setIsAnnual] = useState(true);
+  // Launch-price toggle — when active, shows the 73%-off launch pricing
+  // (currently the same as priceAnnual; expires 31 dic 2026).
+  const [isLaunch, setIsLaunch] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [activeTestimonial, setActiveTestimonial] = useState(0);
   const { data: sub } = useApi(() => billingApi.subscription('org_default'), [], null);
@@ -9356,17 +9781,30 @@ function BillingView({ view: _view, onNavigate }: { view: View; onNavigate: (v: 
             </button>
           </div>
 
-          {/* Toggle + promotion */}
-          <div className="mt-10 flex items-center gap-4 flex-wrap">
+          {/* Toggle + launch-price tab */}
+          <div className="mt-10 flex items-center gap-3 flex-wrap">
             <div className="inline-flex items-center gap-1.5 p-1.5" style={{ border: `1px solid ${LC.border}`, background: '#fff' }}>
-              <button onClick={() => setIsAnnual(true)} className="px-3 py-1.5 text-[13px] rounded-[4px] transition-all" style={{ background: isAnnual ? LC.bg2 : 'transparent', color: LC.text, fontWeight: isAnnual ? 600 : 400 }}>Facturación anual</button>
-              <button onClick={() => setIsAnnual(false)} className="px-3 py-1.5 text-[13px] rounded-[4px] transition-all" style={{ background: !isAnnual ? LC.bg2 : 'transparent', color: LC.text, fontWeight: !isAnnual ? 600 : 400 }}>Facturación mensual</button>
+              <button onClick={() => { setIsAnnual(true); setIsLaunch(false); }} className="px-3 py-1.5 text-[13px] rounded-[4px] transition-all" style={{ background: isAnnual && !isLaunch ? LC.bg2 : 'transparent', color: LC.text, fontWeight: isAnnual && !isLaunch ? 600 : 400 }}>Facturación anual</button>
+              <button onClick={() => { setIsAnnual(false); setIsLaunch(false); }} className="px-3 py-1.5 text-[13px] rounded-[4px] transition-all" style={{ background: !isAnnual && !isLaunch ? LC.bg2 : 'transparent', color: LC.text, fontWeight: !isAnnual && !isLaunch ? 600 : 400 }}>Facturación mensual</button>
             </div>
-            <div className="inline-flex items-center gap-2.5 px-4 py-2.5" style={{ border: `1px solid ${LC.border}`, background: '#fff' }}>
-              <span className="text-[11px] uppercase tracking-[0.6px] font-bold" style={{ color: LC.text }}>Promoción especial</span>
-              <span className="size-[3px] rounded-full" style={{ background: LC.text }} />
-              <span className="text-[13px] font-medium" style={{ color: LC.text }}>Ahorra hasta un 73% en cada plan</span>
-            </div>
+
+            {/* Square launch-price tab — next to the monthly/annual toggle */}
+            <button
+              onClick={() => setIsLaunch(v => !v)}
+              className="inline-flex items-center gap-2.5 px-4 py-2.5 transition-all"
+              style={{
+                border: `1px solid ${isLaunch ? LC.accent : LC.border}`,
+                background: isLaunch ? LC.accent : '#fff',
+                color: isLaunch ? '#fff' : LC.text,
+                cursor: 'pointer',
+              }}
+            >
+              <span className="text-[11px] uppercase tracking-[0.6px] font-bold">Precio lanzamiento</span>
+              <span className="size-[3px] rounded-full" style={{ background: isLaunch ? '#fff' : LC.text }} />
+              <span className="text-[13px] font-medium">Hasta 31 dic 2026</span>
+              <span className="size-[3px] rounded-full" style={{ background: isLaunch ? '#fff' : LC.text }} />
+              <span className="text-[13px] font-bold">Ahorra 73%</span>
+            </button>
           </div>
 
           {/* Plans row */}
@@ -9378,7 +9816,8 @@ function BillingView({ view: _view, onNavigate }: { view: View; onNavigate: (v: 
               </div>
               <div className="flex flex-1">
                 {PLANS.map((plan, i) => {
-                  const price = isAnnual ? plan.priceAnnual : plan.priceMonthly;
+                  // Launch pricing shows the same 73%-off annual rate regardless of billing toggle
+                  const price = isLaunch ? plan.priceAnnual : isAnnual ? plan.priceAnnual : plan.priceMonthly;
                   const isCurrent = currentPlanId === plan.id;
                   return (
                     <div key={plan.id} className="flex flex-col flex-1 p-6" style={{ borderLeft: i > 0 ? `1px solid ${LC.border}` : 'none' }}>
@@ -23667,7 +24106,8 @@ function PrototypeApp() {
       case 'workspaceMultilingual': return <WorkspaceMultilingualView view={view} onNavigate={setView} />;
       case 'workspaceHours':        return <HorarioAtencionView view={view} onNavigate={setView} />;
       case 'workspaceBrands':       return <MarcasView view={view} onNavigate={setView} />;
-      case 'billing':        return <BillingView view={view} onNavigate={setView} />;
+      case 'billing':            return <BillingView view={view} onNavigate={setView} />;
+      case 'featuresComparison': return <FeaturesComparisonView view={view} onNavigate={setView} />;
       case 'messenger':      return <MessengerView view={view} onNavigate={setView} />;
       case 'email':          return <EmailView view={view} onNavigate={setView} />;
       case 'phone':          return <PhoneView view={view} onNavigate={setView} />;
