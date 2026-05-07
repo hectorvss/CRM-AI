@@ -5668,7 +5668,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
           sectionActive ? 'font-semibold text-[#1a1a1a] bg-[#ededea]/60' : 'font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]'
         }`}
       >
-        <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#646462]">{icon}</div>
+        <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{icon}</div>
         <span className="flex-1">{label}</span>
         <Chev on={openGroups[groupKey]} />
       </button>
@@ -5690,7 +5690,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
               : 'font-medium text-[#9a9a98] cursor-default'
         }`}
       >
-        <div className="w-[15px] h-[15px] flex items-center justify-center flex-shrink-0 text-[#646462]">{icon}</div>
+        <div className="w-[15px] h-[15px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{icon}</div>
         <span className="flex-1">{label}</span>
         {warn && <span className="text-[#f59e0b] text-[11px] leading-none">⚠</span>}
       </button>
@@ -5762,7 +5762,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
       <div className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-0.5">
         {/* Inicio */}
         <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#646462]">{IcoHome}</div>
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoHome}</div>
           <span className="flex-1">Inicio</span>
         </button>
 
@@ -5853,12 +5853,12 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
 
         {/* Standalone bottom items */}
         <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#646462]">{IcoHelpGrp}</div>
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoHelpGrp}</div>
           <span className="flex-1">Centro de ayuda</span>
           <Chev on={false} />
         </button>
         <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#646462]">{IcoOutboundGrp}</div>
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoOutboundGrp}</div>
           <span className="flex-1">Canales salientes</span>
           <Chev on={false} />
         </button>
@@ -17504,17 +17504,23 @@ function FinAtributoEditor({
   onAction: (msg: string, type?: 'success' | 'error') => void;
   onToggleEnable: (next: boolean) => void;
 }) {
+  // Treat as "new" when the resource has no name yet AND no values/conditions —
+  // this matches the startNewBlank() initialization in FinAtributosContent.
+  const isNew = !initial.name && initial.values.length === 0 && initial.conditions.length === 0;
+  void onDelete;
   const [name, setName] = useState(initial.name);
-  const [description, setDescription] = useState(initial.description);
+  const [description, setDescription] = useState(initial.description.slice(0, 255));
   const [audience, setAudience] = useState<FinAtributo['audience']>(initial.audience);
   const [reDetectOnClose, setReDetectOnClose] = useState(initial.reDetectOnClose);
   const [values, setValues] = useState<FinAtributoValue[]>(initial.values);
   const [conditions, setConditions] = useState<FinAtributoCondition[]>(initial.conditions);
   const [enabled, setEnabled] = useState(initial.enabled);
   const [visibility, setVisibility] = useState<'all' | 'admins' | 'me'>('all');
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [tab, setTab] = useState<'general' | 'values' | 'conditions'>('general');
   const [valSearch, setValSearch] = useState('');
+  const [valueEditor, setValueEditor] = useState<null | { mode: 'create' } | { mode: 'edit'; id: string }>(null);
+  const [valueName, setValueName] = useState('');
+  const [valueDescription, setValueDescription] = useState('');
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -17547,11 +17553,30 @@ function FinAtributoEditor({
     setEnabled(next);
     onToggleEnable(next);
   }
-  function addValue() {
-    setValues(v => [...v, { id: `val_${Date.now()}_${Math.floor(Math.random()*1000)}`, name: '', description: '' }]);
+  function openValueCreate() {
+    setValueName('');
+    setValueDescription('');
+    setValueEditor({ mode: 'create' });
   }
-  function updateValue(id: string, patch: Partial<FinAtributoValue>) {
-    setValues(v => v.map(it => it.id === id ? { ...it, ...patch } : it));
+  function openValueEdit(id: string) {
+    const v = values.find(x => x.id === id);
+    if (!v) return;
+    setValueName(v.name);
+    setValueDescription(v.description);
+    setValueEditor({ mode: 'edit', id });
+  }
+  function saveValueEditor() {
+    if (!valueEditor) return;
+    if (valueEditor.mode === 'create') {
+      setValues(v => [...v, {
+        id: `val_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+        name: valueName,
+        description: valueDescription,
+      }]);
+    } else {
+      setValues(v => v.map(it => it.id === valueEditor.id ? { ...it, name: valueName, description: valueDescription } : it));
+    }
+    setValueEditor(null);
   }
   function removeValue(id: string) {
     setValues(v => v.filter(it => it.id !== id));
@@ -17584,63 +17609,111 @@ function FinAtributoEditor({
     if (!q) return values;
     return values.filter(v => v.name.toLowerCase().includes(q) || v.description.toLowerCase().includes(q));
   }, [values, valSearch]);
-  const remaining = Math.max(0, 500 - description.length);
+  const remaining = Math.max(0, 255 - description.length);
+  const valueDescRemaining = Math.max(0, 2500 - valueDescription.length);
+  const valueNameRemaining = Math.max(0, 400 - valueName.length);
   const otherAttributes = allAttributes.filter(a => a.id !== initial.id);
+
+  const titleText = isNew ? 'Nuevo atributo' : 'Editar atributo';
 
   return (
     <div className="fixed inset-0 z-50" onClick={onClose}>
       <div
-        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
-          isFullscreen ? 'w-full max-w-none border-l-0 rounded-none' : 'w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]'
-        }`}
+        className="absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Editar atributo</h2>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11.5px] ${enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
-              {enabled ? 'Habilitado' : 'Deshabilitado'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="h-8 px-3 rounded-full bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-              Prácticas recomendadas
+        {valueEditor ? (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <button
+              onClick={() => setValueEditor(null)}
+              title="Volver"
+              className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
-            <button onClick={onDelete} title="Eliminar" className="w-8 h-8 rounded-md hover:bg-[#fef2f2] flex items-center justify-center text-[#b91c1c]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-            {enabled ? (
-              <button
-                onClick={handleToggleEnabled}
-                className="h-8 px-3 rounded-full bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c] text-[13px] font-semibold hover:bg-[#fee2e2] flex items-center gap-1.5"
-              >
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
-                Pausar
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 text-[13px]">
+              <span className="text-[#646462]">{titleText}</span>
+              <span className="text-[#a4a4a2]">›</span>
+              <span className="font-semibold text-[#1a1a1a] truncate">
+                {valueEditor.mode === 'create' ? 'Nuevo valor' : (valueName || 'Editar valor')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={saveValueEditor} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
               </button>
-            ) : (
-              <button
-                onClick={handleToggleEnabled}
-                className="h-8 px-3 rounded-full bg-[#dcfce7] border border-[#bbf7d0] text-[#15803d] text-[13px] font-semibold hover:bg-[#bbf7d0] flex items-center gap-1.5"
-              >
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
-                Habilitar
-              </button>
-            )}
-            <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
-            <span className="w-px h-6 bg-[#e9eae6]" />
-            <button onClick={() => setIsFullscreen(v => !v)} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
-              {isFullscreen
-                ? <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                : <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            </button>
-            <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-            </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">{titleText}</h2>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                {enabled ? 'Habilitado' : 'Deshabilitado'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] flex items-center gap-2 hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                Prácticas recomendadas
+              </button>
+              {enabled ? (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#b91c1c] hover:bg-[#991b1b] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+                  Pausar
+                </button>
+              ) : (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#15803d] hover:bg-[#166534] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                  Habilitar
+                </button>
+              )}
+              <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
 
+        {/* Value editor sub-view (replaces tabs + body when active) */}
+        {valueEditor ? (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+            <div className="max-w-[760px] mx-auto w-full px-12 py-8 flex flex-col gap-4">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Elige un nombre corto y claro que indique a Fin exactamente lo que representa este valor.</p>
+                <input
+                  value={valueName}
+                  onChange={e => { if (e.target.value.length <= 400) setValueName(e.target.value); }}
+                  placeholder="Ingresa un nombre, por ejemplo, Negativo"
+                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="mt-1.5 text-[11.5px] text-[#646462]">{valueNameRemaining} caracteres restantes</p>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describe qué representa este valor y cuándo Fin debería elegirlo. Incluye los temas de conversación a los que se aplica, las palabras clave comunes de los clientes o preguntas, y cuándo debe elegirse en lugar de otros valores en el atributo.</p>
+                <textarea
+                  value={valueDescription}
+                  onChange={e => { if (e.target.value.length <= 2500) setValueDescription(e.target.value); }}
+                  placeholder={'Ingrese una descripción, por ejemplo,\n\nEste valor cubre todas las conversaciones en las que un cliente expresa un sentimiento negativo. Ejemplos comunes incluyen:\n• Opinión negativa sobre un producto\n• Frustración con el servicio a clientes recibido\n\nPalabras clave: infeliz, frustrado, reembolso, devolución, decepcionado'}
+                  className="w-full min-h-[420px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="mt-1.5 text-[11.5px] text-[#646462]">{valueDescRemaining.toLocaleString('es-ES')} caracteres restantes</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* Tab strip */}
         <div className="flex-shrink-0 h-11 border-b border-[#e9eae6] px-5 flex items-end gap-2">
           {([
@@ -17661,150 +17734,182 @@ function FinAtributoEditor({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
           {tab === 'general' && (
-            <div className="max-w-[760px] mx-auto w-full px-8 py-8 flex flex-col gap-6">
-              <div>
-                <label className="block text-[12.5px] font-semibold text-[#1a1a1a] mb-1.5">Nombre</label>
+            <div className="max-w-[760px] mx-auto w-full px-8 py-8 flex flex-col gap-4">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Elige un nombre claro y descriptivo que indique a Fin el propósito de este atributo. Por ejemplo, si es para detectar la confianza del cliente, llámalo "Confianza".</p>
                 <input
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="Sentimiento, Urgencia…"
-                  className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13.5px] focus:outline-none focus:border-[#1a1a1a]"
+                  placeholder="Introduzca un nombre..."
+                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
                 />
               </div>
-              <div>
-                <label className="block text-[12.5px] font-semibold text-[#1a1a1a] mb-1.5">Descripción</label>
-                <div className="relative">
-                  <textarea
-                    value={description}
-                    maxLength={500}
-                    onChange={e => setDescription(e.target.value)}
-                    placeholder="Describe qué representa este atributo y cuándo Fin debe detectarlo."
-                    className="w-full min-h-[100px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13.5px] resize-none focus:outline-none focus:border-[#1a1a1a]"
-                  />
-                  <p className="absolute bottom-2 right-3 text-[11.5px] text-[#646462] pointer-events-none">{remaining} caracteres restantes</p>
-                </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describa brevemente el propósito de este atributo y cómo debe usarlo Fin.</p>
+                <textarea
+                  value={description}
+                  onChange={e => { if (e.target.value.length <= 255) setDescription(e.target.value); }}
+                  placeholder={'Ingrese una descripción, por ejemplo,\n\nEste atributo capta el tono emocional general que expresa un cliente en una conversación.'}
+                  className="w-full min-h-[140px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="mt-1.5 text-[11.5px] text-[#646462]">{remaining} caracteres restantes</p>
               </div>
-              <div>
-                <div className="flex items-center gap-1.5 mb-3">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <div className="flex items-center gap-1.5 mb-4">
                   <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Ajustes de Fin</h3>
-                  <span className="w-4 h-4 rounded-full border border-[#e9eae6] flex items-center justify-center text-[10px] text-[#646462]">?</span>
+                  <span className="w-4 h-4 rounded-full bg-[#1a1a1a] text-white text-[10px] flex items-center justify-center cursor-help" title="Configuración usada por Fin al detectar este atributo">?</span>
                 </div>
-                <div className="bg-white border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
-                  <div className="px-4 py-3 flex items-center justify-between gap-4">
-                    <span className="text-[13.5px] text-[#1a1a1a]">Audiencia</span>
-                    <Dropdown
-                      value={audience}
-                      items={FIN_AUDIENCE_ITEMS}
-                      onChange={v => setAudience(v as FinAtributo['audience'])}
-                    />
+                <div className="flex items-start justify-between gap-4 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Audiencia</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Elige para qué audiencias debe Fin detectar este atributo</p>
                   </div>
-                  <div className="px-4 py-3 flex items-center justify-between gap-4">
-                    <span className="text-[13.5px] text-[#1a1a1a]">Reglas de escalamiento</span>
-                    <a href="#" className="text-[13px] font-medium text-[#1a1a1a] hover:underline flex items-center gap-1">
+                  <Dropdown
+                    value={audience}
+                    items={FIN_AUDIENCE_ITEMS}
+                    onChange={v => setAudience(v as FinAtributo['audience'])}
+                  />
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2 border-t border-[#f1f1ee] mt-2 pt-3 relative">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Reglas de escalamiento</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Usa este atributo para activar el escalamiento</p>
+                  </div>
+                  {!isNew ? (
+                    <a href="#" className="text-[13px] font-medium text-[#1a1a1a] hover:underline flex items-center gap-1 whitespace-nowrap">
                       {initial.escalationRules} reglas
                       <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M5 4l6 4-6 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </a>
+                  ) : (
+                    <span className="inline-flex items-center text-[12px] bg-[#1a1a1a]/90 text-white px-2.5 py-1 rounded-md whitespace-nowrap">El atributo debe ser guardado</span>
+                  )}
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2 border-t border-[#f1f1ee] mt-2 pt-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Volver a detectar al cerrar</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5 leading-[16px]">Vuelva a ejecutar la detección cuando un miembro del equipo<br/>o un flujo de trabajo cierre la conversación</p>
                   </div>
-                  <div className="px-4 py-3 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-[13.5px] text-[#1a1a1a]">Volver a detectar al cerrar</p>
-                      <p className="text-[12px] text-[#646462] mt-0.5">Re-evalúa el atributo cuando la conversación se cierra.</p>
-                    </div>
-                    <button
-                      onClick={() => setReDetectOnClose(v => !v)}
-                      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${reDetectOnClose ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}
-                    >
-                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${reDetectOnClose ? 'left-[18px]' : 'left-0.5'}`} />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setReDetectOnClose(v => !v)}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${reDetectOnClose ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${reDetectOnClose ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
                 </div>
               </div>
-              <div>
-                <div className="flex items-center gap-1.5 mb-3">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <div className="flex items-center gap-1.5 mb-4">
                   <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Ajustes de compañeros de equipo</h3>
-                  <span className="w-4 h-4 rounded-full border border-[#e9eae6] flex items-center justify-center text-[10px] text-[#646462]">?</span>
+                  <span className="w-4 h-4 rounded-full bg-[#1a1a1a] text-white text-[10px] flex items-center justify-center cursor-help" title="Cómo ven los compañeros de equipo este atributo en Inbox">?</span>
                 </div>
-                <div className="bg-white border border-[#e9eae6] rounded-[12px]">
-                  <div className="px-4 py-3 flex items-center justify-between gap-4">
-                    <span className="text-[13.5px] text-[#1a1a1a]">Visibilidad de datos</span>
-                    <Dropdown
-                      value={visibility}
-                      items={[
-                        { value: 'all', label: 'Todos' },
-                        { value: 'admins', label: 'Solo administradores' },
-                        { value: 'me', label: 'Sólo yo' },
-                      ]}
-                      onChange={v => setVisibility(v as 'all' | 'admins' | 'me')}
-                    />
+                <div className="flex items-start justify-between gap-4 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Visibilidad de datos</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Quién puede ver este atributo en Inbox</p>
                   </div>
+                  <Dropdown
+                    value={visibility}
+                    items={[
+                      { value: 'all', label: 'Todos' },
+                      { value: 'admins', label: 'Solo administradores' },
+                      { value: 'me', label: 'Sólo yo' },
+                    ]}
+                    onChange={v => setVisibility(v as 'all' | 'admins' | 'me')}
+                  />
                 </div>
               </div>
             </div>
           )}
 
           {tab === 'values' && (
-            <div className="max-w-[900px] mx-auto w-full px-8 py-6 flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                <div className="flex-1 max-w-[360px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
-                  <input
-                    type="text"
-                    value={valSearch}
-                    onChange={e => setValSearch(e.target.value)}
-                    placeholder="Buscar valor"
-                    className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
-                  />
-                </div>
-                <button title="Ordenar" className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 3v10M4 13l-2-2M4 13l2-2M11 13V3M11 3l2 2M11 3l-2 2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </button>
-                <div className="flex-1" />
-                <button onClick={importCsv} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  Cargar CSV
-                </button>
-                <button onClick={addValue} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-                  Nuevo valor
-                </button>
-              </div>
-              <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
-                <div className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] bg-[#f8f8f7]/40 text-[12px] font-semibold text-[#646462]">
-                  <div></div>
-                  <div>Nombre</div>
-                  <div>Descripción</div>
-                  <div></div>
-                </div>
-                {filteredValues.length === 0 ? (
-                  <div className="px-4 py-10 text-center text-[13px] text-[#646462]">Aún no hay valores. Pulsa «Nuevo valor» para añadir uno.</div>
-                ) : filteredValues.map(v => (
-                  <div key={v.id} className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] last:border-b-0 items-center group hover:bg-[#f8f8f7]/30">
-                    <span className="text-[#a4a4a2] cursor-grab" title="Arrastrar">⋮⋮</span>
-                    <input
-                      value={v.name}
-                      onChange={e => updateValue(v.id, { name: e.target.value })}
-                      placeholder="Nombre del valor"
-                      className="h-8 rounded-md border border-transparent hover:border-[#e9eae6] focus:border-[#1a1a1a] px-2 text-[13px] focus:outline-none bg-transparent"
-                    />
-                    <input
-                      value={v.description}
-                      onChange={e => updateValue(v.id, { description: e.target.value })}
-                      placeholder="Descripción opcional"
-                      className="h-8 rounded-md border border-transparent hover:border-[#e9eae6] focus:border-[#1a1a1a] px-2 text-[13px] focus:outline-none bg-transparent"
-                    />
-                    <button
-                      onClick={() => removeValue(v.id)}
-                      title="Eliminar"
-                      className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100"
-                    >
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
+            values.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center">
+                <h3 className="text-[18px] font-semibold text-[#1a1a1a]">Agregar valores</h3>
+                <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[520px]">
+                  Define los valores que Fin debe seleccionar al detectar este atributo. Por ejemplo, para detectar la confianza, asigna el atributo "Confianza" y crea 3 valores: Positivo, Neutral y Negativo.
+                </p>
+                <div className="mt-6 mb-6 w-[260px] h-[140px] rounded-[12px] border border-[#e9eae6] bg-white shadow-sm relative overflow-hidden">
+                  <div className="absolute inset-3 flex flex-col gap-1.5">
+                    <div className="h-2 bg-[#f1f1ee] rounded w-full"/>
+                    <div className="h-2 bg-[#f1f1ee] rounded w-3/4"/>
                   </div>
-                ))}
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 w-[140px] bg-white border border-[#e9eae6] rounded-[8px] shadow-md p-2 text-left">
+                    <p className="text-[10px] font-bold text-[#1a1a1a]">Fin detected Sentiment as Positive</p>
+                    <p className="text-[9px] text-[#646462] mt-0.5 leading-[12px]">The user shared appreciation for a quick resolution.</p>
+                  </div>
+                  <span className="absolute left-3 bottom-3 w-2 h-2 rounded-full bg-[#0fb87f]"/>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={openValueCreate} className="h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Nuevo valor
+                  </button>
+                  <button onClick={importCsv} className="h-9 px-4 rounded-full bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-2 hover:bg-[#f8f8f7]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 3v8M5 6l3-3 3 3M3 13h10"/></svg>
+                    Cargar CSV
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="max-w-[900px] mx-auto w-full px-8 py-6 flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 max-w-[360px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+                    <input
+                      type="text"
+                      value={valSearch}
+                      onChange={e => setValSearch(e.target.value)}
+                      placeholder="Buscar valor"
+                      className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+                    />
+                  </div>
+                  <button title="Ordenar" className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 3v10M4 13l-2-2M4 13l2-2M11 13V3M11 3l2 2M11 3l-2 2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                  <div className="flex-1" />
+                  <button onClick={importCsv} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Cargar CSV
+                  </button>
+                  <button onClick={openValueCreate} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Nuevo valor
+                  </button>
+                </div>
+                <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                  <div className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] bg-[#f8f8f7]/40 text-[12px] font-semibold text-[#646462]">
+                    <div></div>
+                    <div>Nombre</div>
+                    <div>Descripción</div>
+                    <div></div>
+                  </div>
+                  {filteredValues.length === 0 ? (
+                    <div className="px-4 py-10 text-center text-[13px] text-[#646462]">Sin coincidencias para «{valSearch}».</div>
+                  ) : filteredValues.map(v => (
+                    <div
+                      key={v.id}
+                      className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] last:border-b-0 items-center group hover:bg-[#f8f8f7]/30 cursor-pointer"
+                      onClick={() => openValueEdit(v.id)}
+                    >
+                      <span className="text-[#a4a4a2] cursor-grab" title="Arrastrar" onClick={e => e.stopPropagation()}>⋮⋮</span>
+                      <span className="text-[13px] text-[#1a1a1a] truncate">{v.name || <span className="text-[#a4a4a2]">Sin nombre</span>}</span>
+                      <span className="text-[13px] text-[#646462] truncate">{v.description}</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); removeValue(v.id); }}
+                        title="Eliminar"
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
           )}
 
           {tab === 'conditions' && (
@@ -17893,6 +17998,8 @@ function FinAtributoEditor({
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   );
