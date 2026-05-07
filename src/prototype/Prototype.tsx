@@ -414,7 +414,7 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
       // Hover-to-expand: enter rail → 210px, leave rail → 44px. No manual toggle button.
       onMouseEnter={() => setExpanded(true)}
       onMouseLeave={() => setExpanded(false)}
-      className="flex flex-col h-full pt-3 pb-2 bg-[#f3f3f1] rounded-tr-2xl rounded-br-2xl justify-between flex-shrink-0 transition-[width] duration-150"
+      className={`absolute top-0 left-0 h-full flex flex-col pt-3 pb-2 bg-[#f3f3f1] rounded-tr-2xl rounded-br-2xl justify-between transition-[width,box-shadow] duration-150 z-50 ${expanded ? 'shadow-[4px_0px_24px_rgba(20,20,20,0.10)]' : ''}`}
       style={{ width: expanded ? 210 : 44 }}
     >
       <div className="flex flex-col gap-3">
@@ -16111,7 +16111,11 @@ function PrototypeApp() {
       className="flex bg-[#f3f3f1] overflow-hidden w-screen h-screen min-w-0"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
-      <LeftNav view={view} onNavigate={setView} />
+      {/* Fixed-width slot that holds space in the flex row.
+          LeftNav expands as an absolute overlay on top of the content. */}
+      <div className="relative flex-shrink-0 w-[44px] h-full">
+        <LeftNav view={view} onNavigate={setView} />
+      </div>
       {renderView()}
     </div>
   );
