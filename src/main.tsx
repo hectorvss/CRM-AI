@@ -142,18 +142,21 @@ function Root() {
     );
   }
 
-  // When `?prototype=1` is set, render the new Fin/Inbox prototype inside
-  // the same auth-bootstrapped shell so its components can hit the live API
-  // (agents, reports, operations, …). Without auth the prototype still
-  // renders, but `useApi` calls fall back to empty state.
-  if (protoParam === '1') {
+  // In LOCAL DEV the prototype is the default — that's what we're actively
+  // building. Production (`import.meta.env.PROD`) keeps the SaaS as the
+  // default. Override either way with ?prototype=1 / ?prototype=2 / ?app=1.
+  const wantApp = protoParam === '0' || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('app') === '1');
+  const wantProto2 = protoParam === '2';
+  const wantProto1 = protoParam === '1' || (import.meta.env.DEV && !wantApp && !wantProto2);
+
+  if (wantProto1) {
     return (
       <PageErrorBoundary page="prototype">
         <PrototypeShell><Prototype /></PrototypeShell>
       </PageErrorBoundary>
     );
   }
-  if (protoParam === '2') {
+  if (wantProto2) {
     return (
       <PageErrorBoundary page="prototype">
         <PrototypeShell><InboxPrototype2 /></PrototypeShell>
