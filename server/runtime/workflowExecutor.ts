@@ -104,3 +104,125 @@ export async function executeNode(
   if (!adapter) return undefined;
   return adapter(ctx, node, config);
 }
+
+// ── Per-node retry wrapper ───────────────────────────────────────────────
+//
+// `executeNodeWithRetry` was historically an inline helper inside
+// `server/routes/workflows.ts`. Phase 4a (Turno 5/D2) moves it here while
+// keeping the underlying `executeNode` callable injectable so this module
+// does not have to know about the inline-handler dispatch in the route.
+// The route passes its own `executeWorkflowNode` (which still owns the
+// remaining inline `flow.merge` / `flow.loop` / `flow.subworkflow` /
+// `flow.wait` / `delay` / `flow.stop_error` branches) until Phase 4b moves
+// those into the adapter registry.
+//
+// The post-execution audit-log side effect was lifted along with the
+// wrapper — it depends only on the node contract, the result, and an
+// audit-log writer. To avoid pulling the route's audit repository into
+// this module we accept an `auditLog` callback. The route wires it to
+// `auditRepository.logEvent` exactly as before.
+//
+// No behavior change: the loop / break / backoff / final-result shape is
+// byte-for-byte identical to the previous inline definition.
+
+export interface ExecuteNodeWithRetryDeps {
+  /**
+   * Per-node executor — typically the route's `executeWorkflowNode`. Returns
+   * the same `{ status, output, error, ... }` envelope adapters return.
+   */
+  executeNode: (
+    scope: { tenantId: string; workspaceId: string; userId?: string },
+    node: any,
+    context: any,
+  ) => Promise<any>;
+  /** Looks up the contract for a node key (sideEffects + risk). */
+  getNodeContract: (key: string) => { sideEffects?: string; risk?: string };
+  /** Append-only audit writer. Failures are swallowed (logged via `logger`). */
+  auditLog: (
+    scope: { tenantId: string; workspaceId: string },
+    entry: {
+      actorId: string;
+      action: string;
+      entityType: string;
+      entityId: string;
+      metadata?: Record<string, any>;
+    },
+  ) => Promise<unknown>;
+  /** Logger used for audit-failure warnings — usually the project logger. */
+  logger: { warn: (message: string, meta?: any) => void };
+}
+
+export async function executeNodeWithRetry(
+  scope: { tenantId: string; workspaceId: string; userId?: string },
+  node: any,
+  context: any,
+  deps: ExecuteNodeWithRetryDeps,
+) {
+  const retries = Math.max(0, Number(node.retryPolicy?.retries ?? node.retry_policy?.retries ?? 0));
+  const backoffMs = Math.max(0, Number(node.retryPolicy?.backoffMs ?? node.retry_policy?.backoffMs ?? 0));
+  let attempt = 0;
+  let lastResult: any = null;
+  while (attempt <= retries) {
+    const result = await deps.executeNode(scope, node, context);
+    lastResult = { ...result, attempt, maxRetries: retries };
+    if (!['failed'].includes(String(result.status))) break;
+    if (attempt >= retries) break;
+    if (backoffMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(backoffMs, 1_500)));
+    }
+    attempt += 1;
+  }
+
+  // ── Step-level audit (Phase 6 — deep SaaS sync) ─────────────────────────
+  // Every node whose contract declares a write or external side-effect
+  // generates an audit_log entry identical to the one produced by the
+  // equivalent UI action.
+  try {
+    const contract = deps.getNodeContract(node.key);
+    const sideEffects = contract.sideEffects ?? 'none';
+    if (sideEffects === 'write' || sideEffects === 'external') {
+      const finalResult = lastResult ?? { status: 'failed' };
+      const action = `WORKFLOW_${String(node.key).toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+      const entityType = node.key.startsWith('case.') ? 'case'
+        : node.key.startsWith('order.') ? 'order'
+        : node.key.startsWith('payment.') ? 'payment'
+        : node.key.startsWith('return.') ? 'return'
+        : node.key.startsWith('approval.') ? 'approval'
+        : node.key.startsWith('customer.') ? 'customer'
+        : node.key.startsWith('message.') ? 'integration'
+        : node.key.startsWith('ai.') || node.key.startsWith('agent.') ? 'agent_run'
+        : 'workflow';
+      const entityId = (
+        context?.case?.id || context?.order?.id || context?.payment?.id ||
+        context?.return?.id || context?.customer?.id || node.id
+      );
+      await deps.auditLog(
+        { tenantId: scope.tenantId, workspaceId: scope.workspaceId },
+        {
+          actorId: scope.userId ?? 'workflow',
+          action,
+          entityType,
+          entityId,
+          metadata: {
+            nodeKey: node.key,
+            nodeLabel: node.label ?? null,
+            nodeId: node.id,
+            status: finalResult.status,
+            error: finalResult.error ?? null,
+            sideEffects,
+            risk: contract.risk ?? 'low',
+            attempt,
+          },
+        },
+      );
+    }
+  } catch (auditErr: any) {
+    deps.logger.warn('workflow step audit failed', {
+      nodeId: node.id,
+      key: node.key,
+      error: String(auditErr?.message ?? auditErr),
+    });
+  }
+
+  return lastResult ?? { status: 'failed', error: 'Node execution failed before producing a result', attempt, maxRetries: retries };
+}
