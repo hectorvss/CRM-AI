@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Fragment, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, reportsApi, workflowsApi } from '../api/client';
+import { agentsApi, aiApi, attachmentsApi, auditApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, policyRulesApi, reportsApi, workflowsApi, workspacesApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
@@ -16726,13 +16726,128 @@ function FinPautaCategory({
   );
 }
 
+// ─── Generic Fin "Nuevo" modal (used by Atributos / Escalamiento / Procedimientos / Audiencias)
+// Matches the KnowledgeFolderModal visual style: 440px white card, h-9 inputs, h-8 rounded-full buttons.
+function FinSimpleCreateModal({
+  title,
+  description,
+  namePlaceholder,
+  descPlaceholder = 'Descripción opcional…',
+  submitLabel = 'Crear',
+  onClose,
+  onSubmit,
+}: {
+  title: string;
+  description?: string;
+  namePlaceholder?: string;
+  descPlaceholder?: string;
+  submitLabel?: string;
+  onClose: () => void;
+  onSubmit: (payload: { name: string; description: string }) => Promise<void> | void;
+}) {
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit() {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    try { await onSubmit({ name: trimmed, description: desc.trim() }); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">{title}</h3>
+        {description && <p className="text-[12.5px] text-[#646462] mb-4">{description}</p>}
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Nombre</label>
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && name.trim()) submit(); }}
+          placeholder={namePlaceholder}
+          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
+        />
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Descripción (opcional)</label>
+        <textarea
+          value={desc}
+          onChange={e => setDesc(e.target.value)}
+          placeholder={descPlaceholder}
+          className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+          <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? 'Guardando…' : submitLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Tiny inline toast used by the Fin sub-views below. Self-contained because
+// these views are mounted without an onAction prop.
+function useFinToast() {
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  function show(text: string, type: 'success' | 'error' = 'success') {
+    setMsg({ text, type });
+    window.setTimeout(() => setMsg(null), 3000);
+  }
+  const node = msg ? (
+    <div className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-lg shadow-lg text-[13px] font-medium ${msg.type === 'error' ? 'bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c]' : 'bg-[#1a1a1a] text-white'}`}>
+      {msg.text}
+    </div>
+  ) : null;
+  return { show, node };
+}
+
 // ─── Capacitar > Atributos (Figma 1:5966) ────────────────────────────────────
 function FinAtributosContent() {
-  const rows: { name: string; count: number }[] = [
-    { name: 'Sentiment', count: 3 },
-    { name: 'Urgency', count: 3 },
-    { name: 'Complexity', count: 3 },
-  ];
+  const { data: rulesData, refetch } = useApi<any[]>(
+    () => policyRulesApi.list({ entity_type: 'fin_attribute' }),
+    [],
+    [],
+  );
+  const rows = useMemo(() => {
+    const list = Array.isArray(rulesData) ? rulesData : [];
+    return list.map((r: any) => ({
+      id: String(r.id || r.ruleId || ''),
+      name: r.name || r.title || 'Sin nombre',
+      isActive: !!(r.isActive ?? r.is_active),
+      count: Number(r.usageCount ?? r.usage_count ?? 0),
+    }));
+  }, [rulesData]);
+  const [showModal, setShowModal] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const toast = useFinToast();
+  async function createAttribute(payload: { name: string; description: string }) {
+    try {
+      await policyRulesApi.create({
+        entityType: 'fin_attribute',
+        name: payload.name,
+        description: payload.description || undefined,
+        isActive: true,
+      });
+      toast.show('Atributo creado');
+      setShowModal(false);
+      refetch();
+    } catch (err: any) {
+      toast.show(err?.message || 'No se pudo crear el atributo', 'error');
+    }
+  }
+  async function toggleActive(id: string, next: boolean) {
+    if (!id || busyId) return;
+    setBusyId(id);
+    try {
+      await policyRulesApi.update(id, { isActive: next });
+      refetch();
+    } catch (err: any) {
+      toast.show(err?.message || 'No se pudo actualizar', 'error');
+    } finally { setBusyId(null); }
+  }
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -16783,7 +16898,7 @@ function FinAtributosContent() {
             <button className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
             </button>
-            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button onClick={() => setShowModal(true)} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo</span>
             </button>
@@ -16804,15 +16919,23 @@ function FinAtributosContent() {
             <div>Resuelto</div>
             <div>Escalado</div>
           </div>
-          {rows.map(r => (
-            <div key={r.name} className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 py-3.5 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a]">
+          {rows.length === 0 ? (
+            <div className="px-2 py-8 text-center text-[13px] text-[#646462]">Aún no hay atributos. Pulsa «Nuevo» para crear uno.</div>
+          ) : rows.map(r => (
+            <div key={r.id || r.name} className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 py-3.5 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a]">
               <div className="flex items-center gap-2">
                 <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
                 <span>{r.name}</span>
                 <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462]">{r.count}</span>
               </div>
               <div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">Deshabilitado</span>
+                <button
+                  onClick={() => toggleActive(r.id, !r.isActive)}
+                  disabled={!r.id || busyId === r.id}
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] hover:opacity-90 ${r.isActive ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}
+                >
+                  {busyId === r.id ? '…' : (r.isActive ? 'Habilitado' : 'Deshabilitado')}
+                </button>
               </div>
               <div className="text-[#646462]">—</div>
               <div className="text-[#646462]">—</div>
@@ -16821,6 +16944,17 @@ function FinAtributosContent() {
           ))}
         </div>
       </div>
+      {showModal && (
+        <FinSimpleCreateModal
+          title="Nuevo atributo de Fin"
+          description="Define un atributo (sentimiento, urgencia, complejidad…) que Fin detectará en cada conversación."
+          namePlaceholder="Sentiment, Urgency, Complexity…"
+          submitLabel="Crear atributo"
+          onClose={() => setShowModal(false)}
+          onSubmit={createAttribute}
+        />
+      )}
+      {toast.node}
     </div>
   );
 }
@@ -16830,6 +16964,37 @@ function FinEscalamientoContent() {
   const IMG_ESCALATION_BANNER = `${FIGMA_CDN}/b1517b7b-b13a-40c8-83a1-46a7a4839098`;
   const IMG_ESCALATION_LINK_BOOK = `${FIGMA_CDN}/34e259b7-ba78-42e5-9f7a-f48a3961b433`;
   const IMG_ESCALATION_CLOSE = `${FIGMA_CDN}/34dfc6d2-2f3f-4639-aa68-6573e7f751a7`;
+  const { data: rulesData, refetch } = useApi<any[]>(
+    () => policyRulesApi.list({ entity_type: 'fin_escalation' }),
+    [],
+    [],
+  );
+  const [search, setSearch] = useState('');
+  const [modal, setModal] = useState<null | 'rule' | 'guideline'>(null);
+  const toast = useFinToast();
+  const all = useMemo(() => Array.isArray(rulesData) ? rulesData : [], [rulesData]);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? all.filter((r: any) => String(r.name || r.title || '').toLowerCase().includes(q)) : all;
+  }, [all, search]);
+  const reglas = filtered.filter((r: any) => (r.category || r.subtype) !== 'guideline');
+  const pautas = filtered.filter((r: any) => (r.category || r.subtype) === 'guideline');
+  async function createEscalation(category: 'rule' | 'guideline', payload: { name: string; description: string }) {
+    try {
+      await policyRulesApi.create({
+        entityType: 'fin_escalation',
+        category,
+        name: payload.name,
+        description: payload.description || undefined,
+        isActive: true,
+      });
+      toast.show(category === 'rule' ? 'Regla creada' : 'Pauta creada');
+      setModal(null);
+      refetch();
+    } catch (err: any) {
+      toast.show(err?.message || 'No se pudo crear', 'error');
+    }
+  }
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -16886,6 +17051,8 @@ function FinEscalamientoContent() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
               <input
                 type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar escalaciones por título o contenido"
                 className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
               />
@@ -16913,17 +17080,25 @@ function FinEscalamientoContent() {
               </div>
             </div>
             <div className="mt-3 ml-9 bg-white border border-[#e9eae6] rounded-[12px]">
-              <button className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40">
-                <div className="text-left">
-                  <p className="text-[13.5px] font-semibold text-[#1a1a1a]">Regla de escalamiento</p>
-                  <p className="text-[12px] text-[#646462] mt-0.5">Usado: <span className="text-[#1a1a1a]">0</span> · Resuelto: — · Escalado: —</p>
-                </div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">No habilitado</span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">Todos en Todos los canales</span>
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
-              </button>
+              {reglas.length === 0 ? (
+                <div className="w-full px-4 py-6 text-center text-[13px] text-[#646462]">Aún no hay reglas. Pulsa «Nuevo» para crear una.</div>
+              ) : reglas.map((r: any) => {
+                const id = String(r.id || '');
+                const active = !!(r.isActive ?? r.is_active);
+                return (
+                  <div key={id} className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] last:border-b-0">
+                    <div className="text-left min-w-0">
+                      <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate">{r.name || 'Sin nombre'}</p>
+                      <p className="text-[12px] text-[#646462] mt-0.5 truncate">{r.description || 'Usado: 0 · Resuelto: — · Escalado: —'}</p>
+                    </div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${active ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{active ? 'Habilitado' : 'No habilitado'}</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">Todos en Todos los canales</span>
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+                  </div>
+                );
+              })}
               <div className="px-4 py-2.5 border-t border-[#e9eae6]">
-                <button className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
+                <button onClick={() => setModal('rule')} className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                   <span>Nuevo</span>
                 </button>
@@ -16945,20 +17120,34 @@ function FinEscalamientoContent() {
               </div>
             </div>
             <div className="mt-3 ml-9 flex items-center gap-2 flex-wrap">
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <button onClick={() => setModal('guideline')} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                 <span>Nuevo</span>
               </button>
-              <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px]">
-                Transfiere las solicitudes de VPN o de elusión a un nivel superior
-              </span>
-              <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[160px]">
-                Escala las soli…
-              </span>
+              {pautas.length === 0 ? (
+                <span className="text-[12.5px] text-[#646462]">Aún no hay pautas.</span>
+              ) : pautas.map((p: any) => (
+                <span key={p.id} className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px]">
+                  {p.name || p.title || 'Pauta'}
+                </span>
+              ))}
             </div>
           </div>
         </div>
       </div>
+      {modal && (
+        <FinSimpleCreateModal
+          title={modal === 'rule' ? 'Nueva regla de escalamiento' : 'Nueva pauta de escalamiento'}
+          description={modal === 'rule'
+            ? 'Define una condición determinista (atributos + datos del cliente) que dispare un escalamiento.'
+            : 'Describe en lenguaje natural cuándo Fin debe transferir la conversación.'}
+          namePlaceholder={modal === 'rule' ? 'Escalar pagos > $1000' : 'Transfiere solicitudes de VPN…'}
+          submitLabel={modal === 'rule' ? 'Crear regla' : 'Crear pauta'}
+          onClose={() => setModal(null)}
+          onSubmit={(payload) => createEscalation(modal, payload)}
+        />
+      )}
+      {toast.node}
     </div>
   );
 }
@@ -16970,10 +17159,30 @@ function FinProcedimientosContent() {
   const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
   const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
   const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
-  const procedures: { title: string; status: 'Draft' }[] = [
-    { title: 'Untitled', status: 'Draft' },
-    { title: 'Untitled', status: 'Draft' },
-  ];
+  const { data: workflowsData, refetch } = useApi<any[]>(() => workflowsApi.list(), [], []);
+  const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const toast = useFinToast();
+  const procedures = useMemo(() => {
+    const list = Array.isArray(workflowsData) ? workflowsData : [];
+    const procs = list.filter((w: any) => String(w.kind || w.type || '').toLowerCase() === 'procedure');
+    const q = search.trim().toLowerCase();
+    return q ? procs.filter((w: any) => String(w.name || w.title || '').toLowerCase().includes(q)) : procs;
+  }, [workflowsData, search]);
+  async function createProcedure(payload: { name: string; description: string }) {
+    try {
+      await workflowsApi.create({
+        kind: 'procedure',
+        name: payload.name,
+        description: payload.description || undefined,
+      });
+      toast.show('Procedimiento creado');
+      setShowModal(false);
+      refetch();
+    } catch (err: any) {
+      toast.show(err?.message || 'No se pudo crear el procedimiento', 'error');
+    }
+  }
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
@@ -16989,7 +17198,7 @@ function FinProcedimientosContent() {
               <span>Aprender</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button onClick={() => setShowModal(true)} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo procedimiento</span>
             </button>
@@ -17000,6 +17209,8 @@ function FinProcedimientosContent() {
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
             <input
               type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
               placeholder="Buscar..."
               className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
             />
@@ -17056,28 +17267,37 @@ function FinProcedimientosContent() {
             <h3 className="text-[14px] font-bold text-[#1a1a1a]">Procedimientos</h3>
             <p className="mt-0.5 text-[13px] text-[#646462]">Automatice las consultas complejas con instrucciones paso a paso para Fin.</p>
             <div className="mt-3 flex flex-col gap-2">
-              {procedures.map((p, i) => (
-                <div key={i} className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.title}</p>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462]">{p.status}</span>
-                    </div>
-                    <p className="text-[12.5px] text-[#646462] mt-0.5">No se ha añadido ninguna descripción.</p>
-                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-[#646462]">
-                      <span>Activado: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Pendiente: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Resuelto: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Entregado: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Escalado: <span className="text-[#1a1a1a]">0</span></span>
-                      <span>Errores: <span className="text-[#1a1a1a]">0</span></span>
-                    </div>
-                  </div>
-                  <button className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
-                  </button>
+              {procedures.length === 0 ? (
+                <div className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-6 text-center text-[13px] text-[#646462]">
+                  {search ? 'Ningún procedimiento coincide con la búsqueda.' : 'Aún no hay procedimientos. Pulsa «Nuevo procedimiento» para crear uno.'}
                 </div>
-              ))}
+              ) : procedures.map((p: any) => {
+                const id = String(p.id || p.slug || '');
+                const status = String(p.status || p.state || 'draft').toLowerCase();
+                const statusLabel = status === 'published' ? 'Publicado' : status === 'archived' ? 'Archivado' : 'Draft';
+                return (
+                  <div key={id} className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.name || p.title || 'Untitled'}</p>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462]">{statusLabel}</span>
+                      </div>
+                      <p className="text-[12.5px] text-[#646462] mt-0.5">{p.description || 'No se ha añadido ninguna descripción.'}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-[#646462]">
+                        <span>Activado: <span className="text-[#1a1a1a]">{p.runsCount ?? p.runs_count ?? 0}</span></span>
+                        <span>Pendiente: <span className="text-[#1a1a1a]">0</span></span>
+                        <span>Resuelto: <span className="text-[#1a1a1a]">0</span></span>
+                        <span>Entregado: <span className="text-[#1a1a1a]">0</span></span>
+                        <span>Escalado: <span className="text-[#1a1a1a]">0</span></span>
+                        <span>Errores: <span className="text-[#1a1a1a]">0</span></span>
+                      </div>
+                    </div>
+                    <button className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -17101,6 +17321,17 @@ function FinProcedimientosContent() {
           </div>
         </div>
       </div>
+      {showModal && (
+        <FinSimpleCreateModal
+          title="Nuevo procedimiento"
+          description="Define un proceso de varios pasos que Fin podrá ejecutar (reembolsos, recogidas, validaciones…)."
+          namePlaceholder="Reembolso por daños, Validación de cuenta…"
+          submitLabel="Crear procedimiento"
+          onClose={() => setShowModal(false)}
+          onSubmit={createProcedure}
+        />
+      )}
+      {toast.node}
     </div>
   );
 }
@@ -17447,7 +17678,36 @@ function FinPruebasContent() {
 }
 
 // ─── Desplegar / Chat (Figma 1:12035) ────────────────────────────────────────
+// Helper used by Despliegue* views: read connectors and pick the freshest one
+// matching a set of channel keywords. Returns a status string for the pill.
+function useChannelDeploymentStatus(matchKeywords: string[]) {
+  const { data } = useApi<any[]>(() => connectorsApi.list(), [], []);
+  return useMemo(() => {
+    const list = Array.isArray(data) ? data : [];
+    const matches = list.filter((c: any) => {
+      const blob = `${c.kind || ''} ${c.type || ''} ${c.provider || ''} ${c.channel || ''} ${c.name || ''}`.toLowerCase();
+      return matchKeywords.some(k => blob.includes(k));
+    });
+    if (matches.length === 0) return { label: 'No establecer en vivo', live: false, count: 0 };
+    const live = matches.find((c: any) => {
+      const status = String(c.status || c.connectionStatus || '').toLowerCase();
+      return status === 'connected' || status === 'live' || status === 'active' || c.isActive === true;
+    });
+    if (live) {
+      const updated = live.updatedAt || live.updated_at || live.lastSyncedAt || live.last_synced_at;
+      const updatedTxt = updated ? new Date(updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : null;
+      return {
+        label: updatedTxt ? `Conectado · actualizado ${updatedTxt}` : 'Conectado',
+        live: true,
+        count: matches.length,
+      };
+    }
+    return { label: 'No establecer en vivo', live: false, count: matches.length };
+  }, [data, matchKeywords]);
+}
+
 function FinDespliegueChatContent() {
+  const status = useChannelDeploymentStatus(['chat', 'messenger', 'slack', 'whatsapp', 'sms', 'facebook', 'instagram']);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -17489,8 +17749,9 @@ function FinDespliegueChatContent() {
         <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
           <div className="flex items-center gap-3">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
-            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
-              <span>No establecer en vivo</span>
+            <button className={`h-7 px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[12px] ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-white border-[#e9eae6] text-[#1a1a1a]'}`}>
+              {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
+              <span>{status.label}</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
           </div>
@@ -17548,6 +17809,7 @@ function FinDespliegueChatContent() {
 
 // ─── Desplegar / Correo electrónico (Figma 1:13680) ──────────────────────────
 function FinDespliegueEmailContent() {
+  const status = useChannelDeploymentStatus(['email', 'mail', 'gmail', 'outlook', 'imap', 'smtp']);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -17593,8 +17855,9 @@ function FinDespliegueEmailContent() {
         <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
           <div className="flex items-center gap-3">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
-            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
-              <span>No establecer en vivo</span>
+            <button className={`h-7 px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[12px] ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-white border-[#e9eae6] text-[#1a1a1a]'}`}>
+              {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
+              <span>{status.label}</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
           </div>
@@ -17654,12 +17917,20 @@ function FinDespliegueEmailContent() {
 
 // ─── Desplegar / Teléfono (Figma 1:14559) ────────────────────────────────────
 function FinDespliegueTelefonoContent() {
+  const status = useChannelDeploymentStatus(['phone', 'voice', 'aircall', 'twilio', 'telnyx', 'voip']);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Top section header */}
-      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
-        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
-        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Teléfono</h2>
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Teléfono</h2>
+        </div>
+        <button className={`h-7 px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[12px] ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-white border-[#e9eae6] text-[#1a1a1a]'}`}>
+          {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
+          <span>{status.label}</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
       </div>
 
       {/* Body */}
@@ -18320,6 +18591,15 @@ function FinMonitoresContent() {
 
 // ─── Registro de cambios (1:19066) ──────────────────────────────────────────
 function FinChangelogContent() {
+  const { data: auditData, loading } = useApi<any[]>(() => auditApi.workspaceAll(), [], []);
+  const [search, setSearch] = useState('');
+  const entries = useMemo(() => {
+    const list = Array.isArray(auditData) ? auditData : [];
+    const q = search.trim().toLowerCase();
+    return q
+      ? list.filter((e: any) => `${e.action || ''} ${e.entityType || e.entity_type || ''} ${e.actorName || e.actor_name || ''} ${JSON.stringify(e.payload || {})}`.toLowerCase().includes(q))
+      : list;
+  }, [auditData, search]);
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
@@ -18331,18 +18611,53 @@ function FinChangelogContent() {
       <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3 border-b border-[#e9eae6]">
         <div className="relative flex-1 max-w-[320px]">
           <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
-          <input type="text" placeholder="Buscar elementos..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar elementos..."
+            className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
+          />
         </div>
         <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
           <span>Cualquier cambio</span>
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 flex items-start justify-center pt-24 px-6">
-        <div className="text-center max-w-[420px]">
-          <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
-          <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en su agente de IA Fin</p>
-        </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {loading ? (
+          <div className="flex items-start justify-center pt-24 px-6">
+            <p className="text-[13px] text-[#646462]">Cargando…</p>
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="flex items-start justify-center pt-24 px-6">
+            <div className="text-center max-w-[420px]">
+              <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
+              <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en su agente de IA Fin</p>
+            </div>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#e9eae6]">
+            {entries.map((e: any, i: number) => {
+              const when = e.createdAt || e.created_at || e.timestamp;
+              const whenTxt = when ? new Date(when).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+              const actor = e.actorName || e.actor_name || e.userId || e.user_id || 'Sistema';
+              const action = e.action || e.event || 'cambio';
+              const entity = e.entityType || e.entity_type || '';
+              return (
+                <div key={e.id || i} className="px-6 py-3 flex items-start gap-3 hover:bg-[#fafafa]">
+                  <span className="w-7 h-7 rounded-full bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0 text-[10px] font-semibold text-[#646462]">
+                    {String(actor)[0]?.toUpperCase() || '?'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-[#1a1a1a]"><span className="font-semibold">{actor}</span> · {action}{entity ? ` · ${entity}` : ''}</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">{whenTxt}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -18350,19 +18665,33 @@ function FinChangelogContent() {
 
 // ─── Ajustes de Fin · General (1:20145) ─────────────────────────────────────
 function FinSettingsContent() {
-  type Row = { icon: ReactNode; title: string; desc: string; cta?: string };
+  type Row = { icon: ReactNode; title: string; desc: string; cta?: string; meta?: string };
+  const { data: ctx } = useApi<any>(() => workspacesApi.currentContext(), [], null);
+  // Pull live numbers (workspace name, plan, tokens used, trial days left) from
+  // the workspace context. Numbers fall back to '—' when the field is absent.
+  const wsCtx: any = ctx || {};
+  const ws = wsCtx.workspace || wsCtx;
+  const planName = ws.planName || ws.plan_name || ws.plan || wsCtx.plan;
+  const tokensUsed = ws.tokensUsed ?? ws.tokens_used ?? wsCtx.tokensUsed ?? wsCtx.usage?.usedThisPeriod;
+  const tokensLimit = ws.tokensLimit ?? ws.tokens_limit ?? wsCtx.tokensLimit ?? wsCtx.usage?.included;
+  const trialEnd = ws.trialEndsAt || ws.trial_ends_at || wsCtx.trialEndsAt;
+  const trialDaysLeft = trialEnd ? Math.max(0, Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000)) : null;
 
   const usoRows: Row[] = [
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M8 2.5l1.6 4 4.4.4-3.4 3 1.1 4.3L8 12l-3.7 2.2L5.4 9.9 2 6.9l4.4-.4z"/></svg>,
       title: 'Alertas y límites',
       desc: 'Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto.',
+      meta: trialDaysLeft != null ? `Prueba: ${trialDaysLeft} días` : (planName ? `Plan: ${planName}` : undefined),
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>,
       title: 'Supervisar el uso',
       desc: 'Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo.',
       cta: 'Ver uso',
+      meta: tokensUsed != null
+        ? (tokensLimit ? `${tokensUsed.toLocaleString?.('es-ES') ?? tokensUsed} / ${tokensLimit.toLocaleString?.('es-ES') ?? tokensLimit} tokens` : `${tokensUsed.toLocaleString?.('es-ES') ?? tokensUsed} tokens`)
+        : undefined,
     },
   ];
 
@@ -18399,6 +18728,9 @@ function FinSettingsContent() {
           <span className="block text-[13.5px] font-semibold text-[#1a1a1a]">{r.title}</span>
           <span className="block mt-0.5 text-[12.5px] text-[#646462] leading-[18px]">{r.desc}</span>
         </span>
+        {r.meta && (
+          <span className="text-[12px] font-mono text-[#1a1a1a] bg-[#f8f8f7] border border-[#e9eae6] rounded-md px-2 py-1 mr-2 whitespace-nowrap">{r.meta}</span>
+        )}
         {r.cta ? (
           <span className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1">
             {r.cta}
@@ -18429,6 +18761,30 @@ function FinSettingsContent() {
 
 // ─── Ajustes de Fin · Audiencias (1:21030) ──────────────────────────────────
 function FinAudiencesContent() {
+  // Audiences = teams (iam) + customer segments (customers). The "Nueva audiencia"
+  // modal currently surfaces a "próximamente" toast because iamApi has no
+  // teams.create endpoint yet — segments are managed elsewhere.
+  const { data: teamsData } = useApi<any[]>(() => iamApi.teams(), [], []);
+  const { data: customersData } = useApi<any[]>(() => customersApi.list(), [], []);
+  const [showModal, setShowModal] = useState(false);
+  const toast = useFinToast();
+  const teams = Array.isArray(teamsData) ? teamsData : [];
+  const segments = useMemo(() => {
+    const list = Array.isArray(customersData) ? customersData : [];
+    const counts = new Map<string, number>();
+    for (const c of list) {
+      const seg = String(c.segment || '').trim();
+      if (!seg) continue;
+      counts.set(seg, (counts.get(seg) || 0) + 1);
+    }
+    return Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
+  }, [customersData]);
+  async function createAudience(_payload: { name: string; description: string }) {
+    // iamApi has no teams.create today — surface a friendly toast instead of
+    // pretending to persist. The modal still closes so the user has feedback.
+    toast.show('Creación de audiencias estará disponible próximamente.');
+    setShowModal(false);
+  }
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between">
@@ -18436,9 +18792,9 @@ function FinAudiencesContent() {
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>
           <h2 className="text-[15px] font-bold text-[#1a1a1a]">Audiencias</h2>
         </div>
-        <button className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+        <button onClick={() => setShowModal(true)} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
           <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
-          <span>Nuevo</span>
+          <span>Nueva audiencia</span>
         </button>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 p-6">
@@ -18452,7 +18808,45 @@ function FinAudiencesContent() {
             <span>Cómo usar las audiencias para segmentar a Fin</span>
           </button>
         </div>
+
+        {/* Live audiences: equipos (iam.teams) + segmentos de clientes */}
+        <div className="mt-6 max-w-[820px]">
+          <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-3">Equipos ({teams.length})</h3>
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
+            {teams.length === 0 ? (
+              <div className="px-4 py-4 text-[13px] text-[#646462]">Aún no hay equipos.</div>
+            ) : teams.map((t: any) => (
+              <div key={t.id || t.name} className="px-4 py-3 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">{t.name || 'Sin nombre'}</span>
+                <span className="text-[12px] text-[#646462]">{t.memberCount ?? t.member_count ?? 0} miembros</span>
+              </div>
+            ))}
+          </div>
+
+          <h3 className="text-[14px] font-bold text-[#1a1a1a] mt-6 mb-3">Segmentos de clientes ({segments.length})</h3>
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
+            {segments.length === 0 ? (
+              <div className="px-4 py-4 text-[13px] text-[#646462]">Aún no hay segmentos.</div>
+            ) : segments.map(s => (
+              <div key={s.name} className="px-4 py-3 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">{s.name}</span>
+                <span className="text-[12px] text-[#646462]">{s.count} clientes</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
+      {showModal && (
+        <FinSimpleCreateModal
+          title="Nueva audiencia"
+          description="Las audiencias agrupan usuarios por equipo o segmento de cliente para personalizar el comportamiento de Fin."
+          namePlaceholder="VIP, Premium, Onboarding…"
+          submitLabel="Crear audiencia"
+          onClose={() => setShowModal(false)}
+          onSubmit={createAudience}
+        />
+      )}
+      {toast.node}
     </div>
   );
 }
