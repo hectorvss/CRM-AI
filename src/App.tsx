@@ -386,31 +386,8 @@ export default function App() {
     }
   }, [navigationTarget]);
 
-  // Redirect to /#/signin when we know we're unauthenticated and supabase auth
-  // is enabled. Throttled via sessionStorage so we never produce a redirect
-  // loop when /#/signin auto-redirects back to the app on detected session.
-  // Guarded against the case where we're already on /signin to avoid bouncing
-  // the landing page back onto itself.
-  useEffect(() => {
-    if (!authReady || authenticated === null) return;
-    if (!supabaseAuthEnabled) return;
-    if (authenticated) return;
-    if (typeof window === 'undefined') return;
-    const onSignin = window.location.hash.startsWith('#/signin');
-    if (onSignin) return;
-    // Throttle: only redirect once per 30 seconds. If we already redirected
-    // recently and we're STILL unauthenticated on landing, the redirect can't
-    // help — surface a static error UI instead so the user can intervene.
-    try {
-      const last = sessionStorage.getItem('crmai.appUnauthRedirectAt');
-      if (last && Date.now() - parseInt(last, 10) < 30000) {
-        console.warn('[App] Skipping auto-redirect to /signin — already redirected recently. Showing manual UI.');
-        return;
-      }
-      sessionStorage.setItem('crmai.appUnauthRedirectAt', String(Date.now()));
-    } catch { /* sessionStorage unavailable */ }
-    window.location.href = '/#/signin';
-  }, [authReady, authenticated]);
+  // No redirect-to-/signin: the SPA has no separate /signin route. We render
+  // the Login form inline below when authenticated=false.
 
   const pageFocus = useMemo(
     () => ({
@@ -444,41 +421,33 @@ export default function App() {
   // a new navigation each render. That manifests to the user as the page
   // "reloading constantly" while the auth state is briefly false.
   if (hasSupabaseAuth && !authenticated) {
-    // If the throttle blocked the auto-redirect, show a manual UI so the
-    // user isn't stuck staring at a spinner while we silently abort. Click
-    // the button to intentionally navigate to /signin.
-    let recentlyRedirected = false;
-    try {
-      const last = sessionStorage.getItem('crmai.appUnauthRedirectAt');
-      recentlyRedirected = !!last && Date.now() - parseInt(last, 10) < 30000;
-    } catch { /* ignore */ }
-
-    if (recentlyRedirected) {
-      return (
-        <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center p-6">
-          <div className="max-w-sm w-full bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center border border-gray-200 dark:border-gray-700">
-            <h1 className="text-base font-bold text-gray-900 dark:text-white mb-2">Sesión no detectada</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-              No pudimos validar tu sesión. Inicia sesión manualmente para continuar.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                try { sessionStorage.removeItem('crmai.appUnauthRedirectAt'); } catch { /* ignore */ }
-                window.location.href = '/#/signin';
-              }}
-              className="h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black"
-            >
-              Iniciar sesión
-            </button>
-          </div>
-        </div>
-      );
-    }
-
+    // CRITICAL: The SPA does NOT have a separate /#/signin entry — App.tsx is
+    // the single root. Render the Login form inline when the user is
+    // unauthenticated. After successful sign-in `setAuthenticated(true)` (via
+    // the supabase auth state listener) flips this branch and the user lands
+    // on the requested page. No redirect needed.
     return (
-      <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+        <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 border border-gray-200 dark:border-gray-700">
+          <div className="text-center mb-6">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Inicia sesión en Clain</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Introduce tus credenciales para continuar.
+            </p>
+          </div>
+          <Login
+            onLogin={() => {
+              // Clear any throttle flags so we don't show stale UI.
+              try {
+                sessionStorage.removeItem('crmai.appUnauthRedirectAt');
+                sessionStorage.removeItem('crmai.lastUnauthRedirect');
+                sessionStorage.removeItem('crmai.unauthRedirectCount');
+                sessionStorage.removeItem('crmai.unauthRedirectCountAt');
+              } catch { /* ignore */ }
+              setAuthenticated(true);
+            }}
+          />
+        </div>
       </div>
     );
   }
