@@ -265,16 +265,109 @@ export async function runWorkflow({
   if (entry) queue.push(entry.id);
 
   let finalStatus = 'completed';
-  const MAX_HOPS = workflow.nodes.length * 4;
+  const MAX_HOPS = workflow.nodes.length * 8;
   let hops = 0;
+
+  // Pre-compute set of nodes reachable only via a `body` handle from any
+  // `flow.loop` — these are skipped in the main BFS because the loop
+  // handler executes them per iteration.
+  const loopBodyNodeIds = new Set<string>();
+  const loopBodyEntryByLoop = new Map<string, string[]>();
+  for (const n of workflow.nodes) {
+    if (n.key === 'flow.loop') {
+      const bodyEntries = workflow.edges
+        .filter((e) => e.source === n.id && e.sourceHandle === 'body')
+        .map((e) => e.target);
+      loopBodyEntryByLoop.set(n.id, bodyEntries);
+      // Walk transitively from each body entry; everything reachable is owned
+      // by the loop until we hit a node that is also reachable from non-body
+      // edges. For simplicity we mark the direct body subgraph following
+      // non-`body`-handle out-edges as well (typical loop body has its own
+      // chain; the test workflows are small and acyclic).
+      const stack = [...bodyEntries];
+      while (stack.length) {
+        const cur = stack.pop()!;
+        if (loopBodyNodeIds.has(cur)) continue;
+        loopBodyNodeIds.add(cur);
+        for (const e of workflow.edges) {
+          if (e.source === cur && e.sourceHandle !== 'done') stack.push(e.target);
+        }
+      }
+    }
+  }
+
+  // Merge sync state (Bug-2): track upstream arrivals into each merge node.
+  const expectedIncomingByMerge = new Map<string, number>();
+  const arrivedByMerge = new Map<string, Map<string, any>>();
+  for (const n of workflow.nodes) {
+    if (n.key === 'flow.merge') {
+      const count = workflow.edges.filter((e) => e.target === n.id).length;
+      expectedIncomingByMerge.set(n.id, count);
+      arrivedByMerge.set(n.id, new Map());
+    }
+  }
+
+  // Helper to run a sub-branch of nodes given an entry id list. Used by
+  // the body runner injected into flow.loop. Sequentially executes each
+  // node; returns the final node's result.
+  async function runBranch(entryIds: string[]): Promise<NodeRunResult> {
+    let lastResult: NodeRunResult = { status: 'completed', output: {} };
+    const localQueue = [...entryIds];
+    const localVisited = new Set<string>();
+    while (localQueue.length) {
+      const id = localQueue.shift()!;
+      if (localVisited.has(id)) continue;
+      localVisited.add(id);
+      const node = workflow.nodes.find((n) => n.id === id);
+      if (!node) continue;
+      lastResult = (await executeWorkflowNode(
+        runScope,
+        node,
+        context,
+        builtServices,
+      )) as NodeRunResult;
+      if (lastResult.status === 'failed') break;
+      const out = workflow.edges.filter(
+        (e) => e.source === id && e.sourceHandle !== 'done',
+      );
+      for (const e of out) localQueue.push(e.target);
+    }
+    return lastResult;
+  }
 
   while (queue.length > 0 && hops < MAX_HOPS) {
     hops += 1;
     const id = queue.shift()!;
     if (visited.includes(id)) continue;
-    visited.push(id);
+
+    // Skip body-only nodes in main BFS — the loop handler will execute them.
+    if (loopBodyNodeIds.has(id)) continue;
+
     const node = workflow.nodes.find((n) => n.id === id);
     if (!node) continue;
+
+    // Bug-2: defer flow.merge until all upstream branches have arrived.
+    if (node.key === 'flow.merge') {
+      const expected = expectedIncomingByMerge.get(id) ?? 0;
+      const arrived = arrivedByMerge.get(id)!;
+      if (arrived.size < expected) {
+        // Not yet ready — re-queue at the back and continue.
+        queue.push(id);
+        continue;
+      }
+      // All upstream arrived → seed merge inputs into context for handler.
+      context.__mergeInputs = Object.fromEntries(arrived.entries());
+    }
+
+    visited.push(id);
+
+    // Bug-1: when about to execute a flow.loop, install a body runner.
+    if (node.key === 'flow.loop') {
+      const bodyEntries = loopBodyEntryByLoop.get(id) ?? [];
+      context.__bodyRunner = async (_binding: any) => {
+        return await runBranch(bodyEntries);
+      };
+    }
 
     const result = (await executeWorkflowNode(
       runScope,
@@ -282,6 +375,11 @@ export async function runWorkflow({
       context,
       builtServices,
     )) as NodeRunResult;
+
+    // Cleanup transient context wiring.
+    if (node.key === 'flow.loop') delete context.__bodyRunner;
+    if (node.key === 'flow.merge') delete context.__mergeInputs;
+
     steps[id] = result;
 
     if (result.status === 'failed') {
@@ -292,10 +390,22 @@ export async function runWorkflow({
       continue;
     }
 
-    // Enqueue downstream nodes. For `flow.loop` we follow the `body`
-    // handle expecting fan-out; otherwise follow all outgoing edges.
-    const outgoing = workflow.edges.filter((e) => e.source === id);
-    for (const e of outgoing) queue.push(e.target);
+    // Enqueue downstream nodes. Follow `done` handle for loops if present;
+    // otherwise follow all non-`body` outgoing edges. Body edges are
+    // handled by the loop's body runner.
+    const outgoing = workflow.edges.filter(
+      (e) => e.source === id && e.sourceHandle !== 'body',
+    );
+    for (const e of outgoing) {
+      // For flow.merge tracking: record this node's output as the upstream
+      // arrival into the target merge node.
+      const targetNode = workflow.nodes.find((n) => n.id === e.target);
+      if (targetNode?.key === 'flow.merge') {
+        const arrived = arrivedByMerge.get(e.target);
+        if (arrived) arrived.set(id, result.output ?? {});
+      }
+      queue.push(e.target);
+    }
   }
 
   return { finalStatus, steps, context, visited, channelRecords };

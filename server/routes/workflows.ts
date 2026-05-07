@@ -1982,43 +1982,65 @@ Write ONLY the reply text, no subject line, no JSON.`;
     const subject = resolveTemplateValue(config.subject || 'Update from support', context);
     const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
     if (!to) return { status: 'failed', error: 'notification.email: no recipient — set "to" or ensure customer.email is in context' };
-    // Pilot node: prefer injected sender (testable); fall back to module import in production.
-    const emailSender = services?.channels?.email ?? sendEmail;
-    const result = await emailSender(to, subject, content, config.ref || context.case?.id || 'workflow').catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
+    // Bug-3 fix: when injected services explicitly lack a transport, block
+    // instead of silently simulating. In production (services not injected)
+    // we still fall back to the real sendEmail.
+    const emailSender = services?.channels?.email ?? (services ? undefined : sendEmail);
+    if (!emailSender) {
+      return {
+        status: 'blocked',
+        error: { code: 'TRANSPORT_NOT_CONFIGURED', message: 'Configura el transporte de email en Conectores antes de usar este nodo.' },
+      };
+    }
+    const result = await emailSender(to, subject, content, config.ref || context.case?.id || 'workflow').catch((err: any) => ({ messageId: null, error: String(err?.message ?? err) }));
     if ((result as any).error) return { status: 'failed', error: `Email send failed: ${(result as any).error}` };
-    return { status: 'completed', output: { to, subject, messageId: result.messageId, simulated: result.simulated } };
+    return { status: 'completed', output: { to, subject, messageId: result.messageId } };
   }
 
   if (node.key === 'notification.whatsapp') {
     const to = resolveTemplateValue(config.to || config.phone || context.customer?.phone || '', context);
     const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
     if (!to) return { status: 'failed', error: 'notification.whatsapp: no recipient — set "to" or ensure customer.phone is in context' };
-    const result = await sendWhatsApp(to, content).catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
+    const whatsappSender = services?.channels?.whatsapp ?? (services ? undefined : sendWhatsApp);
+    if (!whatsappSender) {
+      return {
+        status: 'blocked',
+        error: { code: 'TRANSPORT_NOT_CONFIGURED', message: 'Configura el transporte de WhatsApp en Conectores antes de usar este nodo.' },
+      };
+    }
+    const result = await whatsappSender(to, content).catch((err: any) => ({ messageId: null, error: String(err?.message ?? err) }));
     if ((result as any).error) return { status: 'failed', error: `WhatsApp send failed: ${(result as any).error}` };
-    return { status: 'completed', output: { to, messageId: result.messageId, simulated: result.simulated } };
+    return { status: 'completed', output: { to, messageId: result.messageId } };
   }
 
   if (node.key === 'notification.sms') {
     const to = resolveTemplateValue(config.to || config.phone || context.customer?.phone || '', context);
     const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
     if (!to) return { status: 'failed', error: 'notification.sms: no recipient — set "to" or ensure customer.phone is in context' };
-    const result = await sendSms(to, content).catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
+    const smsSender = services?.channels?.sms ?? (services ? undefined : sendSms);
+    if (!smsSender) {
+      return {
+        status: 'blocked',
+        error: { code: 'TRANSPORT_NOT_CONFIGURED', message: 'Configura el transporte de SMS en Conectores antes de usar este nodo.' },
+      };
+    }
+    const result = await smsSender(to, content).catch((err: any) => ({ messageId: null, error: String(err?.message ?? err) }));
     if ((result as any).error) return { status: 'failed', error: `SMS send failed: ${(result as any).error}` };
-    return { status: 'completed', output: { to, messageId: result.messageId, simulated: result.simulated } };
+    return { status: 'completed', output: { to, messageId: result.messageId } };
   }
 
   // ── AI text generation (real Gemini) ────────────────────────────────────────
   if (node.key === 'ai.generate_text') {
     const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
     if (!prompt) return { status: 'failed', error: 'ai.generate_text: prompt is required' };
-    const geminiKey = appConfig.ai.geminiApiKey;
+    // Bug-3 fix: prefer injected aiKeys (testable); fall back to config in
+    // production. When BOTH are absent, block instead of silently simulating.
+    const geminiKey = services?.aiKeys?.gemini ?? (services ? undefined : appConfig.ai.geminiApiKey);
     if (!geminiKey) {
-      // Graceful fallback when no API key configured
-      const fallback = `[AI unavailable — configure GEMINI_API_KEY] ${prompt.slice(0, 120)}`;
-      const target = config.target || config.output || 'generatedText';
-      context.agent = { ...(context.agent ?? {}), [target]: fallback };
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: fallback };
-      return { status: 'completed', output: { text: fallback, target, simulated: true } };
+      return {
+        status: 'blocked',
+        error: { code: 'TRANSPORT_NOT_CONFIGURED', message: 'Configura una API key para el proveedor de IA antes de usar este nodo.' },
+      };
     }
     const genAI = new GoogleGenerativeAI(geminiKey);
     const model = genAI.getGenerativeModel({ model: appConfig.ai.geminiModel || 'gemini-2.5-pro' });
@@ -2688,7 +2710,27 @@ Write ONLY the reply text, no subject line, no JSON.`;
   }
 
   if (node.key === 'flow.merge') {
-    return { status: 'completed', output: { merged: true, mode: config.mode || 'wait-all' } };
+    // Bug-2 fix: when the scheduler has aggregated upstream branch outputs into
+    // `context.__mergeInputs` (Map<sourceId, output>), expose them as
+    // `output.merged.from_<sourceId>`. The scheduler is responsible for not
+    // firing this node until ALL incoming edges have arrived. If no merge
+    // inputs have been seeded (legacy / single-incoming caller) we degenerate
+    // to a passthrough.
+    const inputs = context.__mergeInputs;
+    const merged: Record<string, any> = {};
+    if (inputs && typeof inputs === 'object') {
+      for (const [sourceId, payload] of Object.entries(inputs)) {
+        merged[`from_${sourceId}`] = payload;
+      }
+    }
+    return {
+      status: 'completed',
+      output: {
+        merged: Object.keys(merged).length > 0 ? merged : { passthrough: true },
+        mode: config.mode || 'wait-all',
+        sources: Object.keys(merged),
+      },
+    };
   }
 
   if (node.key === 'flow.loop') {
@@ -2716,22 +2758,36 @@ Write ONLY the reply text, no subject line, no JSON.`;
 
     const aggregated: any[] = [];
     let failures = 0;
+    // Bug-1 fix: if the scheduler has provided a body runner via
+    // `context.__bodyRunner`, invoke it per item so downstream `body`-handle
+    // nodes actually execute once per iteration. The runner walks the body
+    // sub-graph and returns the terminal step's output. When no runner is
+    // wired (legacy / pre-fan-out callers), we fall back to the previous
+    // snapshot-only behaviour so existing tests keep passing.
+    const bodyRunner: ((loopBinding: any) => Promise<any>) | undefined =
+      typeof context.__bodyRunner === 'function' ? context.__bodyRunner : undefined;
     for (let index = 0; index < sliced.length; index += 1) {
       const item = sliced[index];
-      // Build a per-iteration sub-context that exposes loop.item / loop.index but
-      // mutates the parent's data scratch space — keeping it cheap; deep clone
-      // would defeat the purpose of letting downstream nodes accumulate state.
       context.loop = { item, index, count: sliced.length, maxIterations };
       try {
-        // Execute the loop body as if it were a single synthetic node call. We
-        // re-use the full retry machinery by treating the loop body as a no-op
-        // step that records the iteration; the actual downstream nodes will be
-        // walked by the BFS in executeWorkflowVersion via the loop's success edge.
-        // For real fan-out semantics we still need to invoke the branch here, so
-        // we mark the iteration as observed in the audit and let downstream BFS
-        // pick it up via context.loop. The iteration result is the snapshot of
-        // context.data after this iteration's body would run on the next BFS step.
-        aggregated.push({ index, item, ok: true, snapshot: cloneJson(context.data ?? {}) });
+        if (bodyRunner) {
+          const bodyResult = await bodyRunner({ item, index, count: sliced.length });
+          const bodyOutput = bodyResult?.output ?? bodyResult ?? {};
+          const bodyStatus = bodyResult?.status ?? 'completed';
+          const ok = bodyStatus !== 'failed';
+          if (!ok) failures += 1;
+          aggregated.push({
+            index,
+            item,
+            ok,
+            status: bodyStatus,
+            output: bodyOutput,
+            snapshot: cloneJson(context.data ?? {}),
+            ...(bodyResult?.error ? { error: bodyResult.error } : {}),
+          });
+        } else {
+          aggregated.push({ index, item, ok: true, snapshot: cloneJson(context.data ?? {}) });
+        }
       } catch (err: any) {
         failures += 1;
         aggregated.push({ index, item, ok: false, error: err?.message ?? String(err) });

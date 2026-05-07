@@ -100,6 +100,59 @@ async function main() {
   }
 
   console.log('  ✓ PASS  bug1-flow-loop: flow.loop fans body out per item');
+
+  // ── Bug-1 second test: shape of output.items ─────────────────────────────
+  // Re-run with a slightly different body that yields a deterministic per-item
+  // output. Assert each iteration has a body output with the right shape.
+  const workflow2 = {
+    nodes: [
+      {
+        id: 'seed2',
+        type: 'utility',
+        key: 'data.set_fields',
+        config: {
+          field: 'items',
+          value: [10, 20, 30, 40, 50],
+        },
+      },
+      {
+        id: 'loop2',
+        type: 'utility',
+        key: 'flow.loop',
+        config: { items: 'data.items', target: 'loopResults' },
+      },
+      {
+        id: 'body2',
+        type: 'utility',
+        key: 'data.set_fields',
+        config: { field: 'value', value: '{{loop.item}}' },
+      },
+    ],
+    edges: [
+      { source: 'seed2', target: 'loop2' },
+      { source: 'loop2', target: 'body2', sourceHandle: 'body' },
+    ],
+  };
+
+  const result2 = await runWorkflow({ workflow: workflow2 });
+  const items2 = result2.steps.loop2.output?.items;
+  assert.ok(Array.isArray(items2), 'output.items must be an array');
+  assert.equal(items2.length, 5, `output.items length should be 5, got ${items2.length}`);
+  for (let i = 0; i < 5; i += 1) {
+    const iter = items2[i];
+    assert.equal(iter.index, i, `items[${i}].index should be ${i}`);
+    assert.equal(String(iter.item), String((i + 1) * 10), `items[${i}].item should be ${(i + 1) * 10}`);
+    assert.ok(iter.ok === true, `items[${i}].ok should be true`);
+    assert.equal(iter.status, 'completed', `items[${i}].status should be completed`);
+    // body output is the data.set_fields output, which carries the set field.
+    const observed = iter.snapshot?.value ?? iter.output?.value ?? iter.output?.set?.value;
+    assert.equal(
+      String(observed),
+      String((i + 1) * 10),
+      `iteration ${i}: body output should reflect item value, got ${JSON.stringify(observed)}`,
+    );
+  }
+  console.log('  ✓ PASS  bug1-flow-loop: output.items shape + length matches iterations');
 }
 
 main().catch((err) => {
