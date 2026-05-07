@@ -25,6 +25,7 @@ import { getRefundThreshold } from '../utils/refundThreshold.js';
 import { logger } from '../utils/logger.js';
 import { broadcastSSE } from './sse.js';
 import { executeNode as runAdapter, executeNodeWithRetry } from '../runtime/workflowExecutor.js';
+import { registerSchedulerHooks } from '../runtime/adapters/flowScheduler.js';
 
 const router = Router();
 const workflowRepository = createWorkflowRepository();
@@ -38,6 +39,19 @@ const integrationRepository = createIntegrationRepository();
 const workspaceRepository = createWorkspaceRepository();
 
 router.use(extractMultiTenant);
+
+// ── Wire flow.subworkflow / flow.merge / flow.loop / flow.wait / delay ─────
+// Their adapters live in server/runtime/adapters/flowScheduler.ts but need
+// callbacks into the route's repository singletons + scheduler. Done at
+// module load so the registry is ready before the first node runs.
+registerSchedulerHooks({
+  getDefinition: (id, tenantId, workspaceId) =>
+    workflowRepository.getDefinition(id, tenantId, workspaceId),
+  getVersion: (id, scope) => workflowRepository.getVersion(id, scope),
+  getLatestVersion: (definitionId, scope) =>
+    workflowRepository.getLatestVersion(definitionId, scope),
+  runSubworkflow: (opts) => executeWorkflowVersion(opts),
+});
 
 const NODE_CATALOG = [
   { type: 'trigger', key: 'case.created', label: 'Case created', category: 'Trigger', icon: 'assignment', requiresConfig: false },
@@ -745,23 +759,7 @@ async function buildStepDryRun(
   };
 }
 
-/** Parse a human duration string (e.g. "2h", "30m", "1d") into an ISO expiry timestamp. */
-function resolveDelayUntil(duration: string): string | null {
-  const str = String(duration).trim().toLowerCase();
-  const match = str.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)$/);
-  if (!match) return null;
-  const amount = parseFloat(match[1]);
-  const unit = match[2];
-  const ms = unit === 'ms' ? amount
-    : unit === 's'  ? amount * 1_000
-    : unit === 'm'  ? amount * 60_000
-    : unit === 'h'  ? amount * 3_600_000
-    : unit === 'd'  ? amount * 86_400_000
-    : unit === 'w'  ? amount * 604_800_000
-    : 0;
-  if (!ms) return null;
-  return new Date(Date.now() + ms).toISOString();
-}
+// `resolveDelayUntil` extracted to server/runtime/adapters/flowScheduler.ts (Phase 4b).
 
 function normalizeTriggerName(value: string | null | undefined) {
   return String(value ?? '').trim().toLowerCase().replace(/_/g, '.');
@@ -1027,156 +1025,9 @@ export async function executeWorkflowNode(
     return { status: 'failed', error: `Unsupported ${node.type} node key: ${node.key}` };
   }
 
-  if (node.key === 'delay' || node.key === 'flow.wait') {
-    const duration = config.duration || config.timeout || null;
-    // Store delay expiry in context so the scheduler can resume at the right time
-    const delayUntil = duration ? resolveDelayUntil(duration) : null;
-    context.delayUntil = delayUntil;
-    return { status: 'waiting', output: { delay: duration || 'manual_resume', delayUntil } };
-  }
-
-  if (node.key === 'flow.merge') {
-    // Bug-2 fix: when the scheduler has aggregated upstream branch outputs into
-    // `context.__mergeInputs` (Map<sourceId, output>), expose them as
-    // `output.merged.from_<sourceId>`. The scheduler is responsible for not
-    // firing this node until ALL incoming edges have arrived. If no merge
-    // inputs have been seeded (legacy / single-incoming caller) we degenerate
-    // to a passthrough.
-    const inputs = context.__mergeInputs;
-    const merged: Record<string, any> = {};
-    if (inputs && typeof inputs === 'object') {
-      for (const [sourceId, payload] of Object.entries(inputs)) {
-        merged[`from_${sourceId}`] = payload;
-      }
-    }
-    return {
-      status: 'completed',
-      output: {
-        merged: Object.keys(merged).length > 0 ? merged : { passthrough: true },
-        mode: config.mode || 'wait-all',
-        sources: Object.keys(merged),
-      },
-    };
-  }
-
-  if (node.key === 'flow.loop') {
-    // Resolve the items array. Accepts either a context path ("steps.fetch.output.items"),
-    // a JSONPath-ish "$.steps.fetch.output.items", or a literal array via config.items.
-    const rawSource = config.items ?? config.source ?? 'data.items';
-    let resolvedItems: any;
-    if (Array.isArray(rawSource)) {
-      resolvedItems = rawSource;
-    } else if (typeof rawSource === 'string') {
-      const cleaned = rawSource.replace(/^\$\.?/, '');
-      resolvedItems = readContextPath(context, cleaned);
-      if (resolvedItems == null) resolvedItems = asArray(rawSource);
-    } else {
-      resolvedItems = rawSource;
-    }
-    if (!Array.isArray(resolvedItems)) {
-      return { status: 'failed', error: `flow.loop: el campo "items" no resolvió a un array (recibido ${typeof resolvedItems}).` };
-    }
-    const items = resolvedItems;
-    const maxIterations = Math.max(1, Number(config.maxIterations || config.max_iterations || 1000));
-    const truncated = items.length > maxIterations;
-    const sliced = truncated ? items.slice(0, maxIterations) : items;
-    logger.info('flow.loop start', { nodeId: node.id, count: sliced.length, maxIterations, truncated });
-
-    const aggregated: any[] = [];
-    let failures = 0;
-    // Bug-1 fix: if the scheduler has provided a body runner via
-    // `context.__bodyRunner`, invoke it per item so downstream `body`-handle
-    // nodes actually execute once per iteration. The runner walks the body
-    // sub-graph and returns the terminal step's output. When no runner is
-    // wired (legacy / pre-fan-out callers), we fall back to the previous
-    // snapshot-only behaviour so existing tests keep passing.
-    const bodyRunner: ((loopBinding: any) => Promise<any>) | undefined =
-      typeof context.__bodyRunner === 'function' ? context.__bodyRunner : undefined;
-    for (let index = 0; index < sliced.length; index += 1) {
-      const item = sliced[index];
-      context.loop = { item, index, count: sliced.length, maxIterations };
-      try {
-        if (bodyRunner) {
-          const bodyResult = await bodyRunner({ item, index, count: sliced.length });
-          const bodyOutput = bodyResult?.output ?? bodyResult ?? {};
-          const bodyStatus = bodyResult?.status ?? 'completed';
-          const ok = bodyStatus !== 'failed';
-          if (!ok) failures += 1;
-          aggregated.push({
-            index,
-            item,
-            ok,
-            status: bodyStatus,
-            output: bodyOutput,
-            snapshot: cloneJson(context.data ?? {}),
-            ...(bodyResult?.error ? { error: bodyResult.error } : {}),
-          });
-        } else {
-          aggregated.push({ index, item, ok: true, snapshot: cloneJson(context.data ?? {}) });
-        }
-      } catch (err: any) {
-        failures += 1;
-        aggregated.push({ index, item, ok: false, error: err?.message ?? String(err) });
-        logger.warn('flow.loop iteration failed', { nodeId: node.id, index, error: err?.message ?? String(err) });
-      }
-    }
-
-    context.loop = { items: sliced, count: sliced.length, maxIterations, truncated, completed: true };
-    context.data = {
-      ...(context.data && typeof context.data === 'object' ? context.data : {}),
-      [String(config.target || 'loopResults')]: aggregated,
-    };
-    logger.info('flow.loop done', { nodeId: node.id, count: sliced.length, failures, truncated });
-    return {
-      status: failures > 0 && failures === sliced.length ? 'failed' : 'completed',
-      output: {
-        looped: true,
-        count: sliced.length,
-        truncated,
-        failures,
-        items: aggregated,
-        target: config.target || 'loopResults',
-      },
-      ...(failures > 0 && failures === sliced.length
-        ? { error: `flow.loop: todas las ${sliced.length} iteraciones fallaron.` }
-        : {}),
-    };
-  }
-
-  if (node.key === 'flow.subworkflow') {
-    const subWorkflowId = config.workflow || config.workflowId || null;
-    if (!subWorkflowId) return { status: 'failed', error: 'flow.subworkflow requires workflow id' };
-    const definition = await workflowRepository.getDefinition(subWorkflowId, scope.tenantId, scope.workspaceId);
-    if (!definition) return { status: 'failed', error: 'Sub-workflow not found' };
-    const version = definition.current_version_id
-      ? await workflowRepository.getVersion(definition.current_version_id, { tenantId: scope.tenantId })
-      : await workflowRepository.getLatestVersion(definition.id, { tenantId: scope.tenantId });
-    if (!version) return { status: 'failed', error: 'Sub-workflow has no version' };
-    const nestedDepth = Number(context.__subworkflowDepth || 0);
-    if (nestedDepth >= 3) return { status: 'blocked', output: { reason: 'Sub-workflow nesting limit reached', subWorkflowId } };
-    const result = await executeWorkflowVersion({
-      tenantId: scope.tenantId,
-      workspaceId: scope.workspaceId,
-      userId: scope.userId,
-      workflowId: definition.id,
-      version,
-      triggerPayload: {
-        ...(parseMaybeJsonObject(config.input) || {}),
-        parentWorkflowNodeId: node.id,
-        parentContext: {
-          caseId: context.case?.id,
-          orderId: context.order?.id,
-          paymentId: context.payment?.id,
-          returnId: context.return?.id,
-          data: context.data,
-        },
-        __subworkflowDepth: nestedDepth + 1,
-      },
-      triggerType: 'subworkflow',
-    });
-    context.subworkflow = { subWorkflowId, runId: result.id, status: result.status };
-    return { status: result.status === 'completed' ? 'completed' : 'waiting', output: context.subworkflow, error: result.error ?? null };
-  }
+  // ── flow.wait, delay, flow.merge, flow.loop, flow.subworkflow extracted to
+  //    server/runtime/adapters/flowScheduler.ts (Phase 4b). Early adapter
+  //    dispatch above handles all 5 keys.
 
   if (node.key === 'flow.stop_error') {
     return { status: 'failed', error: config.errorMessage || 'Stopped by flow.stop_error', output: { stopped: true } };
