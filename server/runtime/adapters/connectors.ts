@@ -24,7 +24,7 @@ const approvalRepository = createApprovalRepository();
 
 const connectorCall: NodeAdapter = async ({ scope, context, services }, node, config) => {
   const fetchImpl = services?.fetchImpl ?? globalThis.fetch.bind(globalThis);
-  const registry = services?.integrations ?? integrationRegistry;
+  const registry: { get: (k: any) => any } = (services?.integrations ?? integrationRegistry) as any;
   const connectorId = config.connector_id || config.connectorId || config.connector;
   if (!connectorId) return { status: 'failed', error: 'connector.call requires connector id' } as any;
   const connector = await integrationRepository.getConnector({ tenantId: scope.tenantId }, connectorId);
@@ -147,7 +147,7 @@ const connectorCheckHealth: NodeAdapter = async ({ scope, context }, _node, conf
 };
 
 const connectorEmitEvent: NodeAdapter = async ({ scope, context, services }, node, config) => {
-  const registry = services?.integrations ?? integrationRegistry;
+  const registry: { get: (k: any) => any } = (services?.integrations ?? integrationRegistry) as any;
   const connectorId = config.connector_id || config.connectorId || config.connector;
   const connector = connectorId ? await integrationRepository.getConnector({ tenantId: scope.tenantId }, connectorId) : null;
   const sourceSystem = connector?.system || config.source_system || config.sourceSystem || 'workflow';

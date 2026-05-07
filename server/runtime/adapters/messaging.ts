@@ -48,7 +48,7 @@ async function refreshOAuthToken(
   if (!json.access_token) return { error: 'Token refresh response sin access_token.' };
   const expiresAt = Date.now() + (Number(json.expires_in || 3600) * 1000);
   try {
-    const newAuth = { ...auth, access_token: json.access_token, expires_at: expiresAt };
+    const newAuth: Record<string, any> = { ...auth, access_token: json.access_token, expires_at: expiresAt };
     if (json.refresh_token) newAuth.refresh_token = json.refresh_token;
     await (integrationRepository as any).updateConnector?.({ tenantId: scope.tenantId }, connectorId, { auth_config: newAuth });
   } catch { /* persistence failure shouldn't block this send */ }
