@@ -908,6 +908,22 @@ export const reportsApi = {
     request<any>(`/reports/sla?${buildReportParams(period, channel, dateFrom, dateTo)}`),
   summary: (period = '7d', channel = 'all', audience = 'Executive / C-Suite') =>
     request<any>(`/reports/summary?${new URLSearchParams({ period, channel, audience }).toString()}`),
+  conversations: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/conversations?${buildReportParams(period, channel)}`),
+  finagent: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/finagent?${buildReportParams(period, channel)}`),
+  teammate: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/teammate?${buildReportParams(period, channel)}`),
+  tickets: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/tickets?${buildReportParams(period, channel)}`),
+  articles: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/articles?${buildReportParams(period, channel)}`),
+  responsiveness: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/responsiveness?${buildReportParams(period, channel)}`),
+  csat: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/csat?${buildReportParams(period, channel)}`),
+  effectiveness: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/effectiveness?${buildReportParams(period, channel)}`),
 };
 
 export const operationsApi = {

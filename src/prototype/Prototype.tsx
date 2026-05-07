@@ -414,7 +414,7 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
       // Hover-to-expand: enter rail → 210px, leave rail → 44px. No manual toggle button.
       onMouseEnter={() => setExpanded(true)}
       onMouseLeave={() => setExpanded(false)}
-      className="flex flex-col h-full pt-3 pb-2 bg-[#f3f3f1] rounded-tr-2xl rounded-br-2xl justify-between flex-shrink-0 transition-[width] duration-150"
+      className={`fixed top-0 left-0 h-full flex flex-col pt-3 pb-2 bg-[#f3f3f1] rounded-tr-2xl rounded-br-2xl justify-between transition-[width,box-shadow] duration-150 z-50 ${expanded ? 'shadow-[4px_0px_24px_rgba(20,20,20,0.10)]' : ''}`}
       style={{ width: expanded ? 210 : 44 }}
     >
       <div className="flex flex-col gap-3">
@@ -9932,7 +9932,7 @@ function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: 
   // All groups collapsed by default — user opens what they need via chevron click.
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'Temas de informes': false,
-    'IA y automatización': false,
+    'IA y automatización': true,
     'Soporte humano': false,
     'Proactivo': false,
   });
@@ -10458,140 +10458,118 @@ function ReportsCallsContent() {
   );
 }
 
-function ReportsConversationsContent() {
+function ReportsConversationsContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.conversations(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 28 }, (_, i) => ({ day: i, count: 0 }));
+  const byChannel: { channel: string; count: number }[] = data?.byChannel ?? [];
+  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
+  const CHANNEL_COLORS = ['#3b59f6', '#fc8a37', '#1e40af', '#7c3aed', '#16a34a', '#dc2626'];
+  const totalByChannel = byChannel.reduce((s, c) => s + c.count, 1);
+  let cumPct = 0;
+  const channelGradientStops = byChannel.map((c, i) => {
+    const pct = (c.count / totalByChannel) * 100;
+    const start = cumPct;
+    cumPct += pct;
+    return `${CHANNEL_COLORS[i % CHANNEL_COLORS.length]} ${start}% ${cumPct}%`;
+  });
+  const donutGradient = channelGradientStops.length > 0
+    ? `conic-gradient(${channelGradientStops.join(', ')})`
+    : 'conic-gradient(#e9eae6 0 100%)';
+
   return (
     <>
       <ReportShellHeader title="Conversations" description="Track your new inbound conversations, busiest periods and biggest customer issues, etc." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-4 gap-4">
-        <ReportsKpiCard label="New conversations" value="4" delta="4" />
-        <ReportsKpiCard label="Conversations replied to" value="0" />
-        <ReportsKpiCard label="Replies sent" value="0" />
-        <ReportsKpiCard label="Closed conversations" value="0" />
-        <ReportsKpiCard label="Reopened conversations" value="0" />
-        <ReportsKpiCard label="Open conversations" value="4" delta="4" />
-        <ReportsKpiCard label="Snoozed conversations" value="0" />
+        <ReportsKpiCard label="New conversations" value={loading ? '…' : String(kpis.new_conversations ?? '—')} delta={kpis.new_change && kpis.new_trend === 'up' ? kpis.new_change : undefined} />
+        <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.replied_conversations ?? '—')} />
+        <ReportsKpiCard label="Closed conversations" value={loading ? '…' : String(kpis.closed_conversations ?? '—')} delta={kpis.closed_change && kpis.closed_trend === 'up' ? kpis.closed_change : undefined} />
+        <ReportsKpiCard label="Open conversations" value={loading ? '…' : String(kpis.open_conversations ?? '—')} />
+        {/* Time series bar chart */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
           <div className="flex items-center gap-1 mb-3">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">New conversations - by time</span>
           </div>
           <div className="h-[180px] flex items-end gap-1 px-3">
-            {Array.from({ length: 28 }, (_, i) => i === 26 ? 4 : 0).map((h, i) => (
-              <div key={i} style={{ height: h ? `${(h / 4) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+            {timeSeries.map((t, i) => (
+              <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
             ))}
           </div>
           <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
-            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>30 días anteriores</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#cccaff]"/>Apr 8 - May 5</span>
+            <span>Día 1</span><span>Día 7</span><span>Día 14</span><span>Día 21</span><span>Día 28</span>
           </div>
         </div>
+        {/* By channel donut */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-2">
           <div className="flex items-center gap-1 mb-3">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">New conversations - by channel</span>
           </div>
-          <div className="h-[140px] flex items-center justify-center">
-            <div className="relative w-[120px] h-[120px] rounded-full" style={{ background: 'conic-gradient(#3b59f6 0 75%, #fc8a37 75% 100%)' }}>
-              <div className="absolute inset-[18px] rounded-full bg-white" />
-            </div>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>Unknown</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fc8a37]"/>Chat</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#1e40af]"/>Email</span>
-          </div>
+          {loading ? (
+            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Cargando...</div>
+          ) : byChannel.length === 0 ? (
+            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos</div>
+          ) : (
+            <>
+              <div className="h-[120px] flex items-center justify-center">
+                <div className="relative w-[120px] h-[120px] rounded-full" style={{ background: donutGradient }}>
+                  <div className="absolute inset-[18px] rounded-full bg-white" />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-2 text-[11px] text-[#646462]">
+                {byChannel.slice(0, 4).map((c, i) => (
+                  <span key={c.channel} className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full" style={{ background: CHANNEL_COLORS[i % CHANNEL_COLORS.length] }} />
+                    {c.channel} ({c.count})
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
-        <ReportEmptyChart label="Replies sent - by time" span={2} />
-        <ReportEmptyChart label="Closed vs. Reopened conversations" span={2} />
+        {/* By type bar */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-2">
           <div className="flex items-center gap-1 mb-3">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Open and Snoozed conversations</span>
+            <span className="text-[12.5px] text-[#1a1a1a]">Conversaciones por tipo (top 5)</span>
           </div>
-          <div className="h-[140px] flex items-end gap-2 px-3">
-            {Array.from({ length: 28 }, (_, i) => i === 26 ? 3 : 0).map((h, i) => (
-              <div key={i} style={{ height: h ? `${(h / 3) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-            ))}
-          </div>
-          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
-            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>Conversaciones abiertas</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fc8a37]"/>Conversaciones pospuestas</span>
-          </div>
-        </div>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Comparison of New Conversations and Replies</span>
-          </div>
-          <div className="h-[140px] flex items-end gap-2 px-3">
-            {Array.from({ length: 28 }, (_, i) => i === 26 ? 4 : 0).map((h, i) => (
-              <div key={i} style={{ height: h ? `${(h / 4) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-            ))}
-          </div>
-          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
-            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>Nuevas conversaciones</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fc8a37]"/>Conversaciones respondidas a</span>
-          </div>
-        </div>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Hourly Distribution of New Conversations</span>
-          </div>
-          <div className="flex">
-            <div className="flex flex-col justify-between pr-2 pt-1 pb-1 text-[10px] text-[#646462] uppercase tracking-wide">
-              {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
-                <span key={d} className="leading-none h-[20px] flex items-center">{d}</span>
-              ))}
-            </div>
-            <div className="flex-1">
-              <div className="grid gap-[2px] p-1 bg-[#cfe5ff] rounded-sm" style={{ gridTemplateColumns: 'repeat(24, minmax(0,1fr))' }}>
-                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].flatMap(day => Array.from({ length: 24 }, (_, h) => {
-                  const highlighted = day === 'Tue' && h === 7;
-                  return (
-                    <div
-                      key={`${day}-${h}`}
-                      className="aspect-square rounded-[2px] flex items-center justify-center text-[8px]"
-                      style={{ background: highlighted ? '#2563eb' : '#bfdbff', color: highlighted ? '#fff' : '#1d4ed8' }}
-                    >
-                      {highlighted ? '4' : '0'}
+          {loading ? (
+            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Cargando...</div>
+          ) : (data?.byType ?? []).length === 0 ? (
+            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos</div>
+          ) : (
+            <div className="space-y-2 pt-2">
+              {(data?.byType ?? []).slice(0, 5).map((t: { type: string; count: number }) => {
+                const maxCount = Math.max(...(data?.byType ?? []).map((x: any) => x.count), 1);
+                return (
+                  <div key={t.type} className="flex items-center gap-2">
+                    <span className="text-[11px] text-[#646462] w-[100px] truncate">{t.type.replace(/_/g, ' ')}</span>
+                    <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
+                      <div className="bg-[#3b59f6] h-2 rounded-full" style={{ width: `${(t.count / maxCount) * 100}%` }} />
                     </div>
-                  );
-                }))}
-              </div>
-              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-1">
-                {Array.from({ length: 24 }, (_, h) => <span key={h}>{h}</span>)}
-              </div>
+                    <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{t.count}</span>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-4">
-            <span className="text-[10px] text-[#646462]">0</span>
-            <div className="h-[8px] w-[200px] rounded-full" style={{ background: 'linear-gradient(to right, #cfe5ff, #2563eb)' }} />
-            <span className="text-[10px] text-[#646462]">4</span>
-          </div>
+          )}
         </div>
       </div>
     </>
   );
 }
 
-function ReportsCsatContent() {
+function ReportsCsatContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.csat(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
   return (
     <>
       <ReportShellHeader title="Surveyed CSAT" description="See how your customer satisfaction scores and support channels, teammates, e..." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Overall CSAT score" value="—" sub="0 de 0" />
+        <ReportsKpiCard label="Overall CSAT score" value={loading ? '…' : kpis.overall_csat != null ? `${kpis.overall_csat}%` : '—'} sub={`${kpis.positive_count ?? 0} de ${(kpis.positive_count ?? 0) + (kpis.neutral_count ?? 0) + (kpis.negative_count ?? 0)}`} />
         <ReportsKpiCard label="Teammate CSAT score" value="—" sub="0 de 0" />
         <ReportsKpiCard label="Fin Agent CSAT score" value="—" sub="0 de 0" />
         <ReportEmptyChart label="CSAT score over time" span={3} />
@@ -10600,9 +10578,9 @@ function ReportsCsatContent() {
           <ReportEmptyChart label="Conversation ratings - by conversation rating" />
           <ReportEmptyChart label="Conversation ratings - by conversation rating" />
         </div>
-        <ReportsKpiCard label="Positive remarks" value="0" />
-        <ReportsKpiCard label="Neutral remarks" value="0" />
-        <ReportsKpiCard label="Negative remarks" value="0" />
+        <ReportsKpiCard label="Positive remarks" value={loading ? '…' : String(kpis.positive_count ?? 0)} />
+        <ReportsKpiCard label="Neutral remarks" value={loading ? '…' : String(kpis.neutral_count ?? 0)} />
+        <ReportsKpiCard label="Negative remarks" value={loading ? '…' : String(kpis.negative_count ?? 0)} />
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-3">
           <div className="flex items-center gap-1 mb-3">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
@@ -10615,8 +10593,8 @@ function ReportsCsatContent() {
           </div>
         </div>
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">CSAT survey</h3>
-        <ReportsKpiCard label="CSAT request rate" value="0%" sub="0 de 0" />
-        <ReportsKpiCard label="CSAT response rate" value="0%" sub="0 de 0" />
+        <ReportsKpiCard label="CSAT request rate" value={loading ? '…' : kpis.request_rate ?? '0%'} sub="0 de 0" />
+        <ReportsKpiCard label="CSAT response rate" value={loading ? '…' : kpis.response_rate ?? '0%'} sub="0 de 0" />
         <div className="col-span-1" />
         <ReportEmptyChart label="CSAT survey request & response rates - by time" span={3} />
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Dissatisfaction drivers</h3>
@@ -10628,23 +10606,25 @@ function ReportsCsatContent() {
   );
 }
 
-function ReportsEffectivenessContent() {
+function ReportsEffectivenessContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.effectiveness(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
   return (
     <>
       <ReportShellHeader title="Effectiveness" description="Measure how effectively your teams handle conversations with the Effectiveness report." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Conversations replied to" value="0" />
-        <ReportsKpiCard label="Closed conversations on first contact rate" value="0%" sub="0 de 4" />
-        <ReportsKpiCard label="Median replies to close a conversation" value="—" />
-        <ReportsKpiCard label="Conversations reassigned" value="0" />
+        <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.conversations_replied_to ?? '—')} />
+        <ReportsKpiCard label="Closed conversations on first contact rate" value={loading ? '…' : kpis.first_contact_resolution ?? '0%'} sub={kpis.first_contact_total != null ? `${kpis.first_contact_resolved ?? 0} de ${kpis.first_contact_total}` : undefined} />
+        <ReportsKpiCard label="Median replies to close a conversation" value={kpis.median_replies_to_close ?? '—'} />
+        <ReportsKpiCard label="Conversations reassigned" value={loading ? '…' : String(kpis.conversations_reassigned ?? 0)} />
         <ReportsKpiCard label="Median time to first assignment" value="—" />
         <ReportsKpiCard label="Median time from first assignment to close" value="—" />
         <div className="col-span-3 grid grid-cols-2 gap-4">
           <ReportEmptyChart label="Median replies to close a conversation - by time" />
           <ReportEmptyChart label="Median time to first assignment" />
         </div>
-        <ReportLineChartCard label="Closed conversations on first contact rate - by time" span={3} points={[{ i: 26, v: 0 }]} axis={["Apr 8","Apr 13","Apr 20","Apr 27","May 4"]} yMax={5} yLabel="5%" />
+        <ReportLineChartCard label="Closed conversations on first contact rate - by time" span={3} points={[{ i: 0, v: 0 }]} axis={["Día 1","Día 7","Día 14","Día 21","Día 28"]} yMax={5} yLabel="5%" />
         <div className="col-span-3 grid grid-cols-2 gap-4">
           <ReportEmptyChart label="Conversations reassigned - by time" />
           <ReportEmptyChart label="Median time from first assignment to close - by time" />
@@ -10654,15 +10634,17 @@ function ReportsEffectivenessContent() {
   );
 }
 
-function ReportsResponsivenessContent() {
+function ReportsResponsivenessContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.responsiveness(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
   return (
     <>
       <ReportShellHeader title="Responsiveness" description="See how quickly your team respond to, and close conversations with the Responsiveness report." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Median response time: including time assigned to bot" value="—" />
-        <ReportsKpiCard label="Median first response time: including time assigned to bot" value="—" />
-        <ReportsKpiCard label="Median time to close: including time assigned to bot" value="—" />
+        <ReportsKpiCard label="Median response time: including time assigned to bot" value={loading ? '…' : kpis.median_response_time ?? '—'} />
+        <ReportsKpiCard label="Median first response time: including time assigned to bot" value={loading ? '…' : kpis.median_first_response ?? '—'} />
+        <ReportsKpiCard label="Median time to close: including time assigned to bot" value={loading ? '…' : kpis.median_time_to_close ?? '—'} />
         <ReportEmptyChart label="Median response time: including time assigned to bot - by time" span={3} />
         <div className="col-span-3 grid grid-cols-2 gap-4">
           <ReportEmptyChart label="Median first response time: including time assigned to bot - by time" />
@@ -10704,35 +10686,108 @@ function ReportsResponsivenessContent() {
   );
 }
 
-function ReportsSlasContent() {
+function ReportsSlasContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
+  const distribution: { status: string; count: number }[] = data?.distribution ?? [];
+  const byPriority: { priority: string; slaStatus: string; count: number }[] = data?.byPriority ?? [];
+  const breachedByType: { type: string; count: number }[] = data?.breachedByType ?? [];
+  const totalWithSla = distribution.reduce((s, d) => s + d.count, 0);
+  const breachedCount = distribution.find(d => d.status === 'breached')?.count ?? 0;
+  const compliantCount = distribution.find(d => d.status === 'compliant')?.count ?? 0;
+  const missRate = totalWithSla > 0 ? `${Math.round((breachedCount / totalWithSla) * 100)}%` : '—';
+
+  // Group byPriority into pivot table
+  const priorities = [...new Set(byPriority.map(r => r.priority))].filter(Boolean);
+  const slaStatuses = [...new Set(byPriority.map(r => r.slaStatus))].filter(Boolean);
+
   return (
     <>
       <ReportShellHeader title="SLAs" description="Review your team's performance against your Service Level Agreements with the SLAs report." />
       <ReportShellFilters extraFilter={{ icon: 'sla', label: 'SLA (Acuerdo de nivel de servicio) es Cualquiera' }} />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Conversation and ticket SLA miss rate" value="—" sub="0 de 0" />
-        <ReportsKpiCard label="Conversations and tickets with SLA" value="0" />
-        <ReportsKpiCard label="Conversations and tickets with missed SLA" value="0" />
+        <ReportsKpiCard label="Conversation and ticket SLA miss rate" value={loading ? '…' : missRate} sub={`${breachedCount} de ${totalWithSla}`} />
+        <ReportsKpiCard label="Conversations and tickets with SLA" value={loading ? '…' : String(totalWithSla)} />
+        <ReportsKpiCard label="Conversations and tickets with missed SLA" value={loading ? '…' : String(breachedCount)} />
+        {/* Distribution summary */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
           <div className="px-5 py-3 flex items-center gap-1">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">SLA performance</span>
           </div>
           <div className="grid grid-cols-4 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-            <div>Tipo de métrica de SLA</div>
-            <div>Tasa de cumplimiento del Acuerdo de Nivel de Servicio</div>
-            <div>SLA incumplidos</div>
-            <div>Promedio Tiempo de respuesta después de un incumplimiento del SLA</div>
+            <div>Estado SLA</div>
+            <div>Casos</div>
+            <div>% del total</div>
+            <div>Tendencia</div>
           </div>
-          <div className="grid grid-cols-4 px-5 py-3 text-[12.5px] text-[#1a1a1a]">
-            <div>Resumen</div>
-            <div className="text-[#646462]">—</div>
-            <div>0</div>
-            <div className="text-[#646462]">—</div>
-          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : distribution.length === 0 ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Sin datos SLA en el período</div>
+          ) : distribution.map(d => (
+            <div key={d.status} className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="capitalize">{d.status}</div>
+              <div>{d.count}</div>
+              <div className="text-[#646462]">{totalWithSla > 0 ? `${Math.round((d.count / totalWithSla) * 100)}%` : '—'}</div>
+              <div className="text-[#646462]">—</div>
+            </div>
+          ))}
+          {/* Compliant summary row */}
+          {distribution.length > 0 && (
+            <div className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] bg-[#f8f8f7] text-[12.5px] font-medium text-[#1a1a1a]">
+              <div>Total</div>
+              <div>{totalWithSla}</div>
+              <div>100%</div>
+              <div className={compliantCount > breachedCount ? 'text-[#16a34a]' : 'text-[#dc2626]'}>{missRate} miss rate</div>
+            </div>
+          )}
         </div>
+        {/* By priority table */}
+        {byPriority.length > 0 && (
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
+            <div className="px-5 py-3 flex items-center gap-1">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">SLA por prioridad</span>
+            </div>
+            <div className={`grid px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]`} style={{ gridTemplateColumns: `repeat(${1 + slaStatuses.length}, minmax(0,1fr))` }}>
+              <div>Prioridad</div>
+              {slaStatuses.map(s => <div key={s} className="capitalize">{s}</div>)}
+            </div>
+            {priorities.map(priority => (
+              <div key={priority} className={`grid px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]`} style={{ gridTemplateColumns: `repeat(${1 + slaStatuses.length}, minmax(0,1fr))` }}>
+                <div className="capitalize">{priority ?? 'Sin prioridad'}</div>
+                {slaStatuses.map(s => {
+                  const found = byPriority.find(r => r.priority === priority && r.slaStatus === s);
+                  return <div key={s} className="text-[#646462]">{found?.count ?? 0}</div>;
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Breached by type */}
+        {breachedByType.length > 0 && (
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-3">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">SLA incumplidos por tipo de caso</span>
+            </div>
+            <div className="space-y-2">
+              {breachedByType.slice(0, 8).map(t => {
+                const maxCount = Math.max(...breachedByType.map(x => x.count), 1);
+                return (
+                  <div key={t.type} className="flex items-center gap-2">
+                    <span className="text-[11px] text-[#646462] w-[120px] truncate">{t.type.replace(/_/g, ' ')}</span>
+                    <div className="flex-1 bg-[#fee2e2] rounded-full h-2">
+                      <div className="bg-[#dc2626] h-2 rounded-full" style={{ width: `${(t.count / maxCount) * 100}%` }} />
+                    </div>
+                    <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{t.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <ReportEmptyChart label="Targets hit over time" span={3} />
-        <ReportEmptyChart label="Hourly Distribution of Missed Targets" span={3} />
       </div>
     </>
   );
@@ -10757,7 +10812,10 @@ function ReportsTeamInboxContent() {
   );
 }
 
-function ReportsTeammateContent() {
+function ReportsTeammateContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.teammate(period, channel), [period, channel], null);
+  const members: any[] = data?.members ?? [];
+  const isEmpty = data?.isEmpty !== false || members.length === 0;
   return (
     <>
       <ReportShellHeader title="Teammate performance" description="Check in on teammate performance with accurate metrics and insights." />
@@ -10768,7 +10826,7 @@ function ReportsTeammateContent() {
         <ReportsKpiCard label="Median teammate assignment to first response" value="—" />
         <ReportsKpiCard label="Median teammate assignment to subsequent response" value="—" />
         <ReportsKpiCard label="Conversations closed per active hour" value="—" />
-        <ReportsKpiCard label="Conversations assigned per active hour" value="∞" />
+        <ReportsKpiCard label="Conversations assigned per active hour" value="—" />
         <ReportsKpiCard label="Conversations replied to per active hour" value="—" />
         <div className="col-span-1" />
         <ReportEmptyChart label="Teammate Productivity" span={3} />
@@ -10779,26 +10837,37 @@ function ReportsTeammateContent() {
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">Comparison of Teammate performance</span>
           </div>
-          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+          <div className="grid grid-cols-4 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
             <div>Compañero de equipo</div>
-            <div>Conversaciones asignadas</div>
-            <div>Conversaciones respondidas a</div>
-            <div>Respuestas enviadas</div>
-            <div>Conversaciones cerradas por compañeros de equipo</div>
+            <div>Rol</div>
+            <div>Casos asignados</div>
+            <div>Casos cerrados</div>
           </div>
-          <div className="grid grid-cols-5 px-5 py-3 text-[12.5px] text-[#1a1a1a] border-b border-[#f1f1ee]">
-            <div>Resumen</div><div>4</div><div>0</div><div>0</div><div>0</div>
-          </div>
-          <div className="grid grid-cols-5 px-5 py-3 text-[12.5px] text-[#1a1a1a]">
-            <div>Hector Vidal Sanchez</div><div>4</div><div>0</div><div>0</div><div>0</div>
-          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : isEmpty ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay datos de compañeros de equipo disponibles. La tabla workspace_members puede no estar configurada.</div>
+          ) : members.map((m, i) => (
+            <div key={i} className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div>{m.name ?? m.userId ?? 'Miembro'}</div>
+              <div className="text-[#646462] capitalize">{m.role ?? '—'}</div>
+              <div>{m.casesAssigned ?? 0}</div>
+              <div>{m.casesClosed ?? 0}</div>
+            </div>
+          ))}
         </div>
       </div>
     </>
   );
 }
 
-function ReportsTicketsContent() {
+function ReportsTicketsContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.tickets(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const byType: { type: string; count: number }[] = data?.byType ?? [];
+  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 28 }, (_, i) => ({ day: i, count: 0 }));
+  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
+  const maxType = Math.max(...byType.map(t => t.count), 1);
   return (
     <>
       <ReportShellHeader title="Tickets" description="Explore your tickets report and create your own custom reports using ticket data." />
@@ -10808,14 +10877,119 @@ function ReportsTicketsContent() {
         <ReportsKpiCard label="Median ticket time in submitted" value="—" />
         <ReportsKpiCard label="Median ticket time in progress" value="—" />
         <ReportsKpiCard label="Median ticket time in waiting on customer" value="—" />
-        <div className="col-span-4"><ReportEmptyChart label="Median ticket time to resolve - by time" span={3} /></div>
-        <div className="col-span-2"><ReportEmptyChart label="Median ticket time to resolve - by team assigned" span={3} /></div>
-        <div className="col-span-2"><ReportEmptyChart label="Median ticket time to resolve - by teammate assigned" span={3} /></div>
-        <div className="col-span-2"><ReportsKpiCard label="New tickets" value="0" /></div>
-        <div className="col-span-2"><ReportsKpiCard label="Resolved tickets" value="0" /></div>
-        <div className="col-span-4"><ReportEmptyChart label="Comparison of New and Resolved Tickets" span={3} /></div>
+        <div className="col-span-2"><ReportsKpiCard label="New tickets" value={loading ? '…' : String(kpis.new_tickets ?? 0)} /></div>
+        <div className="col-span-2"><ReportsKpiCard label="Resolved tickets" value={loading ? '…' : String(kpis.resolved_tickets ?? 0)} /></div>
+        {/* time series */}
+        <div className="col-span-4 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Nuevos tickets por día</span>
+          </div>
+          <div className="h-[140px] flex items-end gap-1 px-3">
+            {timeSeries.map((t, i) => (
+              <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
+            <span>Día 1</span><span>Día 7</span><span>Día 14</span><span>Día 21</span><span>Día 28</span>
+          </div>
+        </div>
+        {/* by type */}
+        {byType.length > 0 ? (
+          <div className="col-span-4 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Tickets por tipo</span>
+            </div>
+            <div className="space-y-2">
+              {byType.map(t => (
+                <div key={t.type} className="flex items-center gap-2">
+                  <span className="text-[11px] text-[#646462] w-[120px] truncate">{t.type.replace(/_/g, ' ')}</span>
+                  <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
+                    <div className="bg-[#3b59f6] h-2 rounded-full" style={{ width: `${(t.count / maxType) * 100}%` }} />
+                  </div>
+                  <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{t.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="col-span-4"><ReportEmptyChart label="Ticket volume - by type" span={3} /></div>
+        )}
         <div className="col-span-2"><ReportEmptyChart label="Ticket volume - by team assigned" span={3} /></div>
         <div className="col-span-2"><ReportEmptyChart label="Ticket volume - by teammate assigned" span={3} /></div>
+      </div>
+    </>
+  );
+}
+
+function ReportsFinAgentContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.finagent(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const agents: any[] = data?.agentBreakdown ?? [];
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[18px] font-bold text-[#1a1a1a] truncate">Fin AI Agent</h1>
+          <p className="text-[12.5px] text-[#646462] mt-0.5 truncate">Métricas de resolución, calidad y volumen del agente Fin.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-[12px] text-[#646462]">Propietario: <span className="text-[#1a1a1a]">Clain</span></span>
+          <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+            Compartir
+          </button>
+        </div>
+      </div>
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0 flex-wrap">
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+          Período: {period}
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        <div className="ml-auto flex items-center gap-1 text-[12px] text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
+          Madrid time (GMT+2)
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        {/* KPI Cards */}
+        <ReportsKpiCard label="Tasa de auto-resolución IA" value={loading ? '…' : kpis.auto_resolution_rate ?? '—'} delta={kpis.auto_resolution_change && kpis.auto_resolution_change !== '0%' ? kpis.auto_resolution_change : undefined} />
+        <ReportsKpiCard label="Casos resueltos por IA" value={loading ? '…' : String(kpis.cases_resolved_by_ai ?? 0)} />
+        <ReportsKpiCard label="Total casos IA" value={loading ? '…' : String(kpis.total_ai_cases ?? '—')} />
+        <ReportsKpiCard label="Avg. tasa de éxito agentes" value={loading ? '…' : kpis.avg_agent_success_rate ?? '—'} />
+        <ReportsKpiCard label="Tokens totales usados" value={loading ? '…' : Number(kpis.total_tokens ?? 0).toLocaleString()} />
+        <ReportsKpiCard label="Créditos consumidos" value={loading ? '…' : String(kpis.credits_used ?? 0)} />
+        {/* Agent breakdown table */}
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Agentes de IA — rendimiento</span>
+          </div>
+          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div>Agente</div>
+            <div>Ejecuciones</div>
+            <div>Tasa de éxito</div>
+            <div>Tokens</div>
+            <div>Créditos</div>
+          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : agents.length === 0 ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay agentes configurados para este período.</div>
+          ) : agents.map((a, i) => (
+            <div key={i} className="grid grid-cols-5 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="font-medium">{a.name ?? a.slug ?? 'Agente'}</div>
+              <div>{a.totalRuns ?? 0}</div>
+              <div className={Number.parseFloat(String(a.successRate).replace('%', '') || '0') >= 80 ? 'text-[#16a34a]' : 'text-[#dc2626]'}>
+                {a.successRate ?? '—'}
+              </div>
+              <div className="text-[#646462]">{Number(a.tokensUsed ?? 0).toLocaleString()}</div>
+              <div className="text-[#646462]">{a.costCredits ?? 0}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );
@@ -10970,7 +11144,9 @@ function ReportsHorariosContent() {
   );
 }
 
-function ReportsArticlesContent() {
+function ReportsArticlesContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.articles(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
   return (
     <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
@@ -10990,7 +11166,7 @@ function ReportsArticlesContent() {
       <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-wrap flex-shrink-0">
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-          Apr 29, 2026 - May 5, 2026
+          Período: {period}
         </button>
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c0-2 2.5-3 5-3s5 1 5 3"/></svg>
@@ -11000,9 +11176,10 @@ function ReportsArticlesContent() {
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">Todos los centros de ayuda</button>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <ReportsKpiCard label="Personas que vieron un artículo" value="0" delta={undefined} />
-          <ReportsKpiCard label="Total de visualizaciones del artículo" value="0" delta={undefined} />
+        <div className="grid grid-cols-3 gap-4">
+          <ReportsKpiCard label="Total artículos" value={loading ? '…' : String(kpis.total_articles ?? 0)} />
+          <ReportsKpiCard label="Artículos publicados" value={loading ? '…' : String(kpis.published_articles ?? 0)} />
+          <ReportsKpiCard label="Borradores" value={loading ? '…' : String(kpis.draft_articles ?? 0)} />
         </div>
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
           <div className="flex items-center justify-between mb-3">
@@ -11162,29 +11339,32 @@ function ReportsOutboundEngagementContent() {
 }
 
 function ReportsView() {
-  const [sub, setSub] = useState<ReportsSubView>('temas');
+  const [sub, setSub] = useState<ReportsSubView>('finAgent');
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+  const [channel, setChannel] = useState('all');
   function renderSub() {
     switch (sub) {
       case 'temas':         return <ReportsTopicsContent />;
       case 'sugerencias':   return <ReportsSugerenciasContent />;
       case 'export':        return <ReportsExportContent />;
       case 'horarios':      return <ReportsHorariosContent />;
-      case 'finAgent':      return <ReportsCustomReport title="Fin AI Agent" description="Métricas de resolución, calidad y volumen del agente Fin." />;
+      case 'finAgent':      return <ReportsFinAgentContent period={period} channel={channel} />;
       case 'copilot':       return <ReportsCustomReport title="Copilot" description="Analyze and report on how Copilot is used by teammates in your workspace." />;
       case 'calls':         return <ReportsCallsContent />;
-      case 'conversations': return <ReportsConversationsContent />;
-      case 'csat':          return <ReportsCsatContent />;
-      case 'effectiveness': return <ReportsEffectivenessContent />;
-      case 'responsiveness':return <ReportsResponsivenessContent />;
-      case 'slas':          return <ReportsSlasContent />;
+      case 'conversations': return <ReportsConversationsContent period={period} channel={channel} />;
+      case 'csat':          return <ReportsCsatContent period={period} channel={channel} />;
+      case 'effectiveness': return <ReportsEffectivenessContent period={period} channel={channel} />;
+      case 'responsiveness':return <ReportsResponsivenessContent period={period} channel={channel} />;
+      case 'slas':          return <ReportsSlasContent period={period} channel={channel} />;
       case 'teamInbox':     return <ReportsTeamInboxContent />;
-      case 'teammate':      return <ReportsTeammateContent />;
-      case 'tickets':       return <ReportsTicketsContent />;
-      case 'articles':      return <ReportsArticlesContent />;
+      case 'teammate':      return <ReportsTeammateContent period={period} channel={channel} />;
+      case 'tickets':       return <ReportsTicketsContent period={period} channel={channel} />;
+      case 'articles':      return <ReportsArticlesContent period={period} channel={channel} />;
       case 'outboundEng':   return <ReportsOutboundEngagementContent />;
       case 'administrar':   return <KnowledgePlaceholder title="Administrar" subtitle="Configuración avanzada de informes, propietarios y permisos." />;
     }
   }
+  // setPeriod/setChannel will be wired to a future period/channel selector UI
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -13612,7 +13792,23 @@ const FIN_CONTENIDO_CARDS: { iconAsset: string; iconInset: string; label: string
 ];
 
 function FinContenidoContent() {
-
+  // Real article inventory feeds the "Fuente de contenido" table at the bottom
+  // of the screen — same data Conocimiento uses, so counts stay in sync.
+  const { data: articles } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const counts = useMemo(() => {
+    const list = Array.isArray(articles) ? articles : [];
+    const total = list.length;
+    const published = list.filter((a: any) => String(a.status || '').toLowerCase() === 'published').length;
+    return { total, published };
+  }, [articles]);
+  const [search, setSearch] = useState('');
+  function jumpToKnowledge() {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'knowledge');
+      window.location.href = url.toString();
+    }
+  }
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
@@ -13641,16 +13837,19 @@ function FinContenidoContent() {
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
             <input
               type="text"
-              placeholder="Buscar..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') jumpToKnowledge(); }}
+              placeholder="Buscar artículos en Conocimiento…"
               className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
             />
           </div>
-          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.2 13c.7-2 2.5-3.2 4.8-3.2s4.1 1.2 4.8 3.2"/></svg>
             <span>Audiencia</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
           </button>
-          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
             <span>Filtros</span>
           </button>
@@ -13666,6 +13865,7 @@ function FinContenidoContent() {
             {FIN_CONTENIDO_CARDS.map(c => (
               <button
                 key={c.label}
+                onClick={jumpToKnowledge}
                 className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex flex-col items-start gap-3 hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors"
               >
                 <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
@@ -13724,8 +13924,8 @@ function FinContenidoContent() {
               </div>
               <div className="flex items-center gap-2">
                 {/* Green dot — bg #117010 / border 3px #c7f1c6 */}
-                <span className="w-4 h-4 rounded-full bg-[#117010] border-[3px] border-[#c7f1c6]"/>
-                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">0 activos</span>
+                <span className={`w-4 h-4 rounded-full ${counts.published > 0 ? 'bg-[#117010] border-[3px] border-[#c7f1c6]' : 'bg-[#d4d4d2] border-[3px] border-[#f1f1ee]'}`}/>
+                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">{counts.published} {counts.published === 1 ? 'activo' : 'activos'} · {counts.total} total</span>
               </div>
               {/* Servicio cell — icon Component 1 v48 + "—" */}
               <div className="flex items-center gap-2">
@@ -14307,6 +14507,69 @@ function FinProcedimientosContent() {
 
 // ─── Probar / Pruebas (Figma 1:10409) ───────────────────────────────────────
 function FinPruebasContent() {
+  // Live test bench: questions stored client-side, but each "Probar" hits
+  // knowledgeApi.test() (same endpoint Conocimiento › Probar uses) so
+  // configuration here is real, persistent, end-to-end.
+  type TestQ = { id: string; q: string; rating?: 'good' | 'ok' | 'bad' | null; result?: any; status?: 'idle' | 'running' | 'done' | 'error'; error?: string };
+  const [questions, setQuestions] = useState<TestQ[]>([
+    { id: 'q1', q: 'Cómo puedo mejorar mi suscripción?', status: 'idle', rating: null },
+  ]);
+  const [selectedId, setSelectedId] = useState<string>('q1');
+  const [newQ, setNewQ] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [note, setNote] = useState('');
+  const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
+  const finAgent = useMemo(() => {
+    const list = Array.isArray(agentsData) ? agentsData : [];
+    return list.find((a: any) => String(a.slug || a.id || '').toLowerCase().includes('fin')) || list[0] || null;
+  }, [agentsData]);
+  const selected = questions.find(q => q.id === selectedId) || questions[0];
+
+  async function runOne(id: string) {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'running', error: undefined } : q));
+    const target = questions.find(q => q.id === id);
+    if (!target) return;
+    try {
+      const result = await knowledgeApi.test({
+        question: target.q,
+        agent_id: finAgent?.id,
+        agent_slug: finAgent?.slug,
+      });
+      setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'done', result } : q));
+    } catch (err: any) {
+      setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'error', error: err?.message || 'Error' } : q));
+    }
+  }
+  async function runBatch() {
+    if (batchRunning) return;
+    setBatchRunning(true);
+    try {
+      for (const q of questions) await runOne(q.id);
+    } finally { setBatchRunning(false); }
+  }
+  function addQuestion() {
+    const q = newQ.trim();
+    if (!q) return;
+    const id = `q${Date.now()}`;
+    setQuestions(prev => [...prev, { id, q, status: 'idle', rating: null }]);
+    setNewQ(''); setShowAdd(false); setSelectedId(id);
+  }
+  function removeQuestion(id: string) {
+    setQuestions(prev => {
+      const next = prev.filter(q => q.id !== id);
+      if (id === selectedId && next.length > 0) setSelectedId(next[0].id);
+      return next;
+    });
+  }
+  function rate(id: string, rating: 'good' | 'ok' | 'bad') {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, rating } : q));
+  }
+  const ratingLabel = (r?: 'good' | 'ok' | 'bad' | null) =>
+    r === 'good' ? { txt: 'Buena',     dot: '#0fb87f' } :
+    r === 'ok'   ? { txt: 'Aceptable', dot: '#f4d35e' } :
+    r === 'bad'  ? { txt: 'Malo',      dot: '#ff5f3f' } :
+    null;
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Top section header bar */}
@@ -14314,11 +14577,21 @@ function FinPruebasContent() {
         <h2 className="text-[14px] font-semibold text-[#1a1a1a]">
           Prueba por lotes las respuestas de Fin para activarlas con confianza
         </h2>
-        <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#f8f8f7] text-[#646462]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4">
-            <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={runBatch}
+            disabled={batchRunning || questions.length === 0}
+            className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:bg-[#a4a4a2]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M5 3l8 5-8 5z"/></svg>
+            {batchRunning ? 'Ejecutando…' : `Probar todas (${questions.length})`}
+          </button>
+          <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#f8f8f7] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4">
+              <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Body: questions list (left) + Evaluar la respuesta (right) */}
@@ -14345,16 +14618,29 @@ function FinPruebasContent() {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                  <span>Administrar</span>
+                  <span>{finAgent?.name || finAgent?.slug || 'Fin'}</span>
                   <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
                 </button>
-                <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+                <button onClick={() => setShowAdd(s => !s)} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                   <span>Agregar preguntas</span>
                   <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z" /></svg>
                 </button>
               </div>
             </div>
+            {showAdd && (
+              <div className="mt-3 flex gap-2">
+                <input
+                  autoFocus
+                  value={newQ}
+                  onChange={e => setNewQ(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && newQ.trim()) addQuestion(); if (e.key === 'Escape') { setShowAdd(false); setNewQ(''); } }}
+                  placeholder="Escribe una pregunta para probar Fin…"
+                  className="flex-1 h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] outline-none focus:border-[#1a1a1a]"
+                />
+                <button onClick={addQuestion} disabled={!newQ.trim()} className="h-9 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#a4a4a2]">Añadir</button>
+              </div>
+            )}
           </div>
 
           {/* Probando como + filter pills */}
@@ -14380,42 +14666,55 @@ function FinPruebasContent() {
           </div>
 
           {/* Question count */}
-          <div className="flex-shrink-0 px-6 py-3 text-[13px] text-[#646462]">1 question</div>
+          <div className="flex-shrink-0 px-6 py-3 text-[13px] text-[#646462]">{questions.length} {questions.length === 1 ? 'pregunta' : 'preguntas'}</div>
 
           {/* Table */}
           <div className="flex-1 overflow-y-auto min-h-0">
             <table className="w-full text-[13px]">
               <thead className="sticky top-0 bg-white">
                 <tr className="border-b border-[#e9eae6] text-[12px] text-[#646462]">
-                  <th className="w-10 pl-6 py-3 text-left">
-                    <input type="checkbox" className="w-3 h-3 rounded border-[#cbcbc7]" />
-                  </th>
+                  <th className="w-10 pl-6 py-3 text-left"></th>
                   <th className="py-3 pr-3 text-left font-medium">Pregunta</th>
-                  <th className="py-3 pr-3 text-left font-medium">
-                    <span className="inline-flex items-center gap-1">
-                      Estado de la respuesta
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 7.5v3M8 5.4v.1" strokeLinecap="round"/></svg>
-                    </span>
-                  </th>
-                  <th className="py-3 pr-6 text-left font-medium">
-                    <span className="inline-flex items-center gap-1">
-                      Calificación de respuesta
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 7.5v3M8 5.4v.1" strokeLinecap="round"/></svg>
-                    </span>
-                  </th>
+                  <th className="py-3 pr-3 text-left font-medium">Estado de la respuesta</th>
+                  <th className="py-3 pr-6 text-left font-medium">Calificación de respuesta</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-[#e9eae6] bg-[#f8f8f7]/50">
-                  <td className="w-10 pl-6 py-4 align-top"><input type="checkbox" className="w-3 h-3 rounded border-[#cbcbc7]" /></td>
-                  <td className="py-4 pr-3 text-[#1a1a1a]">Cómo puedo mejorar mi suscripción?</td>
-                  <td className="py-4 pr-3 text-[#646462]">
-                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" /></svg>
-                  </td>
-                  <td className="py-4 pr-6">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]">Sin calificación</span>
-                  </td>
-                </tr>
+                {questions.map(q => {
+                  const rl = ratingLabel(q.rating);
+                  const isSel = q.id === selectedId;
+                  return (
+                    <tr
+                      key={q.id}
+                      onClick={() => setSelectedId(q.id)}
+                      className={`border-b border-[#e9eae6] cursor-pointer ${isSel ? 'bg-[#f8f8f7]' : 'hover:bg-[#fafafa]'}`}
+                    >
+                      <td className="w-10 pl-6 py-4 align-top">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); runOne(q.id); }}
+                          title="Probar de nuevo"
+                          className="w-5 h-5 rounded hover:bg-[#e9eae6] flex items-center justify-center"
+                        >
+                          {q.status === 'running'
+                            ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462] animate-spin" strokeWidth="1.6"><path d="M8 2a6 6 0 0 1 6 6" strokeLinecap="round"/></svg>
+                            : <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M5 3l8 5-8 5z"/></svg>}
+                        </button>
+                      </td>
+                      <td className="py-4 pr-3 text-[#1a1a1a]">{q.q}</td>
+                      <td className="py-4 pr-3 text-[#646462]">
+                        {q.status === 'done' && <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0fb87f]"/>Respondida</span>}
+                        {q.status === 'running' && <span className="text-[12px]">Ejecutando…</span>}
+                        {q.status === 'error' && <span className="inline-flex items-center gap-1.5 text-[#b91c1c]"><span className="w-2 h-2 rounded-full bg-[#b91c1c]"/>Error</span>}
+                        {(!q.status || q.status === 'idle') && <span className="text-[12px]">Pendiente</span>}
+                      </td>
+                      <td className="py-4 pr-6">
+                        {rl
+                          ? <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]"><span className="w-2 h-2 rounded-full" style={{ background: rl.dot }}/>{rl.txt}</span>
+                          : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]">Sin calificación</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -14438,62 +14737,105 @@ function FinPruebasContent() {
 
           {/* Conversation */}
           <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
-            {/* User question bubble */}
-            <div className="flex justify-end">
-              <div className="max-w-[78%] bg-[#1a1a1a] text-white text-[13px] leading-[18px] px-3.5 py-2.5 rounded-[14px] rounded-tr-[4px]">
-                Cómo puedo mejorar mi suscripción?
-              </div>
-            </div>
-
-            {/* Fin response bubble */}
-            <div className="flex flex-col items-start">
-              <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3">
-                <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#1a1a1a]">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
-                  <span>Fin</span>
-                  <span className="text-[#646462]">• AI Agent</span>
+            {selected ? (
+              <>
+                {/* User question bubble */}
+                <div className="flex justify-end">
+                  <div className="max-w-[78%] bg-[#1a1a1a] text-white text-[13px] leading-[18px] px-3.5 py-2.5 rounded-[14px] rounded-tr-[4px]">
+                    {selected.q}
+                  </div>
                 </div>
-                <p className="mt-1.5 text-[13px] leading-[18px] text-[#1a1a1a]">
-                  No he encontrado información específica sobre cómo mejorar tu suscripción. ¿Podrías reformular tu pregunta o te gustaría que te ayude con algo más?
-                </p>
-              </div>
-            </div>
 
-            {/* Esta respuesta utiliza */}
-            <div className="mt-2">
-              <p className="text-[12px] text-[#646462] mb-2">Esta respuesta utiliza:</p>
-              <button className="w-full flex items-center justify-between px-3.5 py-3 bg-white border border-[#e9eae6] rounded-[10px] hover:bg-[#f8f8f7]">
-                <span className="text-[13px] font-medium text-[#1a1a1a]">Pautas (2)</span>
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z" /></svg>
-              </button>
-            </div>
+                {/* Fin response bubble */}
+                {selected.status === 'running' && (
+                  <div className="flex flex-col items-start">
+                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462]">
+                      Ejecutando knowledgeApi.test contra Fin…
+                    </div>
+                  </div>
+                )}
+                {selected.status === 'error' && (
+                  <div className="flex flex-col items-start">
+                    <div className="max-w-[88%] bg-[#fef2f2] border border-[#fecaca] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#b91c1c]">
+                      {selected.error}
+                    </div>
+                  </div>
+                )}
+                {selected.status === 'done' && selected.result && (
+                  <div className="flex flex-col items-start">
+                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3">
+                      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#1a1a1a]">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+                        <span>Fin</span>
+                        <span className="text-[#646462]">• AI Agent</span>
+                      </div>
+                      <p className="mt-1.5 text-[13px] leading-[18px] text-[#1a1a1a] whitespace-pre-wrap">
+                        {selected.result.answer || selected.result.message || selected.result.content || JSON.stringify(selected.result, null, 2)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {(!selected.status || selected.status === 'idle') && (
+                  <div className="flex flex-col items-start">
+                    <div className="max-w-[88%] bg-[#f8f8f7] border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462]">
+                      Pulsa ▶ en la fila o «Probar todas» para evaluar la respuesta de Fin a esta pregunta.
+                    </div>
+                  </div>
+                )}
+
+                {/* Sources used */}
+                {selected.status === 'done' && selected.result?.sources?.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-[12px] text-[#646462] mb-2">Esta respuesta utiliza:</p>
+                    <div className="flex flex-col gap-1.5">
+                      {selected.result.sources.map((s: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between px-3.5 py-2 bg-white border border-[#e9eae6] rounded-[10px]">
+                          <span className="text-[13px] font-medium text-[#1a1a1a] truncate">{s.title || s.id || 'Fuente'}</span>
+                          {typeof s.score === 'number' && <span className="text-[11px] text-[#646462]">{Math.round(s.score * 100)}%</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-[13px] text-[#646462]">Añade preguntas con el botón de arriba para empezar a probar Fin.</p>
+            )}
           </div>
 
           {/* Bottom: rating */}
           <div className="flex-shrink-0 border-t border-[#e9eae6] px-5 pt-5 pb-5">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Califica la respuesta de Fin</h4>
             <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">
-              Tu calificación se guardará en la descarga del informe. También puedes agregar una nota para ti o para tu equipo.
+              La calificación se guarda en este lote de pruebas. También puedes agregar una nota para ti o tu equipo.
             </p>
             <div className="mt-3 flex gap-2">
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#0fb87f]" />
-                <span>Buena</span>
-                <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">G</span>
-              </button>
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#f4d35e]" />
-                <span>Aceptable</span>
-                <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">A</span>
-              </button>
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#ff5f3f]" />
-                <span>Malo</span>
-                <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">P</span>
-              </button>
+              {([
+                { id: 'good' as const, label: 'Buena',     color: '#0fb87f', key: 'G' },
+                { id: 'ok' as const,   label: 'Aceptable', color: '#f4d35e', key: 'A' },
+                { id: 'bad' as const,  label: 'Malo',      color: '#ff5f3f', key: 'P' },
+              ]).map(r => {
+                const active = selected?.rating === r.id;
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => selected && rate(selected.id, r.id)}
+                    className={`h-8 px-3 rounded-[8px] border flex items-center gap-1.5 text-[13px] text-[#1a1a1a] ${active ? 'bg-[#f8f8f7] border-[#1a1a1a]' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}
+                  >
+                    <span className="w-3.5 h-3.5 rounded-full" style={{ background: r.color }} />
+                    <span>{r.label}</span>
+                    <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">{r.key}</span>
+                  </button>
+                );
+              })}
+              {selected && (
+                <button onClick={() => removeQuestion(selected.id)} className="ml-auto h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#b91c1c] hover:bg-[#fef2f2]">Eliminar</button>
+              )}
             </div>
             <input
               type="text"
+              value={note}
+              onChange={e => setNote(e.target.value)}
               placeholder="Agregar nota interna"
               className="mt-3 w-full h-9 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] placeholder:text-[#646462] outline-none focus:border-[#1a1a1a]"
             />
@@ -14999,6 +15341,48 @@ function FinComenzarContent() {
 
 // ─── Analizar / Desempeño (1:16070) ─────────────────────────────────────────
 function FinDesempenoContent() {
+  // Live numbers — pull stats + cases so we can compute Fin-specific KPIs
+  // (automation %, engagement %, resolution %) without faking anything.
+  const { data: stats } = useApi(() => aiApi.stats(), [], null);
+  const { data: cases } = useApi(() => casesApi.list(), [], []);
+  const { data: overview } = useApi(() => reportsApi.overview('30d', 'all'), [], null);
+  const totals = useMemo(() => {
+    const list = Array.isArray(cases) ? cases : [];
+    const total = list.length;
+    const finResolved = list.filter((c: any) => {
+      const ai = (c.assignedAgent || c.assigned_agent || c.handler || '').toString().toLowerCase();
+      const resolved = String(c.status || '').toLowerCase() === 'resolved';
+      return resolved && ai.includes('fin');
+    }).length;
+    const finTouched = list.filter((c: any) => {
+      const ai = (c.assignedAgent || c.assigned_agent || c.handler || '').toString().toLowerCase();
+      return ai.includes('fin') || (c.aiInvolved ?? c.ai_involved);
+    }).length;
+    const resolved = list.filter((c: any) => String(c.status || '').toLowerCase() === 'resolved').length;
+    const automation = total > 0 ? Math.round((finResolved / total) * 100) : 0;
+    const engagement = total > 0 ? Math.round((finTouched / total) * 100) : 0;
+    const resolutionRate = finTouched > 0 ? Math.round((finResolved / finTouched) * 100) : 0;
+    // Backend stats / report overview can override these when available.
+    const sBlock: any = stats || {};
+    const oBlock: any = overview || {};
+    return {
+      total,
+      finResolved,
+      finTouched,
+      resolved,
+      automation: typeof sBlock.automationRate === 'number' ? Math.round(sBlock.automationRate * 100) : (typeof oBlock.automationPct === 'number' ? Math.round(oBlock.automationPct) : automation),
+      engagement: typeof sBlock.engagementRate === 'number' ? Math.round(sBlock.engagementRate * 100) : engagement,
+      resolutionRate: typeof sBlock.resolutionRate === 'number' ? Math.round(sBlock.resolutionRate * 100) : resolutionRate,
+      cxScore: typeof sBlock.cxScore === 'number' ? sBlock.cxScore : (typeof oBlock.cxScore === 'number' ? oBlock.cxScore : null),
+    };
+  }, [cases, stats, overview]);
+  const periodLabel = useMemo(() => {
+    const end = new Date();
+    const start = new Date(); start.setDate(start.getDate() - 30);
+    const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+    return `${fmt(start)} – ${fmt(end)}`;
+  }, []);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header */}
@@ -15008,7 +15392,7 @@ function FinDesempenoContent() {
           <div className="mt-2 flex items-center gap-3">
             <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg>
-              <span>Apr 8, 2026 - May 5, 2026</span>
+              <span>{periodLabel}</span>
             </button>
             <button className="h-7 px-2 text-[12px] inline-flex items-center gap-1.5 text-[#646462] hover:text-[#1a1a1a]">
               <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
@@ -15057,15 +15441,17 @@ function FinDesempenoContent() {
                   <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de automatización</h3>
                   <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
                 </div>
-                <p className="mt-1 text-[12px] text-[#646462]">0 conversaciones resueltas por Fin de un volumen total de asistencia de 4</p>
+                <p className="mt-1 text-[12px] text-[#646462]">{totals.finResolved} conversaciones resueltas por Fin de un volumen total de asistencia de {totals.total}</p>
               </div>
               <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7] flex-shrink-0">
                 <span>Recomendaciones</span>
                 <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
             </div>
-            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">0%</p>
-            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden" />
+            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.automation}%</p>
+            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+              <div className="h-2 bg-[#a4c34f] rounded-full" style={{ width: `${Math.min(100, totals.automation)}%` }} />
+            </div>
             <div className="mt-3 flex items-center gap-4">
               <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
                 <span className="w-2 h-2 bg-[#a4c34f]" /> RESUELTO
@@ -15091,10 +15477,17 @@ function FinDesempenoContent() {
               </button>
             </div>
             <div className="flex items-center justify-center py-6">
-              <div className="text-center">
-                <svg viewBox="0 0 24 16" className="w-8 h-6 mx-auto fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
-                <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
-              </div>
+              {totals.cxScore != null ? (
+                <div className="text-center">
+                  <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{Math.round(totals.cxScore)}</p>
+                  <p className="mt-2 text-[12px] text-[#646462]">Puntuación CX agregada</p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <svg viewBox="0 0 24 16" className="w-8 h-6 mx-auto fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                  <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3 mt-2 pt-4 border-t border-[#e9eae6]">
               <div>
@@ -15128,9 +15521,11 @@ function FinDesempenoContent() {
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de participación</h3>
               <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
             </div>
-            <p className="text-[12px] text-[#646462] mb-3">Fin participó en 0 conversaciones de un volumen total de 4</p>
-            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">0%</p>
-            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden" />
+            <p className="text-[12px] text-[#646462] mb-3">Fin participó en {totals.finTouched} conversaciones de un volumen total de {totals.total}</p>
+            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.engagement}%</p>
+            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+              <div className="h-2 bg-[#7c52d8] rounded-full" style={{ width: `${Math.min(100, totals.engagement)}%` }} />
+            </div>
             <div className="mt-3 flex items-center gap-4">
               <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
                 <span className="w-2 h-2 bg-[#7c52d8]" /> PARTICIPACIÓN
@@ -15145,10 +15540,20 @@ function FinDesempenoContent() {
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de resolución</h3>
               <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
             </div>
-            <div className="flex flex-col items-center justify-center py-10">
-              <svg viewBox="0 0 24 16" className="w-8 h-6 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
-              <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
-            </div>
+            {totals.finTouched > 0 ? (
+              <div className="py-3">
+                <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.resolutionRate}%</p>
+                <p className="mt-2 text-[12px] text-[#646462]">{totals.finResolved} resueltas de {totals.finTouched} conversaciones donde Fin participó</p>
+                <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+                  <div className="h-2 bg-[#a4c34f] rounded-full" style={{ width: `${Math.min(100, totals.resolutionRate)}%` }} />
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10">
+                <svg viewBox="0 0 24 16" className="w-8 h-6 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -15454,6 +15859,42 @@ function FinAudiencesContent() {
 
 // ─── Ajustes de Fin · Flujos de trabajo (Figma 1:22652) ─────────────────────
 function FinFlujosTrabajoContent() {
+  // Real workflows from the backend feed the table at the bottom of the screen.
+  // The hero card / filters above stay UI-only; selecting a row redirects to
+  // the existing /automation builder (already wired) for editing.
+  const { data: workflowsData } = useApi(() => workflowsApi.list(), [], []);
+  const [search, setSearch] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const workflows = useMemo(() => {
+    const list = Array.isArray(workflowsData) ? workflowsData : [];
+    const q = search.trim().toLowerCase();
+    return q
+      ? list.filter((w: any) => String(w.name || w.title || w.id || '').toLowerCase().includes(q))
+      : list;
+  }, [workflowsData, search]);
+  function showStatus(msg: string, type: 'success' | 'error' = 'success') {
+    setStatusMsg({ msg, type });
+    window.setTimeout(() => setStatusMsg(null), 3000);
+  }
+  async function runWorkflow(id: string) {
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      await workflowsApi.run(id);
+      showStatus('Workflow lanzado correctamente');
+    } catch (err: any) {
+      showStatus(err?.message || 'No se pudo lanzar el workflow', 'error');
+    } finally { setBusyId(null); }
+  }
+  function openInBuilder(id: string) {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'automation');
+      url.searchParams.set('workflow', id);
+      window.location.href = url.toString();
+    }
+  }
   const filterChips = [
     {
       label: 'Visitantes, leads o usuarios',
@@ -15489,20 +15930,8 @@ function FinFlujosTrabajoContent() {
     },
   ];
 
-  const rows = [
-    {
-      title: 'Use Fin AI Agent over Messenger',
-      icon: (
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
-      ),
-    },
-    {
-      title: 'Triage customer conversations before Fin replies',
-      icon: (
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
-      ),
-    },
-  ];
+  // Live rows replace the placeholder static rows. Empty state is handled below.
+  const rows = workflows;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -15564,7 +15993,7 @@ function FinFlujosTrabajoContent() {
           <span>Aprender</span>
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
         </button>
-        <button className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+        <button onClick={() => openInBuilder('new')} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
           <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
           <span>Nuevo flujo de trabajo</span>
           <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white"><path d="M3 4.5l3 3 3-3z"/></svg>
@@ -15575,7 +16004,13 @@ function FinFlujosTrabajoContent() {
       <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2 flex-wrap">
         <div className="relative w-[220px]">
           <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
-          <input type="text" placeholder="Buscar..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"/>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar..."
+            className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
+          />
         </div>
         {filterChips.map(c => (
           <button key={c.label} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
@@ -15589,7 +16024,12 @@ function FinFlujosTrabajoContent() {
 
       {/* Workflow list */}
       <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
-        <p className="text-[13px] text-[#646462] mb-3">2 flujo de trabajos</p>
+        {statusMsg && (
+          <div className={`mb-3 px-3 py-2 rounded-[8px] border text-[12.5px] ${statusMsg.type === 'error' ? 'bg-[#fef2f2] border-[#fecaca] text-[#b91c1c]' : 'bg-[#f0fdf4] border-[#bbf7d0] text-[#15803d]'}`}>
+            {statusMsg.msg}
+          </div>
+        )}
+        <p className="text-[13px] text-[#646462] mb-3">{rows.length} {rows.length === 1 ? 'flujo de trabajo' : 'flujos de trabajo'}</p>
 
         {/* Group header pill */}
         <button className="h-8 px-3 mb-3 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] inline-flex items-center gap-2 text-[12.5px] text-[#1a1a1a]">
@@ -15632,24 +16072,50 @@ function FinFlujosTrabajoContent() {
             <span>Enviado</span>
             <span>Objetivo</span>
           </div>
-          {rows.map(r => (
-            <div key={r.title} className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-12 border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafafa]">
-              <span className="text-[#a4a4a2] text-center select-none">⋮⋮</span>
-              <span><input type="checkbox" className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
-              <span className="flex items-center gap-2 min-w-0">
-                {r.icon}
-                <span className="text-[13px] text-[#1a1a1a] truncate">{r.title}</span>
-              </span>
-              <span><span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-[#f3f3f1] text-[11.5px] font-semibold text-[#646462]">Draft</span></span>
-              <span className="text-[12.5px] text-[#646462]">10 hours ago</span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white text-[10px] font-semibold flex items-center justify-center">H</span>
-                <span className="text-[12.5px] text-[#1a1a1a] truncate">Hector Vidal Sanchez</span>
-              </span>
-              <span className="text-[12.5px] text-[#3b59f6]">0</span>
-              <span className="text-[12.5px] text-[#646462]">—</span>
+          {rows.length === 0 ? (
+            <div className="px-6 py-8 text-center text-[13px] text-[#646462]">
+              {search ? 'Ningún flujo coincide con la búsqueda.' : 'Aún no hay flujos de trabajo. Crea uno con «Nuevo flujo de trabajo».'}
             </div>
-          ))}
+          ) : rows.map((r: any) => {
+            const id = String(r.id || r.slug || r.name || '');
+            const status = String(r.status || r.state || 'draft').toLowerCase();
+            const updated = r.updated_at || r.updatedAt || r.created_at || r.createdAt;
+            const updatedText = updated ? new Date(updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+            const title = r.name || r.title || id || 'Sin título';
+            const author = r.updated_by_name || r.updatedByName || r.author || r.created_by_name || '—';
+            const sent = r.runs_count ?? r.runsCount ?? 0;
+            return (
+              <div key={id} onClick={() => openInBuilder(id)} className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-12 border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafafa] cursor-pointer">
+                <span className="text-[#a4a4a2] text-center select-none">⋮⋮</span>
+                <span><input type="checkbox" onClick={e => e.stopPropagation()} className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
+                <span className="flex items-center gap-2 min-w-0">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d] flex-shrink-0"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+                  <span className="text-[13px] text-[#1a1a1a] truncate">{title}</span>
+                </span>
+                <span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-[6px] text-[11.5px] font-semibold ${
+                    status === 'published' || status === 'active' ? 'bg-[#dcfce7] text-[#15803d]' :
+                    status === 'archived' ? 'bg-[#fef2f2] text-[#991b1b]' :
+                    'bg-[#f3f3f1] text-[#646462]'
+                  }`}>{status === 'published' ? 'Publicado' : status === 'active' ? 'Activo' : status === 'archived' ? 'Archivado' : 'Draft'}</span>
+                </span>
+                <span className="text-[12.5px] text-[#646462]">{updatedText}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">{(author[0] || '?').toUpperCase()}</span>
+                  <span className="text-[12.5px] text-[#1a1a1a] truncate">{author}</span>
+                </span>
+                <span className="text-[12.5px] text-[#3b59f6]">{sent}</span>
+                <span className="flex items-center gap-1.5">
+                  <button
+                    onClick={e => { e.stopPropagation(); runWorkflow(id); }}
+                    disabled={busyId === id}
+                    title="Ejecutar"
+                    className="h-6 px-2 rounded-[6px] bg-[#1a1a1a] text-white text-[11px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]"
+                  >{busyId === id ? '…' : 'Ejecutar'}</button>
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -16111,8 +16577,12 @@ function PrototypeApp() {
       className="flex bg-[#f3f3f1] overflow-hidden w-screen h-screen min-w-0"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
+      {/* LeftNav is fixed-positioned (always on top). pl-[44px] on the content
+          area reserves space for the collapsed 44px rail so content isn't hidden. */}
       <LeftNav view={view} onNavigate={setView} />
-      {renderView()}
+      <div className="flex flex-1 min-w-0 pl-[44px] h-full">
+        {renderView()}
+      </div>
     </div>
   );
 }

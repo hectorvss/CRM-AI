@@ -5,15 +5,6 @@ export interface ReportScope {
   workspaceId: string;
 }
 
-export interface ReportRepository {
-  getOverview(scope: ReportScope, period: string, channel?: string): Promise<any>;
-  getIntents(scope: ReportScope, period: string, channel?: string): Promise<any>;
-  getAgents(scope: ReportScope, period: string, channel?: string): Promise<any>;
-  getApprovals(scope: ReportScope, period: string, channel?: string): Promise<any>;
-  getCosts(scope: ReportScope, period: string, channel?: string): Promise<any>;
-  getSLA(scope: ReportScope, period: string, channel?: string): Promise<any>;
-}
-
 function periodToISO(period: string): string {
   const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
   return new Date(Date.now() - days * 86_400_000).toISOString();
@@ -488,6 +479,463 @@ async function getSLASupabase(scope: ReportScope, period: string, channel?: stri
   };
 }
 
+async function getConversationsSupabase(scope: ReportScope, period: string, channel?: string) {
+  const supabase = getSupabaseAdmin();
+  const since = periodToISO(period);
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+  const priorEnd = since;
+  const priorStart = new Date(new Date(since).getTime() - days * 86_400_000).toISOString();
+  const normalizedChannel = normalizeChannel(channel);
+
+  const caseCount = (from: string, to?: string, statuses?: string[], notStatuses?: string[]) => {
+    let query = supabase
+      .from('cases')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', scope.tenantId)
+      .gte('created_at', from);
+    if (to) query = query.lt('created_at', to);
+    if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
+    if (statuses?.length) query = query.in('status', statuses);
+    if (notStatuses?.length) query = query.not('status', 'in', notStatuses);
+    return query;
+  };
+
+  const [
+    { count: newConversations },
+    { count: priorNew },
+    { count: closedConversations },
+    { count: priorClosed },
+    { count: openConversations },
+    { count: repliedConversations },
+    { data: rawCases },
+    { data: channelData },
+    { data: typeData },
+  ] = await Promise.all([
+    caseCount(since),
+    caseCount(priorStart, priorEnd),
+    caseCount(since, undefined, ['resolved', 'closed']),
+    caseCount(priorStart, priorEnd, ['resolved', 'closed']),
+    caseCount(since, undefined, undefined, ['resolved', 'closed', 'cancelled']),
+    caseCount(since, undefined, undefined, ['open']),
+    (() => {
+      let q = supabase.from('cases').select('created_at').eq('tenant_id', scope.tenantId).gte('created_at', since);
+      if (normalizedChannel) q = q.eq('source_channel', normalizedChannel);
+      return q;
+    })(),
+    (() => {
+      let q = supabase.from('cases').select('source_channel').eq('tenant_id', scope.tenantId).gte('created_at', since);
+      if (normalizedChannel) q = q.eq('source_channel', normalizedChannel);
+      return q;
+    })(),
+    (() => {
+      let q = supabase.from('cases').select('type').eq('tenant_id', scope.tenantId).gte('created_at', since);
+      if (normalizedChannel) q = q.eq('source_channel', normalizedChannel);
+      return q;
+    })(),
+  ]);
+
+  // Build 28-day time series
+  const buckets: Record<string, number> = {};
+  const sinceMs = new Date(since).getTime();
+  for (const row of (rawCases || [])) {
+    const dayIndex = Math.floor((new Date(row.created_at).getTime() - sinceMs) / 86_400_000);
+    const key = String(Math.min(Math.max(dayIndex, 0), 27));
+    buckets[key] = (buckets[key] || 0) + 1;
+  }
+  const timeSeries = Array.from({ length: 28 }, (_, i) => ({ day: i, count: buckets[String(i)] || 0 }));
+
+  // Build by-channel counts
+  const channelCounts = new Map<string, number>();
+  for (const row of (channelData || [])) {
+    const ch = row.source_channel || 'unknown';
+    channelCounts.set(ch, (channelCounts.get(ch) || 0) + 1);
+  }
+  const byChannel = Array.from(channelCounts.entries()).map(([ch, count]) => ({ channel: ch, count })).sort((a, b) => b.count - a.count);
+
+  // Build by-type (top 5)
+  const typeCounts = new Map<string, number>();
+  for (const row of (typeData || [])) {
+    const t = row.type || 'general_support';
+    typeCounts.set(t, (typeCounts.get(t) || 0) + 1);
+  }
+  const byType = Array.from(typeCounts.entries()).map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count).slice(0, 5);
+
+  const nNew = newConversations || 0;
+  const nPriorNew = priorNew || 0;
+  const nClosed = closedConversations || 0;
+  const nPriorClosed = priorClosed || 0;
+
+  return {
+    period,
+    kpis: {
+      new_conversations: nNew,
+      closed_conversations: nClosed,
+      open_conversations: openConversations || 0,
+      replied_conversations: repliedConversations || 0,
+      new_change: changeStr(nNew, nPriorNew),
+      new_trend: trend(nNew, nPriorNew),
+      closed_change: changeStr(nClosed, nPriorClosed),
+      closed_trend: trend(nClosed, nPriorClosed),
+    },
+    timeSeries,
+    byChannel,
+    byType,
+  };
+}
+
+async function getFinAgentSupabase(scope: ReportScope, period: string, channel?: string) {
+  const [overview, agentsData, costsData] = await Promise.all([
+    getOverviewSupabase(scope, period, channel),
+    getAgentsSupabase(scope, period, channel),
+    getCostsSupabase(scope, period, channel),
+  ]);
+
+  const kpis = overview.kpis || [];
+  const autoKpi = kpis.find((k: any) => k.key === 'auto_resolution');
+  const totalKpi = kpis.find((k: any) => k.key === 'total_cases');
+  const agents = agentsData.agents || [];
+  const totalRuns = agents.reduce((s: number, a: any) => s + (a.totalRuns || 0), 0);
+  const avgSuccessRate = agents.length
+    ? agents.reduce((s: number, a: any) => s + Number.parseFloat(String(a.successRate).replace('%', '') || '0'), 0) / agents.length
+    : 0;
+
+  return {
+    period,
+    kpis: {
+      auto_resolution_rate: autoKpi?.value ?? '0%',
+      auto_resolution_change: autoKpi?.change ?? '0%',
+      total_ai_cases: totalKpi?.value ?? '0',
+      avg_agent_success_rate: `${Math.round(avgSuccessRate)}%`,
+      total_tokens: costsData.summary?.totalTokens ?? 0,
+      credits_used: costsData.summary?.creditsUsed ?? 0,
+      cases_resolved_by_ai: costsData.summary?.autoResolvedCases ?? 0,
+    },
+    agentBreakdown: agents,
+  };
+}
+
+async function getTeammateSupabase(scope: ReportScope, period: string, _channel?: string) {
+  const supabase = getSupabaseAdmin();
+  let members: any[] = [];
+
+  try {
+    const { data, error } = await supabase
+      .from('workspace_members')
+      .select('user_id, role, joined_at')
+      .eq('tenant_id', scope.tenantId);
+    if (!error && data) {
+      members = data.map((m: any) => ({
+        userId: m.user_id,
+        role: m.role || 'member',
+        joinedAt: m.joined_at,
+        name: m.user_id || 'Member',
+        email: null,
+        casesAssigned: 0,
+        casesReplied: 0,
+        casesClosed: 0,
+        medianHandleTime: null,
+      }));
+    }
+  } catch (_) {
+    // table doesn't exist — use empty array
+  }
+
+  return {
+    period,
+    members,
+    isEmpty: members.length === 0,
+  };
+}
+
+async function getTicketsSupabase(scope: ReportScope, period: string, channel?: string) {
+  const supabase = getSupabaseAdmin();
+  const since = periodToISO(period);
+  const normalizedChannel = normalizeChannel(channel);
+
+  let query = supabase
+    .from('cases')
+    .select('type, status, created_at')
+    .eq('tenant_id', scope.tenantId)
+    .gte('created_at', since);
+  if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
+  // ticket-like types
+  query = query.or("type.like.%ticket%,type.eq.technical_support");
+
+  const { data, error } = await query;
+  if (error) {
+    // if query fails (e.g. no rows matching), return zeros
+    return {
+      period,
+      kpis: { new_tickets: 0, resolved_tickets: 0, open_tickets: 0, median_resolution: null },
+      byType: [],
+      timeSeries: Array.from({ length: 28 }, (_, i) => ({ day: i, count: 0 })),
+    };
+  }
+
+  const rows = data || [];
+  const newTickets = rows.length;
+  const resolvedTickets = rows.filter(r => ['resolved', 'closed'].includes(r.status)).length;
+  const openTickets = rows.filter(r => !['resolved', 'closed', 'cancelled'].includes(r.status)).length;
+
+  const typeCounts = new Map<string, number>();
+  for (const row of rows) {
+    const t = row.type || 'ticket';
+    typeCounts.set(t, (typeCounts.get(t) || 0) + 1);
+  }
+  const byType = Array.from(typeCounts.entries()).map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count);
+
+  const sinceMs = new Date(since).getTime();
+  const buckets: Record<string, number> = {};
+  for (const row of rows) {
+    const dayIndex = Math.floor((new Date(row.created_at).getTime() - sinceMs) / 86_400_000);
+    const key = String(Math.min(Math.max(dayIndex, 0), 27));
+    buckets[key] = (buckets[key] || 0) + 1;
+  }
+  const timeSeries = Array.from({ length: 28 }, (_, i) => ({ day: i, count: buckets[String(i)] || 0 }));
+
+  return {
+    period,
+    kpis: { new_tickets: newTickets, resolved_tickets: resolvedTickets, open_tickets: openTickets, median_resolution: null },
+    byType,
+    timeSeries,
+  };
+}
+
+async function getArticlesSupabase(scope: ReportScope, period: string, _channel?: string) {
+  const supabase = getSupabaseAdmin();
+  let totalArticles = 0;
+  let publishedArticles = 0;
+  let draftArticles = 0;
+  let searchHitsTotal = 0;
+
+  try {
+    const { data, error } = await supabase
+      .from('knowledge_articles')
+      .select('status, created_at')
+      .eq('tenant_id', scope.tenantId);
+    if (!error && data) {
+      totalArticles = data.length;
+      publishedArticles = data.filter((r: any) => r.status === 'published').length;
+      draftArticles = data.filter((r: any) => r.status === 'draft').length;
+    }
+  } catch (_) {
+    // table doesn't exist — return zeros
+  }
+
+  try {
+    const { data } = await supabase
+      .from('knowledge_articles')
+      .select('search_hits')
+      .eq('tenant_id', scope.tenantId);
+    if (data) {
+      searchHitsTotal = data.reduce((s: number, r: any) => s + Number(r.search_hits || 0), 0);
+    }
+  } catch (_) {
+    // column doesn't exist
+  }
+
+  return {
+    period,
+    kpis: {
+      total_articles: totalArticles,
+      published_articles: publishedArticles,
+      draft_articles: draftArticles,
+      search_hits_total: searchHitsTotal,
+    },
+  };
+}
+
+async function getResponsivenessSupabase(scope: ReportScope, period: string, channel?: string) {
+  const supabase = getSupabaseAdmin();
+  const since = periodToISO(period);
+  const normalizedChannel = normalizeChannel(channel);
+
+  let medianTimeToClose: string | null = null;
+
+  try {
+    let query = supabase
+      .from('cases')
+      .select('created_at, updated_at, status')
+      .eq('tenant_id', scope.tenantId)
+      .gte('created_at', since)
+      .in('status', ['resolved', 'closed']);
+    if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
+    const { data } = await query;
+
+    if (data && data.length > 0) {
+      let totalHours = 0;
+      let count = 0;
+      for (const row of data) {
+        if (row.updated_at && row.created_at) {
+          const diffMs = new Date(row.updated_at).getTime() - new Date(row.created_at).getTime();
+          if (diffMs > 0) {
+            totalHours += diffMs / (1000 * 3600);
+            count += 1;
+          }
+        }
+      }
+      if (count > 0) {
+        const avgHours = totalHours / count;
+        if (avgHours < 1) {
+          medianTimeToClose = `${Math.round(avgHours * 60)}m`;
+        } else if (avgHours < 24) {
+          medianTimeToClose = `${Math.round(avgHours)}h`;
+        } else {
+          medianTimeToClose = `${Math.round(avgHours / 24)}d`;
+        }
+      }
+    }
+  } catch (_) {
+    // column or table issue — keep null
+  }
+
+  return {
+    period,
+    kpis: {
+      median_response_time: null,
+      median_first_response: null,
+      median_time_to_close: medianTimeToClose,
+    },
+    distribution: [
+      { bucket: '< 5m', count: 0 },
+      { bucket: '5m - 15m', count: 0 },
+      { bucket: '15m - 30m', count: 0 },
+      { bucket: '30m - 1h', count: 0 },
+      { bucket: '1h - 3h', count: 0 },
+      { bucket: '3h - 8h', count: 0 },
+      { bucket: '> 8h', count: 0 },
+    ],
+  };
+}
+
+async function getCsatSupabase(scope: ReportScope, period: string, channel?: string) {
+  const supabase = getSupabaseAdmin();
+  const since = periodToISO(period);
+  const normalizedChannel = normalizeChannel(channel);
+
+  let overallCsat = 0;
+  let positiveCount = 0;
+  let neutralCount = 0;
+  let negativeCount = 0;
+
+  try {
+    let query = supabase
+      .from('cases')
+      .select('satisfaction_score')
+      .eq('tenant_id', scope.tenantId)
+      .gte('created_at', since);
+    if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
+    const { data } = await query;
+
+    if (data && data.length > 0) {
+      const withScore = data.filter((r: any) => r.satisfaction_score != null);
+      if (withScore.length > 0) {
+        positiveCount = withScore.filter((r: any) => r.satisfaction_score >= 4).length;
+        neutralCount = withScore.filter((r: any) => r.satisfaction_score === 3).length;
+        negativeCount = withScore.filter((r: any) => r.satisfaction_score <= 2).length;
+        overallCsat = Math.round((positiveCount / withScore.length) * 100);
+      }
+    }
+  } catch (_) {
+    // column doesn't exist — return zeros
+  }
+
+  return {
+    period,
+    kpis: {
+      overall_csat: overallCsat,
+      positive_count: positiveCount,
+      neutral_count: neutralCount,
+      negative_count: negativeCount,
+      request_rate: '0%',
+      response_rate: '0%',
+    },
+  };
+}
+
+async function getEffectivenessSupabase(scope: ReportScope, period: string, channel?: string) {
+  const supabase = getSupabaseAdmin();
+  const since = periodToISO(period);
+  const normalizedChannel = normalizeChannel(channel);
+
+  const caseCount = (extraFilter?: (q: any) => any) => {
+    let query = supabase
+      .from('cases')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', scope.tenantId)
+      .gte('created_at', since);
+    if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
+    if (extraFilter) query = extraFilter(query);
+    return query;
+  };
+
+  const [
+    { count: total },
+    { count: replied },
+  ] = await Promise.all([
+    caseCount(),
+    caseCount(q => q.not('status', 'eq', 'open')),
+  ]);
+
+  // First contact resolution: cases closed within 1 hour using updated_at - created_at < 3600000ms
+  let firstContactResolved = 0;
+  let firstContactTotal = 0;
+  try {
+    let query = supabase
+      .from('cases')
+      .select('created_at, updated_at, status')
+      .eq('tenant_id', scope.tenantId)
+      .gte('created_at', since)
+      .in('status', ['resolved', 'closed']);
+    if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
+    const { data } = await query;
+    if (data) {
+      firstContactTotal = data.length;
+      firstContactResolved = data.filter((r: any) => {
+        if (!r.updated_at || !r.created_at) return false;
+        const diffMs = new Date(r.updated_at).getTime() - new Date(r.created_at).getTime();
+        return diffMs > 0 && diffMs < 3_600_000;
+      }).length;
+    }
+  } catch (_) {
+    // column missing
+  }
+
+  const nTotal = total || 0;
+  const nReplied = replied || 0;
+  const fcrRate = firstContactTotal > 0 ? pct(firstContactResolved, firstContactTotal) : '0%';
+
+  return {
+    period,
+    kpis: {
+      conversations_replied_to: nReplied,
+      first_contact_resolution: fcrRate,
+      first_contact_resolved: firstContactResolved,
+      first_contact_total: firstContactTotal,
+      conversations_reassigned: 0,
+      median_replies_to_close: null,
+      total_conversations: nTotal,
+    },
+  };
+}
+
+export interface ReportRepository {
+  getOverview(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getIntents(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getAgents(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getApprovals(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getCosts(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getSLA(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getConversations(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getFinAgent(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getTeammate(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getTickets(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getArticles(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getResponsiveness(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getCsat(scope: ReportScope, period: string, channel?: string): Promise<any>;
+  getEffectiveness(scope: ReportScope, period: string, channel?: string): Promise<any>;
+}
+
 export function createReportRepository(): ReportRepository {
   return {
     getOverview: getOverviewSupabase,
@@ -496,5 +944,13 @@ export function createReportRepository(): ReportRepository {
     getApprovals: getApprovalsSupabase,
     getCosts: getCostsSupabase,
     getSLA: getSLASupabase,
+    getConversations: getConversationsSupabase,
+    getFinAgent: getFinAgentSupabase,
+    getTeammate: getTeammateSupabase,
+    getTickets: getTicketsSupabase,
+    getArticles: getArticlesSupabase,
+    getResponsiveness: getResponsivenessSupabase,
+    getCsat: getCsatSupabase,
+    getEffectiveness: getEffectivenessSupabase,
   };
 }
