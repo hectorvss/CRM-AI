@@ -18008,6 +18008,494 @@ function FinAtributosContent() {
   );
 }
 
+// ─── Escalation rule types + field/operator catalog ─────────────────────────
+type FinEscalationOperator =
+  | 'is' | 'is_not' | 'starts_with' | 'ends_with' | 'contains'
+  | 'contains_exact_word' | 'does_not_contain' | 'is_unknown' | 'has_any_value';
+
+type FinEscalationCondition = {
+  id: string;
+  field: string;
+  operator: FinEscalationOperator;
+  value: string;
+};
+
+type FinEscalationRule = {
+  id: string;
+  title: string;
+  enabled: boolean;
+  audience: 'all' | 'users' | 'leads' | 'visitors';
+  channels: string[];
+  conditions: FinEscalationCondition[];
+  metrics?: { used?: number; resolved?: number; routed?: number };
+};
+
+const FIN_ESC_FIELD_ICON_PERSON = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13c1-2.5 3-3.5 5-3.5s4 1 5 3.5"/></svg>
+);
+const FIN_ESC_FIELD_ICON_PEOPLE = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><circle cx="11.5" cy="6.5" r="1.8"/><path d="M2 13c.7-2 2.3-3 4-3s3.3 1 4 3M9.5 13c.4-1.5 1.5-2.3 3-2.3s2.6.8 3 2.3"/></svg>
+);
+const FIN_ESC_FIELD_ICON_ATTR = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M3 8h10M3 11.5h6" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_DATA = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M3 8h10M8 3c1.5 1.5 2.3 3.2 2.3 5S9.5 11.5 8 13c-1.5-1.5-2.3-3.2-2.3-5S6.5 4.5 8 3z"/></svg>
+);
+
+type FinEscField = { key: string; label: string; status?: string; icon: ReactNode };
+
+const FIN_ESCALATION_FIELDS: { conversation: FinEscField[]; finAttributes: FinEscField[]; personData: FinEscField[] } = {
+  conversation: [
+    { key: 'teammate_assigned', label: 'Teammate assigned', icon: FIN_ESC_FIELD_ICON_PERSON },
+    { key: 'team_assigned',     label: 'Team assigned',     icon: FIN_ESC_FIELD_ICON_PEOPLE },
+  ],
+  finAttributes: [
+    { key: 'attr_complexity', label: 'Complexity', status: 'Deshabilitado', icon: FIN_ESC_FIELD_ICON_ATTR },
+    { key: 'attr_sentiment',  label: 'Sentiment',  status: 'Deshabilitado', icon: FIN_ESC_FIELD_ICON_ATTR },
+    { key: 'attr_urgency',    label: 'Urgency',    status: 'Deshabilitado', icon: FIN_ESC_FIELD_ICON_ATTR },
+  ],
+  personData: [
+    { key: 'pd_current_channel',      label: 'Current channel',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_initial_channel',      label: 'Initial channel',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_name',                 label: 'Name',                     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_account',              label: 'Account',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_owner',                label: 'Owner',                    icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_lead_category',        label: 'Lead category',            icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_qualification_status', label: 'Qualification status',     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_conversation_rating',  label: 'Conversation Rating',      icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_email',                label: 'Email',                    icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_email_domain',         label: 'Email domain',             icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_phone',                label: 'Phone',                    icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_user_id',              label: 'User ID',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_first_seen',           label: 'First Seen',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_signed_up',            label: 'Signed up',                icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_seen',            label: 'Last seen',                icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_contacted',       label: 'Last contacted',           icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_heard_from',      label: 'Last heard from',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_opened_email',    label: 'Last opened email',        icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_clicked_link',    label: 'Last clicked on link in email', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_web_sessions',         label: 'Web sessions',             icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_country',              label: 'Country',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_region',               label: 'Region',                   icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_city',                 label: 'City',                     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_timezone',             label: 'Timezone',                 icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_continent_code',       label: 'Continent code',           icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_browser_language',     label: 'Browser Language',         icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_language_override',    label: 'Language Override',        icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_browser',              label: 'Browser',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_browser_version',      label: 'Browser Version',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_os',                   label: 'OS',                       icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_segment',              label: 'Segment',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_person_tag',           label: 'Person tag',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_unsubscribed',         label: 'Unsubscribed from Emails', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_marked_spam',          label: 'Marked email as spam',     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_hard_bounced',         label: 'Has hard bounced',         icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_campaign',         label: 'UTM Campaign',             icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_content',          label: 'UTM Content',              icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_medium',           label: 'UTM Medium',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_source',           label: 'UTM Source',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_term',             label: 'UTM Term',                 icon: FIN_ESC_FIELD_ICON_DATA },
+  ],
+};
+
+const FIN_ESCALATION_OPERATORS: Array<{ value: FinEscalationOperator; label: string; takesValue: boolean }> = [
+  { value: 'is',                    label: 'is',                    takesValue: true  },
+  { value: 'is_not',                label: 'is not',                takesValue: true  },
+  { value: 'starts_with',           label: 'starts with',           takesValue: true  },
+  { value: 'ends_with',             label: 'ends with',             takesValue: true  },
+  { value: 'contains',              label: 'contains',              takesValue: true  },
+  { value: 'contains_exact_word',   label: 'contains exact word',   takesValue: true  },
+  { value: 'does_not_contain',      label: 'does not contain',      takesValue: true  },
+  { value: 'is_unknown',            label: 'is unknown',            takesValue: false },
+  { value: 'has_any_value',         label: 'has any value',         takesValue: false },
+];
+
+function findFinEscField(key: string): FinEscField | undefined {
+  return (
+    FIN_ESCALATION_FIELDS.conversation.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.finAttributes.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.personData.find(f => f.key === key)
+  );
+}
+
+function FinFieldPickerPopover({
+  onPick,
+  onClose,
+}: {
+  onPick: (key: string) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState('');
+  const popRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    function onClick(e: MouseEvent) {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClick);
+    };
+  }, [onClose]);
+  const lower = q.trim().toLowerCase();
+  const filt = (list: FinEscField[]) =>
+    !lower ? list : list.filter(f => f.label.toLowerCase().includes(lower));
+  const conversation = filt(FIN_ESCALATION_FIELDS.conversation);
+  const finAttributes = filt(FIN_ESCALATION_FIELDS.finAttributes);
+  const personData = filt(FIN_ESCALATION_FIELDS.personData);
+  return (
+    <div
+      ref={popRef}
+      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[320px] max-h-[380px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] flex flex-col overflow-hidden"
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="flex-shrink-0 p-2 border-b border-[#e9eae6]">
+        <div className="h-8 rounded-[6px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-2.5 gap-2">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+          <input
+            autoFocus
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search data..."
+            className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+          />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto py-1">
+        {conversation.length > 0 && (
+          <div className="py-1">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Conversation</div>
+            {conversation.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {finAttributes.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Fin Attributes</div>
+            {finAttributes.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+                {f.status && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462] flex-shrink-0">{f.status}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+        {personData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Person data</div>
+            {personData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {conversation.length === 0 && finAttributes.length === 0 && personData.length === 0 && (
+          <div className="px-3 py-6 text-center text-[12.5px] text-[#646462]">No hay coincidencias</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FinOperatorPickerPopover({
+  value,
+  onPick,
+  onClose,
+}: {
+  value: FinEscalationOperator;
+  onPick: (op: FinEscalationOperator) => void;
+  onClose: () => void;
+}) {
+  const popRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    function onClick(e: MouseEvent) {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClick);
+    };
+  }, [onClose]);
+  return (
+    <div
+      ref={popRef}
+      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[220px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1.5"
+      onClick={e => e.stopPropagation()}
+    >
+      {FIN_ESCALATION_OPERATORS.map(op => {
+        const selected = op.value === value;
+        return (
+          <button
+            key={op.value}
+            onClick={() => { onPick(op.value); }}
+            className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          >
+            <span className={`w-3.5 h-3.5 rounded-full border flex-shrink-0 flex items-center justify-center ${selected ? 'border-[#1a1a1a]' : 'border-[#a4a4a2]'}`}>
+              {selected && <span className="w-2 h-2 rounded-full bg-[#1a1a1a]" />}
+            </span>
+            <span className="flex-1 truncate">{op.label}</span>
+          </button>
+        );
+      })}
+      <div className="border-t border-[#f1f1ee] mt-1 pt-1 px-3 pb-1 text-right">
+        <button onClick={onClose} className="text-[12.5px] font-semibold text-[#ed621d] hover:underline">Done</button>
+      </div>
+    </div>
+  );
+}
+
+function FinEscalationChannelsDropdown({
+  channels,
+  onChange,
+}: {
+  channels: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const isAll = channels.length === 0;
+  const label = isAll ? 'Todos los canales' : channels.map(c => {
+    if (c === 'chat') return 'Chat';
+    if (c === 'email') return 'Correo electrónico';
+    if (c === 'voice') return 'Voz';
+    return c;
+  }).join(', ');
+  const items: DropdownItem[] = [
+    { value: 'all',   label: `${isAll ? '✓ ' : ''}Todos los canales` },
+    { value: 'chat',  label: `${channels.includes('chat') ? '✓ ' : ''}Chat` },
+    { value: 'email', label: `${channels.includes('email') ? '✓ ' : ''}Correo electrónico` },
+    { value: 'voice', label: `${channels.includes('voice') ? '✓ ' : ''}Voz` },
+  ];
+  return (
+    <Dropdown
+      value=""
+      items={items}
+      onChange={v => {
+        if (v === 'all') onChange([]);
+        else onChange(channels.includes(v) ? channels.filter(c => c !== v) : [...channels, v]);
+      }}
+      renderTrigger={(_, open) => (
+        <>
+          <span className="truncate">{label}</span>
+          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+        </>
+      )}
+      triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+    />
+  );
+}
+
+function FinEscalationRuleRow({
+  rule,
+  startExpanded,
+  onSave,
+  onDelete,
+  onToggleEnabled,
+}: {
+  rule: FinEscalationRule;
+  startExpanded?: boolean;
+  onSave: (next: FinEscalationRule) => void;
+  onDelete: () => void;
+  onToggleEnabled: () => void;
+}) {
+  const [expanded, setExpanded] = useState<boolean>(!!startExpanded);
+  const [draft, setDraft] = useState<FinEscalationRule>(rule);
+  const [fieldPickerFor, setFieldPickerFor] = useState<string | null>(null);
+  const [opPickerFor, setOpPickerFor] = useState<string | null>(null);
+
+  useEffect(() => { if (!expanded) setDraft(rule); }, [rule, expanded]);
+
+  function patchCondition(id: string, patch: Partial<FinEscalationCondition>) {
+    setDraft(d => ({ ...d, conditions: d.conditions.map(c => c.id === id ? { ...c, ...patch } : c) }));
+  }
+  function addCondition() {
+    setDraft(d => ({
+      ...d,
+      conditions: [...d.conditions, { id: `cond_${Date.now()}_${Math.floor(Math.random()*1000)}`, field: '', operator: 'is', value: '' }],
+    }));
+  }
+  function removeCondition(id: string) {
+    setDraft(d => ({ ...d, conditions: d.conditions.filter(c => c.id !== id) }));
+  }
+  function save() { onSave(draft); setExpanded(false); }
+  function cancel() { setDraft(rule); setExpanded(false); }
+
+  const audienceLabel = FIN_AUDIENCE_LABEL[rule.audience] || 'Todos';
+  const channelsLabel = rule.channels.length === 0 ? 'Todos los canales' : `${rule.channels.length} canal${rule.channels.length === 1 ? '' : 'es'}`;
+  const used = rule.metrics?.used ?? 0;
+  const resolved = rule.metrics?.resolved;
+  const routed = rule.metrics?.routed;
+
+  if (!expanded) {
+    return (
+      <div className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] last:border-b-0 cursor-pointer" onClick={() => setExpanded(true)}>
+        <div className="text-left min-w-0">
+          <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate">{rule.title || 'Ingresa un título'}</p>
+          <p className="text-[12px] text-[#646462] mt-0.5 truncate">
+            Usado: {used} · Resuelto: {resolved ?? '–'} · Escalado: {routed ?? '–'}
+          </p>
+        </div>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${rule.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{rule.enabled ? 'Habilitado' : 'No habilitado'}</span>
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">{audienceLabel} en {channelsLabel}</span>
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4-4 4z"/></svg>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full px-4 py-4 border-b border-[#e9eae6] last:border-b-0 bg-white">
+      <div className="flex items-center gap-3 mb-4">
+        <input
+          value={draft.title}
+          onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+          placeholder="Ingresa un título"
+          className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[14px] font-semibold focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] flex-shrink-0 ${draft.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{draft.enabled ? 'Habilitado' : 'No habilitado'}</span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {draft.conditions.length === 0 && (
+          <p className="text-[12.5px] text-[#646462]">Sin condiciones todavía. Añade una para comenzar.</p>
+        )}
+        {draft.conditions.map(cond => {
+          const f = findFinEscField(cond.field);
+          const op = FIN_ESCALATION_OPERATORS.find(o => o.value === cond.operator) || FIN_ESCALATION_OPERATORS[0];
+          return (
+            <div key={cond.id} className="flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <button
+                  onClick={() => { setFieldPickerFor(cond.id); setOpPickerFor(null); }}
+                  className={`h-8 px-3 rounded-[8px] border bg-white flex items-center gap-2 text-[13px] hover:bg-[#f8f8f7] ${fieldPickerFor === cond.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'} ${f ? 'text-[#1a1a1a]' : 'text-[#646462]'}`}
+                >
+                  {f ? (
+                    <>
+                      <span className="w-4 h-4 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                      <span className="truncate">{f.label}</span>
+                    </>
+                  ) : (
+                    <span>Selecciona un campo</span>
+                  )}
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {fieldPickerFor === cond.id && (
+                  <FinFieldPickerPopover
+                    onPick={(key) => patchCondition(cond.id, { field: key })}
+                    onClose={() => setFieldPickerFor(null)}
+                  />
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  onClick={() => { setOpPickerFor(cond.id); setFieldPickerFor(null); }}
+                  className={`h-8 px-3 rounded-[8px] border bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${opPickerFor === cond.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}
+                >
+                  <span>{op.label}</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {opPickerFor === cond.id && (
+                  <FinOperatorPickerPopover
+                    value={cond.operator}
+                    onPick={(o) => { patchCondition(cond.id, { operator: o, value: FIN_ESCALATION_OPERATORS.find(x => x.value === o)?.takesValue ? cond.value : '' }); }}
+                    onClose={() => setOpPickerFor(null)}
+                  />
+                )}
+              </div>
+
+              {op.takesValue ? (
+                <input
+                  value={cond.value}
+                  onChange={e => patchCondition(cond.id, { value: e.target.value })}
+                  placeholder="Valor"
+                  className="h-8 rounded-[8px] border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] min-w-[160px] flex-1"
+                />
+              ) : (
+                <input
+                  value=""
+                  disabled
+                  placeholder="—"
+                  className="h-8 rounded-[8px] border border-[#e9eae6] px-3 text-[13px] bg-[#f8f8f7] text-[#a4a4a2] min-w-[160px] flex-1 cursor-not-allowed"
+                />
+              )}
+
+              <button
+                onClick={() => removeCondition(cond.id)}
+                title="Eliminar condición"
+                className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0"
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          );
+        })}
+        <div>
+          <button onClick={addCondition} className="text-[13px] font-semibold text-[#ed621d] hover:underline flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+            <span>Añadir condición</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-[#e9eae6] flex items-center gap-2 flex-wrap">
+        <Dropdown
+          value={draft.audience}
+          items={FIN_AUDIENCE_ITEMS}
+          onChange={v => setDraft(d => ({ ...d, audience: v as FinEscalationRule['audience'] }))}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+        />
+        <FinEscalationChannelsDropdown
+          channels={draft.channels}
+          onChange={ch => setDraft(d => ({ ...d, channels: ch }))}
+        />
+        <div className="flex-1" />
+        <button
+          onClick={onDelete}
+          title="Eliminar regla"
+          className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        {draft.enabled ? (
+          <button
+            onClick={onToggleEnabled}
+            className="h-8 px-3 rounded-[8px] bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c] text-[13px] font-semibold hover:bg-[#fee2e2] flex items-center gap-1.5"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+            Pausar
+          </button>
+        ) : (
+          <button
+            onClick={onToggleEnabled}
+            className="h-8 px-3 rounded-[8px] bg-[#dcfce7] border border-[#bbf7d0] text-[#15803d] text-[13px] font-semibold hover:bg-[#bbf7d0] flex items-center gap-1.5"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+            Habilitar
+          </button>
+        )}
+        <button onClick={cancel} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Cancelar</button>
+        <button onClick={save} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="2"><path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span>Guardar</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Capacitar > Escalamiento (Figma 1:7382) ─────────────────────────────────
 function FinEscalamientoContent() {
   const IMG_ESCALATION_BANNER = `${FIGMA_CDN}/b1517b7b-b13a-40c8-83a1-46a7a4839098`;
@@ -18018,16 +18506,32 @@ function FinEscalamientoContent() {
     [],
     [],
   );
+  const escalationRules = useFinResource<FinEscalationRule>('escalation_rules', []);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<null | 'rule' | 'guideline'>(null);
+  const [justCreated, setJustCreated] = useState<string | null>(null);
   const toast = useFinToast();
   const all = useMemo(() => Array.isArray(rulesData) ? rulesData : [], [rulesData]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return q ? all.filter((r: any) => String(r.name || r.title || '').toLowerCase().includes(q)) : all;
   }, [all, search]);
-  const reglas = filtered.filter((r: any) => (r.category || r.subtype) !== 'guideline');
   const pautas = filtered.filter((r: any) => (r.category || r.subtype) === 'guideline');
+  const filteredRules = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? escalationRules.items.filter(r => r.title.toLowerCase().includes(q)) : escalationRules.items;
+  }, [escalationRules.items, search]);
+  function createBlankRule() {
+    const created = escalationRules.create({
+      title: '',
+      enabled: false,
+      audience: 'all',
+      channels: [],
+      conditions: [],
+      metrics: { used: 0 },
+    });
+    setJustCreated(created.id);
+  }
   async function createEscalation(category: 'rule' | 'guideline', payload: { name: string; description: string }) {
     try {
       await policyRulesApi.create({
@@ -18129,25 +18633,20 @@ function FinEscalamientoContent() {
               </div>
             </div>
             <div className="mt-3 ml-9 bg-white border border-[#e9eae6] rounded-[12px]">
-              {reglas.length === 0 ? (
+              {filteredRules.length === 0 ? (
                 <div className="w-full px-4 py-6 text-center text-[13px] text-[#646462]">Aún no hay reglas. Pulsa «Nuevo» para crear una.</div>
-              ) : reglas.map((r: any) => {
-                const id = String(r.id || '');
-                const active = !!(r.isActive ?? r.is_active);
-                return (
-                  <div key={id} className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] last:border-b-0">
-                    <div className="text-left min-w-0">
-                      <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate">{r.name || 'Sin nombre'}</p>
-                      <p className="text-[12px] text-[#646462] mt-0.5 truncate">{r.description || 'Usado: 0 · Resuelto: — · Escalado: —'}</p>
-                    </div>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${active ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{active ? 'Habilitado' : 'No habilitado'}</span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">Todos en Todos los canales</span>
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
-                  </div>
-                );
-              })}
+              ) : filteredRules.map(rule => (
+                <FinEscalationRuleRow
+                  key={rule.id}
+                  rule={rule}
+                  startExpanded={justCreated === rule.id}
+                  onSave={(next) => { escalationRules.update(rule.id, next); if (justCreated === rule.id) setJustCreated(null); toast.show('Regla guardada'); }}
+                  onDelete={() => { escalationRules.remove(rule.id); toast.show('Regla eliminada'); }}
+                  onToggleEnabled={() => { escalationRules.update(rule.id, { enabled: !rule.enabled }); toast.show(rule.enabled ? 'Regla pausada' : 'Regla habilitada'); }}
+                />
+              ))}
               <div className="px-4 py-2.5 border-t border-[#e9eae6]">
-                <button onClick={() => setModal('rule')} className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
+                <button onClick={createBlankRule} className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                   <span>Nuevo</span>
                 </button>
