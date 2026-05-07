@@ -10174,10 +10174,71 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
         {/* AI Credits — selector + detail (real packs €79 / €249 / €549 / flexible) */}
         <BillingCreditsBlock selectedPack={selectedPack} setSelectedPack={setSelectedPack} currentPlan={currentPlan} />
 
-        {/* FAQs */}
+        {/* ── Seats — full width ───────────────────────────────────────────────── */}
+        <div style={{ borderBottom: `1px solid ${LC.border}` }}>
+          {/* Section header */}
+          <div style={{ padding: '32px 64px 0' }}>
+            <p style={{ fontSize: 20, fontWeight: 800, color: LC.text, marginBottom: 6 }}>Puestos adicionales</p>
+            <p style={{ fontSize: 13, color: LC.text60, lineHeight: '1.7', maxWidth: 680, marginBottom: 28 }}>
+              Cada plan incluye puestos de base. Añade más en cualquier momento — la facturación <strong style={{ color: LC.text }}>se prorratea automáticamente</strong> hasta tu próxima fecha de renovación. Los puestos Lite (solo lectura) son <strong style={{ color: LC.text }}>gratuitos e ilimitados</strong> en todos los planes.
+            </p>
+          </div>
+          {/* Table */}
+          <div style={{ borderTop: `1px solid ${LC.border}` }}>
+            {/* Header row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr', padding: '0 64px', background: LC.bg2, borderBottom: `1px solid ${LC.border}` }}>
+              {['Plan', 'Puestos incluidos', 'Precio / puesto extra', 'Colaboradores Lite', ''].map((h, i) => (
+                <div key={h + i} style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</div>
+              ))}
+            </div>
+            {[
+              { id: 'starter',  name: 'Starter',  seats: 3,    extraPrice: '€25 / mes',     note: 'Empieza desde aquí' },
+              { id: 'growth',   name: 'Growth',   seats: 8,    extraPrice: '€22 / mes',     note: 'Más popular' },
+              { id: 'scale',    name: 'Scale',    seats: 20,   extraPrice: '€19 / mes',     note: 'Para equipos grandes' },
+              { id: 'business', name: 'Business', seats: null, extraPrice: 'Personalizado', note: 'Habla con ventas' },
+            ].map(row => {
+              const isCurrent = currentPlan.toLowerCase().includes(row.id);
+              return (
+                <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr', padding: '0 64px', borderBottom: `1px solid ${LC.border}`, background: isCurrent ? LC.bg2 : 'transparent' }}>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 14, fontWeight: isCurrent ? 700 : 500, color: LC.text }}>{row.name}</span>
+                    {isCurrent && <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: LC.accent, padding: '2px 7px', letterSpacing: '0.04em' }}>ACTUAL</span>}
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: LC.text }}>{row.seats != null ? `${row.seats} puestos` : 'Personalizado'}</span>
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 400, color: isCurrent ? LC.accent : LC.text }}>{row.extraPrice}</span>
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: LC.text }}>Ilimitados · Gratis</span>
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    {isCurrent ? (
+                      <button style={{ height: 34, padding: '0 16px', fontSize: 12, fontWeight: 600, background: LC.text, color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Añadir puesto
+                      </button>
+                    ) : (
+                      <button onClick={() => onNavigate('billing')} style={{ height: 34, padding: '0 16px', fontSize: 12, fontWeight: 600, background: 'transparent', color: LC.text60, border: `1px solid ${LC.border}`, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Cambiar a {row.name}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ padding: '16px 64px 32px' }}>
+            <p style={{ fontSize: 12, color: LC.text60 }}>
+              * El precio por puesto extra se aplica al puesto adicional por encima del límite incluido en tu plan. Se prorratea desde el momento de la activación.
+            </p>
+          </div>
+        </div>
+
+        {/* FAQs — full width */}
         <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
           <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 24 }}>Preguntas frecuentes</p>
-          <div style={{ maxWidth: 680 }}>
+          <div>
             {FAQS.map(f => <BillingFaqItem key={f.q} q={f.q} a={f.a} />)}
             <div style={{ borderTop: `1px solid ${LC.border}` }} />
           </div>
