@@ -8,8 +8,10 @@
 import type { NodeAdapter } from '../workflowExecutor.js';
 import { flowAdapters } from './flow.js';
 import { dataAdapters } from './data.js';
+import { coreAdapters } from './core.js';
 
 export const ALL_ADAPTERS: Record<string, NodeAdapter> = {
   ...flowAdapters,
   ...dataAdapters,
+  ...coreAdapters,
 };
