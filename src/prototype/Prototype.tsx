@@ -17687,7 +17687,7 @@ function FinAtributoEditor({
         {/* Value editor sub-view (replaces tabs + body when active) */}
         {valueEditor ? (
           <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
-            <div className="max-w-[760px] mx-auto w-full px-12 py-8 flex flex-col gap-4">
+            <div className="w-full px-8 py-8 flex flex-col gap-4">
               <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
                 <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
                 <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Elige un nombre corto y claro que indique a Fin exactamente lo que representa este valor.</p>
@@ -17736,7 +17736,7 @@ function FinAtributoEditor({
         {/* Body */}
         <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
           {tab === 'general' && (
-            <div className="max-w-[760px] mx-auto w-full px-8 py-8 flex flex-col gap-4">
+            <div className="w-full px-8 py-8 flex flex-col gap-4">
               <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
                 <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
                 <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Elige un nombre claro y descriptivo que indique a Fin el propósito de este atributo. Por ejemplo, si es para detectar la confianza del cliente, llámalo "Confianza".</p>
@@ -17855,7 +17855,7 @@ function FinAtributoEditor({
                 </div>
               </div>
             ) : (
-              <div className="max-w-[900px] mx-auto w-full px-8 py-6 flex flex-col gap-4">
+              <div className="w-full px-8 py-6 flex flex-col gap-4">
                 <div className="flex items-center gap-2">
                   <div className="flex-1 max-w-[360px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
                     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
@@ -17913,7 +17913,7 @@ function FinAtributoEditor({
           )}
 
           {tab === 'conditions' && (
-            <div className="max-w-[1100px] mx-auto w-full px-8 py-6 flex flex-col gap-4">
+            <div className="w-full px-8 py-6 flex flex-col gap-4">
               <p className="text-[13px] text-[#646462] leading-[20px] max-w-[760px]">
                 Configura reglas condicionales para controlar cuándo Fin detecta un atributo. Una vez que se han definido las condiciones, Fin espera a que se cumplan antes de intentar la detección.
               </p>
