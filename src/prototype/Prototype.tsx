@@ -16111,12 +16111,12 @@ function PrototypeApp() {
       className="flex bg-[#f3f3f1] overflow-hidden w-screen h-screen min-w-0"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
-      {/* Fixed-width slot that holds space in the flex row.
-          LeftNav expands as an absolute overlay on top of the content. */}
-      <div className="relative flex-shrink-0 w-[44px] h-full">
-        <LeftNav view={view} onNavigate={setView} />
+      {/* LeftNav is fixed-positioned (always on top). pl-[44px] on the content
+          area reserves space for the collapsed 44px rail so content isn't hidden. */}
+      <LeftNav view={view} onNavigate={setView} />
+      <div className="flex flex-col flex-1 min-w-0 pl-[44px] h-full overflow-hidden">
+        {renderView()}
       </div>
-      {renderView()}
     </div>
   );
 }
