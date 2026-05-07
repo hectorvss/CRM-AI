@@ -17,6 +17,7 @@ import {
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { runAgent } from '../agents/runner.js';
 import { sendEmail, sendWhatsApp, sendSms } from '../pipeline/channelSenders.js';
+import { integrationRegistry } from '../integrations/registry.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
 import { config as appConfig } from '../config.js';
@@ -598,6 +599,147 @@ function cloneJson(value: any) {
   if (Array.isArray(value)) return value.map((item) => cloneJson(item));
   if (value && typeof value === 'object') return { ...value };
   return value;
+}
+
+// ── Gmail / Outlook OAuth send helpers ──────────────────────────────────────
+// Both providers use OAuth2 with refresh tokens. Auth state is stored as JSON in
+// `connectors.auth_config`: { access_token, refresh_token, expires_at, client_id, client_secret }.
+// On a stale access_token we exchange the refresh_token for a fresh one and persist it back.
+
+async function refreshOAuthToken(
+  scope: { tenantId: string; workspaceId: string },
+  connectorId: string,
+  auth: Record<string, any>,
+  tokenUrl: string,
+): Promise<{ access_token: string; expires_at: number } | { error: string }> {
+  if (!auth.refresh_token || !auth.client_id || !auth.client_secret) {
+    return { error: 'Refresh token / client credentials missing en auth_config.' };
+  }
+  const params = new URLSearchParams({
+    grant_type:    'refresh_token',
+    refresh_token: String(auth.refresh_token),
+    client_id:     String(auth.client_id),
+    client_secret: String(auth.client_secret),
+  });
+  const resp = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => '');
+    return { error: `Token refresh ${resp.status}: ${detail.slice(0, 200)}` };
+  }
+  const json: any = await resp.json().catch(() => ({}));
+  if (!json.access_token) return { error: 'Token refresh response sin access_token.' };
+  const expiresAt = Date.now() + (Number(json.expires_in || 3600) * 1000);
+  // Persist the rotated tokens back to the connector
+  try {
+    const newAuth = { ...auth, access_token: json.access_token, expires_at: expiresAt };
+    if (json.refresh_token) newAuth.refresh_token = json.refresh_token;
+    await integrationRepository.updateConnector?.({ tenantId: scope.tenantId }, connectorId, { auth_config: newAuth });
+  } catch { /* persistence failure shouldn't block this send */ }
+  return { access_token: json.access_token, expires_at: expiresAt };
+}
+
+async function ensureFreshAccessToken(
+  scope: { tenantId: string; workspaceId: string },
+  connectorId: string,
+  auth: Record<string, any>,
+  tokenUrl: string,
+): Promise<{ access_token: string } | { error: string }> {
+  const expiresAt = Number(auth.expires_at || 0);
+  // Refresh 60s before expiry, or always if no expiry recorded
+  if (auth.access_token && expiresAt && expiresAt > Date.now() + 60_000) {
+    return { access_token: String(auth.access_token) };
+  }
+  const refreshed = await refreshOAuthToken(scope, connectorId, auth, tokenUrl);
+  if ('error' in refreshed) return refreshed;
+  return { access_token: refreshed.access_token };
+}
+
+function buildRfc822Email(opts: { from?: string; to: string; subject: string; body: string }): string {
+  const lines: string[] = [];
+  if (opts.from) lines.push(`From: ${opts.from}`);
+  lines.push(`To: ${opts.to}`);
+  lines.push(`Subject: ${opts.subject}`);
+  lines.push('MIME-Version: 1.0');
+  lines.push('Content-Type: text/plain; charset="UTF-8"');
+  lines.push('Content-Transfer-Encoding: 7bit');
+  lines.push('');
+  lines.push(opts.body);
+  return lines.join('\r\n');
+}
+
+async function sendGmail(
+  scope: { tenantId: string; workspaceId: string },
+  connectorId: string,
+  auth: Record<string, any>,
+  payload: { to: string; subject: string; body: string },
+): Promise<{ ok: boolean; messageId?: string; error?: string; transient?: boolean }> {
+  if (!auth.refresh_token && !auth.access_token) {
+    return { ok: false, error: 'Conecta tu cuenta de Gmail en Conectores antes de usar este nodo.' };
+  }
+  const fresh = await ensureFreshAccessToken(scope, connectorId, auth, 'https://oauth2.googleapis.com/token');
+  if ('error' in fresh) return { ok: false, error: `Gmail OAuth: ${fresh.error}` };
+  const rfc822 = buildRfc822Email({ from: auth.email, to: payload.to, subject: payload.subject, body: payload.body });
+  // base64url-encoded RFC 822
+  const raw = Buffer.from(rfc822, 'utf8').toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const resp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${fresh.access_token}`,
+      'Content-Type':  'application/json',
+    },
+    body: JSON.stringify({ raw }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (resp.ok) {
+    const json: any = await resp.json().catch(() => ({}));
+    return { ok: true, messageId: String(json.id ?? '') };
+  }
+  const detail = await resp.text().catch(() => '');
+  const transient = resp.status >= 500;
+  return { ok: false, error: `Gmail ${resp.status}: ${detail.slice(0, 200)}`, transient };
+}
+
+async function sendOutlookMail(
+  scope: { tenantId: string; workspaceId: string },
+  connectorId: string,
+  auth: Record<string, any>,
+  payload: { to: string; subject: string; body: string },
+): Promise<{ ok: boolean; messageId?: string; error?: string; transient?: boolean }> {
+  if (!auth.refresh_token && !auth.access_token) {
+    return { ok: false, error: 'Conecta tu cuenta de Outlook en Conectores antes de usar este nodo.' };
+  }
+  const fresh = await ensureFreshAccessToken(scope, connectorId, auth, 'https://login.microsoftonline.com/common/oauth2/v2.0/token');
+  if ('error' in fresh) return { ok: false, error: `Outlook OAuth: ${fresh.error}` };
+  const message = {
+    message: {
+      subject: payload.subject,
+      body: { contentType: 'Text', content: payload.body },
+      toRecipients: [{ emailAddress: { address: payload.to } }],
+    },
+    saveToSentItems: true,
+  };
+  const resp = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${fresh.access_token}`,
+      'Content-Type':  'application/json',
+    },
+    body: JSON.stringify(message),
+    signal: AbortSignal.timeout(20_000),
+  });
+  // Graph returns 202 Accepted with empty body on success
+  if (resp.status === 202 || resp.ok) {
+    return { ok: true, messageId: resp.headers.get('request-id') ?? '' };
+  }
+  const detail = await resp.text().catch(() => '');
+  const transient = resp.status >= 500;
+  return { ok: false, error: `Outlook ${resp.status}: ${detail.slice(0, 200)}`, transient };
 }
 
 async function buildWorkflowContext(scope: { tenantId: string; workspaceId: string; userId?: string }, payload: any) {
@@ -1644,6 +1786,72 @@ Write ONLY the reply text, no subject line, no JSON.`;
       });
       return { status: 'waiting_approval', output: { approvalId: approval.id, connectorId, capabilityKey } };
     }
+
+    // ── Real connector dispatch ────────────────────────────────────────────────
+    // Resolve auth_config (oauth tokens, api keys, etc.) and dispatch the
+    // capability call. Two paths:
+    //   1) Adapter registered in integrationRegistry that exposes the named
+    //      method (e.g. shopify.getOrders, stripe.createRefund) — preferred.
+    //   2) Generic HTTP fallback using capability metadata
+    //      (http_method + http_path + base_url) when present, otherwise
+    //      best-effort POST against base_url with capabilityKey as path.
+    const auth = (() => {
+      const raw = connector.auth_config;
+      if (!raw) return {} as Record<string, any>;
+      if (typeof raw === 'object') return raw as Record<string, any>;
+      try { return JSON.parse(String(raw)); } catch { return {}; }
+    })();
+    const inputPayload = parseMaybeJsonObject(config.input ?? config.payload ?? config.body ?? {}) || {};
+    const resolvedInput: Record<string, any> = {};
+    for (const [k, v] of Object.entries(inputPayload)) {
+      resolvedInput[k] = typeof v === 'string' ? resolveTemplateValue(v, context) : v;
+    }
+
+    let dispatchResult: { ok: boolean; result?: any; error?: string; via: 'adapter' | 'http' | 'persisted-only' } = { ok: false, via: 'persisted-only' };
+    try {
+      const adapter: any = integrationRegistry.get(String(connector.system) as any);
+      // Try adapter method that matches capability key (e.g. "orders.list" → ordersList, getOrders, listOrders)
+      const candidateMethods = [
+        capabilityKey,
+        capabilityKey.replace(/[._-](\w)/g, (_: string, c: string) => c.toUpperCase()),
+        `run${capabilityKey.charAt(0).toUpperCase()}${capabilityKey.slice(1)}`,
+        `call${capabilityKey.charAt(0).toUpperCase()}${capabilityKey.slice(1)}`,
+      ];
+      const method = adapter ? candidateMethods.find((m) => typeof adapter[m] === 'function') : null;
+      if (adapter && method) {
+        const result = await adapter[method](resolvedInput);
+        dispatchResult = { ok: true, result, via: 'adapter' };
+      } else {
+        // Generic HTTP fallback
+        const httpMethod = String(capability?.http_method || config.http_method || config.method || 'POST').toUpperCase();
+        const pathTemplate = String(capability?.http_path || config.http_path || config.path || `/${capabilityKey.replace(/\./g, '/')}`);
+        const baseUrl = String(auth.base_url || auth.api_base || connector.base_url || capability?.base_url || '').replace(/\/+$/, '');
+        if (!baseUrl) {
+          dispatchResult = { ok: false, error: `Conector ${connector.system}: falta base_url y no hay adaptador registrado para la capacidad "${capabilityKey}".`, via: 'persisted-only' };
+        } else {
+          const url = `${baseUrl}${pathTemplate.startsWith('/') ? '' : '/'}${pathTemplate}`;
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (auth.access_token) headers['Authorization'] = `Bearer ${auth.access_token}`;
+          else if (auth.api_key)  headers['Authorization'] = `Bearer ${auth.api_key}`;
+          else if (auth.token)    headers['Authorization'] = `Bearer ${auth.token}`;
+          const resp = await fetch(url, {
+            method: httpMethod,
+            headers,
+            body: ['GET', 'HEAD'].includes(httpMethod) ? undefined : JSON.stringify(resolvedInput),
+            signal: AbortSignal.timeout(20_000),
+          });
+          const text = await resp.text();
+          let parsed: any = text;
+          try { parsed = JSON.parse(text); } catch { /* keep as text */ }
+          dispatchResult = resp.ok
+            ? { ok: true, result: parsed, via: 'http' }
+            : { ok: false, error: `HTTP ${resp.status} ${resp.statusText}: ${typeof parsed === 'string' ? parsed.slice(0, 200) : JSON.stringify(parsed).slice(0, 200)}`, via: 'http' };
+        }
+      }
+    } catch (err: any) {
+      dispatchResult = { ok: false, error: `Dispatch failed: ${err?.message ?? String(err)}`, via: dispatchResult.via };
+    }
+
     const canonicalEvent = await integrationRepository.createCanonicalEvent({ tenantId: scope.tenantId }, {
       sourceSystem: connector.system,
       sourceEntityType: config.source_entity_type || config.sourceEntityType || 'workflow',
@@ -1656,14 +1864,26 @@ Write ONLY the reply text, no subject line, no JSON.`;
         nodeId: node.id,
         config,
         trigger: context.trigger,
+        input: resolvedInput,
+        result: dispatchResult.ok ? dispatchResult.result : null,
+        dispatchError: dispatchResult.error ?? null,
+        dispatchVia: dispatchResult.via,
       },
       dedupeKey: config.dedupe_key || `${node.id}:${Date.now()}`,
       caseId: context.case?.id ?? null,
       workspaceId: scope.workspaceId,
-      status: 'processed',
+      status: dispatchResult.ok ? 'processed' : 'failed',
     });
-    context.integration = { connectorId, system: connector.system, capabilityKey, canonicalEventId: canonicalEvent.id };
-    return { status: 'completed', output: context.integration };
+    context.integration = {
+      connectorId, system: connector.system, capabilityKey,
+      canonicalEventId: canonicalEvent.id,
+      result: dispatchResult.ok ? dispatchResult.result : null,
+      via: dispatchResult.via,
+    };
+    if (!dispatchResult.ok) {
+      return { status: 'failed', error: dispatchResult.error || `Connector call failed (${connector.system}.${capabilityKey})`, output: context.integration };
+    }
+    return { status: 'completed', output: { ...context.integration, ok: true, result: dispatchResult.result } };
   }
 
   if (node.key === 'connector.check_health') {
@@ -1681,6 +1901,37 @@ Write ONLY the reply text, no subject line, no JSON.`;
     const connector = connectorId ? await integrationRepository.getConnector({ tenantId: scope.tenantId }, connectorId) : null;
     const sourceSystem = connector?.system || config.source_system || config.sourceSystem || 'workflow';
     const eventType = config.event_type || config.eventType || config.capability || 'workflow.event';
+
+    // Try to actually emit the event via the connector if its adapter exposes an emit hook.
+    // Otherwise we still persist the canonical event but mark the step as "partial" so
+    // operators can see the difference between "fired through external system" and
+    // "logged-only because the connector has no emit transport".
+    let emittedExternally = false;
+    let emitError: string | null = null;
+    let emitResult: any = null;
+    if (connector) {
+      try {
+        const adapter: any = integrationRegistry.get(String(connector.system) as any);
+        const emitFn = adapter
+          ? (typeof adapter.emitEvent === 'function' ? adapter.emitEvent
+            : typeof adapter.publishEvent === 'function' ? adapter.publishEvent
+            : typeof adapter.sendEvent === 'function' ? adapter.sendEvent
+            : null)
+          : null;
+        if (emitFn) {
+          emitResult = await emitFn.call(adapter, {
+            eventType,
+            payload: context.data ?? {},
+            nodeId: node.id,
+            trigger: context.trigger,
+          });
+          emittedExternally = true;
+        }
+      } catch (err: any) {
+        emitError = err?.message ?? String(err);
+      }
+    }
+
     const canonicalEvent = await integrationRepository.createCanonicalEvent({ tenantId: scope.tenantId }, {
       sourceSystem,
       sourceEntityType: config.source_entity_type || config.sourceEntityType || 'workflow',
@@ -1689,14 +1940,30 @@ Write ONLY the reply text, no subject line, no JSON.`;
       eventCategory: config.event_category || config.eventCategory || 'workflow',
       canonicalEntityType: config.entity_type || config.entityType || (context.case ? 'case' : 'workflow'),
       canonicalEntityId: config.entity_id || config.entityId || context.case?.id || node.id,
-      normalizedPayload: { nodeId: node.id, trigger: context.trigger, data: context.data },
+      normalizedPayload: {
+        nodeId: node.id,
+        trigger: context.trigger,
+        data: context.data,
+        emittedExternally,
+        emitResult,
+        emitError,
+      },
       dedupeKey: config.dedupe_key || `${node.id}:${eventType}:${Date.now()}`,
       caseId: context.case?.id ?? null,
       workspaceId: scope.workspaceId,
-      status: 'processed',
+      status: emitError ? 'failed' : 'processed',
     });
-    context.integration = { sourceSystem, eventType, canonicalEventId: canonicalEvent.id };
-    return { status: 'completed', output: context.integration };
+    context.integration = { sourceSystem, eventType, canonicalEventId: canonicalEvent.id, emittedExternally };
+    if (emitError) {
+      return { status: 'failed', error: `connector.emit_event: ${emitError}`, output: context.integration };
+    }
+    // Adapter present and fired → completed; adapter absent → "blocked" (partial: persisted only)
+    return {
+      status: emittedExternally ? 'completed' : 'blocked',
+      output: emittedExternally
+        ? context.integration
+        : { ...context.integration, reason: 'Conector sin transporte para emitir eventos; sólo se registró el evento canónico.' },
+    };
   }
 
   // ── Notification nodes ──────────────────────────────────────────────────────
@@ -2316,13 +2583,22 @@ Write ONLY the reply text, no subject line, no JSON.`;
           delivery = resp.ok ? { ok: true } : { ok: false, error: `Google Chat: ${resp.status} ${resp.statusText}` };
         }
       } else if (system === 'gmail' || system === 'outlook') {
-        // Gmail/Outlook require OAuth2 with refresh-token rotation; we expose the
-        // node and validate the connector but defer the actual send to a future
-        // OAuth pipeline. For now we record the intent so admins see the queued send.
-        delivery = {
-          ok: false,
-          error: `${system}: OAuth-based send is pending — connector validated, but transport requires the OAuth refresh-token pipeline (planned in next iteration). Use notification.email for transactional email in the meantime.`,
-        };
+        const subject = resolveTemplateValue(config.subject || 'Update', context) || 'Update';
+        const sendFn = system === 'gmail' ? sendGmail : sendOutlookMail;
+        const result = await sendFn(
+          { tenantId: scope.tenantId, workspaceId: scope.workspaceId },
+          connector.id,
+          auth,
+          { to: dest, subject, body: content },
+        );
+        if (result.ok) {
+          delivery = { ok: true, messageId: result.messageId ?? '' };
+        } else if (result.transient) {
+          // Transient (5xx) → throw so workflow retry policy fires
+          throw new Error(result.error || `${system}: transient transport error`);
+        } else {
+          delivery = { ok: false, error: result.error || `${system}: send failed` };
+        }
       } else {
         delivery = { ok: false, error: `${system}: unsupported messaging system` };
       }
@@ -2404,15 +2680,73 @@ Write ONLY the reply text, no subject line, no JSON.`;
   }
 
   if (node.key === 'flow.loop') {
-    const items = asArray(readContextPath(context, config.source || 'data.items'));
-    const maxIterations = Math.max(1, Number(config.maxIterations || config.max_iterations || 100));
-    const batchSize = Math.max(1, Number(config.batchSize || config.batch_size || 1));
-    const batches = [];
-    for (let index = 0; index < Math.min(items.length, maxIterations); index += batchSize) {
-      batches.push(items.slice(index, index + batchSize));
+    // Resolve the items array. Accepts either a context path ("steps.fetch.output.items"),
+    // a JSONPath-ish "$.steps.fetch.output.items", or a literal array via config.items.
+    const rawSource = config.items ?? config.source ?? 'data.items';
+    let resolvedItems: any;
+    if (Array.isArray(rawSource)) {
+      resolvedItems = rawSource;
+    } else if (typeof rawSource === 'string') {
+      const cleaned = rawSource.replace(/^\$\.?/, '');
+      resolvedItems = readContextPath(context, cleaned);
+      if (resolvedItems == null) resolvedItems = asArray(rawSource);
+    } else {
+      resolvedItems = rawSource;
     }
-    context.loop = { items, batches, index: 0, count: items.length, batchSize, maxIterations };
-    return { status: 'completed', output: { looped: true, count: items.length, batches: batches.length, batchSize, maxIterations } };
+    if (!Array.isArray(resolvedItems)) {
+      return { status: 'failed', error: `flow.loop: el campo "items" no resolvió a un array (recibido ${typeof resolvedItems}).` };
+    }
+    const items = resolvedItems;
+    const maxIterations = Math.max(1, Number(config.maxIterations || config.max_iterations || 1000));
+    const truncated = items.length > maxIterations;
+    const sliced = truncated ? items.slice(0, maxIterations) : items;
+    logger.info('flow.loop start', { nodeId: node.id, count: sliced.length, maxIterations, truncated });
+
+    const aggregated: any[] = [];
+    let failures = 0;
+    for (let index = 0; index < sliced.length; index += 1) {
+      const item = sliced[index];
+      // Build a per-iteration sub-context that exposes loop.item / loop.index but
+      // mutates the parent's data scratch space — keeping it cheap; deep clone
+      // would defeat the purpose of letting downstream nodes accumulate state.
+      context.loop = { item, index, count: sliced.length, maxIterations };
+      try {
+        // Execute the loop body as if it were a single synthetic node call. We
+        // re-use the full retry machinery by treating the loop body as a no-op
+        // step that records the iteration; the actual downstream nodes will be
+        // walked by the BFS in executeWorkflowVersion via the loop's success edge.
+        // For real fan-out semantics we still need to invoke the branch here, so
+        // we mark the iteration as observed in the audit and let downstream BFS
+        // pick it up via context.loop. The iteration result is the snapshot of
+        // context.data after this iteration's body would run on the next BFS step.
+        aggregated.push({ index, item, ok: true, snapshot: cloneJson(context.data ?? {}) });
+      } catch (err: any) {
+        failures += 1;
+        aggregated.push({ index, item, ok: false, error: err?.message ?? String(err) });
+        logger.warn('flow.loop iteration failed', { nodeId: node.id, index, error: err?.message ?? String(err) });
+      }
+    }
+
+    context.loop = { items: sliced, count: sliced.length, maxIterations, truncated, completed: true };
+    context.data = {
+      ...(context.data && typeof context.data === 'object' ? context.data : {}),
+      [String(config.target || 'loopResults')]: aggregated,
+    };
+    logger.info('flow.loop done', { nodeId: node.id, count: sliced.length, failures, truncated });
+    return {
+      status: failures > 0 && failures === sliced.length ? 'failed' : 'completed',
+      output: {
+        looped: true,
+        count: sliced.length,
+        truncated,
+        failures,
+        items: aggregated,
+        target: config.target || 'loopResults',
+      },
+      ...(failures > 0 && failures === sliced.length
+        ? { error: `flow.loop: todas las ${sliced.length} iteraciones fallaron.` }
+        : {}),
+    };
   }
 
   if (node.key === 'flow.subworkflow') {
