@@ -1306,44 +1306,7 @@ export async function executeWorkflowNode(
   // ── policy.evaluate, core.audit_log, core.idempotency_check, core.rate_limit
   // extracted to server/runtime/adapters/core.ts (Phase 3b)
 
-  if (node.key === 'knowledge.search') {
-    const query = config.query || config.q || config.content || context.case?.intent || context.case?.summary || context.trigger?.query || '';
-    const articles = await knowledgeRepository.listArticles(scope, {
-      q: query || undefined,
-      status: config.status || 'published',
-      type: config.type || undefined,
-      domain_id: config.domain_id || config.domainId || undefined,
-    });
-    const top = articles.slice(0, Number(config.limit || 5)).map((article: any) => ({
-      id: article.id,
-      title: article.title,
-      status: article.status,
-      domain: article.domain_name ?? article.domain_id ?? null,
-      version: article.version,
-    }));
-    context.knowledge = { query, articles: top };
-    return { status: 'completed', output: { query, count: top.length, articles: top } };
-  }
-
-  if (node.key === 'knowledge.validate_policy') {
-    const policyText = String(config.policy || context.knowledge?.articles?.[0]?.title || '');
-    const proposedAction = String(config.action || config.proposedAction || context.agent?.intent || '');
-    const blockedTerms = asArray(config.blocked_terms || config.blockedTerms || 'forbidden|not allowed|manager required').map((term) => String(term).toLowerCase());
-    const requiresReview = blockedTerms.some((term) => policyText.toLowerCase().includes(term)) || ['refund', 'cancel', 'dispute'].includes(proposedAction.toLowerCase()) && config.require_review !== false;
-    context.policy = { decision: requiresReview ? 'review' : 'allow', policy: config.policy || 'knowledge', proposedAction };
-    return { status: requiresReview ? 'waiting_approval' : 'completed', output: context.policy };
-  }
-
-  if (node.key === 'knowledge.attach_evidence') {
-    const evidence = {
-      title: config.title || context.knowledge?.articles?.[0]?.title || 'Workflow evidence',
-      source: config.source || 'knowledge',
-      articles: context.knowledge?.articles ?? [],
-      note: config.note || null,
-    };
-    context.evidence = [...(Array.isArray(context.evidence) ? context.evidence : []), evidence];
-    return { status: 'completed', output: { evidenceAttached: true, evidence } };
-  }
+  // ── knowledge.* extracted to server/runtime/adapters/knowledge.ts (Phase 3c)
 
   if (['agent.classify', 'agent.sentiment', 'agent.summarize', 'agent.draft_reply'].includes(node.key)) {
     const text = String(
