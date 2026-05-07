@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ProfileTab from './profile/ProfileTab';
 import AccessPermissionsTab from './profile/AccessPermissionsTab';
@@ -7,7 +7,7 @@ import NotificationsTab from './profile/NotificationsTab';
 import PreferencesTab from './profile/PreferencesTab';
 import ActivityTab from './profile/ActivityTab';
 import { iamApi } from '../api/client';
-import { useApi } from '../api/hooks';
+import { useRenderLoopGuard } from '../hooks/useRenderLoopGuard';
 import { NavigateInput } from '../types';
 
 type ProfileTabType =
@@ -47,6 +47,22 @@ export default function Profile({ onNavigate, initialSection }: ProfileProps) {
   const [discardTick, setDiscardTick] = useState(0);
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
 
+  // ── Diagnostic instrumentation ─────────────────────────────────────────
+  // Kept intentionally even after the render-loop fix. If /profile ever
+  // spirals again, these console messages are the smoking gun: ask the user
+  // to copy the [profile] render lines from DevTools and we know within
+  // seconds whether the loop is back and what the state looks like at the
+  // time of the loop. Cheap, side-effect-free.
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+  const { tripped: loopTripped } = useRenderLoopGuard('profile', 50, 5000);
+  // eslint-disable-next-line no-console
+  console.log(`[profile] render #${renderCountRef.current}`, {
+    activeTab,
+    userExists: undefined as unknown,
+    saveHandlerSet: !!saveHandler,
+  });
+
   // Functional setState wrapper. CRITICAL: when storing a function in state via
   // setState, React treats a bare function value as the updater function (it
   // would invoke handleSave(prevState) instead of storing it). Tabs call this
@@ -57,13 +73,52 @@ export default function Profile({ onNavigate, initialSection }: ProfileProps) {
     setSaveHandlerRaw(() => h);
   }, []);
 
-  // Pull user ONCE at the shell level — we then pass `user` + `refetchUser`
-  // down to each tab. Previously every tab also called `useApi(iamApi.me)`
-  // independently (six total fetches per page render). On any 401 each one
-  // emitted `crmai:unauthorized`, which compounded with StrictMode's double
-  // mount and any token-refresh race produced a redirect storm that looked
-  // to the user like the page was constantly reloading.
-  const { data: user, loading: userLoading, refetch: refetchUser } = useApi<any>(iamApi.me, []);
+  // ── Nuclear simplification ─────────────────────────────────────────────
+  // Replaces the previous `useApi(iamApi.me)` call that, despite being a
+  // single shared fetch, still carried automatic retry-on-5xx and a
+  // `setData(fallback ?? null)` reset on every effect run. Both behaviours
+  // could plausibly contribute to a re-render loop. This plain effect runs
+  // exactly once on mount, no retries, AbortController on unmount.
+  // Errors are NOT translated into `crmai:unauthorized` events here — that
+  // remains the responsibility of App.tsx / api client paths so we don't
+  // multiply 401 events.
+  const [user, setUser] = useState<any | null>(null);
+  const [userLoading, setUserLoading] = useState(true);
+  const [, setUserError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    setUserLoading(true);
+    iamApi.me()
+      .then(u => {
+        if (ac.signal.aborted) return;
+        setUser(u);
+        setUserLoading(false);
+      })
+      .catch(err => {
+        if (ac.signal.aborted) return;
+        setUserError(err?.message || 'Failed to load user');
+        setUserLoading(false);
+        // Do NOT emit unauthorized here — let App.tsx handle that.
+      });
+    return () => ac.abort();
+  }, []);
+
+  const refetchUser = useCallback(() => {
+    setUserLoading(true);
+    iamApi.me()
+      .then(u => { setUser(u); setUserLoading(false); })
+      .catch(err => { setUserError(err?.message || 'Failed'); setUserLoading(false); });
+  }, []);
+
+  // Re-log now that `user` is in scope so the diagnostic line carries the
+  // real `userExists` flag.
+  // eslint-disable-next-line no-console
+  console.log(`[profile] state #${renderCountRef.current}`, {
+    activeTab,
+    userExists: !!user,
+    saveHandlerSet: !!saveHandler,
+  });
 
   useEffect(() => {
     setSaveHandler(null);
@@ -116,6 +171,24 @@ export default function Profile({ onNavigate, initialSection }: ProfileProps) {
       initials,
     };
   }, [user]);
+
+  // Visible kill-switch: if the render-loop guard tripped, replace the page
+  // body with a static banner. This stops the loop the user can see, while
+  // the console logs preserve the diagnostic trail.
+  if (loopTripped) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-white p-6">
+        <div className="max-w-md rounded-md border border-[#fecaca] bg-[#fee2e2] p-4 text-[13px] text-[#b91c1c]">
+          <strong>Render loop detected — please report.</strong>
+          <p className="mt-1 text-[12px] text-[#991b1b]">
+            The profile page detected an excessive number of renders and
+            stopped to prevent freezing the tab. Open DevTools console and
+            share the <code>[profile]</code> log lines.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full w-full flex flex-col bg-white">

@@ -30,8 +30,34 @@ const MEMBERSHIP_CACHE_KEY = 'crmai.membership.v1';
  */
 let redirecting = false;
 const LAST_REDIRECT_KEY = 'crmai.lastUnauthRedirect';
+const COUNT_KEY = 'crmai.unauthRedirectCount';
+const COUNT_RESET_KEY = 'crmai.unauthRedirectCountAt';
 async function handleUnauthorized() {
   if (redirecting) return;
+
+  // Hard-stop ceiling: if we've already redirected 3+ times in the last
+  // 60s the user is in a redirect storm we cannot recover from automatically.
+  // Halt all further redirects for this session and surface a banner so the
+  // user can see what's happening and reload manually. This is the absolute
+  // backstop for any path that bypasses the 10s throttle below.
+  try {
+    const countRaw = sessionStorage.getItem(COUNT_KEY);
+    const countAt = parseInt(sessionStorage.getItem(COUNT_RESET_KEY) || '0', 10);
+    const now = Date.now();
+    const count = (countRaw && now - countAt < 60000) ? parseInt(countRaw, 10) : 0;
+    if (count >= 3) {
+      console.error('[auth] Hard-stop: 3+ unauthorized redirects in 60s. Halting.');
+      try {
+        document.body.insertAdjacentHTML(
+          'afterbegin',
+          '<div style="position:fixed;top:0;left:0;right:0;background:#fee2e2;color:#b91c1c;padding:8px;text-align:center;z-index:9999;font-family:system-ui;font-size:13px">Sesión expirada — recarga la página manualmente.</div>',
+        );
+      } catch { /* DOM may not be ready */ }
+      return;
+    }
+    sessionStorage.setItem(COUNT_KEY, String(count + 1));
+    sessionStorage.setItem(COUNT_RESET_KEY, String(now));
+  } catch { /* sessionStorage may be unavailable */ }
 
   // Throttle: if we just redirected within the last 10s, skip. This breaks the
   // page-reload loop that happens when a 401 fires immediately after the user

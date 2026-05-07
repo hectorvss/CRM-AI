@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { iamApi } from '../../api/client';
 import { supabase } from '../../api/supabase';
 import LoadingState from '../LoadingState';
+import { useRenderLoopGuard } from '../../hooks/useRenderLoopGuard';
 import { DetailSection, DetailRow } from './sections';
 
 type SaveHandler = (() => Promise<void> | void) | null;
@@ -133,6 +134,18 @@ const STYLES = [
 ];
 
 export default function ProfileTab({ user, userLoading, onSaveReady }: ProfileTabProps) {
+  // Diagnostic instrumentation — kept intentionally. See Profile.tsx for
+  // the rationale: cheap render-counting is the fastest way to confirm a
+  // future regression without redeploying.
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+  const { tripped: loopTripped } = useRenderLoopGuard('profile-tab', 50, 5000);
+  // eslint-disable-next-line no-console
+  console.log(`[profile-tab] render #${renderCountRef.current}`, {
+    userExists: !!user,
+    userLoading: !!userLoading,
+  });
+
   const loading = Boolean(userLoading);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
@@ -258,6 +271,16 @@ export default function ProfileTab({ user, userLoading, onSaveReady }: ProfileTa
     }
     return () => onSaveReady?.(null);
   }, [hasChanges, handleSave, onSaveReady]);
+
+  if (loopTripped) {
+    return (
+      <div className="p-6">
+        <div className="rounded-md border border-[#fecaca] bg-[#fee2e2] p-3 text-[12.5px] text-[#b91c1c]">
+          Render loop detected in profile tab — please report.
+        </div>
+      </div>
+    );
+  }
 
   if (loading) return <LoadingState title="Cargando perfil" message="Recuperando tus datos." compact />;
 
