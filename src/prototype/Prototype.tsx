@@ -5778,7 +5778,14 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
 
       <div className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-0.5">
         {/* Inicio */}
-        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+        <button
+          onClick={() => onNavigate('settings')}
+          className={`flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] text-left ${
+            view === 'settings'
+              ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+              : 'font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]'
+          }`}
+        >
           <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoHome}</div>
           <span className="flex-1">Inicio</span>
         </button>
@@ -5787,8 +5794,8 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
         <GroupRow icon={IcoWorkspace} label="Espacio de trabajo" groupKey="workspace" sectionActive={isWorkspaceSection} />
         {openGroups.workspace && (
           <div className="flex flex-col gap-0.5 pl-2">
-            <SubRow icon={IcoGeneral}    label="General"              nav={null} />
-            <SubRow icon={IcoTeammate}   label="Compañeros de equipo" nav={null} />
+            <SubRow icon={IcoGeneral}    label="General"              nav={'workspaceGeneral'} />
+            <SubRow icon={IcoTeammate}   label="Compañeros de equipo" nav={'workspaceTeammates'} />
             <SubRow icon={IcoHoursS}     label="Horario de atención"  nav={'workspaceHours'} />
             <SubRow icon={IcoBrandsS}    label="Marcas"               nav={'workspaceBrands'} />
             <SubRow icon={IcoSecurityS}  label="Seguridad"            nav={'workspaceSecurity'} warn />
@@ -5812,8 +5819,8 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoEmailS}     label="Correo electrónico"        nav={'email'} />
             <SubRow icon={IcoPhoneS}     label="Teléfono"                  nav={'phone'} />
             <SubRow icon={IcoWhatsAppS}  label="WhatsApp"                  nav={'whatsapp'} />
-            <SubRow icon={IcoSwitchS}    label="Switch"                    nav={null} />
-            <SubRow icon={IcoSlackS}     label="Slack"                     nav={null} />
+            <SubRow icon={IcoSwitchS}    label="Switch"                    nav={'switchChannel'} />
+            <SubRow icon={IcoSlackS}     label="Slack"                     nav={'slackChannel'} />
             <SubRow icon={IcoDiscordS}   label="Discord"                   nav={'discord'} />
             <SubRow icon={IcoSMSS}       label="SMS"                       nav={'sms'} />
             <SubRow icon={IcoSocialS}    label="Canales de redes sociales" nav={'social'} />
@@ -5849,8 +5856,8 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
           <div className="flex flex-col gap-0.5 pl-2">
             <SubRow icon={IcoAppS}  label="Tienda de aplicaciones"    nav={'appStore'} />
             <SubRow icon={IcoConnS} label="Conectores de datos"       nav={'connectors'} />
-            <SubRow icon={IcoAuthS} label="Autenticación"             nav={null} />
-            <SubRow icon={IcoDevS}  label="Centro para desarrolladores" nav={null} />
+            <SubRow icon={IcoAuthS} label="Autenticación"             nav={'auth'} />
+            <SubRow icon={IcoDevS}  label="Centro para desarrolladores" nav={'developer'} />
           </div>
         )}
 
