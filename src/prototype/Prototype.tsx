@@ -9,9 +9,8 @@ import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
-import Profile from '../components/Profile';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'profile' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -478,18 +477,132 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
           <img src={ICON_SETTINGS} alt="" className="w-4 h-4 flex-shrink-0" />
           {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Ajustes</span>}
         </button>
-        {/* Perfil */}
-        <button
-          onClick={() => onNavigate('profile')}
-          className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}
-        >
-          <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7] flex-shrink-0">
-            <img src={AVATAR_ME} alt="" className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute bottom-[-2px] right-[-2px] w-[7px] h-[7px] bg-[#158613] rounded-[3.6px] border border-white" />
-          </div>
-          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Perfil</span>}
-        </button>
+        {/* Perfil — popover menu (Intercom-style) */}
+        <ProfileMenuButton expanded={expanded} />
       </div>
+    </div>
+  );
+}
+
+// ── Profile menu — popover that opens above the Perfil button in the LeftNav ──
+function ProfileMenuButton({ expanded }: { expanded: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [away, setAway] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const { data: user } = useApi<any>(iamApi.me, []);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    window.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const userName = user?.name || 'Tu cuenta';
+  const userEmail = user?.email || '';
+  const initials = String(userName)
+    .split(/\s+/).filter(Boolean).slice(0, 2).map((s: string) => s.charAt(0).toUpperCase()).join('') || '?';
+
+  function Row({ icon, label, sub, onClick, danger, chev }: { icon?: ReactNode; label: string; sub?: string; onClick?: () => void; danger?: boolean; chev?: boolean }) {
+    return (
+      <button
+        type="button"
+        onClick={() => { onClick?.(); setOpen(false); }}
+        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${danger ? 'text-[#b91c1c] hover:bg-[#fef2f2]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+      >
+        {icon && <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">{icon}</span>}
+        <span className="flex-1 truncate">{label}{sub && <span className="text-[#646462] font-normal"> {sub}</span>}</span>
+        {chev && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>}
+      </button>
+    );
+  }
+
+  async function handleSignOut() {
+    try {
+      const { supabase } = await import('../api/supabase');
+      await supabase.auth.signOut();
+    } catch { /* ignore */ }
+    try { localStorage.removeItem('crmai.membership.v1'); } catch { /* ignore */ }
+    if (typeof window !== 'undefined') window.location.reload();
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${open ? 'bg-white/80' : ''}`}
+      >
+        <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7] flex-shrink-0 flex items-center justify-center">
+          {user?.avatar_url ? (
+            <img src={user.avatar_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <span className="text-[8.5px] font-bold text-[#646462]">{initials}</span>
+          )}
+          <div className={`absolute bottom-[-2px] right-[-2px] w-[7px] h-[7px] rounded-[3.6px] border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
+        </div>
+        {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Perfil</span>}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute z-50 left-full ml-2 bottom-0 w-[280px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] py-1.5 overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-[#e9eae6]">
+            <div className="relative w-7 h-7 rounded-full overflow-hidden bg-[#f8f8f7] flex items-center justify-center">
+              {user?.avatar_url ? (
+                <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[12px] font-semibold text-[#646462]">{initials}</span>
+              )}
+              <div className={`absolute bottom-0 right-0 w-[8px] h-[8px] rounded-full border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{userName}</p>
+              {userEmail && <p className="text-[11px] text-[#646462] truncate">{userEmail}</p>}
+            </div>
+          </div>
+
+          {/* Modo ausente toggle */}
+          <button
+            type="button"
+            onClick={() => setAway(v => !v)}
+            className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          >
+            <span className="flex-1 text-left">Modo ausente</span>
+            <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors flex-shrink-0 ${away ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
+              <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${away ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+            </span>
+          </button>
+
+          <div className="border-t border-[#e9eae6] my-1" />
+
+          <Row label="Tema:" sub="Sistema de coincidencias" chev />
+          <Row label="Idioma:" sub="Español (MX)" chev />
+          <Row label="Espacio de trabajo:" sub="Acme" chev />
+
+          <div className="border-t border-[#e9eae6] my-1" />
+
+          <Row label="Centro de ayuda" onClick={() => window.open('https://www.intercom.com/help', '_blank')} />
+          <Row label="Foro de la comunidad" onClick={() => window.open('https://community.intercom.com', '_blank')} />
+          <Row label="Página de estado" onClick={() => window.open('https://www.intercomstatus.com', '_blank')} />
+          <Row label="Términos y políticas" onClick={() => window.open('https://www.intercom.com/terms-and-policies', '_blank')} />
+
+          <div className="border-t border-[#e9eae6] my-1" />
+
+          <Row label="Cerrar sesión" danger onClick={handleSignOut} />
+        </div>
+      )}
     </div>
   );
 }
@@ -22827,7 +22940,6 @@ function PrototypeApp() {
       case 'settings': return <SettingsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;
       case 'imports':  return <ImportsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;
       case 'personal': return <PersonalView view={view} onNavigate={setView} />;
-      case 'profile':  return <Profile />;
       case 'security':       return <SecurityView view={view} onNavigate={setView} onBack={() => setView('personal')} />;
       case 'notifications':  return <NotificationsView view={view} onNavigate={setView} />;
       case 'visible':        return <VisibleView view={view} onNavigate={setView} />;
