@@ -14,6 +14,7 @@ import { actionsAdapters } from './actions.js';
 import { notificationsAdapters } from './notifications.js';
 import { messagingAdapters } from './messaging.js';
 import { aiAdapters } from './ai.js';
+import { connectorsAdapters } from './connectors.js';
 
 export const ALL_ADAPTERS: Record<string, NodeAdapter> = {
   ...flowAdapters,
@@ -24,4 +25,5 @@ export const ALL_ADAPTERS: Record<string, NodeAdapter> = {
   ...notificationsAdapters,
   ...messagingAdapters,
   ...aiAdapters,
+  ...connectorsAdapters,
 };
