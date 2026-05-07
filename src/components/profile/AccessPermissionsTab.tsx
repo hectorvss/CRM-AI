@@ -62,7 +62,7 @@ export default function AccessPermissionsTab() {
 
   const groups = useMemo(() => groupPermissions(state.permissions), [state.permissions]);
   const hasWildcard = state.permissions.includes('*');
-  const totalGranted = hasWildcard ? PERMISSION_CATALOG.length : Array.from(groups.values()).reduce((acc, arr) => acc + arr.length, 0);
+  const totalGranted = hasWildcard ? PERMISSION_CATALOG.length : Array.from(groups.values()).reduce((acc: number, arr: any[]) => acc + arr.length, 0);
   const canImpersonate = hasWildcard || state.permissions.includes('iam.impersonate');
 
   if (loading) return <LoadingState title="Cargando permisos" message="Revisando tu rol y accesos" compact />;

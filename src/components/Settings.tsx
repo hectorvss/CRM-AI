@@ -7,10 +7,9 @@ import NotificationsTab from './settings/Notifications';
 import SecurityAuditTab from './settings/SecurityAudit';
 import BillingUsageTab from './settings/BillingUsage';
 import DataPrivacyTab from './settings/DataPrivacy';
-import PersonalTab from './settings/Personal';
 import { NavigateInput } from '../types';
 
-type SettingsTab = 'workspace' | 'teams_roles' | 'notifications' | 'security_audit' | 'billing_usage' | 'data_privacy' | 'personal';
+type SettingsTab = 'workspace' | 'teams_roles' | 'notifications' | 'security_audit' | 'billing_usage' | 'data_privacy';
 
 type TabErrorBoundaryProps = { children: ReactNode; label: string };
 type SettingsProps = {
@@ -41,11 +40,17 @@ export default function Settings({ onNavigate, initialSection }: SettingsProps) 
 
   useEffect(() => {
     if (!initialSection) return;
+    // 'personal' was consolidated into the Profile page — redirect any
+    // legacy navigation back to the unified Profile shell.
+    if (initialSection === 'personal') {
+      onNavigate?.({ page: 'profile', section: 'profile', entityType: 'setting', sourceContext: 'settings_redirect' });
+      return;
+    }
     const nextSection = initialSection as SettingsTab;
-    if (['workspace', 'teams_roles', 'notifications', 'security_audit', 'billing_usage', 'data_privacy', 'personal'].includes(nextSection)) {
+    if (['workspace', 'teams_roles', 'notifications', 'security_audit', 'billing_usage', 'data_privacy'].includes(nextSection)) {
       setActiveTab(nextSection);
     }
-  }, [initialSection]);
+  }, [initialSection, onNavigate]);
 
   const handleDiscard = useCallback(() => {
     saveHandlerRef.current = null;
@@ -66,7 +71,6 @@ export default function Settings({ onNavigate, initialSection }: SettingsProps) 
     { id: 'security_audit', label: 'Security & Audit' },
     { id: 'billing_usage', label: 'Billing & Usage' },
     { id: 'data_privacy', label: 'Data & Privacy' },
-    { id: 'personal', label: 'Personal' },
   ];
 
   return (
@@ -104,7 +108,6 @@ export default function Settings({ onNavigate, initialSection }: SettingsProps) 
             {activeTab === 'security_audit' && <SecurityAuditTab onSaveReady={setSaveHandler} />}
             {activeTab === 'billing_usage' && <BillingUsageTab onSaveReady={setSaveHandler} onNavigate={onNavigate} />}
             {activeTab === 'data_privacy' && <DataPrivacyTab onSaveReady={setSaveHandler} />}
-            {activeTab === 'personal' && <PersonalTab onSaveReady={setSaveHandler} />}
           </TabErrorBoundary>
         </motion.div>
       </AnimatePresence>
