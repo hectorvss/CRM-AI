@@ -12673,13 +12673,71 @@ function ReportsView() {
       case 'administrar':   return <KnowledgePlaceholder title="Administrar" subtitle="Configuración avanzada de informes, propietarios y permisos." />;
     }
   }
-  // setPeriod/setChannel will be wired to a future period/channel selector UI
+  const periodLabel = period === '7d' ? 'Últimos 7 días' : period === '90d' ? 'Últimos 90 días' : 'Últimos 30 días';
+  const channelLabel = channel === 'all' ? 'Todos los canales'
+    : channel === 'chat' ? 'Chat'
+    : channel === 'email' ? 'Email'
+    : channel === 'phone' ? 'Teléfono'
+    : channel === 'whatsapp' ? 'WhatsApp'
+    : channel === 'sms' ? 'SMS'
+    : 'Social';
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <ReportsSidebar sub={sub} onSelect={setSub} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {/* Global period + channel selector — every Reports*Content
+              receives these as props and reruns its API call when they
+              change, so the whole module stays in sync. */}
+          <div className="flex-shrink-0 h-12 border-b border-[#e9eae6] flex items-center px-5 gap-2">
+            <span className="text-[12px] uppercase tracking-wide text-[#646462] font-semibold">Filtros globales</span>
+            <span className="w-px h-5 bg-[#e9eae6] mx-2" />
+            <Dropdown
+              value={period}
+              onChange={(v) => setPeriod(v as '7d' | '30d' | '90d')}
+              triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              renderTrigger={() => (
+                <>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg>
+                  <span>{periodLabel}</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                </>
+              )}
+              items={[
+                { value: '7d',  label: 'Últimos 7 días' },
+                { value: '30d', label: 'Últimos 30 días' },
+                { value: '90d', label: 'Últimos 90 días' },
+              ]}
+            />
+            <Dropdown
+              value={channel}
+              onChange={setChannel}
+              triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              renderTrigger={() => (
+                <>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>
+                  <span>{channelLabel}</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                </>
+              )}
+              items={[
+                { value: 'all',      label: 'Todos los canales' },
+                { value: 'chat',     label: 'Chat',      divider: true },
+                { value: 'email',    label: 'Email' },
+                { value: 'phone',    label: 'Teléfono' },
+                { value: 'whatsapp', label: 'WhatsApp' },
+                { value: 'sms',      label: 'SMS' },
+                { value: 'social',   label: 'Social' },
+              ]}
+            />
+            <span className="flex-1" />
+            <button
+              onClick={() => { setPeriod('30d'); setChannel('all'); }}
+              disabled={period === '30d' && channel === 'all'}
+              className="h-8 px-3 rounded-[8px] text-[12.5px] text-[#646462] hover:bg-[#f8f8f7] disabled:opacity-50"
+            >Restablecer</button>
+          </div>
           {renderSub()}
         </div>
       </div>
