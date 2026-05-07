@@ -737,10 +737,14 @@ router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
     const { user_id, team_id } = req.body;
+    const now = new Date().toISOString();
 
     await caseRepository.update(scope, req.params.id, {
       assigned_user_id: user_id || null,
-      assigned_team_id: team_id || null
+      assigned_team_id: team_id || null,
+      // Track when the case was first (or re-) assigned so responsiveness
+      // KPIs (assign→first-response, assign→close) have a baseline timestamp.
+      assigned_at: user_id ? now : null,
     });
 
     await auditRepository.log({
@@ -961,6 +965,39 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
         priority: 4,
       },
     );
+
+    // ── KPI tracking ──────────────────────────────────────────────────────────
+    const supabase = getSupabaseAdmin();
+    const caseId = req.params.id;
+    const tenantId = req.tenantId!;
+    const agentUserId = req.userId || null;
+
+    // 1. Set first_response_at on the case if this is the first human reply
+    if (!bundle.case.first_response_at && agentUserId) {
+      await caseRepository.update(scope, caseId, { first_response_at: now });
+    }
+
+    // 2. Record this reply in case_replies for subsequent-response median tracking.
+    //    reply_number is 1-indexed: count existing replies for this case first.
+    try {
+      const { count } = await supabase
+        .from('case_replies')
+        .select('*', { count: 'exact', head: true })
+        .eq('case_id', caseId)
+        .eq('tenant_id', tenantId);
+      const replyNumber = (count ?? 0) + 1;
+      await supabase.from('case_replies').insert({
+        case_id: caseId,
+        tenant_id: tenantId,
+        user_id: agentUserId,
+        reply_number: replyNumber,
+        replied_at: now,
+      });
+    } catch (trackErr) {
+      // Non-fatal: tracking failure must never block a reply
+      console.warn('[reply-tracking] case_replies insert failed:', trackErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     await auditRepository.log({
       tenantId: req.tenantId!,
@@ -1467,6 +1504,90 @@ router.post('/:id/merge', validate({ body: MergeBodySchema }), async (req: Multi
     res.json({ ok: true, targetId, sourceId });
   } catch (err: any) {
     console.error('Error merging cases:', err);
+    res.status(500).json({ error: err.message ?? 'Internal server error' });
+  }
+});
+
+// ── CSAT Survey endpoints ──────────────────────────────────────────────────
+// POST /api/cases/:id/survey/send
+// Records that a CSAT survey was sent for this case.
+router.post('/:id/survey/send', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const caseId = req.params.id;
+    const bundle = await caseRepository.getBundle(scope, caseId);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+
+    const supabase = getSupabaseAdmin();
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('cases')
+      .update({ survey_sent_at: now, surveyed_by: req.userId || 'system' })
+      .eq('id', caseId)
+      .eq('tenant_id', req.tenantId!);
+    if (error) throw error;
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CSAT_SURVEY_SENT',
+      entityType: 'case',
+      entityId: caseId,
+      newValue: { survey_sent_at: now },
+    });
+
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId, change: 'survey_sent' }, req.workspaceId!);
+    res.json({ success: true, survey_sent_at: now });
+  } catch (err: any) {
+    console.error('Error sending survey:', err);
+    res.status(500).json({ error: err.message ?? 'Internal server error' });
+  }
+});
+
+// POST /api/cases/:id/survey/respond  { score: 1-5, comment?: string }
+// Records a customer CSAT response.
+router.post('/:id/survey/respond', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const caseId = req.params.id;
+    const { score, comment } = req.body;
+
+    const parsedScore = Number(score);
+    if (!score || isNaN(parsedScore) || parsedScore < 1 || parsedScore > 5) {
+      return res.status(400).json({ error: 'score must be an integer between 1 and 5' });
+    }
+
+    const bundle = await caseRepository.getBundle(scope, caseId);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+
+    const supabase = getSupabaseAdmin();
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('cases')
+      .update({
+        satisfaction_score: parsedScore,
+        survey_responded_at: now,
+        // Store comment in existing metadata or a dedicated field if available
+      })
+      .eq('id', caseId)
+      .eq('tenant_id', req.tenantId!);
+    if (error) throw error;
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CSAT_SURVEY_RESPONDED',
+      entityType: 'case',
+      entityId: caseId,
+      newValue: { satisfaction_score: parsedScore, survey_responded_at: now, comment: comment || null },
+    });
+
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId, change: 'survey_responded', score: parsedScore }, req.workspaceId!);
+    res.json({ success: true, satisfaction_score: parsedScore, survey_responded_at: now });
+  } catch (err: any) {
+    console.error('Error recording survey response:', err);
     res.status(500).json({ error: err.message ?? 'Internal server error' });
   }
 });

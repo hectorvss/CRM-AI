@@ -19520,6 +19520,19 @@ function PrototypeApp() {
     }
   }, [view]);
 
+  // Agent activity heartbeat — fires every 60 s while the tab is visible.
+  // Increments active_minutes in agent_daily_activity so Reports > Teammate
+  // can show "conversations per active hour" metrics.
+  useEffect(() => {
+    const sendHeartbeat = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetch('/api/workspaces/heartbeat', { method: 'POST' }).catch(() => {/* best-effort */});
+    };
+    sendHeartbeat(); // fire immediately on mount
+    const id = window.setInterval(sendHeartbeat, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   function renderView() {
     switch (view) {
       case 'inbox':    return <InboxView />;
