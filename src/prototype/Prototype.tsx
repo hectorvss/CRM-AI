@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, auditApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, operationsApi, reportsApi, workflowsApi, workspacesApi } from '../api/client';
+import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, workflowsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
@@ -3784,26 +3784,9 @@ function InboxView() {
   function togglePanel(which: keyof PanelState) {
     setPanels(p => ({ ...p, [which]: !p[which] }));
   }
-  // Server-side filters — sent as query params to GET /cases. The legacy
-  // Inbox supported these so the prototype matches feature parity. The
-  // sidebar scope filtering still runs client-side on top of the result.
-  const [serverFilters, setServerFilters] = useState<{ status?: string; priority?: string; risk_level?: string; q?: string }>({});
-  const [showFilterPanel, setShowFilterPanel] = useState(false);
-  function applyFilter(key: keyof typeof serverFilters, value: string | undefined) {
-    setServerFilters(prev => {
-      const next = { ...prev };
-      if (!value) delete next[key]; else next[key] = value;
-      return next;
-    });
-  }
-  function clearFilters() { setServerFilters({}); }
   const { data: apiCases, loading, error } = useApi(
-    () => {
-      const params: Record<string, string> = {};
-      Object.entries(serverFilters).forEach(([k, v]) => { if (v) params[k] = String(v); });
-      return casesApi.list(Object.keys(params).length ? params : undefined);
-    },
-    [refreshKey, serverFilters],
+    () => casesApi.list(),
+    [refreshKey],
     [],
   );
   // Real backend data only — no mock fallback. Empty list = empty UI.
@@ -4071,56 +4054,7 @@ function InboxView() {
                 </p>
               </div>
             )}
-            {/* Server-side filter bar — always rendered so the Filtros button
-                is reachable (Cmd+K shortcut targets it). Keys status /
-                priority / risk_level / q map straight to GET /cases params. */}
-            <div className={`absolute ${scope === 'search' ? 'top-[88px]' : 'top-0'} left-0 right-0 z-10 bg-white border-b border-[#e9eae6] px-3 py-2 flex flex-wrap items-center gap-1.5`}>
-              <button
-                title="Filtros"
-                onClick={() => setShowFilterPanel(s => !s)}
-                className={`h-7 px-2.5 rounded-[6px] border text-[12px] inline-flex items-center gap-1 ${showFilterPanel || Object.keys(serverFilters).length > 0 ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
-              >
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/></svg>
-                <span>Filtros</span>
-                {Object.keys(serverFilters).length > 0 && <span className="ml-1 px-1.5 rounded-full bg-white/20 text-[11px]">{Object.keys(serverFilters).length}</span>}
-              </button>
-              {showFilterPanel && (['status','priority','risk_level'] as const).map(field => {
-                const opts =
-                  field === 'status'    ? ['', 'open', 'pending', 'resolved'] :
-                  field === 'priority'  ? ['', 'low', 'normal', 'high', 'urgent'] :
-                                          ['', 'low', 'medium', 'high'];
-                return (
-                  <select
-                    key={field}
-                    value={serverFilters[field] || ''}
-                    onChange={e => applyFilter(field, e.target.value || undefined)}
-                    className="h-7 px-2 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a]"
-                  >
-                    <option value="">{field === 'status' ? 'Cualquier estado' : field === 'priority' ? 'Cualquier prioridad' : 'Cualquier riesgo'}</option>
-                    {opts.filter(Boolean).map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                );
-              })}
-              {showFilterPanel && (
-                <input
-                  type="text"
-                  value={serverFilters.q || ''}
-                  onChange={e => applyFilter('q', e.target.value || undefined)}
-                  placeholder="Texto…"
-                  className="h-7 px-2 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] w-[140px] focus:outline-none focus:border-[#1a1a1a]"
-                />
-              )}
-              {Object.keys(serverFilters).length > 0 && (
-                <button onClick={clearFilters} className="h-7 px-2 rounded-[6px] text-[12px] text-[#b91c1c] hover:bg-[#fef2f2]">Limpiar</button>
-              )}
-              {!showFilterPanel && Object.entries(serverFilters).map(([k, v]) => (
-                <span key={k} className="h-7 px-2 rounded-[6px] bg-[#f3f3f1] border border-[#e9eae6] text-[11.5px] text-[#1a1a1a] inline-flex items-center gap-1">
-                  <span className="text-[#646462]">{k === 'q' ? 'texto' : k}:</span>{v}
-                  <button onClick={() => applyFilter(k as any, undefined)} className="text-[#646462] hover:text-[#1a1a1a]">×</button>
-                </span>
-              ))}
-            </div>
-            <div className={`${scope === 'search' ? 'pt-[132px]' : 'pt-[44px]'} h-full`}>
+            <div className={scope === 'search' ? 'pt-[88px] h-full' : 'h-full'}>
               <ConversationList
                 selectedId={selectedConv?.id || selectedConvId}
                 onSelect={setSelectedConvId}
@@ -4520,37 +4454,6 @@ function ContactProfileScreen({
   const [savingSegment, setSavingSegment] = useState(false);
   const [savingRisk, setSavingRisk] = useState(false);
   const [localMsg, setLocalMsg] = useState<string | null>(null);
-  // Merge another contact into this one — calls customersApi.merge on the
-  // server, which canonicalises the source customer onto target and moves
-  // every case/note/identity over. Backed by /customers/:targetId/merge.
-  const [showMerge, setShowMerge] = useState(false);
-  const [mergeQuery, setMergeQuery] = useState('');
-  const [mergeBusy, setMergeBusy] = useState(false);
-  const { data: customersList } = useApi(() => customersApi.list(), [], []);
-  const mergeCandidates = useMemo(() => {
-    const list = Array.isArray(customersList) ? customersList : [];
-    const q = mergeQuery.trim().toLowerCase();
-    const filtered = list.filter((c: any) => c.id !== contactId);
-    return q
-      ? filtered.filter((c: any) => [c.canonicalName, c.canonicalEmail, c.name, c.email, c.id]
-          .filter(Boolean).join(' ').toLowerCase().includes(q))
-      : filtered.slice(0, 8);
-  }, [customersList, mergeQuery, contactId]);
-  async function mergeFrom(sourceId: string) {
-    if (mergeBusy) return;
-    setMergeBusy(true);
-    setLocalMsg(null);
-    try {
-      await customersApi.merge(contactId, sourceId);
-      setLocalMsg('Contactos fusionados — los datos del origen se han canonicalizado en este contacto.');
-      setShowMerge(false);
-      setMergeQuery('');
-      refetchState();
-      onUpdated?.();
-    } catch (err: any) {
-      setLocalMsg(err?.message || 'No se pudo fusionar el contacto');
-    } finally { setMergeBusy(false); }
-  }
 
   // Reset tab + transient state whenever a different contact opens
   useEffect(() => { setTab('all_activity'); setLocalMsg(null); }, [contactId]);
@@ -4653,58 +4556,7 @@ function ContactProfileScreen({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={() => setShowMerge(true)}
-            title="Fusionar con otro contacto"
-            className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] inline-flex items-center gap-1.5"
-          >
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h4l3 5-3 5H3M13 3l-3 5 3 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            <span>Fusionar</span>
-          </button>
-        </div>
       </div>
-
-      {/* Merge modal */}
-      {showMerge && (
-        <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={() => !mergeBusy && setShowMerge(false)}>
-          <div className="w-[480px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Fusionar con otro contacto</h3>
-            <p className="text-[12.5px] text-[#646462] mb-4">Elige el contacto <strong>origen</strong>. Sus casos, notas e identidades pasarán a <strong>{name}</strong> y el origen se archivará. La operación es destructiva.</p>
-            <input
-              autoFocus
-              value={mergeQuery}
-              onChange={e => setMergeQuery(e.target.value)}
-              placeholder="Buscar contacto…"
-              className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
-            />
-            <div className="max-h-[280px] overflow-y-auto flex flex-col gap-1">
-              {mergeCandidates.length === 0 ? (
-                <p className="text-[12.5px] text-[#646462] py-3 text-center">Sin coincidencias.</p>
-              ) : mergeCandidates.map((c: any) => (
-                <button
-                  key={c.id}
-                  disabled={mergeBusy}
-                  onClick={() => {
-                    if (typeof window !== 'undefined' && !window.confirm(`¿Fusionar "${c.canonicalName || c.canonicalEmail || c.id}" en este contacto? La operación es irreversible.`)) return;
-                    mergeFrom(c.id);
-                  }}
-                  className="text-left px-3 py-2 rounded-lg hover:bg-[#f8f8f7] flex items-center gap-2 disabled:opacity-60"
-                >
-                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0" style={{ backgroundColor: pickContactColor(c.id) }}>{((c.canonicalName || c.canonicalEmail || '?')[0] || '?').toUpperCase()}</span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-[13px] font-medium text-[#1a1a1a] truncate">{c.canonicalName || c.canonicalEmail || c.id}</span>
-                    {c.canonicalEmail && <span className="block text-[11.5px] text-[#646462] truncate">{c.canonicalEmail}</span>}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setShowMerge(false)} disabled={mergeBusy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto min-h-0">
@@ -15582,43 +15434,6 @@ function FinTendenciasContent() {
 
 // ─── Analizar / Monitores (1:18192) ─────────────────────────────────────────
 function FinMonitoresContent() {
-  // Real agent runs from operationsApi feed the monitor cards. We also listen
-  // to /api/sse/agent-runs so the cards bump their counts in real time as
-  // chains execute. No mock data — empty state when nothing has run.
-  const [refreshKey, setRefreshKey] = useState(0);
-  const { data: runsData } = useApi(() => operationsApi.agentRuns(), [refreshKey], []);
-  const runs = Array.isArray(runsData) ? runsData : [];
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    let es: EventSource | null = null;
-    let cancelled = false;
-    function connect() {
-      if (cancelled) return;
-      try { es = new EventSource('/api/sse/agent-runs'); } catch { return; }
-      es.addEventListener('agent:start',  () => setRefreshKey(k => k + 1));
-      es.addEventListener('agent:finish', () => setRefreshKey(k => k + 1));
-      es.onerror = () => { try { es?.close(); } catch { /* ignore */ } if (!cancelled) setTimeout(connect, 5000); };
-    }
-    connect();
-    return () => { cancelled = true; try { es?.close(); } catch { /* ignore */ } };
-  }, []);
-
-  const agg = useMemo(() => {
-    const total = runs.length;
-    const last7 = runs.filter((r: any) => {
-      const t = new Date(r.started_at || r.startedAt || r.created_at || r.createdAt || 0).getTime();
-      return Number.isFinite(t) && (Date.now() - t) <= 7 * 86400_000;
-    }).length;
-    const failed = runs.filter((r: any) => String(r.status || '').toLowerCase() === 'failed' || String(r.status || '').toLowerCase() === 'error').length;
-    const unreviewed = runs.filter((r: any) => !(r.reviewed_at || r.reviewedAt)).length;
-    const byAgent = new Map<string, number>();
-    for (const r of runs) {
-      const slug = String((r as any).agent_slug || (r as any).agentSlug || (r as any).agent || 'desconocido');
-      byAgent.set(slug, (byAgent.get(slug) || 0) + 1);
-    }
-    return { total, last7, failed, unreviewed, byAgent: Array.from(byAgent.entries()) };
-  }, [runs]);
-
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-14 flex items-center justify-between">
@@ -15683,22 +15498,16 @@ function FinMonitoresContent() {
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.01"/></svg>
             </span>
             <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Conversaciones sin revisión</span>
-            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">{agg.unreviewed}</span>
+            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">0</span>
           </button>
           <button className="bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
             <span className="w-7 h-7 rounded-md bg-[#fef3c7] flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#a06820]"><path d="M8 1l7 13H1z"/></svg>
             </span>
-            <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Ejecuciones con error</span>
-            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">{agg.failed}</span>
+            <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Correcciones necesarias</span>
+            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">0</span>
           </button>
-          <button className="bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
-            <span className="w-7 h-7 rounded-md bg-[#dcfce7] flex items-center justify-center flex-shrink-0">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#15803d]"><path d="M3 8l3 3 7-7" stroke="#15803d" strokeWidth="1.6" fill="none" strokeLinecap="round"/></svg>
-            </span>
-            <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Ejecuciones · 7 días</span>
-            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">{agg.last7}</span>
-          </button>
+          <div />
         </div>
 
         {/* Todas las conversaciones de Fin */}
@@ -15706,58 +15515,24 @@ function FinMonitoresContent() {
           <div className="bg-white rounded-[10px] border border-[#e9eae6] p-4">
             <div className="flex items-start justify-between">
               <div>
-                <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Todas las ejecuciones de agentes</h4>
-                <p className="mt-0.5 text-[12px] text-[#646462]">SSE en directo</p>
+                <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Todas las conversaciones de Fin</h4>
+                <p className="mt-0.5 text-[12px] text-[#646462]">Continuo</p>
               </div>
               <button className="w-6 h-6 rounded hover:bg-[#f8f8f7] flex items-center justify-center">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
               </button>
             </div>
+            <div className="mt-6 flex items-center gap-1 h-[60px] px-1">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <span key={i} className="flex-1 h-px border-t border-dashed border-[#d4d4d2]" />
+              ))}
+            </div>
             <div className="mt-3 pt-3 border-t border-[#e9eae6]">
-              <p className="text-[11px] text-[#646462]">Total · histórico</p>
-              <p className="text-[18px] font-mono font-bold text-[#1a1a1a]">{agg.total}</p>
+              <p className="text-[11px] text-[#646462]">Conversaciones</p>
+              <p className="text-[18px] font-mono font-bold text-[#1a1a1a]">0</p>
             </div>
           </div>
-          {agg.byAgent.slice(0, 2).map(([slug, count]) => (
-            <div key={slug} className="bg-white rounded-[10px] border border-[#e9eae6] p-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="text-[14px] font-semibold text-[#1a1a1a] truncate">{slug}</h4>
-                  <p className="mt-0.5 text-[12px] text-[#646462]">Agente</p>
-                </div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-[#e9eae6]">
-                <p className="text-[11px] text-[#646462]">Ejecuciones</p>
-                <p className="text-[18px] font-mono font-bold text-[#1a1a1a]">{count}</p>
-              </div>
-            </div>
-          ))}
         </div>
-
-        {/* Recent runs table */}
-        {runs.length > 0 && (
-          <div className="mt-6">
-            <h3 className="text-[14px] text-[#1a1a1a] mb-3">Últimas ejecuciones</h3>
-            <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden">
-              {runs.slice(0, 8).map((r: any, idx: number) => {
-                const status = String(r.status || '').toLowerCase();
-                const started = r.started_at || r.startedAt || r.created_at || r.createdAt;
-                const slug = r.agent_slug || r.agentSlug || r.agent || 'agente';
-                const caseId = r.case_id || r.caseId;
-                return (
-                  <div key={r.id || idx} className={`grid grid-cols-[1fr_140px_140px_120px] items-center px-4 py-2.5 ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}>
-                    <span className="text-[13px] text-[#1a1a1a] truncate">{slug}</span>
-                    <span className="text-[12px] text-[#646462]">{caseId || '—'}</span>
-                    <span className="text-[12px] text-[#646462]">{started ? new Date(started).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                    <span className={`text-[12px] font-semibold ${status === 'failed' || status === 'error' ? 'text-[#b91c1c]' : status === 'completed' || status === 'success' ? 'text-[#15803d]' : 'text-[#646462]'}`}>
-                      {status || 'pendiente'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -15765,22 +15540,6 @@ function FinMonitoresContent() {
 
 // ─── Registro de cambios (1:19066) ──────────────────────────────────────────
 function FinChangelogContent() {
-  // Pull workspace audit log; we filter by entity types relevant to Fin
-  // (agents, knowledge, workflows, policies). Each row is a real change.
-  const { data: auditData } = useApi(() => auditApi.workspaceAll(), [], []);
-  const [search, setSearch] = useState('');
-  const events = useMemo(() => {
-    const list = Array.isArray(auditData) ? auditData : [];
-    const finRelated = list.filter((e: any) => {
-      const t = String(e.entity_type || e.entityType || '').toLowerCase();
-      return ['agent', 'agents', 'knowledge', 'article', 'workflow', 'policy', 'fin'].some(k => t.includes(k));
-    });
-    const q = search.trim().toLowerCase();
-    return q
-      ? finRelated.filter((e: any) => JSON.stringify(e).toLowerCase().includes(q))
-      : finRelated;
-  }, [auditData, search]);
-
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
@@ -15792,51 +15551,18 @@ function FinChangelogContent() {
       <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3 border-b border-[#e9eae6]">
         <div className="relative flex-1 max-w-[320px]">
           <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar elementos..."
-            className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
-          />
+          <input type="text" placeholder="Buscar elementos..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]" />
         </div>
         <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
           <span>Cualquier cambio</span>
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4">
-        {events.length === 0 ? (
-          <div className="flex items-start justify-center pt-24">
-            <div className="text-center max-w-[420px]">
-              <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
-              <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en tu agente de IA Fin{search ? ' que coincidan con la búsqueda' : ''}.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden max-w-[920px]">
-            {events.map((e: any, idx: number) => {
-              const when = e.created_at || e.createdAt || e.timestamp;
-              return (
-                <div key={e.id || idx} className={`flex items-start gap-3 px-4 py-3 ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}>
-                  <span className="w-7 h-7 rounded-md bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="2"/></svg>
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-[#1a1a1a]">
-                      <span className="font-semibold">{e.actor_name || e.actorName || e.user_email || e.userEmail || 'Sistema'}</span>{' '}
-                      <span className="text-[#646462]">{e.action || e.event || 'modificó'}</span>{' '}
-                      <span className="font-mono text-[12px] bg-[#f3f3f1] px-1.5 py-0.5 rounded">{e.entity_type || e.entityType}</span>
-                      {(e.entity_id || e.entityId) && <span className="ml-1 font-mono text-[11px] text-[#646462]">#{e.entity_id || e.entityId}</span>}
-                    </p>
-                    {e.summary && <p className="mt-1 text-[12px] text-[#646462]">{e.summary}</p>}
-                  </div>
-                  <span className="text-[11px] text-[#646462] flex-shrink-0">{when ? new Date(when).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      <div className="flex-1 overflow-y-auto min-h-0 flex items-start justify-center pt-24 px-6">
+        <div className="text-center max-w-[420px]">
+          <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
+          <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en su agente de IA Fin</p>
+        </div>
       </div>
     </div>
   );
@@ -15844,30 +15570,19 @@ function FinChangelogContent() {
 
 // ─── Ajustes de Fin · General (1:20145) ─────────────────────────────────────
 function FinSettingsContent() {
-  type Row = { icon: ReactNode; title: string; desc: string; cta?: string; view?: string };
-
-  // Each row deep-links to the canonical settings view that already implements
-  // the underlying configuration — single source of truth, no duplication.
-  function openView(view?: string) {
-    if (!view || typeof window === 'undefined') return;
-    const url = new URL(window.location.href);
-    url.searchParams.set('view', view);
-    window.location.href = url.toString();
-  }
+  type Row = { icon: ReactNode; title: string; desc: string; cta?: string };
 
   const usoRows: Row[] = [
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M8 2.5l1.6 4 4.4.4-3.4 3 1.1 4.3L8 12l-3.7 2.2L5.4 9.9 2 6.9l4.4-.4z"/></svg>,
       title: 'Alertas y límites',
       desc: 'Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto.',
-      view: 'billing',
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>,
       title: 'Supervisar el uso',
       desc: 'Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo.',
       cta: 'Ver uso',
-      view: 'billing',
     },
   ];
 
@@ -15876,31 +15591,27 @@ function FinSettingsContent() {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13.5c.7-2.4 2.7-3.7 5-3.7s4.3 1.3 5 3.7"/></svg>,
       title: 'La identidad de Fin',
       desc: 'Administra el nombre y avatar que verán tus clientes.',
-      view: 'workspaceBrands',
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 4l3 3-3 3M7 11h7" strokeLinecap="round"/></svg>,
       title: 'Botones de respuesta de Fin',
       desc: 'Elija cómo Fin formula las opciones que les presenta a sus clientes. Disponible en SMS.',
-      view: 'macros',
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.6 1.7 2.4 3.6 2.4 6S9.6 12.3 8 14C6.4 12.3 5.6 10.4 5.6 8S6.4 3.7 8 2z"/></svg>,
       title: 'Soporte multilingüe de Fin',
       desc: 'Controla los idiomas en los que responderá Fin.',
-      view: 'multilingual',
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4"/></svg>,
       title: 'Respuestas de correo electrónico de Fin',
       desc: 'Configura cómo Fin firma y formatea los correos electrónicos que envía a tus clientes.',
-      view: 'email',
     },
   ];
 
   function renderRow(r: Row) {
     return (
-      <button key={r.title} onClick={() => openView(r.view)} className="w-full bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 text-left hover:bg-[#f8f8f7]">
+      <button key={r.title} className="w-full bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 text-left hover:bg-[#f8f8f7]">
         <span className="w-8 h-8 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
           {r.icon}
         </span>
@@ -15938,30 +15649,6 @@ function FinSettingsContent() {
 
 // ─── Ajustes de Fin · Audiencias (1:21030) ──────────────────────────────────
 function FinAudiencesContent() {
-  // Audiences = teams + customer segments. We surface real teams from
-  // iamApi.teams() (already used in Settings › Equipos) and let the user
-  // jump there to manage them — single source of truth.
-  const { data: teamsData } = useApi(() => iamApi.teams(), [], []);
-  const { data: customers } = useApi(() => customersApi.list(), [], []);
-  const teams = Array.isArray(teamsData) ? teamsData : [];
-  const segments = useMemo(() => {
-    const list = Array.isArray(customers) ? customers : [];
-    const map = new Map<string, number>();
-    for (const c of list) {
-      const seg = String((c as any).segment || 'estándar').toLowerCase();
-      map.set(seg, (map.get(seg) || 0) + 1);
-    }
-    return Array.from(map.entries()).map(([id, count]) => ({ id, count }));
-  }, [customers]);
-
-  function openSettings(view: string) {
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.set('view', view);
-      window.location.href = url.toString();
-    }
-  }
-
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between">
@@ -15969,66 +15656,21 @@ function FinAudiencesContent() {
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>
           <h2 className="text-[15px] font-bold text-[#1a1a1a]">Audiencias</h2>
         </div>
-        <button onClick={() => openSettings('inboxTeam')} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+        <button className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
           <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
-          <span>Gestionar equipos</span>
+          <span>Nuevo</span>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+      <div className="flex-1 overflow-y-auto min-h-0 p-6">
         <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 max-w-[820px]">
           <h3 className="text-[16px] font-bold text-[#1a1a1a] leading-[22px]">Segmenta tu contenido y pautas de Fin para usuarios específicos</h3>
           <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">
-            Las audiencias en este workspace combinan equipos (para el routing humano + Copilot) y segmentos de clientes (VIP / estándar / bajo valor) que ya existen en Contactos. Fin aplica políticas distintas según la audiencia activa.
+            Crea y administra audiencias personalizadas para controlar qué conocimientos utiliza Fin y qué pauta aplica, asegurando que los usuarios obtengan respuestas que siempre sean relevantes.
           </p>
-        </div>
-
-        {/* Teams */}
-        <div className="max-w-[820px]">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Equipos ({teams.length})</h4>
-            <button onClick={() => openSettings('inboxTeam')} className="text-[12.5px] font-medium text-[#1a1a1a] hover:underline">Gestionar →</button>
-          </div>
-          {teams.length === 0 ? (
-            <div className="bg-white border border-[#e9eae6] rounded-[10px] px-4 py-6 text-center text-[13px] text-[#646462]">
-              Sin equipos. Crea uno desde <button onClick={() => openSettings('inboxTeam')} className="underline">Equipos del Inbox</button>.
-            </div>
-          ) : (
-            <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden">
-              {teams.map((t: any, idx: number) => (
-                <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}>
-                  <span className="w-8 h-8 rounded-md bg-[#f3f3f1] flex items-center justify-center text-[12px] font-semibold text-[#1a1a1a]">{(t.name || '?')[0]}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{t.name}</p>
-                    {t.description && <p className="text-[12px] text-[#646462] truncate">{t.description}</p>}
-                  </div>
-                  <span className="text-[12px] text-[#646462]">{t.member_count ?? t.memberCount ?? '—'} miembros</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Customer segments */}
-        <div className="max-w-[820px]">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Segmentos de clientes ({segments.length})</h4>
-            <button onClick={() => openSettings('contacts')} className="text-[12.5px] font-medium text-[#1a1a1a] hover:underline">Ver contactos →</button>
-          </div>
-          {segments.length === 0 ? (
-            <div className="bg-white border border-[#e9eae6] rounded-[10px] px-4 py-6 text-center text-[13px] text-[#646462]">
-              Aún no hay datos de segmentación.
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-3">
-              {segments.map(s => (
-                <div key={s.id} className="bg-white border border-[#e9eae6] rounded-[10px] p-4">
-                  <p className="text-[12px] uppercase tracking-wide text-[#646462] font-semibold">{s.id}</p>
-                  <p className="mt-1 text-[24px] font-mono font-bold text-[#1a1a1a]">{s.count}</p>
-                  <p className="mt-1 text-[12px] text-[#646462]">{s.count === 1 ? 'contacto' : 'contactos'}</p>
-                </div>
-              ))}
-            </div>
-          )}
+          <button className="mt-4 h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
+            <span>Cómo usar las audiencias para segmentar a Fin</span>
+          </button>
         </div>
       </div>
     </div>
@@ -16302,55 +15944,18 @@ function FinFlujosTrabajoContent() {
 
 // ─── Ajustes de Fin · Automatizaciones simples (Figma 1:23926) ──────────────
 function FinAutomatizacionesSimplesContent() {
-  // Real "simple automations" come from workflowsApi filtered to ones tagged
-  // simple (or with kind='simple'). Each row shows the live published state
-  // and toggling it calls workflowsApi.publish/archive so changes persist.
-  const [refreshKey, setRefreshKey] = useState(0);
-  const { data: workflowsData } = useApi(() => workflowsApi.list(), [refreshKey], []);
-  const refreshWorkflows = () => setRefreshKey(k => k + 1);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const allFlows = Array.isArray(workflowsData) ? workflowsData : [];
-  const simpleFlows = useMemo(() => {
-    return allFlows.filter((w: any) => {
-      const kind = String(w.kind || w.type || '').toLowerCase();
-      const tags = Array.isArray(w.tags) ? w.tags.map((t: any) => String(t).toLowerCase()) : [];
-      return kind === 'simple' || tags.includes('simple') || tags.includes('automation:simple');
-    });
-  }, [allFlows]);
-  async function toggleFlow(id: string, currentlyOn: boolean) {
-    if (busyId) return;
-    setBusyId(id);
-    try {
-      if (currentlyOn) {
-        await workflowsApi.archive(id);
-      } else {
-        await workflowsApi.publish(id);
-      }
-      refreshWorkflows?.();
-    } catch {
-      /* surface in UI via reload */
-    } finally { setBusyId(null); }
-  }
-  function openAutomation() {
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.set('view', 'automation');
-      window.location.href = url.toString();
-    }
-  }
-  // Show the live simple flows; if none exist, fall back to the canonical
-  // illustrative pair so the UI doesn't go blank for first-time users.
-  const fallbackItems = [
-    { id: '__placeholder_context', label: 'Obtén el contexto de los problemas por adelantado', state: false as boolean },
-    { id: '__placeholder_response', label: 'Comparte tu tiempo de respuesta habitual',          state: false as boolean },
+  const trigger1Items = [
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 5h11M2.5 8h11M2.5 11h11" strokeLinecap="round"/></svg>,
+      label: 'Obtén el contexto de los problemas por adelantado',
+      state: 'Off' as const,
+    },
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5" strokeLinecap="round"/></svg>,
+      label: 'Comparte tu tiempo de respuesta habitual',
+      state: 'On' as const,
+    },
   ];
-  const trigger1Items = simpleFlows.length > 0
-    ? simpleFlows.map((w: any) => ({
-        id: String(w.id),
-        label: w.name || w.title || w.id,
-        state: ['published', 'active'].includes(String(w.status || '').toLowerCase()),
-      }))
-    : fallbackItems;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -16440,28 +16045,18 @@ function FinAutomatizacionesSimplesContent() {
 
         {/* Action items */}
         <div className="flex flex-col gap-2 mb-6">
-          {trigger1Items.map(item => {
-            const placeholder = item.id.startsWith('__placeholder');
-            return (
-              <button
-                key={item.id}
-                onClick={() => placeholder ? openAutomation() : toggleFlow(item.id, item.state)}
-                disabled={busyId === item.id}
-                className="w-full bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 flex items-center gap-3 hover:bg-[#fafafa] text-left disabled:opacity-60"
-              >
-                <span className="w-7 h-7 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5" strokeLinecap="round"/></svg>
-                </span>
-                <span className="flex-1 text-[13px] text-[#1a1a1a]">{item.label}</span>
-                {item.state ? (
-                  <span className="px-2 py-0.5 rounded-full bg-[#dcf2e3] text-[#1f7a3a] text-[11.5px] font-semibold">On</span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full bg-[#f3f3f1] text-[#646462] text-[11.5px] font-semibold">Off</span>
-                )}
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
-              </button>
-            );
-          })}
+          {trigger1Items.map(item => (
+            <button key={item.label} className="w-full bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 flex items-center gap-3 hover:bg-[#fafafa] text-left">
+              <span className="w-7 h-7 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">{item.icon}</span>
+              <span className="flex-1 text-[13px] text-[#1a1a1a]">{item.label}</span>
+              {item.state === 'On' ? (
+                <span className="px-2 py-0.5 rounded-full bg-[#dcf2e3] text-[#1f7a3a] text-[11.5px] font-semibold">On</span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-[#f3f3f1] text-[#646462] text-[11.5px] font-semibold">Off</span>
+              )}
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
+            </button>
+          ))}
         </div>
 
         {/* Group 2: cierre conversación */}
@@ -16805,7 +16400,7 @@ function PrototypeApp() {
       {/* LeftNav is fixed-positioned (always on top). pl-[44px] on the content
           area reserves space for the collapsed 44px rail so content isn't hidden. */}
       <LeftNav view={view} onNavigate={setView} />
-      <div className="flex flex-col flex-1 min-w-0 pl-[44px] h-full overflow-hidden">
+      <div className="flex flex-1 min-w-0 pl-[44px] h-full">
         {renderView()}
       </div>
     </div>
