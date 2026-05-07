@@ -10,7 +10,7 @@ import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows from '../components/Workflows';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'helpCenterHome' | 'helpCenterAll' | 'outboundSubscriptions' | 'outboundTests' | 'outboundTags';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -5655,9 +5655,6 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   const isSuscripcionSection = view === 'billing';
   const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels' || view === 'switchChannel' || view === 'slackChannel';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
-  const isHelpCenterSection = view === 'helpCenter' || view === 'helpCenterHome' || view === 'helpCenterAll';
-  const isOutboundSection = view === 'outbound' || view === 'outboundSubscriptions' || view === 'outboundTests' || view === 'outboundTags';
-
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     workspace:   isWorkspaceSection,
     suscripcion: isSuscripcionSection,
@@ -5667,8 +5664,6 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
     integ:       isIntegSection,
     datos:       isDatos,
     personal:    isPersonalSection,
-    helpCenter:  isHelpCenterSection,
-    outbound:    isOutboundSection,
   });
   const toggle = (k: string) => setOpenGroups(s => ({ ...s, [k]: !s[k] }));
 
@@ -5868,25 +5863,6 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoCustomS}    label="Objetos personalizados"        nav={'customObjects'} />
             <SubRow icon={IcoImportsS}   label="Importaciones y exportaciones" nav={'imports'} />
             <SubRow icon={IcoTopicsS}    label="Temas"                         nav={'topics'} />
-          </div>
-        )}
-
-        {/* Centro de ayuda */}
-        <GroupRow icon={IcoHelpGrp} label="Centro de ayuda" groupKey="helpCenter" sectionActive={isHelpCenterSection} />
-        {openGroups.helpCenter && (
-          <div className="flex flex-col gap-0.5 pl-2">
-            <SubRow icon={<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2L2 7v7h4v-4h4v4h4V7L8 2z" opacity="0.8"/></svg>} label="Inicio Help Center"      nav={'helpCenterHome'} />
-            <SubRow icon={<svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="10" rx="1.5" opacity="0.45"/><path d="M4 6h8M4 9h5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>} label="Todos los centros" nav={'helpCenterAll'} />
-          </div>
-        )}
-
-        {/* Canales salientes */}
-        <GroupRow icon={IcoOutboundGrp} label="Canales salientes" groupKey="outbound" sectionActive={isOutboundSection} />
-        {openGroups.outbound && (
-          <div className="flex flex-col gap-0.5 pl-2">
-            <SubRow icon={<svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 5h14M1 5a1 1 0 011-1h12a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1V5z" opacity="0.4"/><path d="M5 8.5h6M8 6.5v4" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>} label="Suscripciones"         nav={'outboundSubscriptions'} />
-            <SubRow icon={<svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="4" width="12" height="9" rx="1.5" opacity="0.4"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" strokeWidth="1.1" fill="none"/><path d="M4 8h3M4 10.5h5" stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round"/></svg>} label="Pruebas de mensajes"  nav={'outboundTests'} />
-            <SubRow icon={<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h6.2L14 8l-5.8 6H2l-1-1V3l1-1z" opacity="0.45"/><circle cx="5.5" cy="8" r="1.3" fill="currentColor"/></svg>} label="Etiquetas de mensajes" nav={'outboundTags'} />
           </div>
         )}
 
@@ -22159,8 +22135,8 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
 }
 
 // ─── WorkspaceTeammatesView ──────────────────────────────────────────────────
-function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const { data: members, loading } = useApi(() => iamApi.members(), [], []);
+function WorkspaceTeammatesView({ view: _view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: members, loading, refetch } = useApi(() => iamApi.members(), [], []);
   const { data: rolesData } = useApi(() => iamApi.roles(), [], []);
   const [search, setSearch] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -22168,6 +22144,13 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
   const [inviteRole, setInviteRole] = useState('agent');
   const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'invited' | 'disabled'>('all');
+  const [sending, setSending] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
+
+  const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const availableRoles: { id: string; name: string }[] = ((rolesData as any[]) ?? []).length > 0
     ? (rolesData as any[])
@@ -22178,185 +22161,263 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
     owner:  'bg-[#ede9fe] text-[#6d28d9]',
     agent:  'bg-[#f0fdf4] text-[#15803d]',
   };
-  const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-    active:   { label: 'Activo',    cls: 'bg-[#dcfce7] text-[#15803d]' },
-    invited:  { label: 'Invitado',  cls: 'bg-[#fef9c3] text-[#854d0e]' },
-    disabled: { label: 'Inactivo',  cls: 'bg-[#f1f1ee] text-[#646462]' },
+  const STATUS_BADGE: Record<string, { label: string; dot: string; cls: string }> = {
+    active:   { label: 'Activo',   dot: 'bg-[#16a34a]', cls: 'bg-[#dcfce7] text-[#15803d]' },
+    invited:  { label: 'Invitado', dot: 'bg-[#ca8a04]', cls: 'bg-[#fef9c3] text-[#854d0e]' },
+    disabled: { label: 'Inactivo', dot: 'bg-[#a4a4a2]', cls: 'bg-[#f1f1ee] text-[#646462]' },
   };
 
   const allRows = ((members as any[]) ?? []);
   const rows = allRows.filter((m: any) => {
-    const matchSearch = !search || (m.name ?? m.email ?? '').toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search || (m.name ?? m.email ?? '').toLowerCase().includes(search.toLowerCase()) || (m.email ?? '').toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === 'all' || (m.status ?? 'active') === filterStatus;
     return matchSearch && matchStatus;
   });
 
-  const handleRoleChange = (memberId: string, newRole: string) => {
+  const handleRoleChange = async (memberId: string, newRole: string) => {
     setMemberRoles(prev => ({ ...prev, [memberId]: newRole }));
-    iamApi.updateMember(memberId, { role_id: newRole }).catch(() => {});
+    try {
+      await iamApi.updateMember(memberId, { role_id: newRole });
+      showToast('Rol actualizado');
+    } catch {
+      showToast('Error al actualizar el rol', 'err');
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail.includes('@')) return;
+    setSending(true);
+    try {
+      await iamApi.inviteMember({ email: inviteEmail, role_id: inviteRole });
+      showToast(`Invitación enviada a ${inviteEmail}`);
+      setInviteOpen(false);
+      setInviteEmail('');
+      refetch?.();
+    } catch {
+      showToast('Error al enviar la invitación', 'err');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const ROLE_DESC: Record<string, string> = {
+    owner: 'Acceso completo, incluyendo facturación y eliminación del workspace.',
+    admin: 'Puede gestionar ajustes, miembros, canales e integraciones.',
+    agent: 'Puede ver y responder conversaciones asignadas.',
   };
 
   return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden" style={{ background: '#f3f3f1' }}>
       <TrialBanner />
-      <div className="flex flex-1 min-h-0 gap-2">
-        <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto min-h-0">
-      <div className="max-w-[820px] mx-auto py-10 px-6 flex flex-col gap-6">
 
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Compañeros de equipo</h1>
-            <p className="text-[13.5px] text-[#646462]">Gestiona los miembros del workspace y sus roles de acceso.</p>
-          </div>
-          <button onClick={() => setInviteOpen(true)} className="flex items-center gap-1.5 px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M8 2v12M2 8h12" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
-            Invitar
+      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-8 py-5 bg-[#f3f3f1] flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <button onClick={() => onNavigate('settings')} className="w-8 h-8 rounded-full bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7] shadow-sm">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="w-3.5 h-3.5 text-[#646462]"><path d="M10 3L5 8l5 5"/></svg>
           </button>
-        </div>
-
-        {/* Filters bar */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-[320px]">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a4a4a2]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
-            <input className="w-full pl-9 pr-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-[#f8f8f7]" placeholder="Buscar por nombre o correo…" value={search} onChange={e => setSearch(e.target.value)} />
+          <div>
+            <h1 className="text-[20px] font-bold text-[#1a1a1a] leading-tight">Compañeros de equipo</h1>
+            <p className="text-[13px] text-[#646462]">{allRows.length} miembro{allRows.length !== 1 ? 's' : ''} · Workspace</p>
           </div>
-          <div className="flex gap-1 bg-[#f3f3f1] rounded-lg p-0.5">
-            {(['all', 'active', 'invited', 'disabled'] as const).map(s => (
-              <button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${filterStatus === s ? 'bg-white shadow-sm text-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>
-                {s === 'all' ? 'Todos' : s === 'active' ? 'Activos' : s === 'invited' ? 'Invitados' : 'Inactivos'}
+        </div>
+        <button
+          onClick={() => setInviteOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-xl hover:bg-[#333] transition-colors"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 2v12M2 8h12"/></svg>
+          Invitar miembro
+        </button>
+      </div>
+
+      {/* ── Filter bar ──────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 px-8 pb-4 flex-shrink-0">
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a4a4a2]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+          <input
+            className="pl-9 pr-4 py-2 bg-white border border-[#e9eae6] rounded-xl text-[13px] focus:outline-none focus:border-[#1a1a1a] w-[280px] shadow-sm"
+            placeholder="Buscar por nombre o correo…"
+            value={search} onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-0.5 bg-white border border-[#e9eae6] rounded-xl p-1 shadow-sm">
+          {(['all', 'active', 'invited', 'disabled'] as const).map(s => (
+            <button key={s} onClick={() => setFilterStatus(s)} className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-medium transition-colors ${filterStatus === s ? 'bg-[#1a1a1a] text-white' : 'text-[#646462] hover:bg-[#f3f3f1]'}`}>
+              {s === 'all' ? `Todos (${allRows.length})` : s === 'active' ? `Activos (${allRows.filter((m: any) => (m.status ?? 'active') === 'active').length})` : s === 'invited' ? `Invitados (${allRows.filter((m: any) => m.status === 'invited').length})` : `Inactivos (${allRows.filter((m: any) => m.status === 'disabled').length})`}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {search && <span className="text-[12px] text-[#a4a4a2]">{rows.length} resultado{rows.length !== 1 ? 's' : ''}</span>}
+        </div>
+      </div>
+
+      {/* ── Table ───────────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-8 pb-8 min-h-0">
+        <div className="bg-white rounded-2xl border border-[#e9eae6] shadow-sm overflow-hidden">
+          {/* Table header */}
+          <div className="grid text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide border-b border-[#f3f3f1] bg-[#fafaf9] px-4 py-3" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr 120px' }}>
+            <span>Miembro</span><span>Estado</span><span>Rol</span><span>Equipos</span><span>Último acceso</span><span className="text-right">Acciones</span>
+          </div>
+
+          {loading ? (
+            <div className="py-20 flex flex-col items-center gap-3 text-[#a4a4a2]">
+              <svg className="w-8 h-8 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
+              <span className="text-[13px]">Cargando miembros…</span>
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="py-20 flex flex-col items-center gap-3 text-[#a4a4a2]">
+              <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 text-[#d4d4d2]">
+                <circle cx="24" cy="18" r="8" stroke="currentColor" strokeWidth="2.5"/>
+                <path d="M8 42c0-8.8 7.2-16 16-16s16 7.2 16 16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+              <p className="text-[14px] font-medium">Sin resultados</p>
+              <p className="text-[12.5px]">{search ? 'Prueba con otro término de búsqueda' : 'Invita a tu primer compañero de equipo'}</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-[#f3f3f1]">
+              {rows.map((m: any) => {
+                const currentRole = memberRoles[m.id] ?? m.role ?? 'agent';
+                const status: string = m.status ?? 'active';
+                const badge = STATUS_BADGE[status] ?? STATUS_BADGE.active;
+                const initials = ((m.name ?? m.email ?? '?') as string).split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+                const avatarHue = ((m.email ?? m.name ?? '').charCodeAt(0) * 31) % 360;
+                return (
+                  <div key={m.id ?? m.email} className="grid items-center px-4 py-3.5 hover:bg-[#fafaf9] group transition-colors" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr 120px' }}>
+
+                    {/* Avatar + name */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0" style={{ background: `hsl(${avatarHue},55%,52%)` }}>{initials}</div>
+                      <div className="min-w-0">
+                        <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate leading-tight">{m.name ?? '—'}</p>
+                        <p className="text-[12px] text-[#a4a4a2] truncate leading-tight">{m.email ?? '—'}</p>
+                      </div>
+                    </div>
+
+                    {/* Status badge */}
+                    <div>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-semibold ${badge.cls}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                        {badge.label}
+                      </span>
+                    </div>
+
+                    {/* Role dropdown */}
+                    <div>
+                      <select
+                        value={currentRole}
+                        onChange={e => handleRoleChange(m.id, e.target.value)}
+                        className={`appearance-none px-3 py-1.5 pr-6 rounded-full text-[11.5px] font-semibold cursor-pointer focus:outline-none border-0 ${ROLE_COLORS[currentRole] ?? 'bg-[#f1f1ee] text-[#646462]'}`}
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%23646462' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center', backgroundSize: '14px' }}
+                      >
+                        {availableRoles.map((r: any) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Teams */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {(m.teams ?? []).length > 0
+                        ? (m.teams as string[]).slice(0, 2).map((t: string) => <span key={t} className="px-2 py-0.5 bg-[#f3f3f1] text-[#646462] rounded text-[11px] font-medium">{t}</span>)
+                        : <span className="text-[12px] text-[#d4d4d2]">—</span>
+                      }
+                    </div>
+
+                    {/* Last seen */}
+                    <div className="text-[12.5px] text-[#a4a4a2]">
+                      {m.last_seen ? new Date(m.last_seen).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }) : status === 'invited' ? 'Pendiente' : 'Nunca'}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {status === 'active' && (
+                        <button className="px-2.5 py-1 text-[11.5px] text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7] hover:text-[#1a1a1a] transition-colors">Desactivar</button>
+                      )}
+                      {status === 'disabled' && (
+                        <button className="px-2.5 py-1 text-[11.5px] text-[#15803d] border border-[#bbf7d0] rounded-lg hover:bg-[#f0fdf4] transition-colors">Activar</button>
+                      )}
+                      {status === 'invited' && (
+                        <button className="px-2.5 py-1 text-[11.5px] text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7] transition-colors">Reenviar</button>
+                      )}
+                      <button className="px-2.5 py-1 text-[11.5px] text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#fef2f2] hover:text-[#b91c1c] hover:border-[#fecaca] transition-colors">Eliminar</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Invite modal ────────────────────────────────────────────────────── */}
+      {inviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-[3px]" onClick={() => setInviteOpen(false)}>
+          <div className="bg-white rounded-2xl w-[460px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-[#f3f3f1]">
+              <h2 className="text-[17px] font-bold text-[#1a1a1a]">Invitar al workspace</h2>
+              <button onClick={() => setInviteOpen(false)} className="w-8 h-8 rounded-full hover:bg-[#f3f3f1] flex items-center justify-center text-[#646462] transition-colors">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M3 3l10 10M13 3L3 13"/></svg>
               </button>
-            ))}
-          </div>
-          <span className="text-[12px] text-[#a4a4a2] ml-auto">{allRows.length} miembro{allRows.length !== 1 ? 's' : ''}</span>
-        </div>
+            </div>
 
-        {/* Table */}
-        {loading ? (
-          <div className="h-40 flex items-center justify-center text-[13px] text-[#a4a4a2]">Cargando miembros…</div>
-        ) : (
-          <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="bg-[#f8f8f7] border-b border-[#e9eae6]">
-                  {['Miembro', 'Estado', 'Rol', 'Último acceso', ''].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>
+            {/* Modal body */}
+            <div className="px-6 py-5 flex flex-col gap-5">
+              <div>
+                <label className="block text-[12.5px] font-semibold text-[#1a1a1a] mb-2">Correo electrónico</label>
+                <input
+                  autoFocus
+                  className="w-full border border-[#e9eae6] rounded-xl px-4 py-3 text-[13.5px] focus:outline-none focus:border-[#1a1a1a] focus:ring-2 focus:ring-[#1a1a1a]/10"
+                  placeholder="nombre@empresa.com"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleInvite()}
+                />
+              </div>
+              <div>
+                <label className="block text-[12.5px] font-semibold text-[#1a1a1a] mb-2">Rol</label>
+                <div className="flex flex-col gap-2">
+                  {availableRoles.map((r: any) => (
+                    <label key={r.id} className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${inviteRole === r.id ? 'border-[#1a1a1a] bg-[#fafaf9]' : 'border-[#e9eae6] hover:border-[#d4d4d2]'}`}>
+                      <input type="radio" name="invite-role" value={r.id} checked={inviteRole === r.id} onChange={() => setInviteRole(r.id)} className="accent-[#1a1a1a]" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-semibold text-[#1a1a1a]">{r.name ?? r.id}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-semibold ${ROLE_COLORS[r.id] ?? 'bg-[#f1f1ee] text-[#646462]'}`}>{r.id}</span>
+                        </div>
+                        <p className="text-[11.5px] text-[#a4a4a2] mt-0.5">{ROLE_DESC[r.id] ?? ''}</p>
+                      </div>
+                    </label>
                   ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#f3f3f1]">
-                {rows.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-12 text-[#a4a4a2]">
-                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-8 h-8 mx-auto mb-2 text-[#d4d4d2]"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6H2z"/></svg>
-                    Sin resultados
-                  </td></tr>
-                ) : rows.map((m: any) => {
-                  const currentRole = memberRoles[m.id] ?? m.role ?? 'agent';
-                  const status = m.status ?? 'active';
-                  const badge = STATUS_BADGE[status] ?? STATUS_BADGE.active;
-                  const initials = (m.name ?? m.email ?? '?').slice(0, 2).toUpperCase();
-                  return (
-                    <tr key={m.id ?? m.email} className="hover:bg-[#fafaf9] group">
-                      {/* Member */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#e8e8e5] to-[#d4d4d0] flex items-center justify-center text-[11px] font-bold text-[#646462] flex-shrink-0">{initials}</div>
-                          <div>
-                            <div className="font-semibold text-[#1a1a1a] leading-tight">{m.name ?? '—'}</div>
-                            <div className="text-[12px] text-[#a4a4a2] leading-tight">{m.email ?? '—'}</div>
-                          </div>
-                        </div>
-                      </td>
-                      {/* Status */}
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${badge.cls}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${status === 'active' ? 'bg-[#16a34a]' : status === 'invited' ? 'bg-[#ca8a04]' : 'bg-[#a4a4a2]'}`} />
-                          {badge.label}
-                        </span>
-                      </td>
-                      {/* Role dropdown */}
-                      <td className="px-4 py-3">
-                        <select
-                          value={currentRole}
-                          onChange={e => handleRoleChange(m.id, e.target.value)}
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#1a1a1a]/20 ${ROLE_COLORS[currentRole] ?? 'bg-[#f1f1ee] text-[#646462]'}`}
-                        >
-                          {availableRoles.map((r: any) => (
-                            <option key={r.id} value={r.id}>{r.name ?? r.id}</option>
-                          ))}
-                        </select>
-                      </td>
-                      {/* Last seen */}
-                      <td className="px-4 py-3 text-[#a4a4a2] text-[12px]">
-                        {m.last_seen ? new Date(m.last_seen).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Nunca'}
-                      </td>
-                      {/* Actions */}
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {status === 'active' && (
-                            <button className="text-[11px] text-[#646462] hover:text-[#1a1a1a] border border-[#e9eae6] rounded-md px-2.5 py-1 hover:bg-[#f8f8f7]">Desactivar</button>
-                          )}
-                          {status === 'disabled' && (
-                            <button className="text-[11px] text-[#646462] hover:text-[#15803d] border border-[#e9eae6] rounded-md px-2.5 py-1 hover:bg-[#f0fdf4]">Activar</button>
-                          )}
-                          {status === 'invited' && (
-                            <button className="text-[11px] text-[#646462] hover:text-[#1a1a1a] border border-[#e9eae6] rounded-md px-2.5 py-1 hover:bg-[#f8f8f7]">Reenviar</button>
-                          )}
-                          <button className="text-[11px] text-[#646462] hover:text-[#b91c1c] border border-[#e9eae6] rounded-md px-2.5 py-1 hover:bg-[#fef2f2]">Eliminar</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Invite modal */}
-        {inviteOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]" onClick={() => setInviteOpen(false)}>
-            <div className="bg-white rounded-2xl p-6 w-[420px] shadow-2xl" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="text-[17px] font-bold text-[#1a1a1a]">Invitar compañero</h2>
-                <button onClick={() => setInviteOpen(false)} className="w-7 h-7 rounded-full hover:bg-[#f3f3f1] flex items-center justify-center text-[#646462]">
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>
-                </button>
-              </div>
-              <div className="flex flex-col gap-4">
-                <div>
-                  <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Correo electrónico</label>
-                  <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="nombre@empresa.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
                 </div>
-                <div>
-                  <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Rol</label>
-                  <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="w-full border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white">
-                    {availableRoles.map((r: any) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
-                  </select>
-                  <p className="text-[11.5px] text-[#a4a4a2] mt-1">
-                    {inviteRole === 'admin' ? 'Puede gestionar ajustes, miembros y canales.' : inviteRole === 'owner' ? 'Acceso completo incluyendo facturación.' : 'Puede ver y responder conversaciones asignadas.'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 mt-6">
-                <button onClick={() => setInviteOpen(false)} className="px-4 py-2 text-[13px] font-medium border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7]">Cancelar</button>
-                <button
-                  onClick={() => { if (inviteEmail) { iamApi.inviteMember({ email: inviteEmail, role_id: inviteRole }).catch(() => {}); setInviteOpen(false); setInviteEmail(''); } }}
-                  className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-40"
-                  disabled={!inviteEmail.includes('@')}
-                >
-                  Enviar invitación
-                </button>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+
+            {/* Modal footer */}
+            <div className="flex justify-end gap-2 px-6 py-4 bg-[#fafaf9] border-t border-[#f3f3f1]">
+              <button onClick={() => setInviteOpen(false)} className="px-4 py-2.5 text-[13px] font-medium border border-[#e9eae6] rounded-xl hover:bg-white transition-colors">Cancelar</button>
+              <button
+                onClick={handleInvite}
+                disabled={!inviteEmail.includes('@') || sending}
+                className="px-5 py-2.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-xl hover:bg-[#333] disabled:opacity-40 transition-colors flex items-center gap-2"
+              >
+                {sending && <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>}
+                {sending ? 'Enviando…' : 'Enviar invitación'}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ── Toast ───────────────────────────────────────────────────────────── */}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-[13px] font-semibold z-[60] transition-all ${toast.type === 'ok' ? 'bg-[#1a1a1a] text-white' : 'bg-[#b91c1c] text-white'}`}>
+          {toast.type === 'ok'
+            ? <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M2 8l4 4 8-8"/></svg>
+            : <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" className="w-4 h-4"><path d="M3 3l10 10M13 3L3 13"/></svg>
+          }
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }
@@ -22721,458 +22782,6 @@ function SlackChannelView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
   );
 }
 
-// ─── HelpCenterHomeView ──────────────────────────────────────────────────────
-function HelpCenterHomeView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [heroTitle, setHeroTitle] = useState('¿En qué podemos ayudarte?');
-  const [heroBg, setHeroBg] = useState('#1a1a1a');
-  const [searchEnabled, setSearchEnabled] = useState(true);
-  const [popularEnabled, setPopularEnabled] = useState(true);
-  const PREVIEW_ARTICLES = ['Cómo empezar con el producto', 'Gestión de tu cuenta', 'Preguntas frecuentes de facturación', 'Integraciones disponibles'];
-  return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
-      <TrialBanner />
-      <div className="flex flex-1 min-h-0 gap-2">
-        <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-[780px] mx-auto py-10 px-6 flex flex-col gap-8">
-              <div>
-                <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Inicio del Help Center</h1>
-                <p className="text-[13.5px] text-[#646462]">Personaliza la página de inicio que ven tus clientes.</p>
-              </div>
-
-              {/* Hero preview */}
-              <div className="rounded-2xl overflow-hidden border border-[#e9eae6]">
-                <div className="px-8 py-10 flex flex-col items-center gap-3" style={{ backgroundColor: heroBg }}>
-                  <h2 className="text-[20px] font-bold text-white text-center">{heroTitle || 'Título del Help Center'}</h2>
-                  {searchEnabled && (
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-4 py-2.5 w-full max-w-[380px] shadow">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="#a4a4a2" strokeWidth="1.4" className="w-4 h-4 flex-shrink-0"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
-                      <span className="text-[13px] text-[#a4a4a2]">Buscar artículos…</span>
-                    </div>
-                  )}
-                </div>
-                {popularEnabled && (
-                  <div className="px-6 py-4 bg-[#f8f8f7] border-t border-[#e9eae6]">
-                    <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-2">Artículos populares</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {PREVIEW_ARTICLES.map(a => (
-                        <div key={a} className="bg-white rounded-lg px-3 py-2 text-[12.5px] text-[#1a1a1a] border border-[#e9eae6] font-medium">{a}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Config card */}
-              <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#f3f3f1]">
-                <div className="px-5 py-4">
-                  <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Título del hero</label>
-                  <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" value={heroTitle} onChange={e => setHeroTitle(e.target.value)} />
-                </div>
-                <div className="px-5 py-4 flex items-center gap-4">
-                  <label className="block text-[12px] font-semibold text-[#646462] flex-1">Color de fondo del hero</label>
-                  <input type="color" value={heroBg} onChange={e => setHeroBg(e.target.value)} className="w-10 h-8 rounded border border-[#e9eae6] cursor-pointer" />
-                  <span className="text-[12px] text-[#646462] font-mono">{heroBg}</span>
-                </div>
-                <div className="px-5 py-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Barra de búsqueda</p>
-                    <p className="text-[12px] text-[#646462]">Permite a los clientes buscar artículos directamente desde el inicio.</p>
-                  </div>
-                  <button onClick={() => setSearchEnabled(v => !v)} className={`w-10 h-6 rounded-full transition-colors flex items-center ${searchEnabled ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
-                    <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${searchEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
-                  </button>
-                </div>
-                <div className="px-5 py-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Artículos populares</p>
-                    <p className="text-[12px] text-[#646462]">Muestra los artículos más vistos en la página de inicio.</p>
-                  </div>
-                  <button onClick={() => setPopularEnabled(v => !v)} className={`w-10 h-6 rounded-full transition-colors flex items-center ${popularEnabled ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
-                    <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${popularEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <button className="px-5 py-2.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Guardar cambios</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── HelpCenterAllView ───────────────────────────────────────────────────────
-function HelpCenterAllView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const HELP_CENTERS = [
-    { name: 'Centro de ayuda principal', domain: 'soporte.miempresa.com', articles: 48, status: 'published', lang: 'Español' },
-    { name: 'Developer Docs',            domain: 'developers.miempresa.com', articles: 22, status: 'published', lang: 'English' },
-    { name: 'Centro interno',            domain: 'interno.miempresa.com', articles: 9,  status: 'draft', lang: 'Español' },
-  ];
-  return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
-      <TrialBanner />
-      <div className="flex flex-1 min-h-0 gap-2">
-        <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-[780px] mx-auto py-10 px-6 flex flex-col gap-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Todos los centros de ayuda</h1>
-                  <p className="text-[13.5px] text-[#646462]">Gestiona todos tus Help Centers y sus configuraciones.</p>
-                </div>
-                <button className="flex items-center gap-1.5 px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 2v12M2 8h12"/></svg>
-                  Nuevo centro
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                {HELP_CENTERS.map(hc => (
-                  <div key={hc.name} className="bg-white border border-[#e9eae6] rounded-xl px-5 py-4 flex items-center gap-4 hover:border-[#d4d4d2] transition-colors group">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#f3f3f1] to-[#e9eae6] flex items-center justify-center flex-shrink-0">
-                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5 text-[#646462]"><rect x="1" y="2" width="14" height="10" rx="1.5" opacity="0.45"/><path d="M4 6h8M4 9h5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[14px] font-semibold text-[#1a1a1a]">{hc.name}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${hc.status === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f1f1ee] text-[#646462]'}`}>
-                          {hc.status === 'published' ? 'Publicado' : 'Borrador'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-[12px] text-[#a4a4a2]">
-                        <span>{hc.domain}</span>
-                        <span>·</span>
-                        <span>{hc.articles} artículos</span>
-                        <span>·</span>
-                        <span>{hc.lang}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="text-[12px] text-[#646462] border border-[#e9eae6] rounded-lg px-3 py-1.5 hover:bg-[#f8f8f7]">Configurar</button>
-                      <button className="text-[12px] text-[#646462] border border-[#e9eae6] rounded-lg px-3 py-1.5 hover:bg-[#f8f8f7]">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 3v10M12 7l-4-4-4 4"/></svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── OutboundSubscriptionsView ───────────────────────────────────────────────
-function OutboundSubscriptionsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [types, setTypes] = useState([
-    { id: '1', name: 'Actualizaciones del producto',  enabled: true,  count: 4320 },
-    { id: '2', name: 'Boletín mensual',               enabled: true,  count: 2810 },
-    { id: '3', name: 'Alertas de seguridad',          enabled: true,  count: 9200 },
-    { id: '4', name: 'Ofertas y promociones',         enabled: false, count: 1540 },
-    { id: '5', name: 'Tips y recursos',               enabled: false, count: 3100 },
-  ]);
-  const toggle = (id: string) => setTypes(prev => prev.map(t => t.id === id ? { ...t, enabled: !t.enabled } : t));
-  const totalSubs = types.reduce((a, t) => a + t.count, 0);
-
-  return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
-      <TrialBanner />
-      <div className="flex flex-1 min-h-0 gap-2">
-        <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-[720px] mx-auto py-10 px-6 flex flex-col gap-8">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Suscripciones</h1>
-                  <p className="text-[13.5px] text-[#646462]">Gestiona los tipos de suscripción y preferencias de comunicación de tus contactos.</p>
-                </div>
-                <button className="flex items-center gap-1.5 px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 2v12M2 8h12"/></svg>
-                  Nuevo tipo
-                </button>
-              </div>
-
-              {/* Stats row */}
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: 'Total suscriptores', value: totalSubs.toLocaleString('es') },
-                  { label: 'Tipos activos', value: types.filter(t => t.enabled).length.toString() },
-                  { label: 'Tasa de opt-out', value: '3.2%' },
-                ].map(s => (
-                  <div key={s.label} className="bg-[#f8f8f7] rounded-xl px-4 py-3 border border-[#e9eae6]">
-                    <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-1">{s.label}</p>
-                    <p className="text-[22px] font-bold text-[#1a1a1a]">{s.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Subscription types */}
-              <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#f3f3f1]">
-                {types.map(t => (
-                  <div key={t.id} className="flex items-center gap-4 px-5 py-4">
-                    <div className="flex-1">
-                      <p className="text-[13px] font-semibold text-[#1a1a1a]">{t.name}</p>
-                      <p className="text-[12px] text-[#a4a4a2]">{t.count.toLocaleString('es')} suscriptores activos</p>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${t.enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f1f1ee] text-[#646462]'}`}>
-                      {t.enabled ? 'Activo' : 'Inactivo'}
-                    </span>
-                    <button onClick={() => toggle(t.id)} className={`w-10 h-6 rounded-full transition-colors flex items-center ${t.enabled ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
-                      <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${t.enabled ? 'translate-x-5' : 'translate-x-1'}`} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="bg-[#fefce8] border border-[#fef08a] rounded-xl px-5 py-4">
-                <p className="text-[12.5px] font-semibold text-[#854d0e] mb-1">Cumplimiento GDPR/CAN-SPAM</p>
-                <p className="text-[12px] text-[#92400e]">Los contactos pueden gestionar sus preferencias desde el enlace de baja incluido en cada mensaje. Todos los opt-outs se procesan en menos de 24 horas.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── OutboundTestsView ───────────────────────────────────────────────────────
-function OutboundTestsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [testEmail, setTestEmail] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState('welcome');
-  const [sent, setSent] = useState(false);
-  const TEMPLATES = [
-    { id: 'welcome', name: 'Email de bienvenida', channel: 'Email', lastSent: 'Hace 2h' },
-    { id: 'onboarding', name: 'Secuencia de onboarding (día 3)', channel: 'Email', lastSent: 'Hace 1d' },
-    { id: 'promo', name: 'Campaña de reactivación', channel: 'Email', lastSent: 'Nunca' },
-    { id: 'push_trial', name: 'Push: trial expirando', channel: 'Push', lastSent: 'Hace 3h' },
-  ];
-  return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
-      <TrialBanner />
-      <div className="flex flex-1 min-h-0 gap-2">
-        <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-[720px] mx-auto py-10 px-6 flex flex-col gap-8">
-              <div>
-                <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Pruebas de mensajes</h1>
-                <p className="text-[13.5px] text-[#646462]">Envía versiones de prueba de tus mensajes salientes antes de publicarlos.</p>
-              </div>
-
-              {/* Template selector */}
-              <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#f3f3f1]">
-                <div className="px-5 py-3 bg-[#f8f8f7] rounded-t-xl">
-                  <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide">Seleccionar mensaje</p>
-                </div>
-                {TEMPLATES.map(t => (
-                  <label key={t.id} className={`flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-[#fafaf9] ${selectedTemplate === t.id ? 'bg-[#f8f8f7]' : ''}`}>
-                    <input type="radio" name="template" value={t.id} checked={selectedTemplate === t.id} onChange={() => { setSelectedTemplate(t.id); setSent(false); }} className="accent-[#1a1a1a]" />
-                    <div className="flex-1">
-                      <p className="text-[13px] font-semibold text-[#1a1a1a]">{t.name}</p>
-                      <p className="text-[12px] text-[#a4a4a2]">{t.channel} · Último envío: {t.lastSent}</p>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${t.channel === 'Email' ? 'bg-[#ede9fe] text-[#6d28d9]' : 'bg-[#fef9c3] text-[#854d0e]'}`}>{t.channel}</span>
-                  </label>
-                ))}
-              </div>
-
-              {/* Send test */}
-              <div className="bg-white border border-[#e9eae6] rounded-xl px-5 py-5 flex flex-col gap-4">
-                <p className="text-[13px] font-semibold text-[#1a1a1a]">Enviar prueba</p>
-                <div className="flex gap-3">
-                  <input
-                    className="flex-1 border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-                    placeholder="tu@correo.com"
-                    value={testEmail} onChange={e => { setTestEmail(e.target.value); setSent(false); }}
-                  />
-                  <button
-                    disabled={!testEmail.includes('@')}
-                    onClick={() => setSent(true)}
-                    className="px-5 py-2.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-40"
-                  >
-                    Enviar prueba
-                  </button>
-                </div>
-                {sent && (
-                  <div className="flex items-center gap-2 text-[12.5px] text-[#15803d] bg-[#f0fdf4] rounded-lg px-3 py-2">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M2 8l4 4 8-8"/></svg>
-                    Mensaje de prueba enviado a {testEmail}
-                  </div>
-                )}
-              </div>
-
-              <div className="text-[12px] text-[#a4a4a2]">
-                Las pruebas no cuentan para límites de envío ni para las estadísticas de la campaña. Se envían desde la dirección verificada del workspace.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── OutboundTagsView ────────────────────────────────────────────────────────
-function OutboundTagsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16'];
-  const [tags, setTags] = useState([
-    { id: '1', name: 'Transaccional',  color: '#6366f1', count: 142 },
-    { id: '2', name: 'Promocional',    color: '#f59e0b', count: 87  },
-    { id: '3', name: 'Onboarding',     color: '#10b981', count: 54  },
-    { id: '4', name: 'Reactivación',   color: '#ef4444', count: 29  },
-    { id: '5', name: 'Newsletter',     color: '#8b5cf6', count: 33  },
-  ]);
-  const [newName, setNewName] = useState('');
-  const [newColor, setNewColor] = useState(COLORS[0]);
-  const [creating, setCreating] = useState(false);
-
-  const addTag = () => {
-    if (!newName.trim()) return;
-    setTags(prev => [...prev, { id: Date.now().toString(), name: newName.trim(), color: newColor, count: 0 }]);
-    setNewName(''); setCreating(false);
-  };
-  const removeTag = (id: string) => setTags(prev => prev.filter(t => t.id !== id));
-
-  return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
-      <TrialBanner />
-      <div className="flex flex-1 min-h-0 gap-2">
-        <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-[680px] mx-auto py-10 px-6 flex flex-col gap-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Etiquetas de mensajes</h1>
-                  <p className="text-[13.5px] text-[#646462]">Organiza tus mensajes salientes con etiquetas de categoría.</p>
-                </div>
-                <button onClick={() => setCreating(true)} className="flex items-center gap-1.5 px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 2v12M2 8h12"/></svg>
-                  Nueva etiqueta
-                </button>
-              </div>
-
-              {/* Create form */}
-              {creating && (
-                <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-xl px-5 py-4 flex flex-col gap-4">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">Nueva etiqueta</p>
-                  <div className="flex gap-3">
-                    <input
-                      autoFocus
-                      className="flex-1 border border-[#e9eae6] bg-white rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-                      placeholder="Nombre de la etiqueta"
-                      value={newName} onChange={e => setNewName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && addTag()}
-                    />
-                    <div className="flex gap-1.5 items-center">
-                      {COLORS.map(c => (
-                        <button key={c} onClick={() => setNewColor(c)} className={`w-5 h-5 rounded-full transition-transform ${newColor === c ? 'scale-125 ring-2 ring-offset-1 ring-[#1a1a1a]' : 'hover:scale-110'}`} style={{ backgroundColor: c }} />
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setCreating(false)} className="px-3 py-1.5 text-[12.5px] border border-[#e9eae6] rounded-lg hover:bg-white">Cancelar</button>
-                    <button onClick={addTag} disabled={!newName.trim()} className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-40">Crear</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Tags list */}
-              <div className="flex flex-col gap-2">
-                {tags.map(tag => (
-                  <div key={tag.id} className="flex items-center gap-4 bg-white border border-[#e9eae6] rounded-xl px-5 py-3.5 group hover:border-[#d4d4d2] transition-colors">
-                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: tag.color }} />
-                    <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">{tag.name}</span>
-                    <span className="text-[12px] text-[#a4a4a2]">{tag.count} mensajes</span>
-                    <button onClick={() => removeTag(tag.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-[#646462] hover:text-[#b91c1c] p-1 rounded">
-                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round"/></svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <p className="text-[12px] text-[#a4a4a2]">Las etiquetas ayudan a clasificar mensajes para reportes y para gestionar las preferencias de suscripción de tus contactos.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── HelpCenterSettingsView ──────────────────────────────────────────────────
-function HelpCenterSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [published, setPublished] = useState(true);
-  const [domain, setDomain] = useState('soporte.miempresa.com');
-  const [color, setColor] = useState('#6366f1');
-  const STATS = [
-    { label: 'Artículos publicados', value: '84' },
-    { label: 'Búsquedas este mes', value: '3.2K' },
-    { label: 'Tasa de resolución', value: '67%' },
-    { label: 'Valoración media', value: '4.6 ★' },
-  ];
-  return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
-      <TrialBanner />
-      <div className="flex flex-1 min-h-0 gap-2">
-        <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto min-h-0">
-      <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Centro de ayuda</h1>
-            <p className="text-[13.5px] text-[#646462]">Configura tu portal de autoservicio.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] text-[#646462]">{published ? 'Publicado' : 'No publicado'}</span>
-            <button onClick={() => setPublished(v => !v)} className={`w-10 h-6 rounded-full transition-colors ${published ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} flex items-center`}>
-              <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${published ? 'translate-x-5' : 'translate-x-1'}`} />
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {STATS.map(s => (
-            <div key={s.label} className="bg-white border border-[#e9eae6] rounded-xl p-4 text-center">
-              <p className="text-[22px] font-bold text-[#1a1a1a]">{s.value}</p>
-              <p className="text-[11px] text-[#646462] mt-0.5">{s.label}</p>
-            </div>
-          ))}
-        </div>
-        <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#e9eae6]">
-          <div className="px-5 py-4">
-            <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Dominio personalizado</label>
-            <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/30" value={domain} onChange={e => setDomain(e.target.value)} />
-            <p className="text-[12px] text-[#646462] mt-1">Añade un registro CNAME en tu DNS apuntando a <span className="font-mono">help.intercom.com</span></p>
-          </div>
-          <div className="px-5 py-4 flex items-center gap-4">
-            <div className="flex-1">
-              <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Color de marca</label>
-              <p className="text-[12px] text-[#646462]">Personaliza el color principal del portal.</p>
-            </div>
-            <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-10 rounded-lg border border-[#e9eae6] cursor-pointer p-0.5" />
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <button className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Guardar cambios</button>
-        </div>
-      </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function Prototype() {
   // ?icons=v2 → render the icon-library gallery instead of the app shell.
@@ -23279,12 +22888,6 @@ function PrototypeApp() {
       case 'topics':              return <TopicsView view={view} onNavigate={setView} />;
       case 'switchChannel':       return <SwitchChannelView view={view} onNavigate={setView} />;
       case 'slackChannel':        return <SlackChannelView view={view} onNavigate={setView} />;
-      case 'helpCenter':          return <HelpCenterSettingsView view={view} onNavigate={setView} />;
-      case 'helpCenterHome':      return <HelpCenterHomeView view={view} onNavigate={setView} />;
-      case 'helpCenterAll':       return <HelpCenterAllView view={view} onNavigate={setView} />;
-      case 'outboundSubscriptions': return <OutboundSubscriptionsView view={view} onNavigate={setView} />;
-      case 'outboundTests':       return <OutboundTestsView view={view} onNavigate={setView} />;
-      case 'outboundTags':        return <OutboundTagsView view={view} onNavigate={setView} />;
     }
   }
 
