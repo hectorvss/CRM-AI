@@ -6080,16 +6080,22 @@ function SetIcon({ kind }: { kind: SetIconKind }) {
   }
 }
 
-function SettingsCardGrid({ title, cards }: {
+function SettingsCardGrid({ title, cards, onNavigate }: {
   title: string;
-  cards: { icon: SetIconKind; bg: string; name: string; desc: string; badge?: string }[];
+  cards: { icon: SetIconKind; bg: string; name: string; desc: string; badge?: string; target?: View }[];
+  onNavigate?: (v: View) => void;
 }) {
   return (
     <div className="mb-6">
       <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">{title}</h3>
       <div className="grid grid-cols-3 gap-3">
         {cards.map((c, i) => (
-          <button key={i} className="bg-white border border-[#e9eae6] rounded-[10px] p-4 flex items-start gap-3 text-left hover:bg-[#fafaf9]">
+          <button
+            key={i}
+            onClick={() => { if (c.target && onNavigate) onNavigate(c.target); }}
+            disabled={!c.target}
+            className={`bg-white border border-[#e9eae6] rounded-[10px] p-4 flex items-start gap-3 text-left ${c.target ? 'hover:bg-[#fafaf9] hover:border-[#d4d4d0] cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+          >
             <span className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: c.bg }}>
               <SetIcon kind={c.icon} />
             </span>
@@ -6107,7 +6113,7 @@ function SettingsCardGrid({ title, cards }: {
   );
 }
 
-function SettingsInicioContent() {
+function SettingsInicioContent({ onNavigate }: { onNavigate?: (v: View) => void }) {
   return (
     <div className="flex flex-col flex-1 min-w-0 bg-white rounded-[16px] shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] overflow-hidden">
       <div className="flex items-center px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
@@ -6117,76 +6123,76 @@ function SettingsInicioContent() {
         </div>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
-        <SettingsCardGrid title="Espacio de trabajo" cards={[
-          { icon: 'gear',   bg: '#f3f3f1', name: 'Generales',            desc: 'Visualiza información básica de tu cuenta, como tu nombre y zona horaria.' },
-          { icon: 'team',   bg: '#dbeafe', name: 'Compañeros de equipo', desc: 'Administra y añade a compañeros de equipo en tu espacio de trabajo.' },
-          { icon: 'clock',  bg: '#fef3c7', name: 'Horario de atención',  desc: 'Configura el horario en el que tu equipo está disponible.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Espacio de trabajo" cards={[
+          { icon: 'gear',   bg: '#f3f3f1', name: 'Generales',            desc: 'Visualiza información básica de tu cuenta, como tu nombre y zona horaria.', target: 'workspaceGeneral' },
+          { icon: 'team',   bg: '#dbeafe', name: 'Compañeros de equipo', desc: 'Administra y añade a compañeros de equipo en tu espacio de trabajo.', target: 'workspaceTeammates' },
+          { icon: 'clock',  bg: '#fef3c7', name: 'Horario de atención',  desc: 'Configura el horario en el que tu equipo está disponible.', target: 'workspaceHours' },
           { icon: 'gift',   bg: '#d1fae5', name: 'Referencias',          badge: 'Gana $200', desc: 'Recomienda Intercom a otras empresas y consigue una bonificación.' },
-          { icon: 'tag',    bg: '#fce7f3', name: 'Marcas',               desc: 'Para tus clientes y agencias.' },
-          { icon: 'shield', bg: '#e0e7ff', name: 'Seguridad',            desc: 'Configura la autenticación y los ajustes de inicio de sesión.' },
-          { icon: 'globe',  bg: '#fef3c7', name: 'Multilingüe',          desc: 'Configura los idiomas en los que opera tu espacio de trabajo.' },
+          { icon: 'tag',    bg: '#fce7f3', name: 'Marcas',               desc: 'Para tus clientes y agencias.', target: 'workspaceBrands' },
+          { icon: 'shield', bg: '#e0e7ff', name: 'Seguridad',            desc: 'Configura la autenticación y los ajustes de inicio de sesión.', target: 'workspaceSecurity' },
+          { icon: 'globe',  bg: '#fef3c7', name: 'Multilingüe',          desc: 'Configura los idiomas en los que opera tu espacio de trabajo.', target: 'workspaceMultilingual' },
         ]} />
-        <SettingsCardGrid title="Suscripción" cards={[
-          { icon: 'card',  bg: '#dcfce7', name: 'Facturación', desc: 'Administra tu suscripción y métodos de pago.' },
-          { icon: 'chart', bg: '#fee2e2', name: 'Uso',         desc: 'Monitoriza el uso de tu suscripción y compromiso de Fin.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Suscripción" cards={[
+          { icon: 'card',  bg: '#dcfce7', name: 'Facturación', desc: 'Administra tu suscripción y métodos de pago.', target: 'billing' },
+          { icon: 'chart', bg: '#fee2e2', name: 'Uso',         desc: 'Monitoriza el uso de tu suscripción y compromiso de Fin.', target: 'billing' },
         ]} />
-        <SettingsCardGrid title="Canales" cards={[
-          { icon: 'chat',     bg: '#fce7f3', name: 'Messenger',              desc: 'Atrae y mantente conectado con clientes a través de tu sitio web o aplicaciones móviles.' },
-          { icon: 'mail',     bg: '#dbeafe', name: 'Correo electrónico',     desc: 'Administra el correo de tu equipo, dominios y autenticación con DKIM.' },
-          { icon: 'phone',    bg: '#fee2e2', name: 'Teléfono',               desc: 'Configura y administra llamadas de voz directamente desde tu Inbox.' },
-          { icon: 'whatsapp', bg: '#dcfce7', name: 'WhatsApp',               desc: 'Habla y configura los números de WhatsApp y comparte tu equipo.' },
-          { icon: 'hash',     bg: '#e9d5ff', name: 'Slack',                  desc: 'Recibe y envía mensajes a tu equipo desde Slack.' },
-          { icon: 'discord',  bg: '#cffafe', name: 'Discord',                desc: 'Recibe y envía mensajes a usuarios de Discord.' },
-          { icon: 'sms',      bg: '#fef3c7', name: 'SMS',                    desc: 'Configura los números de SMS para enviar mensajes a tus usuarios.' },
-          { icon: 'social',   bg: '#fce7f3', name: 'Canales redes sociales', desc: 'Administra mensajes desde plataformas sociales en tu equipo.' },
-          { icon: 'globe',    bg: '#dbeafe', name: 'Todos los canales',      desc: 'Administra y configura los ajustes de todos los canales de tu equipo.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Canales" cards={[
+          { icon: 'chat',     bg: '#fce7f3', name: 'Messenger',              desc: 'Atrae y mantente conectado con clientes a través de tu sitio web o aplicaciones móviles.', target: 'messenger' },
+          { icon: 'mail',     bg: '#dbeafe', name: 'Correo electrónico',     desc: 'Administra el correo de tu equipo, dominios y autenticación con DKIM.', target: 'email' },
+          { icon: 'phone',    bg: '#fee2e2', name: 'Teléfono',               desc: 'Configura y administra llamadas de voz directamente desde tu Inbox.', target: 'phone' },
+          { icon: 'whatsapp', bg: '#dcfce7', name: 'WhatsApp',               desc: 'Habla y configura los números de WhatsApp y comparte tu equipo.', target: 'whatsapp' },
+          { icon: 'hash',     bg: '#e9d5ff', name: 'Slack',                  desc: 'Recibe y envía mensajes a tu equipo desde Slack.', target: 'slackChannel' },
+          { icon: 'discord',  bg: '#cffafe', name: 'Discord',                desc: 'Recibe y envía mensajes a usuarios de Discord.', target: 'discord' },
+          { icon: 'sms',      bg: '#fef3c7', name: 'SMS',                    desc: 'Configura los números de SMS para enviar mensajes a tus usuarios.', target: 'sms' },
+          { icon: 'social',   bg: '#fce7f3', name: 'Canales redes sociales', desc: 'Administra mensajes desde plataformas sociales en tu equipo.', target: 'social' },
+          { icon: 'globe',    bg: '#dbeafe', name: 'Todos los canales',      desc: 'Administra y configura los ajustes de todos los canales de tu equipo.', target: 'allChannels' },
         ]} />
-        <SettingsCardGrid title="Inbox" cards={[
-          { icon: 'inbox',    bg: '#dbeafe', name: 'Inbox para el equipo', desc: 'Crea buzones para tu equipo de compañeros que podrían trabajar juntos.' },
-          { icon: 'redirect', bg: '#fef3c7', name: 'Asignaciones',         desc: 'Especifica cómo se asignan los casos de soporte y cómo se manejan las cargas de trabajo.' },
-          { icon: 'bolt',     bg: '#e9d5ff', name: 'Macros',               desc: 'Crea y edita macros para enviar respuestas comunes con un solo clic.' },
-          { icon: 'ticket',   bg: '#fce7f3', name: 'Tipos de atención',    desc: 'Crea y configura los tipos de tickets y categorías de tu equipo de servicio al cliente.' },
-          { icon: 'timer',    bg: '#fee2e2', name: 'SLA',                  desc: 'Asegúrate de que tu equipo cumple los acuerdos de nivel de servicio prometidos.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Inbox" cards={[
+          { icon: 'inbox',    bg: '#dbeafe', name: 'Inbox para el equipo', desc: 'Crea buzones para tu equipo de compañeros que podrían trabajar juntos.', target: 'inboxTeam' },
+          { icon: 'redirect', bg: '#fef3c7', name: 'Asignaciones',         desc: 'Especifica cómo se asignan los casos de soporte y cómo se manejan las cargas de trabajo.', target: 'assignments' },
+          { icon: 'bolt',     bg: '#e9d5ff', name: 'Macros',               desc: 'Crea y edita macros para enviar respuestas comunes con un solo clic.', target: 'macros' },
+          { icon: 'ticket',   bg: '#fce7f3', name: 'Tipos de atención',    desc: 'Crea y configura los tipos de tickets y categorías de tu equipo de servicio al cliente.', target: 'tickets' },
+          { icon: 'timer',    bg: '#fee2e2', name: 'SLA',                  desc: 'Asegúrate de que tu equipo cumple los acuerdos de nivel de servicio prometidos.', target: 'sla' },
         ]} />
-        <SettingsCardGrid title="IA y automatización" cards={[
-          { icon: 'sparkle', bg: '#fef3c7', name: 'Fin AI Agent',   desc: 'Administra tu agente de IA y personalízalo para tus clientes.' },
-          { icon: 'aibox',   bg: '#e0e7ff', name: 'Buzón de IA',    badge: 'New Beta', desc: 'Activa características nuevas de inteligencia artificial en el buzón de tu equipo.' },
-          { icon: 'wrench',  bg: '#fce7f3', name: 'Automatización', desc: 'Crea reglas y flujos de trabajo para automatizar el trabajo en tu Inbox.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="IA y automatización" cards={[
+          { icon: 'sparkle', bg: '#fef3c7', name: 'Fin AI Agent',   desc: 'Administra tu agente de IA y personalízalo para tus clientes.', target: 'fin' },
+          { icon: 'aibox',   bg: '#e0e7ff', name: 'Buzón de IA',    badge: 'New Beta', desc: 'Activa características nuevas de inteligencia artificial en el buzón de tu equipo.', target: 'aiInbox' },
+          { icon: 'wrench',  bg: '#fce7f3', name: 'Automatización', desc: 'Crea reglas y flujos de trabajo para automatizar el trabajo en tu Inbox.', target: 'automation' },
         ]} />
-        <SettingsCardGrid title="Integraciones" cards={[
-          { icon: 'shop', bg: '#dbeafe', name: 'Tienda de aplicaciones',     desc: 'Conecta a Intercom todos los servicios y herramientas que ya usas.' },
-          { icon: 'plug', bg: '#dcfce7', name: 'Conectores de datos',        desc: 'Especifica los datos de los sistemas externos que usa tu equipo.' },
-          { icon: 'code', bg: '#fef3c7', name: 'Centro para desarrolladores', desc: 'Crea aplicaciones y servicios personalizados para tu propio negocio.' },
-          { icon: 'flow', bg: '#fce7f3', name: 'Automatizaciones',           desc: 'Crea automatizaciones con cualquier información o paso a paso.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Integraciones" cards={[
+          { icon: 'shop', bg: '#dbeafe', name: 'Tienda de aplicaciones',     desc: 'Conecta a Intercom todos los servicios y herramientas que ya usas.', target: 'appStore' },
+          { icon: 'plug', bg: '#dcfce7', name: 'Conectores de datos',        desc: 'Especifica los datos de los sistemas externos que usa tu equipo.', target: 'connectors' },
+          { icon: 'code', bg: '#fef3c7', name: 'Centro para desarrolladores', desc: 'Crea aplicaciones y servicios personalizados para tu propio negocio.', target: 'developer' },
+          { icon: 'flow', bg: '#fce7f3', name: 'Automatizaciones',           desc: 'Crea automatizaciones con cualquier información o paso a paso.', target: 'automation' },
         ]} />
-        <SettingsCardGrid title="Datos" cards={[
-          { icon: 'tag',      bg: '#dbeafe', name: 'Etiquetas',                desc: 'Administra tus etiquetas y agrúpalas en categorías para crear filtros.' },
-          { icon: 'user',     bg: '#dcfce7', name: 'Personas',                 desc: 'Administra atributos, segmentos y eventos de los contactos en tu cuenta.' },
-          { icon: 'building', bg: '#fef3c7', name: 'Empresas',                 desc: 'Administra atributos, segmentos y eventos de las cuentas en tu cuenta.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Datos" cards={[
+          { icon: 'tag',      bg: '#dbeafe', name: 'Etiquetas',                desc: 'Administra tus etiquetas y agrúpalas en categorías para crear filtros.', target: 'labels' },
+          { icon: 'user',     bg: '#dcfce7', name: 'Personas',                 desc: 'Administra atributos, segmentos y eventos de los contactos en tu cuenta.', target: 'people' },
+          { icon: 'building', bg: '#fef3c7', name: 'Empresas',                 desc: 'Administra atributos, segmentos y eventos de las cuentas en tu cuenta.', target: 'companies' },
           { icon: 'chat',     bg: '#fce7f3', name: 'Conversaciones',           desc: 'Crea atributos para los datos que tu equipo necesita en cada conversación.' },
-          { icon: 'cube',     bg: '#e9d5ff', name: 'Objetos personalizados',   desc: 'Importar tipos de objetos para crear y asociar datos personalizados.' },
-          { icon: 'arrows',   bg: '#cffafe', name: 'Importación y exportación', desc: 'Importa o exporta datos de Intercom y otras fuentes.' },
-          { icon: 'bars',     bg: '#fee2e2', name: 'Temas',                    desc: 'Crea categorías generales o más temas conversacionales.' },
+          { icon: 'cube',     bg: '#e9d5ff', name: 'Objetos personalizados',   desc: 'Importar tipos de objetos para crear y asociar datos personalizados.', target: 'customObjects' },
+          { icon: 'arrows',   bg: '#cffafe', name: 'Importación y exportación', desc: 'Importa o exporta datos de Intercom y otras fuentes.', target: 'imports' },
+          { icon: 'bars',     bg: '#fee2e2', name: 'Temas',                    desc: 'Crea categorías generales o más temas conversacionales.', target: 'topics' },
         ]} />
-        <SettingsCardGrid title="Centro de ayuda" cards={[
-          { icon: 'home', bg: '#dbeafe', name: 'Inicio Help Center',         desc: 'Configura el inicio de tu centro de ayuda.' },
-          { icon: 'book', bg: '#dcfce7', name: 'Todos los centros de ayuda', desc: 'Lista todos los centros de ayuda en tu cuenta.' },
-          { icon: 'plus', bg: '#fef3c7', name: 'Nuevo Centro de ayuda',      desc: '' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Centro de ayuda" cards={[
+          { icon: 'home', bg: '#dbeafe', name: 'Inicio Help Center',         desc: 'Configura el inicio de tu centro de ayuda.', target: 'helpCenter' },
+          { icon: 'book', bg: '#dcfce7', name: 'Todos los centros de ayuda', desc: 'Lista todos los centros de ayuda en tu cuenta.', target: 'helpCenter' },
+          { icon: 'plus', bg: '#fef3c7', name: 'Nuevo Centro de ayuda',      desc: '', target: 'helpCenter' },
         ]} />
-        <SettingsCardGrid title="Canales salientes" cards={[
-          { icon: 'bell',  bg: '#fce7f3', name: 'Suscripciones',         desc: 'Permite a los clientes administrar las comunicaciones que reciben.' },
-          { icon: 'flask', bg: '#fef3c7', name: 'Pruebas de mensajes',   desc: 'Crea pruebas A/B con mensajes automatizados.' },
-          { icon: 'tag',   bg: '#dcfce7', name: 'Etiquetas de mensajes', desc: 'Clasifica tus mensajes con etiquetas personalizadas.' },
-          { icon: 'brush', bg: '#e9d5ff', name: 'Personalización',       desc: 'Personaliza la apariencia de los mensajes salientes.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Canales salientes" cards={[
+          { icon: 'bell',  bg: '#fce7f3', name: 'Suscripciones',         desc: 'Permite a los clientes administrar las comunicaciones que reciben.', target: 'outbound' },
+          { icon: 'flask', bg: '#fef3c7', name: 'Pruebas de mensajes',   desc: 'Crea pruebas A/B con mensajes automatizados.', target: 'outbound' },
+          { icon: 'tag',   bg: '#dcfce7', name: 'Etiquetas de mensajes', desc: 'Clasifica tus mensajes con etiquetas personalizadas.', target: 'outbound' },
+          { icon: 'brush', bg: '#e9d5ff', name: 'Personalización',       desc: 'Personaliza la apariencia de los mensajes salientes.', target: 'outbound' },
         ]} />
-        <SettingsCardGrid title="Personal" cards={[
-          { icon: 'pencil',   bg: '#dbeafe', name: 'Información',            desc: 'Configura tu información personal como tu nombre y avatar.' },
-          { icon: 'shield',   bg: '#fef3c7', name: 'Seguridad de la cuenta', desc: 'Configura ajustes de tu cuenta personal de inicio de sesión.' },
-          { icon: 'bell',     bg: '#fce7f3', name: 'Notificaciones',         desc: 'Configura las preferencias de notificaciones.' },
-          { icon: 'eye',      bg: '#dcfce7', name: 'Visible para ti',        desc: 'Personaliza tu vista de pantalla y disposición.' },
-          { icon: 'key',      bg: '#fee2e2', name: 'Tokens de API',          desc: 'Verifica y configura tus tokens personales de la API.' },
-          { icon: 'lockuser', bg: '#e9d5ff', name: 'Acceso a la cuenta',     desc: 'Administra cuentas asociadas, incluyendo qué espacios de trabajo puedes usar.' },
-          { icon: 'globe',    bg: '#cffafe', name: 'Multilingüe',            desc: 'Configura los ajustes de traducción de tu cuenta.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Personal" cards={[
+          { icon: 'pencil',   bg: '#dbeafe', name: 'Información',            desc: 'Configura tu información personal como tu nombre y avatar.', target: 'personal' },
+          { icon: 'shield',   bg: '#fef3c7', name: 'Seguridad de la cuenta', desc: 'Configura ajustes de tu cuenta personal de inicio de sesión.', target: 'security' },
+          { icon: 'bell',     bg: '#fce7f3', name: 'Notificaciones',         desc: 'Configura las preferencias de notificaciones.', target: 'notifications' },
+          { icon: 'eye',      bg: '#dcfce7', name: 'Visible para ti',        desc: 'Personaliza tu vista de pantalla y disposición.', target: 'visible' },
+          { icon: 'key',      bg: '#fee2e2', name: 'Tokens de API',          desc: 'Verifica y configura tus tokens personales de la API.', target: 'tokens' },
+          { icon: 'lockuser', bg: '#e9d5ff', name: 'Acceso a la cuenta',     desc: 'Administra cuentas asociadas, incluyendo qué espacios de trabajo puedes usar.', target: 'accountAccess' },
+          { icon: 'globe',    bg: '#cffafe', name: 'Multilingüe',            desc: 'Configura los ajustes de traducción de tu cuenta.', target: 'multilingual' },
         ]} />
       </div>
     </div>
@@ -6200,7 +6206,7 @@ function SettingsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-3 overflow-hidden">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <SettingsInicioContent />
+        <SettingsInicioContent onNavigate={onNavigate} />
       </div>
     </div>
   );

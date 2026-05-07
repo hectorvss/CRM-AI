@@ -137,7 +137,7 @@ export default function Profile({ onNavigate, initialSection }: ProfileProps) {
       {/* ── Two-column body ────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 flex">
         {/* Left nav */}
-        <nav className="w-[220px] flex-shrink-0 border-r border-[#e9eae6] py-3 px-2 overflow-y-auto">
+        <nav className="w-[220px] flex-shrink-0 border-r border-[#e9eae6] py-3 px-2 overflow-y-auto bg-[#f3f3f1]">
           {TABS.map(tab => {
             const active = activeTab === tab.id;
             return (
@@ -145,10 +145,10 @@ export default function Profile({ onNavigate, initialSection }: ProfileProps) {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full h-9 px-3 rounded-md flex items-center text-[13px] font-medium text-left transition-colors ${
+                className={`w-full h-9 px-3 rounded-lg flex items-center text-[13px] text-left transition-colors mt-0.5 ${
                   active
-                    ? 'bg-[#1a1a1a] text-white'
-                    : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
+                    ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+                    : 'font-medium text-[#1a1a1a] hover:bg-white/60'
                 }`}
               >
                 {tab.label}
