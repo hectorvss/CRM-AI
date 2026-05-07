@@ -1,169 +1,167 @@
-import React, { useMemo } from 'react';
-import { useApi } from '../../api/hooks';
+import React, { useEffect, useMemo, useState } from 'react';
 import { iamApi } from '../../api/client';
-import { PERMISSION_CATALOG, PERMISSION_DOMAINS } from '../../permissions/catalog';
-import { usePermissions } from '../../contexts/PermissionsContext';
+import { PERMISSION_CATALOG } from '../../permissions/catalog';
 import LoadingState from '../LoadingState';
+import { DetailSection } from './sections';
 
-const FALLBACK_USER = {
-  id: 'system',
-  email: 'system@crm-ai.local',
-  name: 'System',
-  role: 'workspace_admin',
-  context: { role_id: 'workspace_admin', permissions: ['*'] },
-  memberships: [],
+type PermissionsState = {
+  role: { id: string; name: string; description: string | null; is_system?: number } | null;
+  permissions: string[];
+  teams: Array<{ id: string; name: string }>;
 };
 
-export default function AccessPermissionsTab() {
-  const { data: user, loading } = useApi<any>(iamApi.me, []);
-  const { data: roles } = useApi<any[]>(iamApi.roles, []);
-  const { data: accessTargets } = useApi<any[]>(iamApi.accessRequestTargets, []);
-  const { isOwner, isSuperAdmin } = usePermissions();
-  const currentUser = user || FALLBACK_USER;
+const FALLBACK: PermissionsState = { role: null, permissions: [], teams: [] };
 
-  // ── All hooks must run unconditionally on every render (React Rules of Hooks) ──
-  const roleId = currentUser?.context?.role_id || currentUser?.memberships?.[0]?.role_id || null;
-  const role = useMemo(() => (roles || []).find((item: any) => item.id === roleId) || null, [roleId, roles]);
-  const rolePermissions = Array.isArray(role?.permissions) ? role.permissions : [];
-  const userPermissions = currentUser?.context?.permissions || rolePermissions || [];
-  const granted = useMemo(() => new Set<string>(userPermissions), [userPermissions]);
-  const currentRoleName = role?.name || currentUser?.memberships?.[0]?.role_name || currentUser?.role || 'Unknown';
+function groupPermissions(keys: string[]) {
+  const hasWildcard = keys.includes('*');
+  const granted = new Set(keys);
+  const groups = new Map<string, Array<{ key: string; label: string; description: string }>>();
 
-  const adminContacts = useMemo(() => {
-    if (Array.isArray(accessTargets) && accessTargets.length > 0) {
-      return accessTargets;
+  // Build entries from the catalog so unknown permissions don't slip through
+  // and so we can show "domain · action" labels.
+  for (const entry of PERMISSION_CATALOG) {
+    const isGranted = hasWildcard || granted.has(entry.key);
+    if (!isGranted) continue;
+    const list = groups.get(entry.domain) || [];
+    list.push({ key: entry.key, label: entry.label, description: entry.description });
+    groups.set(entry.domain, list);
+  }
+
+  // Catch any permission key the user has that's NOT in the catalog (e.g.
+  // custom roles with niche keys). Bucket them under "Otros".
+  if (!hasWildcard) {
+    const known = new Set(PERMISSION_CATALOG.map(e => e.key));
+    const unknown = keys.filter(k => k !== '*' && !known.has(k));
+    if (unknown.length > 0) {
+      groups.set('Otros', unknown.map(k => ({ key: k, label: k, description: '' })));
     }
-    const roleMap = new Map((roles || []).map((item: any) => [item.id, item]));
-    return (currentUser?.memberships || []).filter((membership: any) => {
-      const roleRecord = roleMap.get(membership.role_id);
-      const roleName = String(roleRecord?.name || membership.role_name || '').toLowerCase();
-      return roleName === 'owner' || roleName === 'workspace_admin';
-    }).map((membership: any) => ({
-      name: membership.role_name,
-      email: '',
-    }));
-  }, [accessTargets, currentUser?.memberships, roles]);
+  }
 
-  const requestAccessHref = useMemo(() => {
-    const recipients = adminContacts
-      .map((workspaceUser: any) => workspaceUser.email)
-      .filter((email: string | undefined): email is string => Boolean(email));
-    const to = encodeURIComponent(recipients[0] || currentUser?.email || 'support@crm-ai.local');
-    const cc = recipients.slice(1).join(',');
-    const subject = encodeURIComponent(`Access request for ${currentRoleName}`);
-    const body = encodeURIComponent(
-      [
-        'Hello,',
-        '',
-        `I would like to request a review of my workspace permissions.`,
-        `Current role: ${currentRoleName}`,
-        `User: ${currentUser.name} <${currentUser.email}>`,
-        '',
-        'Requested change:',
-        '- ',
-      ].join('\n'),
-    );
-    return `mailto:${to}?subject=${subject}&body=${body}${cc ? `&cc=${encodeURIComponent(cc)}` : ''}`;
-  }, [adminContacts, currentRoleName, currentUser?.email, currentUser?.name]);
+  return groups;
+}
 
-  // Conditional return is now safe — all hooks above already executed.
-  if (loading) return <LoadingState title="Loading access permissions" message="Checking your live role membership and access matrix." compact />;
+export default function AccessPermissionsTab() {
+  const [state, setState] = useState<PermissionsState>(FALLBACK);
+  const [loading, setLoading] = useState(true);
 
-  const hasWildcard = granted.has('*');
-  const totalPermissions = PERMISSION_CATALOG.length;
-  const grantedCount = hasWildcard ? totalPermissions : PERMISSION_CATALOG.filter(p => granted.has(p.key)).length;
-  const deniedCount = totalPermissions - grantedCount;
-  const adminSummary = adminContacts.length > 0
-    ? adminContacts.map((workspaceUser: any) => workspaceUser.name || workspaceUser.email).join(', ')
-    : 'workspace administrators';
+  useEffect(() => {
+    let cancelled = false;
+    iamApi.myPermissions()
+      .then((data: any) => {
+        if (cancelled) return;
+        setState({
+          role: data?.role || null,
+          permissions: Array.isArray(data?.permissions) ? data.permissions : [],
+          teams: Array.isArray(data?.teams) ? data.teams : [],
+        });
+      })
+      .catch(() => { if (!cancelled) setState(FALLBACK); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const groups = useMemo(() => groupPermissions(state.permissions), [state.permissions]);
+  const hasWildcard = state.permissions.includes('*');
+  const totalGranted = hasWildcard ? PERMISSION_CATALOG.length : Array.from(groups.values()).reduce((acc, arr) => acc + arr.length, 0);
+  const canImpersonate = hasWildcard || state.permissions.includes('iam.impersonate');
+
+  if (loading) return <LoadingState title="Cargando permisos" message="Revisando tu rol y accesos" compact />;
 
   return (
-    <div className="space-y-6">
-      {/* Role overview */}
-      <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white capitalize">
-                {String(currentRoleName).replace(/_/g, ' ')}
-              </h2>
-              {isOwner && (
-                <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">Owner</span>
-              )}
-              {!isOwner && isSuperAdmin && (
-                <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">Admin</span>
-              )}
+    <div>
+      {/* Mi rol */}
+      <DetailSection title="Mi rol" helper="Tu rol determina qué puedes ver y hacer en este workspace.">
+        <div className="py-3">
+          {state.role ? (
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold capitalize">
+                    {String(state.role.name).replace(/_/g, ' ')}
+                  </span>
+                  {state.role.is_system === 1 && (
+                    <span className="inline-flex items-center h-5 px-2 rounded-full bg-[#f4f4f3] border border-[#e9eae6] text-[10.5px] font-semibold text-[#646462] uppercase tracking-wide">Sistema</span>
+                  )}
+                </div>
+                {state.role.description && (
+                  <p className="text-[12.5px] text-[#646462] mt-2">{state.role.description}</p>
+                )}
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-[11px] text-[#646462] uppercase tracking-wide">Permisos</p>
+                <p className="text-[20px] font-semibold text-[#1a1a1a]">{hasWildcard ? '∞' : totalGranted}</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              {role?.is_system === 1 ? 'System role' : 'Custom role'} · {grantedCount} of {totalPermissions} permissions
-            </p>
-          </div>
-          {!isOwner && !isSuperAdmin && (
-            <a
-              href={requestAccessHref}
-              className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white underline underline-offset-2"
-            >
-              Request access
-            </a>
+          ) : (
+            <p className="text-[12.5px] text-[#646462]">No se ha podido determinar tu rol.</p>
           )}
         </div>
+      </DetailSection>
 
-        <div className="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-gray-100 dark:border-gray-800">
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Granted</p>
-            <p className="text-2xl font-semibold text-gray-900 dark:text-white">{grantedCount}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Denied</p>
-            <p className="text-2xl font-semibold text-gray-400 dark:text-gray-600">{deniedCount}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Coverage</p>
-            <p className="text-2xl font-semibold text-gray-900 dark:text-white">{Math.round((grantedCount / totalPermissions) * 100)}%</p>
-          </div>
+      {/* Permisos */}
+      <DetailSection title="Permisos" helper={hasWildcard ? 'Tienes acceso completo (*).' : 'Permisos concedidos, agrupados por dominio.'}>
+        <div className="py-3 space-y-4">
+          {hasWildcard ? (
+            <p className="text-[12.5px] text-[#1a1a1a]">Acceso total — puedes realizar cualquier acción en este workspace.</p>
+          ) : groups.size === 0 ? (
+            <p className="text-[12.5px] text-[#646462]">No tienes permisos asignados.</p>
+          ) : (
+            Array.from(groups.entries()).map(([domain, entries]) => (
+              <div key={domain}>
+                <p className="text-[11px] uppercase tracking-wide font-semibold text-[#646462] mb-2">{domain}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {entries.map(p => (
+                    <span
+                      key={p.key}
+                      title={p.description || p.key}
+                      className="inline-flex items-center h-6 px-2.5 rounded-full bg-[#f4f4f3] border border-[#e9eae6] text-[11.5px] font-medium text-[#1a1a1a]"
+                    >
+                      {p.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </div>
-      </div>
+      </DetailSection>
 
-      {/* Permission matrix */}
-      <div className="grid grid-cols-2 gap-4">
-        {PERMISSION_DOMAINS.map(domain => {
-          const domainPerms = PERMISSION_CATALOG.filter(p => p.domain === domain);
-          const domainGranted = hasWildcard ? domainPerms.length : domainPerms.filter(p => granted.has(p.key)).length;
+      {/* Equipos */}
+      <DetailSection title="Equipos" helper="Equipos a los que perteneces dentro del workspace.">
+        <div className="py-2">
+          {state.teams.length === 0 ? (
+            <p className="text-[12.5px] text-[#646462] py-2">No perteneces a ningún equipo todavía.</p>
+          ) : (
+            <ul className="divide-y divide-[#f0f0ee]">
+              {state.teams.map(team => (
+                <li key={team.id} className="py-3 flex items-center gap-3">
+                  <span className="material-symbols-outlined text-[#646462] text-[18px]">groups</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">{team.name}</p>
+                    <p className="text-[11.5px] text-[#646462]">Miembro</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </DetailSection>
 
-          return (
-            <div key={domain} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{domain}</h3>
-                <span className="text-xs text-gray-400 dark:text-gray-500">{domainGranted}/{domainPerms.length}</span>
-              </div>
-              <div className="divide-y divide-gray-50 dark:divide-gray-800/50">
-                {domainPerms.map(p => {
-                  const isGranted = hasWildcard || granted.has(p.key);
-                  return (
-                    <div key={p.key} className="flex items-start gap-3 px-4 py-2.5">
-                      <span className={`material-symbols-outlined text-[18px] mt-0.5 flex-shrink-0 ${isGranted ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-700'}`}>
-                        {isGranted ? 'check_circle' : 'cancel'}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm ${isGranted ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
-                          {p.label}
-                        </p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{p.description}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+      {/* Suplantación — only if user has the right */}
+      {canImpersonate && (
+        <DetailSection title="Suplantación" helper="Puedes asumir la identidad de otros usuarios para depurar problemas.">
+          <div className="py-3 flex items-start gap-3">
+            <span className="material-symbols-outlined text-[#646462] text-[18px] mt-0.5">switch_account</span>
+            <div className="flex-1">
+              <p className="text-[12.5px] text-[#1a1a1a]">
+                Tienes el permiso <code className="bg-[#f4f4f3] px-1 rounded">iam.impersonate</code>. Úsalo solo cuando sea estrictamente necesario para soporte.
+              </p>
+              <p className="text-[11.5px] text-[#646462] mt-1">
+                La suplantación queda registrada en la auditoría con tu identidad como actor original.
+              </p>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Help note */}
-      {!isOwner && !isSuperAdmin && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
-          Your access is governed by your role. Requests will be addressed to {adminSummary}.
-        </p>
+          </div>
+        </DetailSection>
       )}
     </div>
   );
