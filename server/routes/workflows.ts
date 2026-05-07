@@ -17,12 +17,15 @@ import {
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { runAgent } from '../agents/runner.js';
 import { sendEmail, sendWhatsApp, sendSms } from '../pipeline/channelSenders.js';
+import { integrationRegistry } from '../integrations/registry.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
 import { config as appConfig } from '../config.js';
 import { getRefundThreshold } from '../utils/refundThreshold.js';
 import { logger } from '../utils/logger.js';
 import { broadcastSSE } from './sse.js';
+import { executeNode as runAdapter, executeNodeWithRetry, executeWorkflow } from '../runtime/workflowExecutor.js';
+import { registerSchedulerHooks } from '../runtime/adapters/flowScheduler.js';
 
 const router = Router();
 const workflowRepository = createWorkflowRepository();
@@ -36,6 +39,19 @@ const integrationRepository = createIntegrationRepository();
 const workspaceRepository = createWorkspaceRepository();
 
 router.use(extractMultiTenant);
+
+// ── Wire flow.subworkflow / flow.merge / flow.loop / flow.wait / delay ─────
+// Their adapters live in server/runtime/adapters/flowScheduler.ts but need
+// callbacks into the route's repository singletons + scheduler. Done at
+// module load so the registry is ready before the first node runs.
+registerSchedulerHooks({
+  getDefinition: (id, tenantId, workspaceId) =>
+    workflowRepository.getDefinition(id, tenantId, workspaceId),
+  getVersion: (id, scope) => workflowRepository.getVersion(id, scope),
+  getLatestVersion: (definitionId, scope) =>
+    workflowRepository.getLatestVersion(definitionId, scope),
+  runSubworkflow: (opts) => executeWorkflowVersion(opts),
+});
 
 const NODE_CATALOG = [
   { type: 'trigger', key: 'case.created', label: 'Case created', category: 'Trigger', icon: 'assignment', requiresConfig: false },
@@ -56,7 +72,6 @@ const NODE_CATALOG = [
   { type: 'trigger', key: 'trigger.chat_message', label: 'On chat message', category: 'Trigger', icon: 'forum', requiresConfig: true },
   { type: 'trigger', key: 'trigger.workflow_error', label: 'On workflow error', category: 'Trigger', icon: 'error_outline', requiresConfig: false },
   { type: 'trigger', key: 'trigger.subworkflow_called', label: 'When called by another workflow', category: 'Trigger', icon: 'login', requiresConfig: false },
-  { type: 'trigger', key: 'trigger.evaluation_run', label: 'When running evaluation', category: 'Trigger', icon: 'science', requiresConfig: false },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Condition', icon: 'attach_money', requiresConfig: true },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Condition', icon: 'rule', requiresConfig: true },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Condition', icon: 'gpp_maybe', requiresConfig: true },
@@ -165,7 +180,6 @@ const NODE_CONTRACTS: Record<string, WorkflowNodeContract> = {
   'trigger.chat_message': { required: ['channel'], optional: ['agentId'], sideEffects: 'none' },
   'trigger.workflow_error': { optional: ['sourceWorkflowId', 'severity'], sideEffects: 'none' },
   'trigger.subworkflow_called': { optional: ['expectedInputs'], sideEffects: 'none' },
-  'trigger.evaluation_run': { optional: ['datasetId'], sideEffects: 'none' },
   'amount.threshold': { required: ['field', 'operator', 'amount'], branchLabels: ['true', 'false'], sideEffects: 'none' },
   'status.matches': { required: ['field', 'value'], optional: ['operator'], branchLabels: ['true', 'false'], sideEffects: 'none' },
   'risk.level': { required: ['field', 'value'], optional: ['operator'], branchLabels: ['true', 'false'], sideEffects: 'none' },
@@ -600,6 +614,8 @@ function cloneJson(value: any) {
   return value;
 }
 
+// ── Gmail / Outlook OAuth send helpers extracted to server/runtime/adapters/messaging.ts (Phase 3f)
+
 async function buildWorkflowContext(scope: { tenantId: string; workspaceId: string; userId?: string }, payload: any) {
   const context: any = {
     trigger: payload ?? {},
@@ -743,23 +759,7 @@ async function buildStepDryRun(
   };
 }
 
-/** Parse a human duration string (e.g. "2h", "30m", "1d") into an ISO expiry timestamp. */
-function resolveDelayUntil(duration: string): string | null {
-  const str = String(duration).trim().toLowerCase();
-  const match = str.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)$/);
-  if (!match) return null;
-  const amount = parseFloat(match[1]);
-  const unit = match[2];
-  const ms = unit === 'ms' ? amount
-    : unit === 's'  ? amount * 1_000
-    : unit === 'm'  ? amount * 60_000
-    : unit === 'h'  ? amount * 3_600_000
-    : unit === 'd'  ? amount * 86_400_000
-    : unit === 'w'  ? amount * 604_800_000
-    : 0;
-  if (!ms) return null;
-  return new Date(Date.now() + ms).toISOString();
-}
+// `resolveDelayUntil` extracted to server/runtime/adapters/flowScheduler.ts (Phase 4b).
 
 function normalizeTriggerName(value: string | null | undefined) {
   return String(value ?? '').trim().toLowerCase().replace(/_/g, '.');
@@ -783,13 +783,12 @@ function workflowMatchesTrigger(version: any, eventType: string) {
     'customer.updated': ['customer.updated', 'customer_updated'],
     'sla.breached': ['sla.breached', 'sla_breached', 'sla.breach'],
     'payment.dispute.created': ['payment.dispute.created', 'payment_dispute_created', 'dispute.created'],
-    'shipment.updated': ['shipment.updated', 'shipment_updated', 'fulfillment.updated'],
+    'shipment.updated': ['shipment.updated', 'shipment_updated', 'fulfillment.updated', 'shipping.updated'],
     'manual.run': ['manual.run', 'manual'],
     'trigger.form_submission': ['trigger.form.submission', 'form.submitted', 'form_submitted'],
     'trigger.chat_message': ['trigger.chat.message', 'chat.message', 'chat_message'],
     'trigger.workflow_error': ['trigger.workflow.error', 'workflow.error', 'workflow_failed'],
     'trigger.subworkflow_called': ['trigger.subworkflow.called', 'subworkflow.called', 'subworkflow'],
-    'trigger.evaluation_run': ['trigger.evaluation.run', 'evaluation.run', 'eval.run'],
   };
   const accepted = new Set([normalizedEvent, ...(aliases[normalizedEvent] ?? []).map(normalizeTriggerName)]);
   return accepted.has(triggerType) || accepted.has(nodeTrigger);
@@ -823,7 +822,17 @@ function buildSimulatedNodeResult(node: any, config: Record<string, any>, contex
   return { status: 'completed', output };
 }
 
-async function executeWorkflowNode(scope: { tenantId: string; workspaceId: string; userId?: string }, node: any, context: any) {
+// Note: `services` is OPTIONAL and only consumed by pilot node handlers
+// (`flow.loop`, `notification.email`). All other handlers fall back to
+// inline imports — see server/runtime/workflowServices.ts for the
+// migration plan. Marked `export` so the workflow-runtime test harness
+// can drive node execution without spinning up the HTTP stack.
+export async function executeWorkflowNode(
+  scope: { tenantId: string; workspaceId: string; userId?: string },
+  node: any,
+  context: any,
+  services?: import('../runtime/workflowServices.js').WorkflowServices,
+) {
   if (node.disabled) {
     return { status: 'skipped', output: { reason: 'Node is disabled' } };
   }
@@ -853,6 +862,38 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
 
   if (node.type === 'trigger') {
     return { status: 'completed', output: { accepted: true, trigger: node.key } };
+  }
+
+  // ── Early adapter dispatch (Turno 5/D2 — Phase 2) ────────────────────────
+  // For node keys that have been migrated to `server/runtime/adapters/`,
+  // delegate here before falling through to the legacy inline branches.
+  // `runAdapter` returns `undefined` when no adapter is registered, in
+  // which case we keep the original control flow intact.
+  //
+  // Simulation safety: in the legacy inline executor the simulation
+  // short-circuit (`if (context.__simulation && contract.sideEffects !== 'none')`)
+  // sat between the condition/data.* blocks and the side-effect blocks
+  // (case.*/order.*/payment.*/.../ai.*/connector.*/notification.*/message.*).
+  // When extracting THOSE blocks we must apply the same gate before
+  // delegating, otherwise a simulated run would execute real side effects.
+  // Pre-extraction position-equivalent: condition/data.* run before this
+  // check; everything else runs after.
+  {
+    const SIDE_EFFECT_FREE_PREFIXES = ['flow.', 'data.'] as const;
+    const isPreSimulationGate = node.type === 'condition'
+      || SIDE_EFFECT_FREE_PREFIXES.some((p) => String(node.key || '').startsWith(p))
+      || node.key === 'stop';
+    if (!isPreSimulationGate
+        && context.__simulation
+        && getNodeContract(node.key).sideEffects !== 'none') {
+      return buildSimulatedNodeResult(node, config, context);
+    }
+    const adapterResult = await runAdapter(
+      { scope, context, services },
+      node,
+      config,
+    );
+    if (adapterResult !== undefined) return adapterResult;
   }
 
   if (node.type === 'condition') {
@@ -922,225 +963,14 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     return { status: result ? 'completed' : 'skipped', output: context.condition };
   }
 
+  // ── data.* adapters extracted to server/runtime/adapters/data.ts (Phase 3a)
+  // The early adapter dispatch above handles all known data.* keys. This
+  // fallback preserves prior behavior for any UNKNOWN data.* key (non-existent
+  // in NODE_CATALOG) that would previously have run through the shared
+  // `base = cloneJson(...)` path and returned `transformed: true`.
   if (node.key.startsWith('data.')) {
     const source = readContextPath(context, config.source || config.path || 'data');
     const base = cloneJson(source && typeof source === 'object' ? source : context.data && typeof context.data === 'object' ? context.data : {});
-
-    if (node.key === 'flow.note') {
-      return { status: 'completed', output: { note: config.content, color: config.color || 'yellow' } };
-    }
-
-    if (node.key === 'data.clean_context') {
-      const fields = asArray(config.fields || config.keys);
-      const mode = config.mode || 'remove'; // remove or keep_only
-      if (mode === 'keep_only') {
-        const cleaned: Record<string, any> = {};
-        fields.forEach(f => {
-          if (context.data && context.data[f] !== undefined) cleaned[f] = context.data[f];
-        });
-        context.data = cleaned;
-      } else {
-        fields.forEach(f => {
-          if (context.data) delete context.data[f];
-        });
-      }
-      return { status: 'completed', output: { cleaned: true, count: fields.length, mode } };
-    }
-
-    if (node.key === 'data.set_fields') {
-      const field = String(config.field || config.target || 'value');
-      const value = resolveTemplateValue(config.value ?? config.content ?? config.output ?? '', context);
-      if (base && typeof base === 'object') {
-        base[field] = value;
-      }
-      context.data = base;
-      return { status: 'completed', output: { data: base, updated: { [field]: value } } };
-    }
-
-    if (node.key === 'data.rename_fields') {
-      const mapping = parseMaybeJsonObject(config.mapping);
-      const renamed: Record<string, any> = {};
-      Object.entries(base && typeof base === 'object' ? base : {}).forEach(([key, value]) => {
-        const targetKey = mapping[key] ?? mapping[String(key)] ?? (key === config.source ? config.target : key);
-        renamed[String(targetKey ?? key)] = value;
-      });
-      context.data = renamed;
-      return { status: 'completed', output: { data: renamed, renamed: true } };
-    }
-
-    if (node.key === 'data.extract_json') {
-      const raw = readContextPath(context, config.source || config.field || config.path || 'trigger');
-      let extracted: any = raw;
-      if (typeof raw === 'string') {
-        try {
-          extracted = JSON.parse(raw);
-        } catch {
-          extracted = { raw };
-        }
-      }
-      if (config.path && extracted && typeof extracted === 'object') {
-        extracted = readContextPath(extracted, config.path);
-      }
-      context.data = extracted ?? {};
-      return { status: 'completed', output: { data: extracted, extracted: true } };
-    }
-
-    if (node.key === 'data.normalize_text') {
-      const raw = readContextPath(context, config.source || config.field || 'trigger.message') ?? config.value ?? '';
-      const normalized = String(raw).trim().replace(/\s+/g, ' ').toLowerCase();
-      context.data = { text: normalized };
-      return { status: 'completed', output: { data: { text: normalized }, normalized: true } };
-    }
-
-    if (node.key === 'data.format_date') {
-      const raw = readContextPath(context, config.source || config.field || 'trigger.date') ?? config.value ?? new Date().toISOString();
-      const date = new Date(raw);
-      const formatted = Number.isNaN(date.getTime())
-        ? String(raw)
-        : (config.format === 'date' ? date.toLocaleDateString() : config.format === 'time' ? date.toLocaleTimeString() : date.toISOString());
-      context.data = { date: formatted };
-      return { status: 'completed', output: { data: { date: formatted }, formatted: true } };
-    }
-
-    if (node.key === 'data.split_items') {
-      const raw = readContextPath(context, config.source || config.field || 'trigger.items') ?? config.value ?? '';
-      const delimiter = config.delimiter || '\n';
-      const items = Array.isArray(raw)
-        ? raw
-        : String(raw)
-          .split(delimiter)
-          .map((value) => value.trim())
-          .filter(Boolean);
-      context.data = { items };
-      return { status: 'completed', output: { data: { items }, split: true, count: items.length } };
-    }
-
-    if (node.key === 'data.dedupe') {
-      const raw = asArray(readContextPath(context, config.source || config.field || 'trigger.items'));
-      const seen = new Set<string>();
-      const items = raw.filter((value) => {
-        const key = JSON.stringify(value);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      context.data = { items };
-      return { status: 'completed', output: { data: { items }, deduped: true, count: items.length } };
-    }
-
-    if (node.key === 'data.map_fields') {
-      const mapping = parseMaybeJsonObject(config.mapping);
-      const payload = base && typeof base === 'object' ? base : {};
-      const mapped = Object.fromEntries(Object.entries(mapping).map(([targetKey, sourcePath]) => [targetKey, readContextPath(context, String(sourcePath)) ?? payload[String(sourcePath)] ?? null]));
-      context.data = mapped;
-      return { status: 'completed', output: { data: mapped, mapped: true } };
-    }
-
-    if (node.key === 'data.pick_fields') {
-      const fields = asArray(config.fields || config.field || config.keys).map((field) => String(field));
-      const payload = base && typeof base === 'object' ? base : {};
-      const picked = Object.fromEntries(fields.map((field) => [field, readContextPath(payload, field) ?? readContextPath(context, field)]));
-      context.data = picked;
-      return { status: 'completed', output: { data: picked, fields } };
-    }
-
-    if (node.key === 'data.merge_objects') {
-      const left = readContextPath(context, config.left || 'data') ?? {};
-      const right = readContextPath(context, config.right || 'trigger') ?? {};
-      const merged = {
-        ...(left && typeof left === 'object' && !Array.isArray(left) ? left : {}),
-        ...(right && typeof right === 'object' && !Array.isArray(right) ? right : {}),
-      };
-      context.data = merged;
-      return { status: 'completed', output: { data: merged, merged: true } };
-    }
-
-    if (node.key === 'data.validate_required') {
-      const fields = asArray(config.fields || config.required || config.field).map((field) => String(field));
-      const payload = base && typeof base === 'object' ? base : context;
-      const missing = fields.filter((field) => {
-        const value = readContextPath(payload, field) ?? readContextPath(context, field);
-        return value === undefined || value === null || String(value).trim() === '';
-      });
-      context.validation = { requiredFields: fields, missing };
-      return {
-        status: missing.length ? 'blocked' : 'completed',
-        output: { valid: missing.length === 0, missing, fields },
-        error: missing.length ? `Missing required fields: ${missing.join(', ')}` : null,
-      };
-    }
-
-    if (node.key === 'data.calculate') {
-      const left = Number(readContextPath(context, config.left || config.source || 'data.amount') ?? config.leftValue ?? 0);
-      const right = Number(readContextPath(context, config.right || 'data.value') ?? config.rightValue ?? config.value ?? 0);
-      const operation = String(config.operation || config.operator || '+');
-      const result = operation === '-' ? left - right : operation === '*' ? left * right : operation === '/' ? (right === 0 ? 0 : left / right) : left + right;
-      const target = String(config.target || 'calculated');
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: result };
-      return { status: 'completed', output: { data: context.data, result, operation, target } };
-    }
-
-    if (node.key === 'data.aggregate') {
-      const items = asArray(readContextPath(context, config.source || 'data.items'));
-      const field = config.field ? String(config.field) : '';
-      const operation = String(config.operation || 'list');
-      const target = String(config.target || 'aggregated');
-      const values = field
-        ? items.map((item: any) => readContextPath(item, field) ?? (item && typeof item === 'object' ? item[field] : item))
-        : items;
-      let result: any;
-      if (operation === 'sum') result = values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
-      else if (operation === 'average') result = values.length ? values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0) / values.length : 0;
-      else if (operation === 'min') result = values.length ? Math.min(...values.map((v: any) => Number(v) || 0)) : null;
-      else if (operation === 'max') result = values.length ? Math.max(...values.map((v: any) => Number(v) || 0)) : null;
-      else if (operation === 'count') result = values.length;
-      else result = values; // 'list'
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: result };
-      return { status: 'completed', output: { data: context.data, result, operation, count: values.length, target } };
-    }
-
-    if (node.key === 'data.limit') {
-      const items = asArray(readContextPath(context, config.source || 'data.items'));
-      const limit = Math.max(0, Number(config.limit ?? config.max ?? 10) || 0);
-      const mode = String(config.mode || 'first');
-      const result = mode === 'last' ? items.slice(-limit) : items.slice(0, limit);
-      const target = String(config.target || 'items');
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: result };
-      return { status: 'completed', output: { data: context.data, count: result.length, originalCount: items.length, target } };
-    }
-
-    if (node.key === 'data.split_out') {
-      const items = asArray(readContextPath(context, config.source || 'data.items'));
-      const target = String(config.target || 'splitItems');
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: items, currentBatch: items };
-      return { status: 'completed', output: { data: context.data, count: items.length, target } };
-    }
-
-    if (node.key === 'data.ai_transform') {
-      const instruction = resolveTemplateValue(config.instruction || config.prompt || '', context);
-      if (!instruction) return { status: 'failed', error: 'data.ai_transform: instruction is required' };
-      const geminiKey = appConfig.ai.geminiApiKey;
-      if (!geminiKey) return { status: 'failed', error: 'data.ai_transform: GEMINI_API_KEY not configured' };
-      const sourceValue = readContextPath(context, config.source || 'data') ?? context.data ?? {};
-      const target = String(config.target || 'transformed');
-      const modelName = String(config.model || appConfig.ai.geminiModel || 'gemini-2.5-flash');
-      const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const fullPrompt = `You are a JSON transformer. Apply the following instruction to the input and return ONLY the transformed JSON output (no commentary, no code fences).\n\nInstruction: ${instruction}\n\nInput JSON:\n${JSON.stringify(sourceValue)}`;
-      const result = await withGeminiRetry(
-        () => model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-          generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2048 },
-        }),
-        { label: 'workflow.data.ai_transform' },
-      );
-      const text = result.response.text().trim();
-      let parsed: any = text;
-      try { parsed = JSON.parse(text); } catch { /* keep as text */ }
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: parsed };
-      return { status: 'completed', output: { data: context.data, target, model: modelName } };
-    }
-
     context.data = base;
     return { status: 'completed', output: { data: base, transformed: true } };
   }
@@ -1149,1399 +979,54 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     return buildSimulatedNodeResult(node, config, context);
   }
 
-  if (node.key === 'case.assign') {
-    if (!context.case?.id) return { status: 'failed', error: 'case.assign requires case context' };
-    await caseRepository.update(scope, context.case.id, {
-      assigned_user_id: config.user_id || config.userId || null,
-      assigned_team_id: config.team_id || config.teamId || null,
-    });
-    return { status: 'completed', output: { caseId: context.case.id, assigned: true } };
-  }
-
-  if (node.key === 'case.note') {
-    if (!context.case?.id) return { status: 'failed', error: 'case.note requires case context' };
-    const content = config.content || `Workflow note from ${node.label}`;
-    const note = await conversationRepository.createInternalNote(scope, {
-      caseId: context.case.id,
-      content,
-      createdBy: scope.userId || 'workflow',
-    });
-    return { status: 'completed', output: { noteId: note.id, content } };
-  }
-
-  if (node.key === 'case.reply') {
-    if (!context.case?.id) return { status: 'failed', error: 'case.reply requires case context' };
-    const conversation = await conversationRepository.ensureForCase(scope, context.case);
-    const message = await conversationRepository.appendMessage(scope, {
-      conversationId: conversation.id,
-      caseId: context.case.id,
-      customerId: context.case.customer_id || null,
-      type: 'agent',
-      direction: 'outbound',
-      senderId: scope.userId || 'workflow',
-      senderName: 'Workflow',
-      content: config.content || 'Workflow generated reply',
-      channel: conversation.channel || 'web_chat',
-    });
-    return { status: 'completed', output: { messageId: message.id } };
-  }
-
-  if (node.key === 'case.update_status') {
-    if (!context.case?.id) return { status: 'failed', error: 'case.update_status requires case context' };
-    const nextStatus = config.status || config.to || 'open';
-    const previousStatus = context.case.status ?? null;
-    await caseRepository.update(scope, context.case.id, { status: nextStatus });
-    await caseRepository.addStatusHistory(scope, {
-      caseId: context.case.id,
-      fromStatus: previousStatus,
-      toStatus: nextStatus,
-      changedBy: scope.userId || 'workflow',
-      reason: config.reason || `Status updated by ${node.label}`,
-    }).catch(() => undefined);
-    context.case = { ...context.case, status: nextStatus };
-    return { status: 'completed', output: { caseId: context.case.id, previousStatus, status: nextStatus } };
-  }
-
-  if (node.key === 'case.set_priority') {
-    if (!context.case?.id) return { status: 'failed', error: 'case.set_priority requires case context' };
-    const updates: Record<string, any> = {};
-    if (config.priority) updates.priority = config.priority;
-    if (config.severity) updates.severity = config.severity;
-    if (config.risk_level || config.riskLevel) updates.risk_level = config.risk_level || config.riskLevel;
-    if (Object.keys(updates).length === 0) updates.priority = 'high';
-    await caseRepository.update(scope, context.case.id, updates);
-    context.case = { ...context.case, ...updates };
-    return { status: 'completed', output: { caseId: context.case.id, updates } };
-  }
-
-  if (node.key === 'case.add_tag') {
-    if (!context.case?.id) return { status: 'failed', error: 'case.add_tag requires case context' };
-    const tag = String(config.tag || config.value || 'workflow').trim();
-    const currentTags = Array.isArray(context.case.tags) ? context.case.tags : [];
-    const tags = Array.from(new Set([...currentTags, tag].filter(Boolean)));
-    await caseRepository.update(scope, context.case.id, { tags });
-    context.case = { ...context.case, tags };
-    return { status: 'completed', output: { caseId: context.case.id, tags } };
-  }
-
-  if (node.key === 'order.cancel') {
-    const orderId = config.order_id || config.orderId || context.order?.id;
-    if (!orderId) return { status: 'failed', error: 'order.cancel requires order context' };
-    const order = await commerceRepository.getOrder(scope, orderId);
-    if (!order) return { status: 'failed', error: 'Order not found' };
-    const fulfillment = String(order.fulfillment_status ?? order.status ?? '').toLowerCase();
-    if (['packed', 'shipped', 'delivered', 'fulfilled'].includes(fulfillment)) {
-      return { status: 'waiting_approval', output: { reason: `Order is ${fulfillment}`, orderId } };
-    }
-    await commerceRepository.updateOrder(scope, orderId, {
-      status: 'cancelled',
-      approval_status: 'not_required',
-      last_update: config.reason || 'Cancelled by workflow',
-      system_states: { ...(order.system_states ?? {}), canonical: 'cancelled', workflow: 'cancelled' },
-    });
-    return { status: 'completed', output: { orderId, status: 'cancelled' } };
-  }
-
-  if (node.key === 'order.hold' || node.key === 'order.release') {
-    const orderId = config.order_id || config.orderId || context.order?.id;
-    if (!orderId) return { status: 'failed', error: `${node.key} requires order context` };
-    const order = await commerceRepository.getOrder(scope, orderId);
-    if (!order) return { status: 'failed', error: 'Order not found' };
-    const hold = node.key === 'order.hold';
-    const workflowStatus = hold ? 'held' : 'released';
-    await commerceRepository.updateOrder(scope, orderId, {
-      approval_status: hold ? 'pending' : 'not_required',
-      last_update: config.reason || (hold ? 'Placed on hold by workflow' : 'Released by workflow'),
-      system_states: { ...(order.system_states ?? {}), workflow: workflowStatus, hold: hold ? 'active' : 'released' },
-    });
-    context.order = { ...order, system_states: { ...(order.system_states ?? {}), workflow: workflowStatus, hold: hold ? 'active' : 'released' } };
-    return { status: hold && config.requires_approval ? 'waiting_approval' : 'completed', output: { orderId, hold, status: workflowStatus } };
-  }
-
-  if (node.key === 'payment.refund') {
-    const paymentId = config.payment_id || config.paymentId || context.payment?.id;
-    if (!paymentId) return { status: 'failed', error: 'payment.refund requires payment context' };
-    const payment = await commerceRepository.getPayment(scope, paymentId);
-    if (!payment) return { status: 'failed', error: 'Payment not found' };
-    const amount = Number(config.amount || payment.amount || 0);
-    if (amount > getRefundThreshold(payment.currency) || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase())) {
-      return { status: 'waiting_approval', output: { reason: 'Refund requires approval', paymentId, amount } };
-    }
-    await commerceRepository.updatePayment(scope, paymentId, {
-      status: 'refunded',
-      refund_amount: amount,
-      refund_type: amount >= Number(payment.amount ?? 0) ? 'full' : 'partial',
-      approval_status: 'approved',
-      system_states: { ...(payment.system_states ?? {}), canonical: 'refunded', workflow: 'refunded' },
-      last_update: config.reason || 'Refunded by workflow',
-    });
-    return { status: 'completed', output: { paymentId, amount, status: 'refunded' } };
-  }
-
-  if (node.key === 'payment.mark_dispute') {
-    const paymentId = config.payment_id || config.paymentId || context.payment?.id;
-    if (!paymentId) return { status: 'failed', error: 'payment.mark_dispute requires payment context' };
-    const payment = await commerceRepository.getPayment(scope, paymentId);
-    if (!payment) return { status: 'failed', error: 'Payment not found' };
-    await commerceRepository.updatePayment(scope, paymentId, {
-      status: config.status || payment.status || 'disputed',
-      dispute_status: config.dispute_status || 'open',
-      dispute_id: config.dispute_id || config.disputeId || payment.dispute_id || `workflow_dispute_${Date.now()}`,
-      approval_status: 'pending',
-      system_states: { ...(payment.system_states ?? {}), dispute: 'Open', workflow: 'dispute_review' },
-      last_update: config.reason || 'Marked as disputed by workflow',
-    });
-    return { status: 'waiting_approval', output: { paymentId, dispute: 'open' } };
-  }
-
-  if (node.key === 'return.create') {
-    const returnId = await commerceRepository.upsertReturn(scope, {
-      externalId: config.external_return_id || `workflow_return_${Date.now()}`,
-      status: config.status || 'pending_review',
-      totalAmount: Number(config.amount || context.order?.total_amount || 0),
-      currency: config.currency || context.order?.currency || 'USD',
-      source: 'workflow',
-    });
-    await commerceRepository.updateReturn(scope, returnId, {
-      order_id: config.order_id || context.order?.id || null,
-      customer_id: config.customer_id || context.customer?.id || context.case?.customer_id || null,
-      return_reason: config.reason || 'Created by workflow',
-      method: config.method || 'workflow',
-    });
-    return { status: 'completed', output: { returnId } };
-  }
-
-  if (node.key === 'return.approve' || node.key === 'return.reject') {
-    const returnId = config.return_id || config.returnId || context.return?.id;
-    if (!returnId) return { status: 'failed', error: `${node.key} requires return context` };
-    const approved = node.key === 'return.approve';
-    await commerceRepository.updateReturn(scope, returnId, {
-      status: approved ? 'approved' : 'rejected',
-      approval_status: approved ? 'approved' : 'rejected',
-      refund_status: approved ? (config.refund_status || 'pending') : 'not_required',
-      return_reason: config.reason || (approved ? 'Approved by workflow' : 'Rejected by workflow'),
-    });
-    return { status: 'completed', output: { returnId, approved } };
-  }
-
-  if (node.key === 'approval.create') {
-    const approval = await approvalRepository.create(scope, {
-      caseId: config.case_id || context.case?.id || null,
-      actionType: config.action_type || 'workflow_approval',
-      actionPayload: { nodeId: node.id, config, context: { caseId: context.case?.id } },
-      riskLevel: config.risk_level || 'medium',
-      priority: config.priority || 'normal',
-      assignedTeamId: config.team_id || config.queue || null,
-      evidencePackage: { workflowNode: node.label },
-    });
-    return { status: 'waiting_approval', output: { approvalId: approval.id } };
-  }
-
-  if (node.key === 'approval.escalate') {
-    const approval = await approvalRepository.create(scope, {
-      caseId: config.case_id || context.case?.id || null,
-      actionType: config.action_type || 'workflow_escalation',
-      actionPayload: { nodeId: node.id, escalationReason: config.reason || 'Workflow escalation', context: { caseId: context.case?.id } },
-      riskLevel: config.risk_level || 'high',
-      priority: config.priority || 'urgent',
-      assignedTeamId: config.team_id || config.queue || 'manager',
-      evidencePackage: { workflowNode: node.label, escalation: true },
-    });
-    return { status: 'waiting_approval', output: { approvalId: approval.id, escalated: true } };
-  }
-
-  if (node.key === 'policy.evaluate') {
-    const policyKey = config.policy || config.policyKey || config.policy_key || 'default';
-    const proposedAction = String(config.action || config.proposedAction || config.proposed_action || context.agent?.intent || '');
-    const amount = Number(readContextPath(context, config.amountField || config.amount_field || 'payment.amount') ?? context.payment?.amount ?? 0);
-    const riskLevel = String(readContextPath(context, config.riskField || config.risk_field || 'agent.riskLevel') ?? context.agent?.riskLevel ?? context.payment?.risk_level ?? 'low');
-
-    // 1. Look up the policy in the knowledge base
-    let policyDecision: 'allow' | 'review' | 'block' = 'allow';
-    let policyReason = `Policy ${policyKey}: default allow`;
-    let policySource = 'default';
-
-    try {
-      const articles = await knowledgeRepository.listArticles(scope, { q: policyKey, status: 'published', type: 'policy' });
-      const policyArticle = articles?.[0];
-      if (policyArticle) {
-        const policyText = String(policyArticle.content ?? policyArticle.summary ?? policyArticle.title ?? '').toLowerCase();
-        policySource = policyArticle.title ?? policyKey;
-        const blockedTerms = ['forbidden', 'not allowed', 'manager required', 'escalate', 'reject'];
-        const reviewTerms = ['review required', 'approval needed', 'check with', 'verify'];
-        if (blockedTerms.some((term) => policyText.includes(term)) || riskLevel === 'high') {
-          policyDecision = 'block';
-          policyReason = `Policy ${policySource}: blocked (risk=${riskLevel})`;
-        } else if (reviewTerms.some((term) => policyText.includes(term)) || amount > Number(config.reviewThreshold || config.review_threshold || 500)) {
-          policyDecision = 'review';
-          policyReason = `Policy ${policySource}: requires review (amount=${amount}, risk=${riskLevel})`;
-        } else {
-          policyDecision = 'allow';
-          policyReason = `Policy ${policySource}: allowed`;
-        }
-      } else {
-        // No KB article — fall back to config-driven field comparison
-        const fieldValue = readContextPath(context, config.field || 'agent.riskLevel');
-        const fieldDecision = compareValues(fieldValue, config.operator || '!=', config.blockValue || 'critical') ? 'allow' : 'block';
-        policyDecision = fieldDecision as typeof policyDecision;
-        policyReason = `Policy ${policyKey}: field-based decision (${config.field}=${fieldValue})`;
-      }
-    } catch {
-      // KB lookup failed — use simple heuristic
-      policyDecision = riskLevel === 'high' ? 'block' : amount > 1000 ? 'review' : 'allow';
-      policyReason = `Policy ${policyKey}: heuristic (risk=${riskLevel}, amount=${amount})`;
-    }
-
-    // 2. Config override: explicit decision wins
-    if (config.decision) {
-      policyDecision = config.decision as typeof policyDecision;
-      policyReason = `Policy ${policyKey}: config override`;
-    }
-
-    const result = { decision: policyDecision, policy: policyKey, source: policySource, reason: policyReason, proposedAction, amount, riskLevel };
-    context.policy = result;
-    return {
-      status: policyDecision === 'block' ? 'blocked' : policyDecision === 'review' ? 'waiting_approval' : 'completed',
-      output: result,
-    };
-  }
-
-  if (node.key === 'core.audit_log') {
-    const entityType = config.entity_type || config.entityType || (context.case ? 'case' : 'workflow');
-    const entityId = config.entity_id || config.entityId || context.case?.id || node.id;
-    await auditRepository.logEvent({ tenantId: scope.tenantId, workspaceId: scope.workspaceId }, {
-      actorId: scope.userId ?? 'workflow',
-      actorType: 'system',
-      action: config.action || 'WORKFLOW_NODE_AUDIT',
-      entityType,
-      entityId,
-      metadata: { nodeId: node.id, label: node.label, message: config.message || null, data: context.data ?? {} },
-    });
-    return { status: 'completed', output: { audited: true, entityType, entityId } };
-  }
-
-  if (node.key === 'core.idempotency_check') {
-    const key = String(config.key || config.idempotencyKey || `${node.id}:${context.case?.id ?? context.order?.id ?? context.trigger?.id ?? 'manual'}`);
-    context.idempotency = context.idempotency ?? {};
-    if (context.idempotency[key]) return { status: 'skipped', output: { duplicate: true, key } };
-    context.idempotency[key] = true;
-    return { status: 'completed', output: { duplicate: false, key } };
-  }
-
-  if (node.key === 'core.rate_limit') {
-    const limit = Number(config.limit || 1);
-    const bucket = String(config.bucket || node.id);
-    context.rateLimits = context.rateLimits ?? {};
-    context.rateLimits[bucket] = Number(context.rateLimits[bucket] || 0) + 1;
-    const allowed = context.rateLimits[bucket] <= limit;
-    return { status: allowed ? 'completed' : 'waiting', output: { bucket, count: context.rateLimits[bucket], limit, allowed } };
-  }
-
-  if (node.key === 'knowledge.search') {
-    const query = config.query || config.q || config.content || context.case?.intent || context.case?.summary || context.trigger?.query || '';
-    const articles = await knowledgeRepository.listArticles(scope, {
-      q: query || undefined,
-      status: config.status || 'published',
-      type: config.type || undefined,
-      domain_id: config.domain_id || config.domainId || undefined,
-    });
-    const top = articles.slice(0, Number(config.limit || 5)).map((article: any) => ({
-      id: article.id,
-      title: article.title,
-      status: article.status,
-      domain: article.domain_name ?? article.domain_id ?? null,
-      version: article.version,
-    }));
-    context.knowledge = { query, articles: top };
-    return { status: 'completed', output: { query, count: top.length, articles: top } };
-  }
-
-  if (node.key === 'knowledge.validate_policy') {
-    const policyText = String(config.policy || context.knowledge?.articles?.[0]?.title || '');
-    const proposedAction = String(config.action || config.proposedAction || context.agent?.intent || '');
-    const blockedTerms = asArray(config.blocked_terms || config.blockedTerms || 'forbidden|not allowed|manager required').map((term) => String(term).toLowerCase());
-    const requiresReview = blockedTerms.some((term) => policyText.toLowerCase().includes(term)) || ['refund', 'cancel', 'dispute'].includes(proposedAction.toLowerCase()) && config.require_review !== false;
-    context.policy = { decision: requiresReview ? 'review' : 'allow', policy: config.policy || 'knowledge', proposedAction };
-    return { status: requiresReview ? 'waiting_approval' : 'completed', output: context.policy };
-  }
-
-  if (node.key === 'knowledge.attach_evidence') {
-    const evidence = {
-      title: config.title || context.knowledge?.articles?.[0]?.title || 'Workflow evidence',
-      source: config.source || 'knowledge',
-      articles: context.knowledge?.articles ?? [],
-      note: config.note || null,
-    };
-    context.evidence = [...(Array.isArray(context.evidence) ? context.evidence : []), evidence];
-    return { status: 'completed', output: { evidenceAttached: true, evidence } };
-  }
-
-  if (['agent.classify', 'agent.sentiment', 'agent.summarize', 'agent.draft_reply'].includes(node.key)) {
-    const text = String(
-      resolveTemplateValue(config.text || config.content || '', context) ||
-      context.case?.summary || context.case?.description || context.trigger?.message || '',
-    );
-    const lower = text.toLowerCase();
-
-    // ── Gemini-powered path ────────────────────────────────────────────────
-    if (appConfig.ai.geminiApiKey && text.length > 3) {
-      const genAI = new GoogleGenerativeAI(appConfig.ai.geminiApiKey);
-      const { pickGeminiModel } = await import('../ai/modelSelector.js');
-      const model = genAI.getGenerativeModel({ model: pickGeminiModel('workflow_ai_node', appConfig.ai.geminiModel) });
-
-      if (node.key === 'agent.classify') {
-        const prompt = `You are a CRM classification engine. Analyze the customer text and return ONLY valid JSON (no markdown fences).
-
-Text: """${text.slice(0, 1500)}"""
-
-JSON schema:
-{
-  "intent": "refund|return|cancellation|shipping|billing|fraud|general_support",
-  "riskLevel": "low|medium|high",
-  "priority": "low|normal|high|critical",
-  "confidence": <float 0-1>,
-  "tags": [<string>, ...]
-}`;
-        const result = await withGeminiRetry(
-          () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 300 } }),
-          { label: 'workflow.agent.classify' },
-        );
-        const raw = result.response.text().trim().replace(/^```json\s*/i, '').replace(/```\s*$/i, '');
-        const parsed = JSON.parse(raw);
-        context.agent = { ...(context.agent ?? {}), ...parsed };
-        return { status: 'completed', output: context.agent };
-      }
-
-      if (node.key === 'agent.sentiment') {
-        const prompt = `You are a customer-sentiment analyzer for a CRM. Analyze the text and return ONLY valid JSON (no markdown fences).
-
-Text: """${text.slice(0, 1500)}"""
-
-JSON schema:
-{
-  "sentiment": "positive|neutral|negative",
-  "frustrationScore": <int 0-10>,
-  "urgencyScore": <int 0-10>,
-  "confidence": <float 0-1>,
-  "signals": [<string>, ...]
-}`;
-        const result = await withGeminiRetry(
-          () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 300 } }),
-          { label: 'workflow.agent.sentiment' },
-        );
-        const raw = result.response.text().trim().replace(/^```json\s*/i, '').replace(/```\s*$/i, '');
-        const parsed = JSON.parse(raw);
-        context.agent = { ...(context.agent ?? {}), ...parsed };
-        return { status: 'completed', output: context.agent };
-      }
-
-      if (node.key === 'agent.summarize') {
-        const maxLen = Number(config.maxLength || 300);
-        const prompt = `Summarize the following customer-service text in ${maxLen} characters or fewer. Be concise and factual. Output plain text, no JSON.
-
-Text: """${text.slice(0, 2000)}"""`;
-        const result = await withGeminiRetry(
-          () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 200 } }),
-          { label: 'workflow.agent.summarize' },
-        );
-        const summary = result.response.text().trim();
-        context.agent = { ...(context.agent ?? {}), summary };
-        context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), summary };
-        return { status: 'completed', output: { summary } };
-      }
-
-      // agent.draft_reply
-      const tone = config.tone || 'professional and empathetic';
-      const instructions = config.instructions ? `\nAdditional instructions: ${config.instructions}` : '';
-      const prompt = `You are a customer-support agent. Draft a reply to the following customer message.
-Tone: ${tone}${instructions}
-
-Customer message: """${text.slice(0, 1500)}"""
-
-Write ONLY the reply text, no subject line, no JSON.`;
-      const result = await withGeminiRetry(
-        () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 512 } }),
-        { label: 'workflow.agent.draft_reply' },
-      );
-      const draftReply = result.response.text().trim();
-      context.agent = { ...(context.agent ?? {}), draftReply };
-      return { status: 'completed', output: { draftReply } };
-    }
-
-    // ── Keyword fallback (no Gemini key) ──────────────────────────────────
-    if (node.key === 'agent.classify') {
-      const intent = config.intent || (lower.includes('refund') ? 'refund' : lower.includes('return') ? 'return' : lower.includes('cancel') ? 'cancellation' : 'support');
-      const riskLevel = config.risk_level || (lower.includes('fraud') || lower.includes('chargeback') ? 'high' : lower.includes('angry') ? 'medium' : 'low');
-      context.agent = { ...(context.agent ?? {}), intent, riskLevel, confidence: 0.55 };
-      return { status: 'completed', output: context.agent };
-    }
-    if (node.key === 'agent.sentiment') {
-      const sentiment = lower.includes('angry') || lower.includes('bad') || lower.includes('damaged') ? 'negative' : lower.includes('thanks') || lower.includes('great') ? 'positive' : 'neutral';
-      context.agent = { ...(context.agent ?? {}), sentiment, confidence: 0.55 };
-      return { status: 'completed', output: context.agent };
-    }
-    if (node.key === 'agent.summarize') {
-      const summary = config.summary || text.slice(0, 240) || `Case ${context.case?.case_number ?? context.case?.id ?? 'context'} summarized by workflow.`;
-      context.agent = { ...(context.agent ?? {}), summary };
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), summary };
-      return { status: 'completed', output: { summary } };
-    }
-    const draft = config.content || config.template || `Thanks for reaching out. We have reviewed your case and will follow the next approved step.`;
-    context.agent = { ...(context.agent ?? {}), draftReply: resolveTemplateValue(draft, context) };
-    return { status: 'completed', output: { draftReply: context.agent.draftReply } };
-  }
-
-  if (node.key === 'agent.run') {
-    const caseId = config.case_id || config.caseId || context.case?.id;
-    const agentSlug = config.agent || config.agentSlug || 'triage-agent';
-    if (!caseId) return { status: 'failed', error: 'agent.run requires case context' };
-    const result = await runAgent({
-      agentSlug,
-      caseId,
-      tenantId: scope.tenantId,
-      workspaceId: scope.workspaceId,
-      triggerEvent: config.trigger_event || config.triggerEvent || 'workflow_node',
-      traceId: `workflow:${node.id}:${Date.now()}`,
-      extraContext: {
-        workflowNodeId: node.id,
-        workflowNodeLabel: node.label,
-        workflowTrigger: context.trigger,
-      },
-    });
-    context.agent = {
-      slug: agentSlug,
-      success: result.success,
-      confidence: result.confidence ?? null,
-      summary: result.summary ?? result.error ?? null,
-      output: result.output ?? {},
-    };
-    return {
-      status: result.success ? 'completed' : 'failed',
-      output: context.agent,
-      error: result.success ? null : result.error ?? 'Agent execution failed',
-    };
-  }
-
-  if (node.key === 'connector.call') {
-    const connectorId = config.connector_id || config.connectorId || config.connector;
-    if (!connectorId) return { status: 'failed', error: 'connector.call requires connector id' };
-    const connector = await integrationRepository.getConnector({ tenantId: scope.tenantId }, connectorId);
-    if (!connector) return { status: 'failed', error: 'Connector not found' };
-    const capabilities = await integrationRepository.listCapabilities({ tenantId: scope.tenantId }, connectorId);
-    const capabilityKey = config.capability || config.capability_key || config.action || capabilities.find((cap: any) => cap.is_enabled !== false)?.capability_key || 'workflow.call';
-    const capability = capabilities.find((cap: any) => cap.capability_key === capabilityKey);
-    if (capability && capability.is_enabled === false) {
-      return { status: 'blocked', output: { reason: 'Connector capability is disabled', connectorId, capabilityKey } };
-    }
-    if (capability?.requires_approval) {
-      const approval = await approvalRepository.create(scope, {
-        caseId: context.case?.id ?? null,
-        actionType: 'connector.call',
-        actionPayload: { connectorId, capabilityKey, nodeId: node.id, config },
-        riskLevel: 'medium',
-        priority: 'normal',
-        evidencePackage: { workflowNode: node.label, connector: connector.system },
-      });
-      return { status: 'waiting_approval', output: { approvalId: approval.id, connectorId, capabilityKey } };
-    }
-    const canonicalEvent = await integrationRepository.createCanonicalEvent({ tenantId: scope.tenantId }, {
-      sourceSystem: connector.system,
-      sourceEntityType: config.source_entity_type || config.sourceEntityType || 'workflow',
-      sourceEntityId: config.source_entity_id || config.sourceEntityId || node.id,
-      eventType: capabilityKey,
-      eventCategory: 'workflow',
-      canonicalEntityType: config.entity_type || config.entityType || (context.case ? 'case' : 'workflow'),
-      canonicalEntityId: config.entity_id || config.entityId || context.case?.id || node.id,
-      normalizedPayload: {
-        nodeId: node.id,
-        config,
-        trigger: context.trigger,
-      },
-      dedupeKey: config.dedupe_key || `${node.id}:${Date.now()}`,
-      caseId: context.case?.id ?? null,
-      workspaceId: scope.workspaceId,
-      status: 'processed',
-    });
-    context.integration = { connectorId, system: connector.system, capabilityKey, canonicalEventId: canonicalEvent.id };
-    return { status: 'completed', output: context.integration };
-  }
-
-  if (node.key === 'connector.check_health') {
-    const connectorId = config.connector_id || config.connectorId || config.connector;
-    if (!connectorId) return { status: 'failed', error: 'connector.check_health requires connector id' };
-    const connector = await integrationRepository.getConnector({ tenantId: scope.tenantId }, connectorId);
-    if (!connector) return { status: 'failed', error: 'Connector not found' };
-    const healthy = !['disabled', 'error', 'failed'].includes(String(connector.status || connector.health_status || '').toLowerCase());
-    context.integration = { connectorId, system: connector.system, healthy, status: connector.status ?? connector.health_status ?? 'unknown' };
-    return { status: healthy ? 'completed' : 'blocked', output: context.integration };
-  }
-
-  if (node.key === 'connector.emit_event') {
-    const connectorId = config.connector_id || config.connectorId || config.connector;
-    const connector = connectorId ? await integrationRepository.getConnector({ tenantId: scope.tenantId }, connectorId) : null;
-    const sourceSystem = connector?.system || config.source_system || config.sourceSystem || 'workflow';
-    const eventType = config.event_type || config.eventType || config.capability || 'workflow.event';
-    const canonicalEvent = await integrationRepository.createCanonicalEvent({ tenantId: scope.tenantId }, {
-      sourceSystem,
-      sourceEntityType: config.source_entity_type || config.sourceEntityType || 'workflow',
-      sourceEntityId: config.source_entity_id || config.sourceEntityId || node.id,
-      eventType,
-      eventCategory: config.event_category || config.eventCategory || 'workflow',
-      canonicalEntityType: config.entity_type || config.entityType || (context.case ? 'case' : 'workflow'),
-      canonicalEntityId: config.entity_id || config.entityId || context.case?.id || node.id,
-      normalizedPayload: { nodeId: node.id, trigger: context.trigger, data: context.data },
-      dedupeKey: config.dedupe_key || `${node.id}:${eventType}:${Date.now()}`,
-      caseId: context.case?.id ?? null,
-      workspaceId: scope.workspaceId,
-      status: 'processed',
-    });
-    context.integration = { sourceSystem, eventType, canonicalEventId: canonicalEvent.id };
-    return { status: 'completed', output: context.integration };
-  }
-
-  // ── Notification nodes ──────────────────────────────────────────────────────
-  if (node.key === 'notification.email') {
-    const to = resolveTemplateValue(config.to || config.email || context.customer?.email || context.case?.customer_email || '', context);
-    const subject = resolveTemplateValue(config.subject || 'Update from support', context);
-    const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
-    if (!to) return { status: 'failed', error: 'notification.email: no recipient — set "to" or ensure customer.email is in context' };
-    const result = await sendEmail(to, subject, content, config.ref || context.case?.id || 'workflow').catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
-    if ((result as any).error) return { status: 'failed', error: `Email send failed: ${(result as any).error}` };
-    return { status: 'completed', output: { to, subject, messageId: result.messageId, simulated: result.simulated } };
-  }
-
-  if (node.key === 'notification.whatsapp') {
-    const to = resolveTemplateValue(config.to || config.phone || context.customer?.phone || '', context);
-    const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
-    if (!to) return { status: 'failed', error: 'notification.whatsapp: no recipient — set "to" or ensure customer.phone is in context' };
-    const result = await sendWhatsApp(to, content).catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
-    if ((result as any).error) return { status: 'failed', error: `WhatsApp send failed: ${(result as any).error}` };
-    return { status: 'completed', output: { to, messageId: result.messageId, simulated: result.simulated } };
-  }
-
-  if (node.key === 'notification.sms') {
-    const to = resolveTemplateValue(config.to || config.phone || context.customer?.phone || '', context);
-    const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
-    if (!to) return { status: 'failed', error: 'notification.sms: no recipient — set "to" or ensure customer.phone is in context' };
-    const result = await sendSms(to, content).catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
-    if ((result as any).error) return { status: 'failed', error: `SMS send failed: ${(result as any).error}` };
-    return { status: 'completed', output: { to, messageId: result.messageId, simulated: result.simulated } };
-  }
-
-  // ── AI text generation (real Gemini) ────────────────────────────────────────
-  if (node.key === 'ai.generate_text') {
-    const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
-    if (!prompt) return { status: 'failed', error: 'ai.generate_text: prompt is required' };
-    const geminiKey = appConfig.ai.geminiApiKey;
-    if (!geminiKey) {
-      // Graceful fallback when no API key configured
-      const fallback = `[AI unavailable — configure GEMINI_API_KEY] ${prompt.slice(0, 120)}`;
-      const target = config.target || config.output || 'generatedText';
-      context.agent = { ...(context.agent ?? {}), [target]: fallback };
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: fallback };
-      return { status: 'completed', output: { text: fallback, target, simulated: true } };
-    }
-    const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: appConfig.ai.geminiModel || 'gemini-2.5-pro' });
-    const systemInstruction = resolveTemplateValue(config.system || config.systemPrompt || '', context);
-    const fullPrompt = systemInstruction ? `${systemInstruction}\n\n${prompt}` : prompt;
-    const maxTokens = Number(config.maxTokens || config.max_tokens || 512);
-    const result = await withGeminiRetry(
-      () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: fullPrompt }] }], generationConfig: { maxOutputTokens: maxTokens } }),
-      { label: 'workflow.ai.generate_text' },
-    );
-    const text = result.response.text().trim();
-    const target = config.target || config.output || 'generatedText';
-    context.agent = { ...(context.agent ?? {}), [target]: text };
-    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: text };
-    return { status: 'completed', output: { text, target, length: text.length } };
-  }
-
-  // ── Core: Code (sandboxed JavaScript) ───────────────────────────────────────
-  if (node.key === 'core.code') {
-    const language = String(config.language || 'javascript').toLowerCase();
-    if (language !== 'javascript') {
-      return { status: 'failed', error: `core.code: language '${language}' not supported. Only 'javascript' is available.` };
-    }
-    const code = String(config.code || '').trim();
-    if (!code) return { status: 'failed', error: 'core.code: code is required' };
-    const timeoutMs = Math.min(30_000, Math.max(50, Number(config.timeoutMs || 2000)));
-    const target = String(config.target || 'codeResult');
-    try {
-      const sandboxContext = {
-        // Read-only snapshot of workflow context — code can mutate locally without
-        // affecting the real context object.
-        context: cloneJson(context ?? {}),
-        data: cloneJson(context.data ?? {}),
-        trigger: cloneJson(context.trigger ?? {}),
-        // Safe globals
-        JSON,
-        Math,
-        Date,
-        Number,
-        String,
-        Array,
-        Object,
-        Boolean,
-        console: {
-          log: (...args: any[]) => logger.info('core.code log', { nodeId: node.id, args }),
-        },
-      };
-      const wrappedSource = `(function userCode() { ${code} })()`;
-      const script = new vm.Script(wrappedSource, { filename: `workflow-node-${node.id}.js` });
-      const ctx = vm.createContext(sandboxContext);
-      const value = script.runInContext(ctx, { timeout: timeoutMs, breakOnSigint: true });
-      const safeValue = (() => {
-        try { return JSON.parse(JSON.stringify(value ?? null)); } catch { return null; }
-      })();
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: safeValue };
-      return { status: 'completed', output: { data: context.data, target, value: safeValue } };
-    } catch (err: any) {
-      return { status: 'failed', error: `core.code execution failed: ${err?.message ?? String(err)}` };
-    }
-  }
-
-  // ── Core: Data table CRUD ───────────────────────────────────────────────────
-  if (node.key === 'core.data_table_op') {
-    const tableId = String(config.tableId || config.table_id || '');
-    if (!tableId) return { status: 'failed', error: 'core.data_table_op: tableId is required' };
-    const operation = String(config.operation || 'list');
-    const target = String(config.target || 'tableResult');
-
-    // Load workspace and read tables from settings.workflows.dataTables
-    const workspace = await workspaceRepository.getById(scope.workspaceId, scope.tenantId);
-    if (!workspace) return { status: 'failed', error: 'core.data_table_op: workspace not found' };
-    const settings = (workspace.settings && typeof workspace.settings === 'object' ? workspace.settings : {}) as any;
-    const wfSettings = (settings.workflows && typeof settings.workflows === 'object' ? settings.workflows : {}) as any;
-    const tables: any[] = Array.isArray(wfSettings.dataTables) ? wfSettings.dataTables : [];
-    const table = tables.find((t) => t && t.id === tableId);
-    if (!table) {
-      return { status: 'failed', error: `core.data_table_op: data table '${tableId}' not found in workspace. Create it under Workflows → Data tables.` };
-    }
-    const rows: any[] = Array.isArray(table.rows) ? table.rows : [];
-    const matchField = config.matchField ? String(config.matchField) : 'id';
-    const matchValueRaw = config.matchValue !== undefined ? resolveTemplateValue(String(config.matchValue), context) : undefined;
-
-    const persistTables = async (nextRows: any[]) => {
-      const updatedTables = tables.map((t) => (t.id === tableId ? { ...t, rows: nextRows, updated_at: new Date().toISOString() } : t));
-      const nextSettings = {
-        ...settings,
-        workflows: { ...wfSettings, dataTables: updatedTables },
-      };
-      await workspaceRepository.updateSettings(scope.workspaceId, nextSettings);
-    };
-
-    if (operation === 'list') {
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: rows };
-      return { status: 'completed', output: { data: context.data, count: rows.length, target } };
-    }
-    if (operation === 'find') {
-      const found = rows.find((r) => String(r?.[matchField] ?? '') === String(matchValueRaw ?? ''));
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: found ?? null };
-      return { status: 'completed', output: { data: context.data, found: !!found, target } };
-    }
-    if (operation === 'insert') {
-      const row = parseMaybeJsonObject(config.row);
-      if (Object.keys(row).length === 0) return { status: 'failed', error: 'core.data_table_op insert: row data is required' };
-      const nextRows = [...rows, row];
-      await persistTables(nextRows);
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: row };
-      return { status: 'completed', output: { data: context.data, target, inserted: true } };
-    }
-    if (operation === 'update') {
-      const row = parseMaybeJsonObject(config.row);
-      const nextRows = rows.map((r) => (String(r?.[matchField] ?? '') === String(matchValueRaw ?? '') ? { ...r, ...row } : r));
-      const updatedCount = nextRows.filter((r, i) => r !== rows[i]).length;
-      if (updatedCount > 0) await persistTables(nextRows);
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: { updated: updatedCount } };
-      return { status: 'completed', output: { data: context.data, target, updated: updatedCount } };
-    }
-    if (operation === 'upsert') {
-      const row = parseMaybeJsonObject(config.row);
-      const idx = rows.findIndex((r) => String(r?.[matchField] ?? '') === String(matchValueRaw ?? ''));
-      const nextRows = idx >= 0 ? rows.map((r, i) => (i === idx ? { ...r, ...row } : r)) : [...rows, row];
-      await persistTables(nextRows);
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: row };
-      return { status: 'completed', output: { data: context.data, target, mode: idx >= 0 ? 'updated' : 'inserted' } };
-    }
-    if (operation === 'delete') {
-      const before = rows.length;
-      const nextRows = rows.filter((r) => String(r?.[matchField] ?? '') !== String(matchValueRaw ?? ''));
-      const deleted = before - nextRows.length;
-      if (deleted > 0) await persistTables(nextRows);
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: { deleted } };
-      return { status: 'completed', output: { data: context.data, target, deleted } };
-    }
-    return { status: 'failed', error: `core.data_table_op: unsupported operation '${operation}'` };
-  }
-
-  // ── Core: Respond to webhook ────────────────────────────────────────────────
-  if (node.key === 'core.respond_webhook') {
-    const statusCode = Math.max(100, Math.min(599, Number(config.statusCode || 200)));
-    const contentType = String(config.contentType || 'application/json');
-    const bodyTemplate = config.body || '';
-    const resolvedBody = resolveTemplateValue(bodyTemplate, context);
-    let payload: any = resolvedBody;
-    if (contentType === 'application/json') {
-      try { payload = JSON.parse(resolvedBody); } catch { /* keep raw */ }
-    }
-    // Stash the response on the context. The webhook trigger handler reads this
-    // when finalizing the run and uses it as the actual HTTP response body.
-    context.webhookResponse = { statusCode, contentType, body: payload };
-    return { status: 'completed', output: { statusCode, contentType, body: payload } };
-  }
-
-  // ── AI: Information extractor (structured output) ───────────────────────────
-  if (node.key === 'ai.information_extractor') {
-    const text = resolveTemplateValue(config.text || '', context);
-    if (!text) return { status: 'failed', error: 'ai.information_extractor: text is required' };
-    const schemaRaw = config.schema || '';
-    const schema = parseMaybeJsonObject(schemaRaw);
-    if (Object.keys(schema).length === 0) return { status: 'failed', error: 'ai.information_extractor: a JSON schema is required' };
-    const geminiKey = appConfig.ai.geminiApiKey;
-    if (!geminiKey) return { status: 'failed', error: 'ai.information_extractor: GEMINI_API_KEY not configured' };
-    const target = String(config.target || 'extracted');
-    const modelName = String(config.model || appConfig.ai.geminiModel || 'gemini-2.5-flash');
-    const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const prompt = `Extract structured information from the following text and return ONLY a JSON object that matches this schema:\n\nSchema: ${JSON.stringify(schema)}\n\nText:\n${text}\n\nReturn valid JSON only.`;
-    const result = await withGeminiRetry(
-      () => model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1024 },
-      }),
-      { label: 'workflow.ai.information_extractor' },
-    );
-    const raw = result.response.text().trim();
-    let extracted: any = {};
-    try { extracted = JSON.parse(raw); } catch { extracted = { _raw: raw, _error: 'Model did not return valid JSON' }; }
-    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: extracted };
-    return { status: 'completed', output: { data: context.data, target, model: modelName } };
-  }
-
-  // ── External AI providers (Anthropic / OpenAI / Ollama / Guardrails) ────────
-  // Key resolution order: connector auth_config (per-workspace) → env var (global)
-  // Users configure connector keys via Integrations → Connect (modal) in the UI.
-  async function resolveAiProviderKey(system: string, envFallback: string | undefined): Promise<string | null> {
-    try {
-      const allConnectors = await integrationRepository.listConnectors({ tenantId: scope.tenantId });
-      const connector = allConnectors.find((c: any) => String(c.system || '').toLowerCase() === system);
-      if (connector) {
-        const auth = typeof connector.auth_config === 'object' && connector.auth_config
-          ? connector.auth_config as Record<string, any>
-          : {};
-        const fromConnector = auth.api_key || auth.access_token || auth.secret_key || auth.token || auth.apiKey;
-        if (fromConnector) return String(fromConnector);
-      }
-    } catch { /* ignore — fall through to env */ }
-    return envFallback || null;
-  }
-
-  if (node.key === 'ai.anthropic') {
-    const apiKey = await resolveAiProviderKey('anthropic', appConfig.ai.anthropicApiKey);
-    if (!apiKey) {
-      return { status: 'failed', error: 'ai.anthropic: API key not configured. Go to Integrations → Connect Anthropic Claude and enter your API key.' };
-    }
-    const operation = String(config.operation || 'message');
-    const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
-    if (!prompt) return { status: 'failed', error: 'ai.anthropic: prompt is required' };
-    const model = String(config.model || 'claude-3-5-sonnet-latest');
-    const systemInstruction = resolveTemplateValue(config.systemInstruction || '', context);
-    const maxTokens = Math.max(1, Number(config.maxTokens || 1024));
-    const temperature = config.temperature !== undefined && config.temperature !== '' ? Number(config.temperature) : undefined;
-    const target = String(config.target || 'anthropicResult');
-
-    try {
-      const body: any = {
-        model,
-        max_tokens: maxTokens,
-        messages: [{ role: 'user', content: prompt }],
-      };
-      if (systemInstruction) body.system = systemInstruction;
-      if (temperature !== undefined && Number.isFinite(temperature)) body.temperature = temperature;
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(60_000),
-      });
-      const json: any = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        return { status: 'failed', error: `ai.anthropic: ${resp.status} ${json?.error?.message ?? resp.statusText}` };
-      }
-      const text = Array.isArray(json.content)
-        ? json.content.map((c: any) => c.text || '').join('').trim()
-        : String(json.content ?? '');
-      context.agent = { ...(context.agent ?? {}), [target]: text };
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: text };
-      return { status: 'completed', output: { text, target, model, operation, length: text.length } };
-    } catch (err: any) {
-      return { status: 'failed', error: `ai.anthropic call failed: ${err?.message ?? String(err)}` };
-    }
-  }
-
-  if (node.key === 'ai.openai') {
-    const apiKey = await resolveAiProviderKey('openai', appConfig.ai.openaiApiKey);
-    if (!apiKey) {
-      return { status: 'failed', error: 'ai.openai: API key not configured. Go to Integrations → Connect OpenAI and enter your API key.' };
-    }
-    const operation = String(config.operation || 'chat');
-    const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
-    if (!prompt) return { status: 'failed', error: 'ai.openai: prompt is required' };
-    const model = String(config.model || 'gpt-4o-mini');
-    const systemInstruction = resolveTemplateValue(config.systemInstruction || '', context);
-    const maxTokens = Math.max(1, Number(config.maxTokens || 1024));
-    const temperature = config.temperature !== undefined && config.temperature !== '' ? Number(config.temperature) : undefined;
-    const target = String(config.target || 'openaiResult');
-
-    try {
-      let endpoint = 'https://api.openai.com/v1/chat/completions';
-      let body: any;
-      if (operation === 'embeddings') {
-        endpoint = 'https://api.openai.com/v1/embeddings';
-        body = { model, input: prompt };
-      } else {
-        const messages: any[] = [];
-        if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
-        messages.push({ role: 'user', content: prompt });
-        body = { model, messages, max_tokens: maxTokens };
-        if (temperature !== undefined && Number.isFinite(temperature)) body.temperature = temperature;
-      }
-      const resp = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(60_000),
-      });
-      const json: any = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        return { status: 'failed', error: `ai.openai: ${resp.status} ${json?.error?.message ?? resp.statusText}` };
-      }
-      let result: any;
-      if (operation === 'embeddings') {
-        result = json?.data?.[0]?.embedding ?? [];
-      } else {
-        result = String(json?.choices?.[0]?.message?.content ?? '').trim();
-      }
-      context.agent = { ...(context.agent ?? {}), [target]: result };
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: result };
-      return { status: 'completed', output: { result, target, model, operation } };
-    } catch (err: any) {
-      return { status: 'failed', error: `ai.openai call failed: ${err?.message ?? String(err)}` };
-    }
-  }
-
-  if (node.key === 'ai.ollama') {
-    // For Ollama, check connector for base_url or api_key (some hosted Ollama instances need a key)
-    let baseUrl = appConfig.ai.ollamaBaseUrl;
-    try {
-      const allConnectors = await integrationRepository.listConnectors({ tenantId: scope.tenantId });
-      const ollamaConnector = allConnectors.find((c: any) => String(c.system || '').toLowerCase() === 'ollama');
-      if (ollamaConnector) {
-        const auth = typeof ollamaConnector.auth_config === 'object' && ollamaConnector.auth_config
-          ? ollamaConnector.auth_config as Record<string, any>
-          : {};
-        if (auth.base_url) baseUrl = String(auth.base_url);
-      }
-    } catch { /* ignore */ }
-    if (!baseUrl) {
-      return { status: 'failed', error: 'ai.ollama: base URL not configured. Go to Integrations → Connect Ollama and enter your Ollama server URL.' };
-    }
-    const prompt = resolveTemplateValue(config.prompt || '', context);
-    const model = String(config.model || '');
-    if (!prompt) return { status: 'failed', error: 'ai.ollama: prompt is required' };
-    if (!model) return { status: 'failed', error: 'ai.ollama: model is required (must be installed on the Ollama server)' };
-    const systemInstruction = resolveTemplateValue(config.systemInstruction || '', context);
-    const temperature = config.temperature !== undefined && config.temperature !== '' ? Number(config.temperature) : undefined;
-    const target = String(config.target || 'ollamaResult');
-
-    try {
-      const body: any = { model, prompt, stream: false };
-      if (systemInstruction) body.system = systemInstruction;
-      if (temperature !== undefined && Number.isFinite(temperature)) body.options = { temperature };
-      const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(120_000),
-      });
-      const json: any = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        return { status: 'failed', error: `ai.ollama: ${resp.status} ${json?.error ?? resp.statusText}` };
-      }
-      const text = String(json?.response ?? '').trim();
-      context.agent = { ...(context.agent ?? {}), [target]: text };
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: text };
-      return { status: 'completed', output: { text, target, model } };
-    } catch (err: any) {
-      return { status: 'failed', error: `ai.ollama call failed: ${err?.message ?? String(err)}` };
-    }
-  }
-
-  // Guardrails: a lightweight safety filter using Gemini (or pattern matching as
-  // fallback) to detect PII / toxicity / prompt injection / off-topic content.
-  if (node.key === 'ai.guardrails') {
-    const text = resolveTemplateValue(config.text || '', context);
-    if (!text) return { status: 'failed', error: 'ai.guardrails: text is required' };
-    const mode = String(config.mode || 'input');
-    const checks = String(config.checks || 'pii,toxicity,prompt_injection')
-      .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-    const topic = config.topic ? resolveTemplateValue(String(config.topic), context) : '';
-    const target = String(config.target || 'guardResult');
-
-    // Pattern-based fast checks (cheap, no API call)
-    const issues: Array<{ check: string; matched: boolean; detail?: string }> = [];
-    if (checks.includes('pii')) {
-      const piiPatterns = [
-        /\b\d{3}-\d{2}-\d{4}\b/, // SSN
-        /\b(?:\d[ -]*?){13,16}\b/, // Credit card
-        /\b[\w.-]+@[\w.-]+\.[a-z]{2,}\b/i, // email
-      ];
-      const matched = piiPatterns.some((p) => p.test(text));
-      issues.push({ check: 'pii', matched });
-    }
-    if (checks.includes('prompt_injection') || checks.includes('jailbreak')) {
-      const injectionPatterns = [
-        /ignore (?:all|previous) instructions/i,
-        /system prompt/i,
-        /you are now/i,
-        /developer mode/i,
-        /jailbreak/i,
-        /pretend (?:you are|to be)/i,
-      ];
-      const matched = injectionPatterns.some((p) => p.test(text));
-      issues.push({ check: 'prompt_injection', matched });
-    }
-    if (checks.includes('toxicity')) {
-      const toxicWords = /(\bhate\b|\bkill\b|\bfucking?\b|\bidiot\b|\bstupid\b)/i;
-      issues.push({ check: 'toxicity', matched: toxicWords.test(text) });
-    }
-    if (checks.includes('off_topic') && topic && appConfig.ai.geminiApiKey) {
-      // Use Gemini to classify on/off-topic
-      try {
-        const genAI = new GoogleGenerativeAI(appConfig.ai.geminiApiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-        const judgePrompt = `Is the following text relevant to the topic "${topic}"? Answer with a single word: YES or NO.\n\nText: ${text}`;
-        const result = await withGeminiRetry(
-          () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: judgePrompt }] }], generationConfig: { maxOutputTokens: 8 } }),
-          { label: 'workflow.ai.guardrails.off_topic' },
-        );
-        const verdict = result.response.text().trim().toUpperCase();
-        issues.push({ check: 'off_topic', matched: verdict.startsWith('NO'), detail: `topic=${topic}, verdict=${verdict}` });
-      } catch (err: any) {
-        issues.push({ check: 'off_topic', matched: false, detail: `judge failed: ${err?.message ?? String(err)}` });
-      }
-    }
-
-    const flagged = issues.filter((i) => i.matched);
-    const safe = flagged.length === 0;
-    const guardResult = { safe, mode, issues, flagged: flagged.map((f) => f.check) };
-    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: guardResult };
-    return {
-      status: safe ? 'completed' : 'blocked',
-      output: { ...guardResult, target },
-      error: safe ? null : `Guardrails blocked: ${flagged.map((f) => f.check).join(', ')}`,
-    };
-  }
-
-  // ── Google Gemini (explicit AI provider node) ───────────────────────────────
-  if (node.key === 'ai.gemini') {
-    const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
-    if (!prompt) return { status: 'failed', error: 'ai.gemini: prompt is required' };
-    const geminiKey = appConfig.ai.geminiApiKey;
-    if (!geminiKey) {
-      return { status: 'failed', error: 'ai.gemini: GEMINI_API_KEY not configured. Add it under Integrations → AI providers.' };
-    }
-    const operation = String(config.operation || 'generate_text');
-    const systemInstruction = resolveTemplateValue(config.systemInstruction || config.system || '', context);
-    const modelName = String(config.model || appConfig.ai.geminiModel || 'gemini-2.5-pro');
-    const temperature = config.temperature !== undefined && config.temperature !== '' ? Number(config.temperature) : undefined;
-    const maxTokens = Number(config.maxTokens || config.max_tokens || 1024);
-    const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      ...(systemInstruction ? { systemInstruction } : {}),
-    });
-    const generationConfig: any = { maxOutputTokens: maxTokens };
-    if (temperature !== undefined && Number.isFinite(temperature)) generationConfig.temperature = temperature;
-    if (operation === 'extract_structured') {
-      generationConfig.responseMimeType = 'application/json';
-    }
-    const result = await withGeminiRetry(
-      () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig }),
-      { label: `workflow.ai.gemini.${operation}` },
-    );
-    const text = result.response.text().trim();
-    let parsed: any = text;
-    if (operation === 'extract_structured') {
-      try { parsed = JSON.parse(text); } catch { /* keep as text */ }
-    }
-    const target = String(config.target || 'geminiResult');
-    context.agent = { ...(context.agent ?? {}), [target]: parsed };
-    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: parsed };
-    return { status: 'completed', output: { result: parsed, model: modelName, operation, target, length: text.length } };
-  }
-
-  // ── External messaging wrappers (real transport) ────────────────────────────
-  // Each message.* node:
-  //   1. Validates that a connector for the system is configured + healthy
-  //   2. Reads auth_config (bot tokens, webhook URLs) from the connector
-  //   3. Calls the provider API to send the message
-  //   4. Records a canonical event in the integration timeline regardless of
-  //      success or failure so admins can audit attempts
-  if (node.key.startsWith('message.')) {
-    const system = node.key.split('.')[1]; // slack, discord, telegram, gmail, outlook, teams, google_chat
-    const allConnectors = await integrationRepository.listConnectors({ tenantId: scope.tenantId });
-    const connector = allConnectors.find((c: any) => String(c.system || '').toLowerCase() === system);
-    if (!connector) {
-      return {
-        status: 'failed',
-        error: `${node.label || node.key}: ${system} is not configured. Open Integrations and connect ${system} first.`,
-      };
-    }
-    const status = String(connector.status || connector.health_status || '').toLowerCase();
-    if (['error', 'failed', 'disabled'].includes(status)) {
-      return {
-        status: 'blocked',
-        output: { reason: `${system} connector is in '${status}' state. Reconnect it in Integrations.`, connectorId: connector.id, system },
-      };
-    }
-    const auth = (() => {
-      const raw = connector.auth_config;
-      if (!raw) return {} as Record<string, any>;
-      if (typeof raw === 'object') return raw as Record<string, any>;
-      try { return JSON.parse(String(raw)); } catch { return {}; }
-    })();
-
-    const dest = resolveTemplateValue(
-      config.channel || config.chatId || config.to || config.space || '',
-      context,
-    );
-    const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
-    if (!dest) return { status: 'failed', error: `${node.key}: destination (channel / to / chatId / space) is required.` };
-    if (!content) return { status: 'failed', error: `${node.key}: message content is required.` };
-
-    // ── Provider-specific transport ──
-    let delivery: { ok: boolean; messageId?: string; error?: string } = { ok: false };
-    try {
-      if (system === 'slack') {
-        const token = auth.bot_token || auth.access_token || auth.token;
-        if (!token) {
-          delivery = { ok: false, error: 'Slack: bot_token not in connector auth_config. Reconnect Slack in Integrations.' };
-        } else {
-          const slackBody: any = { channel: dest, text: content };
-          if (config.thread_ts) slackBody.thread_ts = resolveTemplateValue(String(config.thread_ts), context);
-          const resp = await fetch('https://slack.com/api/chat.postMessage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=utf-8', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify(slackBody),
-            signal: AbortSignal.timeout(15_000),
-          });
-          const json: any = await resp.json().catch(() => ({}));
-          delivery = json.ok ? { ok: true, messageId: json.ts } : { ok: false, error: `Slack: ${json.error ?? resp.statusText}` };
-        }
-      } else if (system === 'discord') {
-        // Discord uses webhook URLs. The user can pass it as `channel` or store it in auth_config.webhook_url.
-        const webhookUrl = /^https?:\/\//i.test(dest) ? dest : (auth.webhook_url || '');
-        if (!webhookUrl) {
-          delivery = { ok: false, error: 'Discord: provide a webhook URL as the channel field or store it in connector auth_config.webhook_url.' };
-        } else {
-          const body: any = { content };
-          if (config.username) body.username = String(config.username);
-          const resp = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(15_000),
-          });
-          delivery = resp.ok ? { ok: true } : { ok: false, error: `Discord: ${resp.status} ${resp.statusText}` };
-        }
-      } else if (system === 'telegram') {
-        const token = auth.bot_token || auth.token;
-        if (!token) {
-          delivery = { ok: false, error: 'Telegram: bot_token not in connector auth_config.' };
-        } else {
-          const body: any = { chat_id: dest, text: content };
-          if (config.parseMode) body.parse_mode = String(config.parseMode);
-          const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(15_000),
-          });
-          const json: any = await resp.json().catch(() => ({}));
-          delivery = json.ok ? { ok: true, messageId: String(json.result?.message_id ?? '') } : { ok: false, error: `Telegram: ${json.description ?? resp.statusText}` };
-        }
-      } else if (system === 'teams') {
-        // Teams uses incoming webhook URLs (per channel). Either the user passes
-        // it in the channel field, or it's stored in auth_config.webhook_url.
-        const webhookUrl = /^https?:\/\//i.test(dest) ? dest : (auth.webhook_url || '');
-        if (!webhookUrl) {
-          delivery = { ok: false, error: 'Teams: provide a channel webhook URL.' };
-        } else {
-          const card: any = {
-            '@type': 'MessageCard',
-            '@context': 'https://schema.org/extensions',
-            summary: config.title || 'CRM-AI alert',
-            themeColor: '0078D4',
-            title: config.title || undefined,
-            text: content,
-          };
-          const resp = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(card),
-            signal: AbortSignal.timeout(15_000),
-          });
-          delivery = resp.ok ? { ok: true } : { ok: false, error: `Teams: ${resp.status} ${resp.statusText}` };
-        }
-      } else if (system === 'google_chat') {
-        const webhookUrl = /^https?:\/\//i.test(dest) ? dest : (auth.webhook_url || '');
-        if (!webhookUrl) {
-          delivery = { ok: false, error: 'Google Chat: provide a space webhook URL.' };
-        } else {
-          const resp = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-            body: JSON.stringify({ text: content }),
-            signal: AbortSignal.timeout(15_000),
-          });
-          delivery = resp.ok ? { ok: true } : { ok: false, error: `Google Chat: ${resp.status} ${resp.statusText}` };
-        }
-      } else if (system === 'gmail' || system === 'outlook') {
-        // Gmail/Outlook require OAuth2 with refresh-token rotation; we expose the
-        // node and validate the connector but defer the actual send to a future
-        // OAuth pipeline. For now we record the intent so admins see the queued send.
-        delivery = {
-          ok: false,
-          error: `${system}: OAuth-based send is pending — connector validated, but transport requires the OAuth refresh-token pipeline (planned in next iteration). Use notification.email for transactional email in the meantime.`,
-        };
-      } else {
-        delivery = { ok: false, error: `${system}: unsupported messaging system` };
-      }
-    } catch (err: any) {
-      delivery = { ok: false, error: `${system} transport exception: ${err?.message ?? String(err)}` };
-    }
-
-    // Always log a canonical event so the integration timeline shows what happened.
-    const canonicalEvent = await integrationRepository.createCanonicalEvent({ tenantId: scope.tenantId }, {
-      sourceSystem: system,
-      sourceEntityType: 'workflow',
-      sourceEntityId: node.id,
-      eventType: delivery.ok ? `${system}.message.sent` : `${system}.message.failed`,
-      eventCategory: 'workflow',
-      canonicalEntityType: context.case ? 'case' : 'workflow',
-      canonicalEntityId: context.case?.id || node.id,
-      normalizedPayload: { nodeId: node.id, destination: dest, content, delivery },
-      dedupeKey: `${node.id}:${system}:${Date.now()}`,
-      caseId: context.case?.id ?? null,
-      workspaceId: scope.workspaceId,
-      status: delivery.ok ? 'processed' : 'failed',
-    });
-    context.integration = { connectorId: connector.id, system, destination: dest, canonicalEventId: canonicalEvent.id, delivered: delivery.ok };
-
-    if (!delivery.ok) {
-      return { status: 'failed', error: delivery.error || `${system}: send failed`, output: { system, connectorId: connector.id, destination: dest, canonicalEventId: canonicalEvent.id } };
-    }
-    return {
-      status: 'completed',
-      output: { system, connectorId: connector.id, destination: dest, messageId: delivery.messageId, canonicalEventId: canonicalEvent.id, delivered: true },
-    };
-  }
-
-  // ── HTTP request (outbound) ──────────────────────────────────────────────────
-  if (node.key === 'data.http_request') {
-    const url = resolveTemplateValue(config.url || config.endpoint || '', context);
-    if (!url) return { status: 'failed', error: 'data.http_request: url is required' };
-    const method = String(config.method || 'GET').toUpperCase();
-    const rawHeaders = parseMaybeJsonObject(config.headers);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...rawHeaders };
-    const bodyTemplate = config.body || config.payload || '';
-    const bodyStr = bodyTemplate ? resolveTemplateValue(bodyTemplate, context) : undefined;
-    try {
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: bodyStr && method !== 'GET' && method !== 'HEAD' ? bodyStr : undefined,
-        signal: AbortSignal.timeout(15_000),
-      });
-      const responseText = await response.text();
-      let responseData: any = responseText;
-      try { responseData = JSON.parse(responseText); } catch { /* keep as string */ }
-      const target = config.target || config.output || 'httpResponse';
-      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: responseData };
-      return {
-        status: response.ok ? 'completed' : 'failed',
-        output: { status: response.status, ok: response.ok, data: responseData, target },
-        ...(response.ok ? {} : { error: `HTTP ${response.status} ${response.statusText}` }),
-      };
-    } catch (fetchErr: any) {
-      return { status: 'failed', error: `HTTP request failed: ${fetchErr?.message ?? String(fetchErr)}` };
-    }
-  }
-
+  // ── All side-effectful node families now live under server/runtime/adapters/:
+  //   case.* / order.* / payment.* / return.* / approval.*  → adapters/actions.ts (Phase 3d)
+  //   policy.* / core.audit_log / core.idempotency_check / core.rate_limit
+  //     / core.code / core.data_table_op / core.respond_webhook → adapters/core.ts (Phase 3b)
+  //   knowledge.*                                              → adapters/knowledge.ts (Phase 3c)
+  //   notification.*                                           → adapters/notifications.ts (Phase 3e)
+  //   message.*                                                → adapters/messaging.ts (Phase 3f)
+  //   ai.*  + agent.*                                          → adapters/ai.ts (Phase 3g)
+  //   connector.*                                              → adapters/connectors.ts (Phase 3h)
+  //   data.* + data.http_request                               → adapters/data.ts (Phase 3a)
+  //   flow.wait/delay/merge/loop/subworkflow                   → adapters/flowScheduler.ts (Phase 4b)
+  //
+  // The early adapter dispatch above handles them all.
   if (['agent', 'integration', 'knowledge'].includes(node.type)) {
     return { status: 'failed', error: `Unsupported ${node.type} node key: ${node.key}` };
   }
 
-  if (node.key === 'delay' || node.key === 'flow.wait') {
-    const duration = config.duration || config.timeout || null;
-    // Store delay expiry in context so the scheduler can resume at the right time
-    const delayUntil = duration ? resolveDelayUntil(duration) : null;
-    context.delayUntil = delayUntil;
-    return { status: 'waiting', output: { delay: duration || 'manual_resume', delayUntil } };
-  }
-
-  if (node.key === 'flow.merge') {
-    return { status: 'completed', output: { merged: true, mode: config.mode || 'wait-all' } };
-  }
-
-  if (node.key === 'flow.loop') {
-    const items = asArray(readContextPath(context, config.source || 'data.items'));
-    const maxIterations = Math.max(1, Number(config.maxIterations || config.max_iterations || 100));
-    const batchSize = Math.max(1, Number(config.batchSize || config.batch_size || 1));
-    const batches = [];
-    for (let index = 0; index < Math.min(items.length, maxIterations); index += batchSize) {
-      batches.push(items.slice(index, index + batchSize));
-    }
-    context.loop = { items, batches, index: 0, count: items.length, batchSize, maxIterations };
-    return { status: 'completed', output: { looped: true, count: items.length, batches: batches.length, batchSize, maxIterations } };
-  }
-
-  if (node.key === 'flow.subworkflow') {
-    const subWorkflowId = config.workflow || config.workflowId || null;
-    if (!subWorkflowId) return { status: 'failed', error: 'flow.subworkflow requires workflow id' };
-    const definition = await workflowRepository.getDefinition(subWorkflowId, scope.tenantId, scope.workspaceId);
-    if (!definition) return { status: 'failed', error: 'Sub-workflow not found' };
-    const version = definition.current_version_id
-      ? await workflowRepository.getVersion(definition.current_version_id, { tenantId: scope.tenantId })
-      : await workflowRepository.getLatestVersion(definition.id, { tenantId: scope.tenantId });
-    if (!version) return { status: 'failed', error: 'Sub-workflow has no version' };
-    const nestedDepth = Number(context.__subworkflowDepth || 0);
-    if (nestedDepth >= 3) return { status: 'blocked', output: { reason: 'Sub-workflow nesting limit reached', subWorkflowId } };
-    const result = await executeWorkflowVersion({
-      tenantId: scope.tenantId,
-      workspaceId: scope.workspaceId,
-      userId: scope.userId,
-      workflowId: definition.id,
-      version,
-      triggerPayload: {
-        ...(parseMaybeJsonObject(config.input) || {}),
-        parentWorkflowNodeId: node.id,
-        parentContext: {
-          caseId: context.case?.id,
-          orderId: context.order?.id,
-          paymentId: context.payment?.id,
-          returnId: context.return?.id,
-          data: context.data,
-        },
-        __subworkflowDepth: nestedDepth + 1,
-      },
-      triggerType: 'subworkflow',
-    });
-    context.subworkflow = { subWorkflowId, runId: result.id, status: result.status };
-    return { status: result.status === 'completed' ? 'completed' : 'waiting', output: context.subworkflow, error: result.error ?? null };
-  }
-
-  if (node.key === 'flow.stop_error') {
-    return { status: 'failed', error: config.errorMessage || 'Stopped by flow.stop_error', output: { stopped: true } };
-  }
-
-  if (node.key === 'flow.noop') {
-    return { status: 'completed', output: { passedThrough: true } };
-  }
-
-  if (node.key === 'stop') {
-    return { status: 'stopped', output: { stopped: true } };
-  }
-
+  // All flow.*, stop, flow.noop, flow.stop_error keys are handled by the
+  // adapter registry (server/runtime/adapters/flow.ts + flowScheduler.ts).
+  // Anything that reaches this point is a node key with no handler — return
+  // a synthesised completion (matches the pre-extraction fallback).
   return { status: 'completed', output: { simulated: true, key: node.key } };
 }
 
-async function executeWorkflowNodeWithRetry(scope: { tenantId: string; workspaceId: string; userId?: string }, node: any, context: any) {
-  const retries = Math.max(0, Number(node.retryPolicy?.retries ?? node.retry_policy?.retries ?? 0));
-  const backoffMs = Math.max(0, Number(node.retryPolicy?.backoffMs ?? node.retry_policy?.backoffMs ?? 0));
-  let attempt = 0;
-  let lastResult: any = null;
-  while (attempt <= retries) {
-    const result = await executeWorkflowNode(scope, node, context);
-    lastResult = { ...result, attempt, maxRetries: retries };
-    if (!['failed'].includes(String(result.status))) break;
-    if (attempt >= retries) break;
-    if (backoffMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, Math.min(backoffMs, 1_500)));
-    }
-    attempt += 1;
-  }
-
-  // ── Step-level audit (Phase 6 — deep SaaS sync) ─────────────────────────────
-  // Every node whose contract declares a write or external side-effect generates
-  // an audit_log entry identical to the one produced by the equivalent UI action.
-  // This means: a workflow that runs case.update_status leaves the same trail as
-  // a supervisor clicking "Update status" in the case panel.
-  try {
-    const contract = getNodeContract(node.key);
-    const sideEffects = contract.sideEffects ?? 'none';
-    if (sideEffects === 'write' || sideEffects === 'external') {
-      const finalResult = lastResult ?? { status: 'failed' };
-      const action = `WORKFLOW_${String(node.key).toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
-      const entityType = node.key.startsWith('case.') ? 'case'
-        : node.key.startsWith('order.') ? 'order'
-        : node.key.startsWith('payment.') ? 'payment'
-        : node.key.startsWith('return.') ? 'return'
-        : node.key.startsWith('approval.') ? 'approval'
-        : node.key.startsWith('customer.') ? 'customer'
-        : node.key.startsWith('message.') ? 'integration'
-        : node.key.startsWith('ai.') || node.key.startsWith('agent.') ? 'agent_run'
-        : 'workflow';
-      const entityId = (
-        context?.case?.id || context?.order?.id || context?.payment?.id ||
-        context?.return?.id || context?.customer?.id || node.id
-      );
-      await auditRepository.logEvent(
-        { tenantId: scope.tenantId, workspaceId: scope.workspaceId },
-        {
-          actorId: scope.userId ?? 'workflow',
-          action,
-          entityType,
-          entityId,
-          metadata: {
-            nodeKey: node.key,
-            nodeLabel: node.label ?? null,
-            nodeId: node.id,
-            status: finalResult.status,
-            error: finalResult.error ?? null,
-            sideEffects,
-            risk: contract.risk ?? 'low',
-            attempt,
-          },
-        },
-      ).catch(() => undefined);
-    }
-  } catch (auditErr: any) {
-    logger.warn('workflow step audit failed', { nodeId: node.id, key: node.key, error: String(auditErr?.message ?? auditErr) });
-  }
-
-  return lastResult ?? { status: 'failed', error: 'Node execution failed before producing a result', attempt, maxRetries: retries };
+// `executeWorkflowNodeWithRetry` was extracted to
+// `server/runtime/workflowExecutor.ts` (Phase 4a — Turno 5/D2). This thin
+// wrapper preserves the exact call sites (the BFS scheduler + resume path)
+// without leaking the dependency-injection plumbing into them.
+async function executeWorkflowNodeWithRetry(
+  scope: { tenantId: string; workspaceId: string; userId?: string },
+  node: any,
+  context: any,
+) {
+  return executeNodeWithRetry(scope, node, context, {
+    executeNode: executeWorkflowNode,
+    getNodeContract,
+    auditLog: (auditScope, entry) => auditRepository.logEvent(auditScope, entry).catch(() => undefined),
+    logger,
+  });
 }
 
-async function executeWorkflowVersion({
-  tenantId,
-  workspaceId,
-  userId,
-  workflowId,
-  version,
-  triggerPayload,
-  triggerType = 'manual',
-  retryOfRunId = null,
-}: {
+// `executeWorkflowVersion` was extracted to
+// `server/runtime/workflowExecutor.ts` as `executeWorkflow` (Phase 4c — Turno
+// 5/D2). This thin wrapper preserves the original signature + every existing
+// call site (POST /:id/run, /:id/retry, /events/trigger, /forms/:slug, the
+// flow.subworkflow scheduler hook, and `executeWorkflowsByEvent`) by
+// injecting the route's repositories + helpers as a deps bundle.
+async function executeWorkflowVersion(opts: {
   tenantId: string;
   workspaceId: string;
   userId?: string;
@@ -2551,188 +1036,20 @@ async function executeWorkflowVersion({
   triggerType?: string;
   retryOfRunId?: string | null;
 }) {
-  const validation = validateWorkflowDefinition(version.nodes ?? [], version.edges ?? []);
-  if (!validation.ok) {
-    const error: any = new Error('Workflow is not executable');
-    error.statusCode = 422;
-    error.validation = validation;
-    throw error;
-  }
-
-  const supabase = getSupabaseAdmin();
-  const runId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const workflowContext = await buildWorkflowContext(
-    { tenantId, workspaceId, userId },
-    triggerPayload ?? {},
-  );
-  const caseId = triggerPayload?.caseId ?? triggerPayload?.case_id ?? workflowContext.case?.id ?? null;
-
-  // Idempotency: if the trigger payload carries a trace_id and a run already
-  // exists for this version + trace_id, return that run instead of creating a
-  // duplicate. This protects against double-fires from retries / cron sweeps.
-  const traceId = triggerPayload?.trace_id ?? triggerPayload?.traceId ?? null;
-  if (traceId && !retryOfRunId) {
-    const { data: existing } = await supabase
-      .from('workflow_runs')
-      .select('id, status, error')
-      .eq('tenant_id', tenantId)
-      .eq('workflow_version_id', version.id)
-      .eq('trigger_payload->>trace_id', String(traceId))
-      .limit(1);
-    if (existing && existing.length > 0) {
-      const prior = existing[0];
-      logger.info('executeWorkflowVersion: idempotent replay, returning existing run', {
-        traceId, runId: prior.id, status: prior.status,
-      });
-      const { data: priorSteps } = await supabase
-        .from('workflow_run_steps')
-        .select('*')
-        .eq('workflow_run_id', prior.id)
-        .order('started_at', { ascending: true });
-      return { id: prior.id, status: prior.status, error: prior.error ?? null, steps: priorSteps ?? [], retryOfRunId: null };
-    }
-  }
-
-  const { error: runError } = await supabase.from('workflow_runs').insert({
-    id: runId,
-    workflow_version_id: version.id,
-    case_id: caseId,
-    tenant_id: tenantId,
-    workspace_id: workspaceId,
-    trigger_type: triggerType,
-    trigger_payload: triggerPayload ?? {},
-    status: 'running',
-    current_node_id: getStartNode(validation.nodes)?.id ?? null,
-    context: { dryRun: false, source: retryOfRunId ? 'workflow_retry' : 'workflow_api', retryOfRunId, workflowContext },
-    started_at: now,
-    ended_at: null,
-    error: null,
+  return executeWorkflow(opts, {
+    validateWorkflowDefinition,
+    getStartNode,
+    pickNextNodes,
+    buildWorkflowContext,
+    executeNodeWithRetry: executeWorkflowNodeWithRetry,
+    getSupabaseAdmin,
+    auditLog: (scope, entry) => auditRepository.logEvent(scope, entry),
+    broadcastSSE,
+    executeWorkflowsByEvent,
+    logger,
   });
-  if (runError) throw runError;
-
-  // Broadcast run started
-  broadcastSSE(tenantId, 'workflow:run:started', {
-    runId, workflowId: version.workflow_id ?? '', versionId: version.id,
-    triggerType: triggerType ?? 'manual', startedAt: now,
-  });
-
-  const steps: any[] = [];
-  // BFS queue: each entry carries the node plus the input data snapshot for that branch
-  const queue: Array<{ node: any; branchInput: any; order: number }> = [
-    { node: getStartNode(validation.nodes), branchInput: triggerPayload ?? {}, order: 0 },
-  ];
-  const visited = new Set<string>();
-  let finalStatus = 'completed';
-  let finalError: string | null = null;
-  const MAX_STEPS = validation.nodes.length * 4; // guard against runaway graphs
-
-  while (queue.length > 0 && steps.length < MAX_STEPS) {
-    const { node: currentNode, branchInput, order } = queue.shift()!;
-    if (!currentNode || visited.has(currentNode.id)) continue;
-    visited.add(currentNode.id);
-
-    const startedAt = new Date().toISOString();
-    const result = await executeWorkflowNodeWithRetry({ tenantId, workspaceId, userId }, currentNode, workflowContext);
-    const endedAt = new Date().toISOString();
-
-    const step = {
-      id: crypto.randomUUID(),
-      workflow_run_id: runId,
-      node_id: currentNode.id,
-      node_type: currentNode.type,
-      status: result.status,
-      input: order === 0 ? branchInput : { fromPreviousStep: true },
-      output: result.output ?? {},
-      started_at: startedAt,
-      ended_at: endedAt,
-      error: (result as any).error ?? null,
-    };
-    steps.push(step);
-
-    workflowContext.lastOutput = result.output ?? null;
-    workflowContext.lastNode = { id: currentNode.id, key: currentNode.key, label: currentNode.label, status: result.status };
-    if (result.output && typeof result.output === 'object' && !Array.isArray(result.output)) {
-      workflowContext.data = (result.output as any).data ?? result.output;
-    }
-
-    if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) {
-      // Blocking result: record final status, drain remaining queue as skipped
-      finalStatus = result.status === 'waiting_approval' ? 'waiting' : result.status;
-      finalError = (result as any).error ?? (result.output as any)?.reason ?? null;
-      break;
-    }
-
-    // Enqueue next nodes (may be multiple for flow.branch fan-out)
-    const nextNodes = pickNextNodes(validation.nodes, validation.edges, currentNode, workflowContext);
-    for (const nextNode of nextNodes) {
-      if (!visited.has(nextNode.id)) {
-        queue.push({ node: nextNode, branchInput: result.output ?? {}, order: order + 1 });
-      }
-    }
-  }
-
-  // Cycle detection: if queue still has items that were already visited
-  if (steps.length >= MAX_STEPS) {
-    finalStatus = 'failed';
-    finalError = 'Workflow exceeded maximum step count — possible cycle detected';
-  }
-
-  if (steps.length > 0) {
-    const { error: stepsError } = await supabase.from('workflow_run_steps').insert(steps);
-    if (stepsError) throw stepsError;
-  }
-
-  const { error: updateRunError } = await supabase.from('workflow_runs').update({
-    status: finalStatus,
-    current_node_id: steps.at(-1)?.node_id ?? null,
-    context: { dryRun: false, source: retryOfRunId ? 'workflow_retry' : 'workflow_api', retryOfRunId, workflowContext },
-    ended_at: ['completed', 'failed', 'blocked', 'stopped'].includes(finalStatus) ? new Date().toISOString() : null,
-    error: finalError,
-  }).eq('id', runId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
-  if (updateRunError) throw updateRunError;
-
-  await auditRepository.logEvent({ tenantId, workspaceId }, {
-    actorId: userId ?? 'system',
-    action: finalStatus === 'completed' ? 'WORKFLOW_RUN_COMPLETED' : 'WORKFLOW_RUN_PAUSED',
-    entityType: 'workflow',
-    entityId: workflowId,
-    metadata: { runId, retryOfRunId, stepCount: steps.length, finalStatus, finalError },
-  });
-
-  // Broadcast run completed/failed/paused
-  broadcastSSE(tenantId, 'workflow:run:updated', {
-    runId,
-    workflowId: workflowId ?? '',
-    status: finalStatus,
-    stepCount: steps.length,
-    error: finalError,
-    endedAt: new Date().toISOString(),
-  });
-
-  // Dispatch trigger.workflow_error event so error-handler workflows can react.
-  // Skipped on retries to avoid loops.
-  if (finalStatus === 'failed' && triggerType !== 'workflow.error' && !retryOfRunId) {
-    try {
-      await executeWorkflowsByEvent(
-        { tenantId, workspaceId, userId },
-        'trigger.workflow_error',
-        {
-          sourceWorkflowId: workflowId,
-          sourceRunId: runId,
-          severity: 'error',
-          error: finalError,
-          failedNodeId: steps.find((s) => s.status === 'failed')?.node_id ?? null,
-          failedNodeKey: steps.find((s) => s.status === 'failed')?.node_id ?? null,
-        },
-      );
-    } catch (dispatchErr: any) {
-      logger.warn('workflow_error event dispatch failed', { runId, error: String(dispatchErr?.message ?? dispatchErr) });
-    }
-  }
-
-  return { id: runId, status: finalStatus, error: finalError, steps, retryOfRunId };
 }
+
 
 export async function continueWorkflowRun({
   tenantId,

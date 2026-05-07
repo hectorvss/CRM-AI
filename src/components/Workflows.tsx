@@ -203,6 +203,8 @@ interface WorkflowDiagnostic {
 interface WorkflowsProps {
   onNavigate?: NavigateFn;
   focusWorkflowId?: string | null;
+  initialView?: WorkflowView;
+  createNewOnMount?: boolean;
 }
 
 type FlowNodeData = {
@@ -239,7 +241,6 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'trigger', key: 'trigger.chat_message', label: 'On chat message', category: 'Trigger', icon: 'forum', requiresConfig: true, description: 'Starts when a user sends a message to the chat surface.' },
   { type: 'trigger', key: 'trigger.workflow_error', label: 'On workflow error', category: 'Trigger', icon: 'error_outline', requiresConfig: true, description: 'Starts when another workflow fails. Use this to handle errors centrally.' },
   { type: 'trigger', key: 'trigger.subworkflow_called', label: 'When called by another workflow', category: 'Trigger', icon: 'login', requiresConfig: false, description: 'Starts when another workflow invokes this one via Execute sub-workflow.' },
-  { type: 'trigger', key: 'trigger.evaluation_run', label: 'When running evaluation', category: 'Trigger', icon: 'science', requiresConfig: false, description: 'Starts when this workflow is invoked by an Evaluations dataset run.' },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Flow', icon: 'alt_route', requiresConfig: true, description: 'Branch based on a numeric amount.' },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Flow', icon: 'rule', requiresConfig: true, description: 'Branch based on status.' },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Flow', icon: 'gpp_maybe', requiresConfig: true, description: 'Branch based on risk.' },
@@ -333,136 +334,11 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'trigger', key: 'trigger.schedule', label: 'Schedule (cron)', category: 'Trigger', icon: 'event_repeat', requiresConfig: true, description: 'Run the workflow on a cron schedule.' },
 ];
 
-const TEMPLATES = [
-  {
-    id: 'refund_guarded',
-    label: 'Guarded refund',
-    category: 'Payments & risk',
-    description: 'Evaluate policy, route high-value refunds to approval, and execute safe refunds.',
-    nodes: [
-      { type: 'trigger', key: 'message.received', label: 'Refund request', position: { x: 100, y: 240 } },
-      { type: 'policy', key: 'policy.evaluate', label: 'Check refund policy', position: { x: 420, y: 220 }, config: { policy: 'refund_policy' } },
-      { type: 'condition', key: 'amount.threshold', label: 'Amount under threshold', position: { x: 760, y: 220 }, config: { field: 'payment.amount', operator: '<=', value: 250 } },
-      { type: 'action', key: 'payment.refund', label: 'Issue refund', position: { x: 1100, y: 150 }, config: { amount: '{{payment.amount}}', reason: '{{case.reason}}' } },
-      { type: 'action', key: 'approval.create', label: 'Request approval', position: { x: 1100, y: 330 }, config: { queue: 'manager' } },
-    ],
-    edges: [
-      { source: 0, target: 1, label: 'next' },
-      { source: 1, target: 2, label: 'next' },
-      { source: 2, target: 3, label: 'true', sourceHandle: 'true' },
-      { source: 2, target: 4, label: 'false', sourceHandle: 'false' },
-    ],
-  },
-  {
-    id: 'packing_guard',
-    label: 'Damaged shipment guard',
-    category: 'Orders & fulfillment',
-    description: 'Detect damaged shipment cases, search policy, and create a guided internal note.',
-    nodes: [
-      { type: 'trigger', key: 'order.updated', label: 'Order updated', position: { x: 120, y: 260 } },
-      { type: 'knowledge', key: 'knowledge.search', label: 'Damage policy', position: { x: 440, y: 240 }, config: { query: 'damaged shipment premium replacement' } },
-      { type: 'action', key: 'case.note', label: 'Create internal note', position: { x: 780, y: 240 }, config: { content: 'Damage policy reviewed. Replacement evidence required before refund.' } },
-    ],
-  },
-  {
-    id: 'payment_dispute',
-    label: 'Payment dispute review',
-    category: 'Payments & risk',
-    description: 'Pause risky payment disputes, call PSP connector, and ask finance approval.',
-    nodes: [
-      { type: 'trigger', key: 'payment.failed', label: 'Payment failed', position: { x: 100, y: 260 } },
-      { type: 'integration', key: 'connector.call', label: 'Check PSP event', position: { x: 420, y: 240 }, config: { capability: 'payment.lookup' } },
-      { type: 'condition', key: 'risk.level', label: 'High risk?', position: { x: 760, y: 240 }, config: { field: 'payment.risk_level', value: 'high' } },
-      { type: 'action', key: 'approval.create', label: 'Finance approval', position: { x: 1100, y: 240 }, config: { queue: 'finance', action_type: 'payment_dispute_review' } },
-    ],
-  },
-  {
-    id: 'flow_orchestration',
-    label: 'Flow orchestration',
-    category: 'Orchestration & data',
-    description: 'Filter, branch, wait, merge and hand off to reusable workflows.',
-    nodes: [
-      { type: 'trigger', key: 'case.created', label: 'Case created', position: { x: 100, y: 260 } },
-      { type: 'condition', key: 'flow.filter', label: 'Filter eligible cases', position: { x: 390, y: 240 }, config: { expression: 'case.priority >= 2' } },
-      { type: 'condition', key: 'flow.switch', label: 'Route by segment', position: { x: 720, y: 240 }, config: { branch: 'customer.segment', comparison: 'vip|standard|enterprise' } },
-      { type: 'utility', key: 'flow.wait', label: 'Wait for SLA window', position: { x: 1040, y: 140 }, config: { timeout: '2h' } },
-      { type: 'utility', key: 'flow.subworkflow', label: 'Call review sub-workflow', position: { x: 1040, y: 300 }, config: { workflow: 'review_case_flow' } },
-      { type: 'utility', key: 'flow.merge', label: 'Merge branches', position: { x: 1360, y: 240 }, config: { mode: 'wait-all' } },
-      { type: 'utility', key: 'flow.stop_error', label: 'Stop on error', position: { x: 1680, y: 240 }, config: { errorMessage: 'Flow stopped after failed policy check.' } },
-    ],
-    edges: [
-      { source: 0, target: 1, label: 'next' },
-      { source: 1, target: 2, label: 'next' },
-      { source: 2, target: 3, label: 'vip', sourceHandle: 'vip' },
-      { source: 2, target: 4, label: 'standard', sourceHandle: 'standard' },
-      { source: 2, target: 6, label: 'other', sourceHandle: 'other' },
-      { source: 3, target: 5, label: 'next' },
-      { source: 4, target: 5, label: 'next' },
-      { source: 5, target: 6, label: 'next' },
-    ],
-  },
-  {
-    id: 'vip_escalation',
-    label: 'VIP escalation',
-    category: 'Support operations',
-    description: 'Detect VIP cases, assign to senior support, and create a clear note.',
-    nodes: [
-      { type: 'trigger', key: 'case.created', label: 'Case created', position: { x: 100, y: 260 } },
-      { type: 'condition', key: 'status.matches', label: 'VIP customer', position: { x: 420, y: 240 }, config: { field: 'customer.segment', value: 'vip' } },
-      { type: 'action', key: 'case.assign', label: 'Assign senior team', position: { x: 760, y: 160 }, config: { teamId: 'senior_support' } },
-      { type: 'action', key: 'case.note', label: 'Create VIP note', position: { x: 760, y: 340 }, config: { content: 'VIP escalation workflow triggered.' } },
-    ],
-  },
-  {
-    id: 'sla_breach',
-    label: 'SLA breach',
-    category: 'Support operations',
-    description: 'Delay, evaluate SLA policy, and escalate stale cases.',
-    nodes: [
-      { type: 'trigger', key: 'case.created', label: 'Case created', position: { x: 100, y: 260 } },
-      { type: 'utility', key: 'delay', label: 'Wait SLA window', position: { x: 420, y: 240 }, config: { duration: '2h' } },
-      { type: 'policy', key: 'policy.evaluate', label: 'Evaluate SLA', position: { x: 740, y: 240 }, config: { policy: 'sla_response' } },
-      { type: 'action', key: 'approval.create', label: 'Manager review', position: { x: 1060, y: 240 }, config: { queue: 'manager', action_type: 'sla_breach' } },
-    ],
-  },
-  {
-    id: 'return_inspection',
-    label: 'Return inspection',
-    category: 'Returns & recovery',
-    description: 'Create return, search inspection policy, and route high-value returns.',
-    nodes: [
-      { type: 'trigger', key: 'return.created', label: 'Return created', position: { x: 100, y: 260 } },
-      { type: 'knowledge', key: 'knowledge.search', label: 'Inspection policy', position: { x: 420, y: 240 }, config: { query: 'return inspection policy' } },
-      { type: 'condition', key: 'amount.threshold', label: 'Value above limit?', position: { x: 760, y: 240 }, config: { field: 'return.total_amount', operator: '>', value: 250 } },
-      { type: 'action', key: 'approval.create', label: 'Inspection approval', position: { x: 1100, y: 240 }, config: { queue: 'returns' } },
-    ],
-  },
-  {
-    id: 'fraud_risk_review',
-    label: 'Fraud risk review',
-    category: 'Payments & risk',
-    description: 'Run risk agent, branch by confidence, and block unsafe automation.',
-    nodes: [
-      { type: 'trigger', key: 'order.updated', label: 'Order updated', position: { x: 100, y: 260 } },
-      { type: 'agent', key: 'agent.run', label: 'Risk agent', position: { x: 420, y: 240 }, config: { agent: 'risk-agent' } },
-      { type: 'condition', key: 'risk.level', label: 'Critical risk?', position: { x: 760, y: 240 }, config: { field: 'agent.risk_level', value: 'critical' } },
-      { type: 'action', key: 'approval.create', label: 'Risk approval', position: { x: 1100, y: 240 }, config: { queue: 'risk' } },
-    ],
-  },
-  {
-    id: 'agent_triage',
-    label: 'Auto-triage with agent',
-    category: 'AI & knowledge',
-    description: 'Run a specialist agent, check confidence, and escalate when needed.',
-    nodes: [
-      { type: 'trigger', key: 'case.created', label: 'Case created', position: { x: 110, y: 260 } },
-      { type: 'agent', key: 'agent.run', label: 'AI Agent', position: { x: 420, y: 220 }, config: { agent: 'triage-agent' } },
-      { type: 'knowledge', key: 'knowledge.search', label: 'Search knowledge', position: { x: 720, y: 390 }, config: { query: '{{case.intent}}' } },
-      { type: 'condition', key: 'risk.level', label: 'High risk?', position: { x: 780, y: 200 }, config: { field: 'agent.risk_level', value: 'high' } },
-      { type: 'action', key: 'approval.create', label: 'Request approval', position: { x: 1120, y: 200 }, config: { queue: 'manager' } },
-    ],
-  },
-] as const;
+// TEMPLATES is defined in workflowTemplates.ts so it can be imported
+// from non-React code (tests, server-side rendering, etc.).
+import { TEMPLATES } from './workflowTemplates';
+export { TEMPLATES };
+
 
 const CONFIG_FIELDS = ['field', 'operator', 'value', 'amount', 'reason', 'agent', 'policy', 'connector', 'content', 'queue', 'query', 'expression', 'source', 'target', 'branch', 'mode', 'timeout', 'batchSize', 'maxIterations', 'workflow', 'comparison', 'fallback', 'errorMessage', 'path', 'delimiter', 'format', 'mapping', 'operation', 'input', 'output'];
 
@@ -903,9 +779,6 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
   'trigger.subworkflow_called': [
     { key: 'expectedInputs', label: 'Expected input fields (comma-separated, optional)', type: 'text', placeholder: 'caseId, customerId' },
   ],
-  'trigger.evaluation_run': [
-    { key: 'datasetId', label: 'Dataset id (optional)', type: 'text', placeholder: 'evaluations dataset id' },
-  ],
   // ── Scheduled trigger ─────────────────────────────────────────────────────
   'trigger.schedule': [
     { key: 'cron', label: 'Cron expression', type: 'text', placeholder: '0 9 * * 1-5', hint: 'Standard cron (min hour day month weekday). E.g. "0 9 * * 1-5" = every weekday at 9 AM' },
@@ -1262,11 +1135,11 @@ function nodeTone(type: NodeType) {
     trigger: 'border-blue-200 bg-white text-blue-700',
     condition: 'border-amber-200 bg-white text-amber-700',
     action: 'border-emerald-200 bg-white text-emerald-700',
-    agent: 'border-gray-200 bg-white text-gray-800',
+    agent: 'border-[#e9eae6] bg-white text-[#1a1a1a]',
     policy: 'border-slate-200 bg-white text-slate-800',
     knowledge: 'border-cyan-200 bg-white text-cyan-700',
     integration: 'border-orange-200 bg-white text-orange-700',
-    utility: 'border-gray-200 bg-white text-gray-700',
+    utility: 'border-[#e9eae6] bg-white text-[#1a1a1a]',
   };
   return tones[type] ?? tones.action;
 }
@@ -1348,7 +1221,7 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
       { title: 'Popular', items: pick(['manual.run', 'webhook.received', 'trigger.schedule', 'trigger.form_submission', 'trigger.chat_message']) },
       { title: 'Support', items: pick(['case.created', 'case.updated', 'message.received', 'sla.breached']) },
       { title: 'Commerce', items: pick(['order.updated', 'shipment.updated', 'payment.failed', 'payment.dispute.created', 'return.created']) },
-      { title: 'System', items: pick(['customer.updated', 'approval.decided', 'trigger.workflow_error', 'trigger.subworkflow_called', 'trigger.evaluation_run']) },
+      { title: 'System', items: pick(['customer.updated', 'approval.decided', 'trigger.workflow_error', 'trigger.subworkflow_called']) },
     ],
   };
 
@@ -1486,16 +1359,16 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
       ? 'border-green-300 ring-green-100'
       : data.latestStatus === 'waiting'
         ? 'border-amber-300 ring-amber-100'
-        : 'border-gray-200 ring-gray-100';
+        : 'border-[#e9eae6] ring-gray-100';
 
   if (node.key === 'flow.note') {
     return (
-      <div className={`group relative p-5 rounded-2xl shadow-sm border-2 min-w-56 min-h-32 flex flex-col ${node.config?.color === 'blue' ? 'bg-blue-50 border-blue-200' : node.config?.color === 'green' ? 'bg-green-50 border-green-200' : node.config?.color === 'red' ? 'bg-red-50 border-red-200' : node.config?.color === 'purple' ? 'bg-purple-50 border-purple-200' : 'bg-yellow-50 border-yellow-200'}`}>
-        <div className="flex items-center gap-2 mb-3 text-gray-500 border-b border-black/5 pb-1.5">
-          <span className="material-symbols-outlined text-base">sticky_note_2</span>
+      <div className={`group relative p-5 rounded-[14px] shadow-sm border-2 min-w-56 min-h-32 flex flex-col ${node.config?.color === 'blue' ? 'bg-blue-50 border-blue-200' : node.config?.color === 'green' ? 'bg-green-50 border-green-200' : node.config?.color === 'red' ? 'bg-red-50 border-red-200' : node.config?.color === 'purple' ? 'bg-purple-50 border-purple-200' : 'bg-yellow-50 border-yellow-200'}`}>
+        <div className="flex items-center gap-2 mb-3 text-[#646462] border-b border-black/5 pb-1.5">
+          <span className="material-symbols-outlined text-[14px]">sticky_note_2</span>
           <span className="text-[10px] font-bold uppercase tracking-wider">Note</span>
         </div>
-        <div className="flex-1 whitespace-pre-wrap text-sm text-gray-700 font-medium leading-relaxed italic">
+        <div className="flex-1 whitespace-pre-wrap text-[13px] text-[#1a1a1a] font-medium leading-relaxed italic">
           {node.config?.content || 'Double click to edit note...'}
         </div>
         <NodeInlineControls data={data} />
@@ -1506,7 +1379,7 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
   if (node.type === 'trigger') {
     return (
       <div className={`group relative flex flex-col items-center ${node.disabled ? 'opacity-45' : ''}`}>
-        <span className="absolute -left-7 top-12 material-symbols-outlined text-sm text-red-400">bolt</span>
+        <span className="absolute -left-7 top-12 material-symbols-outlined text-[13px] text-red-400">bolt</span>
         <button
           onClick={() => data.onSelect(node.id)}
           onContextMenu={(event) => {
@@ -1515,12 +1388,12 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
           }}
           className={`relative flex h-28 w-28 items-center justify-center rounded-[28px] border bg-white shadow-sm transition hover:shadow-md ${data.selected ? 'ring-4 ring-gray-200' : ''} ${statusTone}`}
         >
-          <Handle type="source" id="main" position={Position.Right} className="!h-4 !w-4 !border-gray-400 !bg-white" />
-          <span className="material-symbols-outlined text-5xl text-gray-700">{data.spec?.icon ?? 'chat'}</span>
+          <Handle type="source" id="main" position={Position.Right} className="!h-4 !w-4 !border-[#d4d4d0] !bg-white" />
+          <span className="material-symbols-outlined text-5xl text-[#1a1a1a]">{data.spec?.icon ?? 'chat'}</span>
           {blockingDiagnostic && <NodeDiagnosticDot tone="error" />}
           {!blockingDiagnostic && warningDiagnostic && <NodeDiagnosticDot tone="warning" />}
         </button>
-        <div className="mt-3 max-w-40 text-center text-base font-semibold leading-tight text-gray-900">{node.label}</div>
+        <div className="mt-3 max-w-40 text-center text-[14px] font-semibold leading-tight text-[#1a1a1a]">{node.label}</div>
         <NodeInlineControls data={data} />
       </div>
     );
@@ -1529,7 +1402,7 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
   if (isCompact) {
     return (
       <div className={`group relative flex flex-col items-center ${node.disabled ? 'opacity-45' : ''}`}>
-        <Handle type="target" id="main" position={Position.Top} className="!h-4 !w-4 !rotate-45 !rounded-none !border-gray-400 !bg-white" />
+        <Handle type="target" id="main" position={Position.Top} className="!h-4 !w-4 !rotate-45 !rounded-none !border-[#d4d4d0] !bg-white" />
         <button
           onClick={() => data.onSelect(node.id)}
           onContextMenu={(event) => {
@@ -1538,13 +1411,13 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
           }}
           className={`flex h-24 w-24 items-center justify-center rounded-full border bg-white shadow-sm transition hover:shadow-md ${data.selected ? 'ring-4 ring-gray-200' : ''} ${statusTone}`}
         >
-          <span className={`material-symbols-outlined text-4xl ${node.type === 'integration' ? 'text-orange-500' : 'text-gray-700'}`}>{data.spec?.icon ?? 'settings'}</span>
+          <span className={`material-symbols-outlined text-4xl ${node.type === 'integration' ? 'text-orange-500' : 'text-[#1a1a1a]'}`}>{data.spec?.icon ?? 'settings'}</span>
           {blockingDiagnostic && <NodeDiagnosticDot tone="error" />}
           {!blockingDiagnostic && warningDiagnostic && <NodeDiagnosticDot tone="warning" />}
         </button>
-        <Handle type="source" id="main" position={Position.Bottom} className="!h-4 !w-4 !rotate-45 !rounded-none !border-gray-400 !bg-white" />
-        <div className="mt-3 max-w-44 text-center text-sm font-semibold text-gray-900">{node.label}</div>
-        {node.ui?.displayNote && node.ui?.notes && <div className="mt-1 max-w-44 text-center text-[11px] text-gray-500">{node.ui.notes}</div>}
+        <Handle type="source" id="main" position={Position.Bottom} className="!h-4 !w-4 !rotate-45 !rounded-none !border-[#d4d4d0] !bg-white" />
+        <div className="mt-3 max-w-44 text-center text-[13px] font-semibold text-[#1a1a1a]">{node.label}</div>
+        {node.ui?.displayNote && node.ui?.notes && <div className="mt-1 max-w-44 text-center text-[11px] text-[#646462]">{node.ui.notes}</div>}
         <NodeInlineControls data={data} />
       </div>
     );
@@ -1552,26 +1425,26 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
 
   return (
     <div className={`group relative ${node.disabled ? 'opacity-45' : ''}`}>
-      <Handle type="target" id="main" position={Position.Left} className="!h-4 !w-4 !border-gray-400 !bg-white" />
+      <Handle type="target" id="main" position={Position.Left} className="!h-4 !w-4 !border-[#d4d4d0] !bg-white" />
       <button
         onClick={() => data.onSelect(node.id)}
         onContextMenu={(event) => {
           event.preventDefault();
           data.onMenu(node.id, { x: event.clientX, y: event.clientY });
         }}
-        className={`relative min-h-24 w-72 rounded-xl border bg-white px-5 py-4 text-left shadow-sm transition hover:shadow-md ${data.selected ? 'ring-4 ring-gray-200' : ''} ${statusTone}`}
+        className={`relative min-h-24 w-72 rounded-[12px] border bg-white px-5 py-4 text-left shadow-sm transition hover:shadow-md ${data.selected ? 'ring-4 ring-gray-200' : ''} ${statusTone}`}
       >
         <div className="flex items-center gap-4">
           <span className={`material-symbols-outlined text-5xl ${nodeTone(node.type).split(' ').at(-1)}`}>{data.spec?.icon ?? 'settings'}</span>
           <div className="min-w-0">
-            <div className="truncate text-base font-semibold text-gray-900">{node.label}</div>
-            <div className="mt-1 text-xs text-gray-500">{node.key}</div>
+            <div className="truncate text-[14px] font-semibold text-[#1a1a1a]">{node.label}</div>
+            <div className="mt-1 text-[12px] text-[#646462]">{node.key}</div>
           </div>
         </div>
-        {data.latestStatus && <div className="mt-3 inline-flex rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase text-gray-500">{data.latestStatus}</div>}
+        {data.latestStatus && <div className="mt-3 inline-flex rounded-full bg-[#f8f8f7] px-2 py-1 text-[10px] font-bold uppercase text-[#646462]">{data.latestStatus}</div>}
         {blockingDiagnostic && <div className="mt-3 text-[11px] font-semibold text-red-600">{blockingDiagnostic.message}</div>}
         {!blockingDiagnostic && warningDiagnostic && <div className="mt-3 text-[11px] font-semibold text-amber-600">{warningDiagnostic.message}</div>}
-        {node.ui?.displayNote && node.ui?.notes && <div className="mt-2 text-xs text-gray-500">{node.ui.notes}</div>}
+        {node.ui?.displayNote && node.ui?.notes && <div className="mt-2 text-[12px] text-[#646462]">{node.ui.notes}</div>}
       </button>
       {node.type === 'condition' ? (
         <>
@@ -1580,30 +1453,30 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
               <Handle type="source" id="vip" position={Position.Right} className="!top-[22%] !h-4 !w-4 !border-green-500 !bg-white" />
               <Handle type="source" id="standard" position={Position.Right} className="!top-[50%] !h-4 !w-4 !border-amber-500 !bg-white" />
               <Handle type="source" id="other" position={Position.Right} className="!top-[78%] !h-4 !w-4 !border-red-500 !bg-white" />
-              <button onClick={() => data.onAdd(node.id, 'vip')} className="absolute -right-14 top-4 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
-              <button onClick={() => data.onAdd(node.id, 'standard')} className="absolute -right-14 top-1/2 -translate-y-1/2 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
-              <button onClick={() => data.onAdd(node.id, 'other')} className="absolute -right-14 bottom-4 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'vip')} className="absolute -right-14 top-4 rounded-[8px] bg-[#f1f1ee] px-2 py-1 text-[12px] font-bold text-[#1a1a1a] opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'standard')} className="absolute -right-14 top-1/2 -translate-y-1/2 rounded-[8px] bg-[#f1f1ee] px-2 py-1 text-[12px] font-bold text-[#1a1a1a] opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'other')} className="absolute -right-14 bottom-4 rounded-[8px] bg-[#f1f1ee] px-2 py-1 text-[12px] font-bold text-[#1a1a1a] opacity-0 transition group-hover:opacity-100">+</button>
             </>
           ) : (
             <>
               <Handle type="source" id="true" position={Position.Right} className="!top-[34%] !h-4 !w-4 !border-green-500 !bg-white" />
               <Handle type="source" id="false" position={Position.Right} className="!top-[66%] !h-4 !w-4 !border-red-500 !bg-white" />
-              <button onClick={() => data.onAdd(node.id, 'true')} className="absolute -right-14 top-5 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
-              <button onClick={() => data.onAdd(node.id, 'false')} className="absolute -right-14 bottom-5 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'true')} className="absolute -right-14 top-5 rounded-[8px] bg-[#f1f1ee] px-2 py-1 text-[12px] font-bold text-[#1a1a1a] opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'false')} className="absolute -right-14 bottom-5 rounded-[8px] bg-[#f1f1ee] px-2 py-1 text-[12px] font-bold text-[#1a1a1a] opacity-0 transition group-hover:opacity-100">+</button>
             </>
           )}
         </>
       ) : (
         <>
-          <Handle type="source" id="main" position={Position.Right} className="!h-4 !w-4 !border-gray-400 !bg-white" />
-          <button onClick={() => data.onAdd(node.id, 'main')} className="absolute -right-14 top-1/2 -translate-y-1/2 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+          <Handle type="source" id="main" position={Position.Right} className="!h-4 !w-4 !border-[#d4d4d0] !bg-white" />
+          <button onClick={() => data.onAdd(node.id, 'main')} className="absolute -right-14 top-1/2 -translate-y-1/2 rounded-[8px] bg-[#f1f1ee] px-2 py-1 text-[12px] font-bold text-[#1a1a1a] opacity-0 transition group-hover:opacity-100">+</button>
           
           {(node.type === 'action' || node.type === 'agent' || node.type === 'integration') && (
             <>
               <Handle type="source" id="error" position={Position.Bottom} className="!h-4 !w-4 !border-red-500 !bg-white" />
               <button 
                 onClick={() => data.onAdd(node.id, 'error')} 
-                className="absolute -bottom-10 left-1/2 -translate-x-1/2 rounded-md bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 opacity-0 transition group-hover:opacity-100 border border-red-100 shadow-sm"
+                className="absolute -bottom-10 left-1/2 -translate-x-1/2 rounded-[8px] bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 opacity-0 transition group-hover:opacity-100 border border-red-100 shadow-sm"
               >
                 ON FAILURE
               </button>
@@ -1612,10 +1485,10 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
         </>
       )}
       {node.type === 'agent' && (
-        <div className="absolute -bottom-11 left-10 flex gap-9 text-[11px] text-gray-500">
+        <div className="absolute -bottom-11 left-10 flex gap-9 text-[11px] text-[#646462]">
           {['chatModel', 'memory', 'tool'].map((port) => (
             <button key={port} onClick={() => data.onAdd(node.id, port)} className="relative">
-              <span className="absolute -top-3 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border border-gray-300 bg-white" />
+              <span className="absolute -top-3 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border border-[#e9eae6] bg-white" />
               {port === 'chatModel' ? 'Chat Model*' : port === 'memory' ? 'Memory' : 'Tool'}
             </button>
           ))}
@@ -1629,11 +1502,11 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
 function NodeInlineControls({ data }: { data: FlowNodeData }) {
   const node = data.workflowNode;
   return (
-    <div className="absolute -top-9 left-1/2 z-10 hidden -translate-x-1/2 items-center gap-1 rounded-lg border border-gray-200 bg-white px-1 py-1 shadow-sm group-hover:flex">
-      <button title="Execute step" onClick={() => data.onExecute(node.id)} className="rounded p-1 hover:bg-gray-100"><span className="material-symbols-outlined text-sm">play_arrow</span></button>
-      <button title={node.disabled ? 'Activate' : 'Deactivate'} onClick={() => data.onToggle(node.id)} className="rounded p-1 hover:bg-gray-100"><span className="material-symbols-outlined text-sm">{node.disabled ? 'power_settings_new' : 'power'}</span></button>
-      <button title="Delete" onClick={() => data.onDelete(node.id)} className="rounded p-1 hover:bg-gray-100"><span className="material-symbols-outlined text-sm">delete</span></button>
-      <button title="More" onClick={(event) => data.onMenu(node.id, { x: event.clientX, y: event.clientY })} className="rounded p-1 hover:bg-gray-100"><span className="material-symbols-outlined text-sm">more_horiz</span></button>
+    <div className="absolute -top-9 left-1/2 z-10 hidden -translate-x-1/2 items-center gap-1 rounded-[10px] border border-[#e9eae6] bg-white px-1 py-1 shadow-sm group-hover:flex">
+      <button title="Execute step" onClick={() => data.onExecute(node.id)} className="rounded-[6px] p-1 hover:bg-[#f8f8f7]"><span className="material-symbols-outlined text-[13px]">play_arrow</span></button>
+      <button title={node.disabled ? 'Activate' : 'Deactivate'} onClick={() => data.onToggle(node.id)} className="rounded-[6px] p-1 hover:bg-[#f8f8f7]"><span className="material-symbols-outlined text-[13px]">{node.disabled ? 'power_settings_new' : 'power'}</span></button>
+      <button title="Delete" onClick={() => data.onDelete(node.id)} className="rounded-[6px] p-1 hover:bg-[#f8f8f7]"><span className="material-symbols-outlined text-[13px]">delete</span></button>
+      <button title="More" onClick={(event) => data.onMenu(node.id, { x: event.clientX, y: event.clientY })} className="rounded-[6px] p-1 hover:bg-[#f8f8f7]"><span className="material-symbols-outlined text-[13px]">more_horiz</span></button>
     </div>
   );
 }
@@ -1658,30 +1531,30 @@ function WorkflowEdgeButton(props: EdgeProps) {
               event.stopPropagation();
               (props.data as any)?.onAddEdge?.(props.id);
             }}
-            className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50"
+            className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white text-[13px] font-bold text-[#1a1a1a] shadow-sm hover:bg-[#f8f8f7]"
           >
             +
           </button>
-          {props.label && <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-500 shadow-sm">{props.label}</span>}
+          {props.label && <span className="rounded-full border border-[#e9eae6] bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-[#646462] shadow-sm">{props.label}</span>}
           <button
             onClick={(event) => {
               event.stopPropagation();
               (props.data as any)?.onRenameEdge?.(props.id);
             }}
-            className="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-xs text-gray-600 shadow-sm hover:bg-gray-50 sm:flex"
+            className="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white text-[12px] text-[#646462] shadow-sm hover:bg-[#f8f8f7] sm:flex"
             title="Rename connection"
           >
-            <span className="material-symbols-outlined text-sm">edit</span>
+            <span className="material-symbols-outlined text-[13px]">edit</span>
           </button>
           <button
             onClick={(event) => {
               event.stopPropagation();
               (props.data as any)?.onDeleteEdge?.(props.id);
             }}
-            className="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-xs text-red-500 shadow-sm hover:bg-red-50 sm:flex"
+            className="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white text-[12px] text-red-500 shadow-sm hover:bg-red-50 sm:flex"
             title="Delete connection"
           >
-            <span className="material-symbols-outlined text-sm">delete</span>
+            <span className="material-symbols-outlined text-[13px]">delete</span>
           </button>
         </div>
       </foreignObject>
@@ -1692,10 +1565,10 @@ function WorkflowEdgeButton(props: EdgeProps) {
 const nodeTypes = { workflowNode: WorkflowNodeCard };
 const edgeTypes = { workflowEdge: WorkflowEdgeButton };
 
-export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: WorkflowsProps) {
+export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId, initialView, createNewOnMount }: WorkflowsProps) {
   const onNavigate = _onNavigate;
-  const [view, setView] = useState<WorkflowView>('list');
-  const [activeTab, setActiveTab] = useState<WorkflowTab>('overview');
+  const [view, setView] = useState<WorkflowView>(initialView ?? 'list');
+  const [activeTab, setActiveTab] = useState<WorkflowTab>('builder');
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [librarySection, setLibrarySection] = useState<WorkflowLibrarySection>('workflows');
   const [query, setQuery] = useState('');
@@ -1907,6 +1780,15 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     const target = workflows.find((workflow) => workflow.id === focusWorkflowId);
     if (target) void openWorkflow(target);
   }, [focusWorkflowId, workflows.length]);
+
+  // When mounted with createNewOnMount=true, immediately seed a new workflow
+  // draft and open the builder. Gated by a ref so it only fires once per mount.
+  const createNewFiredRef = useRef(false);
+  useEffect(() => {
+    if (!createNewOnMount || createNewFiredRef.current) return;
+    createNewFiredRef.current = true;
+    void createFromTemplate(TEMPLATES[0]);
+  }, []);
 
   // Dispatch deferred card action after the workflow is loaded into editor state
   useEffect(() => {
@@ -2561,7 +2443,6 @@ function loadBuilderState(workflow: Workflow) {
     if (actionDialog.kind === 'description') {
       const next = actionDialog.value.trim();
       await persistWorkflowDraft({ description: next });
-      setActiveTab('overview');
       setMessage('Workflow description updated.');
       setActionDialog(null);
       return;
@@ -2629,12 +2510,19 @@ function loadBuilderState(workflow: Workflow) {
   const addSections = useMemo(() => getAddPanelSections(addCategory, catalog, addSearch), [catalog, addCategory, addSearch]);
 
   if (loading && workflows.length === 0) {
-    return <LoadingState title="Loading workflows" message="Fetching workflow definitions from Supabase." />;
+    return (
+      <div className="flex items-center justify-center h-full text-[#646462] bg-white">
+        <div className="flex items-center gap-3">
+          <div className="w-4 h-4 border-2 border-[#e9eae6] border-t-[#1a1a1a] rounded-full animate-spin" />
+          <span className="text-[13px]">Cargando flujos de trabajo…</span>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
-      <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
+      <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-[12px] border border-[#f1f1ee] dark:border-[#1a1a1a] shadow-card">
         <AnimatePresence mode="wait">
           {view === 'list' ? (
             <WorkflowList
@@ -2704,7 +2592,7 @@ function loadBuilderState(workflow: Workflow) {
               />
 
               {(message || updateWorkflow.error || validateWorkflow.error || publishWorkflow.error || dryRunWorkflow.error || stepRunWorkflow.error || runWorkflow.error || rollbackWorkflow.error || retryWorkflowRun.error || resumeWorkflowRun.error || cancelWorkflowRun.error || triggerWorkflowEvent.error || loadWorkflowRun.error) && (
-                <div className="border-b border-gray-100 px-5 py-2 text-xs text-gray-600 dark:border-gray-800 dark:text-gray-300">
+                <div className="border-b border-[#f1f1ee] px-5 py-2 text-[12px] text-[#646462] dark:border-[#1a1a1a] dark:text-[#a4a4a2]">
                   {updateWorkflow.error || validateWorkflow.error || publishWorkflow.error || dryRunWorkflow.error || stepRunWorkflow.error || runWorkflow.error || rollbackWorkflow.error || retryWorkflowRun.error || resumeWorkflowRun.error || cancelWorkflowRun.error || triggerWorkflowEvent.error || loadWorkflowRun.error || message}
                 </div>
               )}
@@ -2733,22 +2621,22 @@ function loadBuilderState(workflow: Workflow) {
                       className="workflow-react-flow"
                     >
                       <Background gap={18} size={1} color="#d7d7d7" />
-                      <MiniMap pannable zoomable nodeStrokeWidth={3} className="!rounded-xl !border !border-gray-200 !bg-white" />
-                      <Controls position="bottom-left" className="!rounded-xl !border !border-gray-200 !bg-white !shadow-sm" />
+                      <MiniMap pannable zoomable nodeStrokeWidth={3} className="!rounded-[12px] !border !border-[#e9eae6] !bg-white" />
+                      <Controls position="bottom-left" className="!rounded-[12px] !border !border-[#e9eae6] !bg-white !shadow-sm" />
                       <Panel position="top-center">
-                        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900 shadow-sm">
-                          <div className="font-semibold">Workflow editor ready</div>
-                          <div className="text-xs">Use + on any node or line to add the next operation.</div>
+                        <div className="inline-flex items-center gap-2 rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-3 py-1.5 text-[12px] text-[#15803d] shadow-sm">
+                          <span className="font-semibold">Workflow editor ready</span>
+                          <span className="text-[#15803d]/80">Use + on any node or line to add the next operation.</span>
                         </div>
                       </Panel>
                       <Panel position="bottom-center">
-                        <button onClick={executeManualRun} className="rounded-lg bg-[#ff4f3d] px-4 py-2 text-sm font-bold text-white shadow-lg hover:opacity-90">
+                        <button onClick={executeManualRun} className="h-8 px-4 rounded-full bg-[#b91c1c] text-white text-[13px] font-semibold hover:bg-[#991b1b] shadow-sm">
                           Open execution
                         </button>
                       </Panel>
                     </ReactFlow>
 
-                    <button onClick={() => openAddPanel({})} className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-xl shadow-sm hover:bg-gray-50">+</button>
+                    <button onClick={() => openAddPanel({})} className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#e9eae6] bg-white text-[20px] shadow-sm hover:bg-[#f8f8f7]">+</button>
 
                     {addPanel && (
                       <WorkflowAddNodePanel
@@ -2938,17 +2826,17 @@ function WorkflowCardDropdown(props: {
         <div
           ref={menuRef}
           style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
-          className="w-52 rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900"
+          className="w-52 rounded-[12px] border border-[#e9eae6] bg-white py-1 shadow-xl dark:border-[#1a1a1a] dark:bg-[#1a1a1a]"
           onClick={(e) => e.stopPropagation()}
         >
           {items.map((item) => (
             <button
               key={item.action}
               onClick={(e) => { e.stopPropagation(); setOpen(false); props.onAction(props.workflow, item.action); }}
-              className={`flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800
-                ${'danger' in item && item.danger ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'}`}
+              className={`flex w-full items-center gap-2.5 px-4 py-2 text-left text-[13px] transition hover:bg-[#f8f8f7] dark:hover:bg-[#1a1a1a]
+                ${'danger' in item && item.danger ? 'text-red-600 dark:text-red-400' : 'text-[#1a1a1a] dark:text-[#e9eae6]'}`}
             >
-              <span className="material-symbols-outlined text-base leading-none">{item.icon}</span>
+              <span className="material-symbols-outlined text-[14px] leading-none">{item.icon}</span>
               {item.label}
             </button>
           ))}
@@ -2963,13 +2851,13 @@ function WorkflowCardDropdown(props: {
         ref={btnRef}
         onClick={handleToggle}
         title={props.kind === 'manage' ? 'Manage' : 'Run & Test'}
-        className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+        className="flex items-center gap-1 rounded-[10px] border border-[#e9eae6] px-2 py-1 text-[12px] font-medium text-[#646462] transition hover:bg-[#f8f8f7] dark:border-[#1a1a1a] dark:text-[#a4a4a2] dark:hover:bg-[#1a1a1a]"
       >
-        <span className="material-symbols-outlined text-base leading-none">
+        <span className="material-symbols-outlined text-[14px] leading-none">
           {props.kind === 'manage' ? 'settings' : 'play_circle'}
         </span>
         <span>{props.kind === 'manage' ? 'Manage' : 'Run'}</span>
-        <span className="material-symbols-outlined text-xs leading-none">expand_more</span>
+        <span className="material-symbols-outlined text-[12px] leading-none">expand_more</span>
       </button>
       {menu}
     </div>
@@ -3044,49 +2932,49 @@ function WorkflowList(props: {
   return (
     <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col overflow-hidden">
       <div className="p-6 pb-4">
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-card-dark">
+        <div className="rounded-[14px] border border-[#e9eae6] bg-white shadow-card dark:border-[#1a1a1a] dark:bg-card-dark">
           <div className="px-8 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Workflows</h1>
-              <p className="text-sm text-gray-500 mt-1.5 max-w-xl">Build operational automations for agents, cases, orders, refunds, returns, approvals, and complex multi-tool integrations.</p>
+              <h1 className="text-[24px] font-bold text-[#1a1a1a] dark:text-white tracking-tight">Workflows</h1>
+              <p className="text-[13px] text-[#646462] mt-1.5 max-w-xl">Build operational automations for agents, cases, orders, refunds, returns, approvals, and complex multi-tool integrations.</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative group">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-black transition-colors dark:group-focus-within:text-white">search</span>
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#646462] group-focus-within:text-[#1a1a1a] transition-colors dark:group-focus-within:text-white">search</span>
                 <input 
                   value={props.query} 
                   onChange={(event) => props.setQuery(event.target.value)} 
                   placeholder={searchPlaceholder} 
-                  className="w-full lg:w-72 rounded-xl border border-gray-200 bg-gray-50 pl-10 pr-4 py-2.5 text-sm outline-none transition-all focus:border-black/20 focus:bg-white focus:ring-4 focus:ring-black/5 dark:border-gray-700 dark:bg-gray-800 dark:focus:border-white/20 dark:focus:bg-gray-900 dark:focus:ring-white/5" 
+                  className="w-full lg:w-72 rounded-[12px] border border-[#e9eae6] bg-[#f8f8f7] pl-10 pr-4 py-2.5 text-[13px] outline-none transition-all focus:border-black/20 focus:bg-white focus:ring-4 focus:ring-black/5 dark:border-[#1a1a1a] dark:bg-[#1a1a1a] dark:focus:border-white/20 dark:focus:bg-[#1a1a1a] dark:focus:ring-white/5" 
                 />
               </div>
               
               {props.section === 'workflows' && (
                 <>
-                  <button onClick={props.onTemplate} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Templates</button>
-                  <button onClick={props.onCreate} className="rounded-xl bg-black px-5 py-2.5 text-sm font-bold text-white shadow-card transition-opacity hover:opacity-90 dark:bg-white dark:text-black">New workflow</button>
+                  <button onClick={props.onTemplate} className="rounded-[12px] border border-[#e9eae6] px-5 py-2.5 text-[13px] font-bold text-[#1a1a1a] transition-colors hover:bg-[#f8f8f7] dark:border-[#1a1a1a] dark:text-[#e9eae6] dark:hover:bg-[#1a1a1a]">Templates</button>
+                  <button onClick={props.onCreate} className="rounded-[12px] bg-black px-5 py-2.5 text-[13px] font-bold text-white shadow-card transition-opacity hover:opacity-90 dark:bg-white dark:text-[#1a1a1a]">New workflow</button>
                 </>
               )}
             </div>
           </div>
-          <div className="px-8 flex items-center gap-8 border-t border-gray-100 dark:border-gray-800 overflow-x-auto no-scrollbar">
+          <div className="px-8 flex items-center gap-8 border-t border-[#f1f1ee] dark:border-[#1a1a1a] overflow-x-auto no-scrollbar">
             {WORKFLOW_LIBRARY_SECTIONS.map((section) => {
               const isActive = props.section === section.key;
               return (
                 <button
                   key={section.key}
                   onClick={() => props.setSection(section.key)}
-                  className={`py-4 text-sm whitespace-nowrap transition-all border-b-2 ${
+                  className={`py-4 text-[13px] whitespace-nowrap transition-all border-b-2 ${
                     isActive
-                      ? 'border-black font-bold text-gray-900 dark:border-white dark:text-white'
-                      : 'border-transparent font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                      ? 'border-black font-bold text-[#1a1a1a] dark:border-white dark:text-white'
+                      : 'border-transparent font-medium text-[#646462] hover:text-[#1a1a1a] dark:text-[#646462] dark:hover:text-[#e9eae6]'
                   }`}
                 >
                   {section.label}
                   <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                     isActive
-                      ? 'bg-black text-white dark:bg-white dark:text-black'
-                      : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                      ? 'bg-black text-white dark:bg-white dark:text-[#1a1a1a]'
+                      : 'bg-[#f8f8f7] text-[#646462] dark:bg-[#1a1a1a] dark:text-[#646462]'
                   }`}>
                     {section.key === 'workflows' ? workflowCount : section.key === 'executions' ? executionCount : section.key === 'variables' ? variableCount : dataTableCount}
                   </span>
@@ -3096,14 +2984,14 @@ function WorkflowList(props: {
           </div>
         </div>
       </div>
-      {props.error && <div className="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{props.error}</div>}
+      {props.error && <div className="mx-6 mt-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">{props.error}</div>}
       <div className="flex-1 overflow-y-auto p-6">
         {props.section === 'workflows' ? (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             {sortedWorkflows.map((workflow) => (
               <div
                 key={workflow.id}
-                className="relative cursor-pointer rounded-2xl border border-gray-200 bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-md dark:border-gray-800 dark:bg-card-dark"
+                className="relative cursor-pointer rounded-[14px] border border-[#e9eae6] bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-md dark:border-[#1a1a1a] dark:bg-card-dark"
                 onClick={() => void props.onOpen(workflow)}
               >
                 {(() => {
@@ -3112,28 +3000,28 @@ function WorkflowList(props: {
                     <>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                      <span className="material-symbols-outlined !text-sm text-gray-500">{meta.icon}</span>
+                    <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#646462]">
+                      <span className="material-symbols-outlined !text-[13px] text-[#646462]">{meta.icon}</span>
                       {workflow.category}
                     </div>
-                    <h3 className="font-bold text-gray-900 dark:text-white">{workflow.name}</h3>
+                    <h3 className="font-bold text-[#1a1a1a] dark:text-white">{workflow.name}</h3>
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase ${workflow.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{workflow.status}</span>
                 </div>
-                <p className="mt-3 line-clamp-2 text-sm text-gray-500 dark:text-gray-400">{workflow.description}</p>
-                <div className="mt-2 text-xs text-gray-400 flex items-center gap-1.5">
+                <p className="mt-3 line-clamp-2 text-[13px] text-[#646462] dark:text-[#646462]">{workflow.description}</p>
+                <div className="mt-2 text-[12px] text-[#646462] flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-[12px]">history</span>
                   Last run {formatRelativeDate(workflow.metrics.find(m => m.label === 'Last run')?.value)}
                 </div>
-                <div className="mt-5 grid grid-cols-3 gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+                <div className="mt-5 grid grid-cols-3 gap-2 border-t border-[#f1f1ee] pt-4 dark:border-[#1a1a1a]">
                   {workflow.metrics.map((metric) => (
                     <div key={metric.label}>
-                      <div className="text-sm font-bold text-gray-900 dark:text-white">{metric.value}{metric.suffix}</div>
-                      <div className="text-[10px] text-gray-400">{metric.label}</div>
+                      <div className="text-[13px] font-bold text-[#1a1a1a] dark:text-white">{metric.value}{metric.suffix}</div>
+                      <div className="text-[10px] text-[#646462]">{metric.label}</div>
                     </div>
                   ))}
                 </div>
-                <div className="mt-4 flex items-center justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                <div className="mt-4 flex items-center justify-end gap-2 border-t border-[#f1f1ee] pt-3 dark:border-[#1a1a1a]">
                   <WorkflowCardDropdown workflow={workflow} kind="manage" onAction={props.onCardAction} />
                   <WorkflowCardDropdown workflow={workflow} kind="run" onAction={props.onCardAction} />
                 </div>
@@ -3147,12 +3035,12 @@ function WorkflowList(props: {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-50 text-gray-500">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[#f8f8f7] text-[#646462]">
                   <span className="material-symbols-outlined">receipt_long</span>
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900">Execution History</h2>
-                  <p className="text-xs text-gray-500">Audit and inspect recent automated runs across your workspace.</p>
+                  <h2 className="text-[15px] font-bold text-[#1a1a1a]">Execution History</h2>
+                  <p className="text-[12px] text-[#646462]">Audit and inspect recent automated runs across your workspace.</p>
                 </div>
               </div>
             </div>
@@ -3219,16 +3107,16 @@ function WorkflowExecutionsSection(props: {
   }
 
   return (
-    <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+    <section className="bg-white dark:bg-card-dark rounded-[14px] border border-[#e9eae6] dark:border-[#1a1a1a] shadow-card overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Execution</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Trigger</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Date</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Status</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 text-right">Action</th>
+            <tr className="border-b border-[#f1f1ee] dark:border-[#1a1a1a] bg-[#f8f8f7]/50 dark:bg-[#1a1a1a]/20">
+              <th className="px-6 py-3 text-[12px] font-semibold text-[#646462] dark:text-[#646462]">Execution</th>
+              <th className="px-6 py-3 text-[12px] font-semibold text-[#646462] dark:text-[#646462]">Trigger</th>
+              <th className="px-6 py-3 text-[12px] font-semibold text-[#646462] dark:text-[#646462]">Date</th>
+              <th className="px-6 py-3 text-[12px] font-semibold text-[#646462] dark:text-[#646462]">Status</th>
+              <th className="px-6 py-3 text-[12px] font-semibold text-[#646462] dark:text-[#646462] text-right">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -3238,44 +3126,44 @@ function WorkflowExecutionsSection(props: {
               const status = String(run?.status ?? 'pending').toLowerCase();
               
               return (
-                <tr key={run.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                <tr key={run.id} className="border-b border-[#f1f1ee] dark:border-[#1a1a1a]/50 hover:bg-[#f8f8f7] dark:hover:bg-[#1a1a1a]/30 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${
+                      <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] ${
                         ['completed', 'resumed'].includes(status) ? 'bg-green-50 text-green-600' :
                         ['failed', 'blocked', 'cancelled'].includes(status) ? 'bg-red-50 text-red-600' :
                         'bg-amber-50 text-amber-600'
                       }`}>
-                        <span className="material-symbols-outlined text-lg">
+                        <span className="material-symbols-outlined text-[15px]">
                           {['completed', 'resumed'].includes(status) ? 'check_circle' :
                            ['failed', 'blocked', 'cancelled'].includes(status) ? 'error' : 'schedule'}
                         </span>
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-gray-900 dark:text-white">
+                        <p className="text-[13px] font-bold text-[#1a1a1a] dark:text-white">
                           {run?.workflow_name ?? workflow?.name ?? 'Workflow run'}
                         </p>
-                        <p className="text-[10px] font-mono text-gray-500 mt-0.5 uppercase tracking-tighter">
+                        <p className="text-[10px] font-mono text-[#646462] mt-0.5 uppercase tracking-tighter">
                           ID: {run.id.slice(0, 8)}
                         </p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="px-2 py-1 rounded-lg border border-gray-100 bg-gray-50 text-[10px] font-bold text-gray-600 uppercase tracking-tight dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                    <span className="px-2 py-1 rounded-[10px] border border-[#f1f1ee] bg-[#f8f8f7] text-[10px] font-bold text-[#646462] uppercase tracking-tight dark:border-[#1a1a1a] dark:bg-[#1a1a1a]/50 dark:text-[#646462]">
                       {run?.trigger_type ?? 'manual'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                    <div className="text-[13px] text-[#646462] dark:text-[#a4a4a2] font-medium">
                       {startedAt ? new Date(startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending'}
                     </div>
-                    <div className="text-[10px] text-gray-400 mt-0.5">
+                    <div className="text-[10px] text-[#646462] mt-0.5">
                       {formatRelativeDate(startedAt)}
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                    <span className={`px-2 py-0.5 rounded-[6px] text-[10px] font-bold uppercase tracking-wider border ${
                       ['completed', 'resumed'].includes(status) ? 'bg-green-50 text-green-700 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/30' :
                       ['failed', 'blocked', 'cancelled'].includes(status) ? 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30' :
                       'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30'
@@ -3287,7 +3175,7 @@ function WorkflowExecutionsSection(props: {
                     {workflow && (
                       <button 
                         onClick={() => props.onOpen(workflow)}
-                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                        className="rounded-[10px] border border-[#e9eae6] px-3 py-1.5 text-[12px] font-bold text-[#1a1a1a] transition hover:bg-[#f8f8f7] dark:border-[#1a1a1a] dark:text-[#e9eae6] dark:hover:bg-[#1a1a1a]"
                       >
                         Inspect
                       </button>
@@ -3322,12 +3210,12 @@ function WorkflowVariablesSection(props: {
       {props.storedVariables.length > 0 && (
         <div>
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Workspace Variables</h3>
+            <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Workspace Variables</h3>
             <button
               onClick={props.onCreate}
-              className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90"
+              className="flex items-center gap-2 rounded-[10px] bg-black px-4 py-2 text-[13px] font-bold text-white shadow-card hover:opacity-90"
             >
-              <span className="material-symbols-outlined text-base">add</span>
+              <span className="material-symbols-outlined text-[14px]">add</span>
               New Variable
             </button>
           </div>
@@ -3336,12 +3224,12 @@ function WorkflowVariablesSection(props: {
               <button
                 key={item.id}
                 onClick={() => props.onEditVariable(item)}
-                className="rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300 hover:shadow-lg"
+                className="rounded-[14px] border border-[#e9eae6] bg-white p-5 text-left shadow-card transition hover:border-[#e9eae6] hover:shadow-lg"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-gray-900">{item.key}</div>
-                    <div className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">{item.value || 'No value yet'}</div>
+                    <div className="text-[13px] font-semibold text-[#1a1a1a]">{item.key}</div>
+                    <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-[#646462]">{item.value || 'No value yet'}</div>
                   </div>
                   <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold uppercase text-blue-700">{item.scope}</span>
                 </div>
@@ -3360,16 +3248,16 @@ function WorkflowVariablesSection(props: {
         />
       ) : rows.length > 0 ? (
         <div>
-          <h3 className="mb-4 text-lg font-semibold text-gray-900">Referenced Variables</h3>
+          <h3 className="mb-4 text-[15px] font-semibold text-[#1a1a1a]">Referenced Variables</h3>
           <div className="space-y-4">
             {rows.map((item) => (
-              <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
+              <div key={item.key} className="rounded-[14px] border border-[#e9eae6] bg-white p-5 shadow-card">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">{item.key}</div>
-                    <div className="mt-1 text-xs text-gray-500">Used in {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
+                    <div className="text-[13px] font-semibold text-[#1a1a1a]">{item.key}</div>
+                    <div className="mt-1 text-[12px] text-[#646462]">Used in {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
                   </div>
-                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">Shared variable</span>
+                  <span className="rounded-full bg-[#f8f8f7] px-2.5 py-1 text-[10px] font-bold uppercase text-[#646462]">Shared variable</span>
                 </div>
                 <div className="mt-4 space-y-2">
                   {item.workflowIds.map((workflowId, index) => {
@@ -3378,13 +3266,13 @@ function WorkflowVariablesSection(props: {
                       <button
                         key={`${workflowId}-${index}`}
                         onClick={() => workflow && props.onOpenWorkflow(workflow)}
-                        className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:bg-gray-50"
+                        className="flex w-full items-center justify-between rounded-[12px] border border-[#e9eae6] px-4 py-3 text-left transition hover:bg-[#f8f8f7]"
                       >
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{item.workflowNames[index] || workflow?.name || 'Workflow'}</div>
-                          <div className="mt-1 text-xs text-gray-500">{item.examples[0] || '{{variables.example}}'}</div>
+                          <div className="text-[13px] font-medium text-[#1a1a1a]">{item.workflowNames[index] || workflow?.name || 'Workflow'}</div>
+                          <div className="mt-1 text-[12px] text-[#646462]">{item.examples[0] || '{{variables.example}}'}</div>
                         </div>
-                        <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
+                        <span className="material-symbols-outlined text-[14px] text-[#646462]">chevron_right</span>
                       </button>
                     );
                   })}
@@ -3430,12 +3318,12 @@ function WorkflowDataTablesSection(props: {
       {visibleStoredTables.length > 0 && (
         <div>
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Data Tables</h3>
+            <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Data Tables</h3>
             <button
               onClick={props.onCreate}
-              className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90"
+              className="flex items-center gap-2 rounded-[10px] bg-black px-4 py-2 text-[13px] font-bold text-white shadow-card hover:opacity-90"
             >
-              <span className="material-symbols-outlined text-base">add</span>
+              <span className="material-symbols-outlined text-[14px]">add</span>
               Create Data Table
             </button>
           </div>
@@ -3444,17 +3332,17 @@ function WorkflowDataTablesSection(props: {
               <button
                 key={table.id}
                 onClick={() => props.onOpenTable(table.id)}
-                className="w-full rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300 hover:shadow-lg"
+                className="w-full rounded-[14px] border border-[#e9eae6] bg-white p-5 text-left shadow-card transition hover:border-[#e9eae6] hover:shadow-lg"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <div className="text-sm font-semibold text-gray-900">{table.name}</div>
-                    <div className="mt-1 text-xs text-gray-500">{table.rows.length} rows · {table.columns.length} custom columns</div>
+                    <div className="text-[13px] font-semibold text-[#1a1a1a]">{table.name}</div>
+                    <div className="mt-1 text-[12px] text-[#646462]">{table.rows.length} rows · {table.columns.length} custom columns</div>
                   </div>
                   <span className="rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-bold uppercase text-green-700">{table.source}</span>
                 </div>
-                <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
-                  <span className="material-symbols-outlined text-sm">edit</span>
+                <div className="mt-3 flex items-center gap-2 text-[12px] text-[#646462]">
+                  <span className="material-symbols-outlined text-[13px]">edit</span>
                   Click to edit
                 </div>
               </button>
@@ -3472,15 +3360,15 @@ function WorkflowDataTablesSection(props: {
         />
       ) : rows.length > 0 ? (
         <div>
-          <h3 className="mb-4 text-lg font-semibold text-gray-900">Referenced Data Tables</h3>
+          <h3 className="mb-4 text-[15px] font-semibold text-[#1a1a1a]">Referenced Data Tables</h3>
           <div className="grid gap-4 xl:grid-cols-2">
             {rows.map((item) => (
-              <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
-                <div className="text-sm font-semibold text-gray-900">{item.key}</div>
-                <div className="mt-1 text-xs text-gray-500">Referenced by {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
+              <div key={item.key} className="rounded-[14px] border border-[#e9eae6] bg-white p-5 shadow-card">
+                <div className="text-[13px] font-semibold text-[#1a1a1a]">{item.key}</div>
+                <div className="mt-1 text-[12px] text-[#646462]">Referenced by {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {item.sources.map((source) => (
-                    <span key={source} className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">{source}</span>
+                    <span key={source} className="rounded-full bg-[#f8f8f7] px-2.5 py-1 text-[10px] font-bold uppercase text-[#646462]">{source}</span>
                   ))}
                 </div>
                 <div className="mt-4 space-y-2">
@@ -3490,10 +3378,10 @@ function WorkflowDataTablesSection(props: {
                       <button
                         key={`${workflowId}-${index}`}
                         onClick={() => workflow && props.onOpenWorkflow(workflow)}
-                        className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:bg-gray-50"
+                        className="flex w-full items-center justify-between rounded-[12px] border border-[#e9eae6] px-4 py-3 text-left transition hover:bg-[#f8f8f7]"
                       >
-                        <span className="text-sm font-medium text-gray-900">{item.workflowNames[index] || workflow?.name || 'Workflow'}</span>
-                        <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
+                        <span className="text-[13px] font-medium text-[#1a1a1a]">{item.workflowNames[index] || workflow?.name || 'Workflow'}</span>
+                        <span className="material-symbols-outlined text-[14px] text-[#646462]">chevron_right</span>
                       </button>
                     );
                   })}
@@ -3509,15 +3397,15 @@ function WorkflowDataTablesSection(props: {
 
 function WorkflowEmptySection(props: { title: string; description: string; actionLabel?: string; onAction?: () => void }) {
   return (
-    <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center shadow-card">
+    <div className="rounded-[14px] border border-dashed border-[#e9eae6] bg-white px-6 py-12 text-center shadow-card">
       <div className="mx-auto max-w-2xl">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 text-gray-500">
-          <span className="material-symbols-outlined text-xl">deployed_code</span>
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[14px] border border-[#e9eae6] bg-[#f8f8f7] text-[#646462]">
+          <span className="material-symbols-outlined text-[20px]">deployed_code</span>
         </div>
-        <h3 className="mt-4 text-2xl font-medium text-gray-900">{props.title}</h3>
-        <p className="mt-3 text-sm leading-6 text-gray-500">{props.description}</p>
+        <h3 className="mt-4 text-[24px] font-medium text-[#1a1a1a]">{props.title}</h3>
+        <p className="mt-3 text-[13px] leading-6 text-[#646462]">{props.description}</p>
         {props.actionLabel && props.onAction && (
-          <button onClick={props.onAction} className="mt-6 rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90">
+          <button onClick={props.onAction} className="mt-6 rounded-[10px] bg-black px-4 py-2 text-[13px] font-bold text-white shadow-card hover:opacity-90">
             {props.actionLabel}
           </button>
         )}
@@ -3528,9 +3416,9 @@ function WorkflowEmptySection(props: { title: string; description: string; actio
 
 function StatTile(props: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{props.label}</div>
-      <div className="mt-2 text-sm font-semibold text-gray-900">{props.value}</div>
+    <div className="rounded-[12px] border border-[#e9eae6] bg-[#f8f8f7] px-4 py-3">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-[#646462]">{props.label}</div>
+      <div className="mt-2 text-[13px] font-semibold text-[#1a1a1a]">{props.value}</div>
     </div>
   );
 }
@@ -3557,27 +3445,27 @@ function WorkflowVariableModal(props: {
   return createPortal(
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="w-full max-w-2xl rounded-[14px] bg-white p-6 shadow-2xl">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-2xl font-medium text-gray-900">{props.variable ? 'Edit variable' : 'New variable'}</h3>
+              <h3 className="text-[24px] font-medium text-[#1a1a1a]">{props.variable ? 'Edit variable' : 'New variable'}</h3>
             </div>
-            <button onClick={props.onClose} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
+            <button onClick={props.onClose} className="rounded-[10px] p-2 text-[#646462] hover:bg-[#f8f8f7]">
               <span className="material-symbols-outlined">close</span>
             </button>
           </div>
           <div className="mt-6 space-y-5">
             <label className="block">
-              <span className="text-sm font-medium text-gray-700">Key <span className="text-[#ff5a46]">*</span></span>
-              <input value={key} onChange={(event) => setKey(event.target.value)} placeholder="Enter a name" className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Key <span className="text-[#ff5a46]">*</span></span>
+              <input value={key} onChange={(event) => setKey(event.target.value)} placeholder="Enter a name" className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-4 py-3 text-[13px] outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-gray-700">Value</span>
-              <textarea value={value} onChange={(event) => setValue(event.target.value)} placeholder="Enter a value" className="mt-2 min-h-28 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Value</span>
+              <textarea value={value} onChange={(event) => setValue(event.target.value)} placeholder="Enter a value" className="mt-2 min-h-28 w-full resize-none rounded-[12px] border border-[#e9eae6] px-4 py-3 text-[13px] outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-gray-700">Scope</span>
-              <select value={scope} onChange={(event) => setScope(event.target.value as WorkflowVariableScope)} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Scope</span>
+              <select value={scope} onChange={(event) => setScope(event.target.value as WorkflowVariableScope)} className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-4 py-3 text-[13px] outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10">
                 <option value="">Select</option>
                 {WORKFLOW_VARIABLE_SCOPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -3586,8 +3474,8 @@ function WorkflowVariableModal(props: {
             </label>
           </div>
           <div className="mt-8 flex justify-end gap-3">
-            <button onClick={props.onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">Cancel</button>
-            <button onClick={() => void props.onSave({ key: key.trim(), value, scope })} disabled={!key.trim()} className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+            <button onClick={props.onClose} className="rounded-[10px] border border-[#e9eae6] px-4 py-2 text-[13px] font-semibold text-[#1a1a1a] transition hover:bg-[#f8f8f7]">Cancel</button>
+            <button onClick={() => void props.onSave({ key: key.trim(), value, scope })} disabled={!key.trim()} className="rounded-[10px] bg-black px-4 py-2 text-[13px] font-bold text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
               Save Variable
             </button>
           </div>
@@ -3619,27 +3507,27 @@ function WorkflowDataTableCreateModal(props: {
   return createPortal(
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="w-full max-w-3xl rounded-[14px] bg-white p-6 shadow-2xl">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-2xl font-medium text-gray-900">Create new data table</h3>
+              <h3 className="text-[24px] font-medium text-[#1a1a1a]">Create new data table</h3>
             </div>
-            <button onClick={props.onClose} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
+            <button onClick={props.onClose} className="rounded-[10px] p-2 text-[#646462] hover:bg-[#f8f8f7]">
               <span className="material-symbols-outlined">close</span>
             </button>
           </div>
           <div className="mt-6 space-y-5">
             <label className="block">
-              <span className="text-sm font-medium text-gray-700">Data table name <span className="text-[#ff5a46]">*</span></span>
-              <input value={name} onChange={(event) => setName(event.target.value)} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Data table name <span className="text-[#ff5a46]">*</span></span>
+              <input value={name} onChange={(event) => setName(event.target.value)} className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-4 py-3 text-[13px] outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
             </label>
 
             <div className="space-y-3">
-              <label className="flex items-center gap-3 text-lg text-gray-700">
+              <label className="flex items-center gap-3 text-[15px] text-[#1a1a1a]">
                 <input type="radio" checked={source === 'scratch'} onChange={() => setSource('scratch')} />
                 <span>From scratch</span>
               </label>
-              <label className="flex items-center gap-3 text-lg text-gray-400">
+              <label className="flex items-center gap-3 text-[15px] text-[#646462]">
                 <input type="radio" checked={source === 'csv'} onChange={() => setSource('csv')} />
                 <span>Import CSV</span>
               </label>
@@ -3647,14 +3535,14 @@ function WorkflowDataTableCreateModal(props: {
 
             {source === 'csv' && (
               <label className="block">
-                <span className="text-sm font-medium text-gray-700">CSV content</span>
-                <textarea value={csvText} onChange={(event) => setCsvText(event.target.value)} placeholder="name,email&#10;Aurora,aurora@example.com" className="mt-2 min-h-36 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
+                <span className="text-[13px] font-medium text-[#1a1a1a]">CSV content</span>
+                <textarea value={csvText} onChange={(event) => setCsvText(event.target.value)} placeholder="name,email&#10;Aurora,aurora@example.com" className="mt-2 min-h-36 w-full resize-none rounded-[12px] border border-[#e9eae6] px-4 py-3 text-[13px] outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
               </label>
             )}
           </div>
           <div className="mt-8 flex justify-end gap-3">
-            <button onClick={props.onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">Cancel</button>
-            <button onClick={() => void props.onCreate({ name: name.trim(), source, csvText })} disabled={!name.trim() || (source === 'csv' && !csvText.trim())} className="rounded-lg bg-black px-5 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+            <button onClick={props.onClose} className="rounded-[10px] border border-[#e9eae6] px-4 py-2 text-[13px] font-semibold text-[#1a1a1a] transition hover:bg-[#f8f8f7]">Cancel</button>
+            <button onClick={() => void props.onCreate({ name: name.trim(), source, csvText })} disabled={!name.trim() || (source === 'csv' && !csvText.trim())} className="rounded-[10px] bg-black px-5 py-2 text-[13px] font-bold text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
               Create Table
             </button>
           </div>
@@ -3727,39 +3615,39 @@ function WorkflowDataTableEditor(props: {
   };
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white shadow-card">
-      <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-6 py-5">
+    <div className="rounded-[14px] border border-[#e9eae6] bg-white shadow-card">
+      <div className="flex items-center justify-between gap-4 border-b border-[#f1f1ee] px-6 py-5">
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-center gap-1">
-            <button onClick={props.onBack} className="flex items-center gap-1 rounded px-2 py-1 text-sm text-gray-500 transition hover:bg-gray-100 hover:text-gray-900">
-              <span className="material-symbols-outlined text-base">arrow_back</span>
+            <button onClick={props.onBack} className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-[13px] text-[#646462] transition hover:bg-[#f8f8f7] hover:text-[#1a1a1a]">
+              <span className="material-symbols-outlined text-[14px]">arrow_back</span>
               <span>Back to Data Tables</span>
             </button>
           </div>
-          <div className="text-2xl font-bold text-gray-900">{draft.name}</div>
+          <div className="text-[24px] font-bold text-[#1a1a1a]">{draft.name}</div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2">
-            <span className="material-symbols-outlined text-base text-gray-400">search</span>
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search rows" className="w-48 bg-transparent text-sm outline-none" />
+          <div className="flex items-center gap-2 rounded-[12px] border border-[#e9eae6] px-3 py-2">
+            <span className="material-symbols-outlined text-[14px] text-[#646462]">search</span>
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search rows" className="w-48 bg-transparent text-[13px] outline-none" />
           </div>
-          <button onClick={addRow} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90">Add Row</button>
-          <button onClick={() => setColumnEditorOpen((open) => !open)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">Add Column</button>
-          <button onClick={() => void props.onSave({ ...draft, updatedAt: new Date().toISOString() })} className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90">Save</button>
+          <button onClick={addRow} className="rounded-[10px] bg-[#ff5a46] px-4 py-2 text-[13px] font-bold text-white shadow-card hover:opacity-90">Add Row</button>
+          <button onClick={() => setColumnEditorOpen((open) => !open)} className="rounded-[10px] border border-[#e9eae6] px-4 py-2 text-[13px] font-semibold text-[#1a1a1a] transition hover:bg-[#f8f8f7]">Add Column</button>
+          <button onClick={() => void props.onSave({ ...draft, updatedAt: new Date().toISOString() })} className="rounded-[10px] bg-black px-4 py-2 text-[13px] font-bold text-white shadow-card hover:opacity-90">Save</button>
         </div>
       </div>
 
       <div className="relative overflow-x-auto">
-        <table className="min-w-full border-collapse text-sm">
+        <table className="min-w-full border-collapse text-[13px]">
           <thead>
-            <tr className="bg-gray-50">
-              <th className="border-b border-r border-gray-200 px-4 py-3 text-left font-medium text-gray-500">id</th>
-              <th className="border-b border-r border-gray-200 px-4 py-3 text-left font-medium text-gray-500">createdAt</th>
-              <th className="border-b border-r border-gray-200 px-4 py-3 text-left font-medium text-gray-500">updatedAt</th>
+            <tr className="bg-[#f8f8f7]">
+              <th className="border-b border-r border-[#e9eae6] px-4 py-3 text-left font-medium text-[#646462]">id</th>
+              <th className="border-b border-r border-[#e9eae6] px-4 py-3 text-left font-medium text-[#646462]">createdAt</th>
+              <th className="border-b border-r border-[#e9eae6] px-4 py-3 text-left font-medium text-[#646462]">updatedAt</th>
               {draft.columns.map((column) => (
-                <th key={column.id} className="border-b border-r border-gray-200 px-4 py-3 text-left font-medium text-gray-500">{column.name}</th>
+                <th key={column.id} className="border-b border-r border-[#e9eae6] px-4 py-3 text-left font-medium text-[#646462]">{column.name}</th>
               ))}
-              <th className="border-b border-gray-200 px-4 py-3 text-left font-medium text-gray-500">
+              <th className="border-b border-[#e9eae6] px-4 py-3 text-left font-medium text-[#646462]">
                 <button onClick={() => setColumnEditorOpen((open) => !open)}>+</button>
               </th>
             </tr>
@@ -3767,40 +3655,40 @@ function WorkflowDataTableEditor(props: {
           <tbody>
             {visibleRows.map((row) => (
               <tr key={row.id}>
-                <td className="border-b border-r border-gray-200 px-4 py-3 text-gray-700">{row.id}</td>
-                <td className="border-b border-r border-gray-200 px-4 py-3 text-gray-500">{row.createdAt}</td>
-                <td className="border-b border-r border-gray-200 px-4 py-3 text-gray-500">{row.updatedAt}</td>
+                <td className="border-b border-r border-[#e9eae6] px-4 py-3 text-[#1a1a1a]">{row.id}</td>
+                <td className="border-b border-r border-[#e9eae6] px-4 py-3 text-[#646462]">{row.createdAt}</td>
+                <td className="border-b border-r border-[#e9eae6] px-4 py-3 text-[#646462]">{row.updatedAt}</td>
                 {draft.columns.map((column) => (
-                  <td key={column.id} className="border-b border-r border-gray-200 px-2 py-2">
-                    <input value={String(row.values[column.name] ?? '')} onChange={(event) => updateCell(row.id, column.name, event.target.value)} className="w-full rounded-lg border border-transparent px-2 py-1.5 outline-none focus:border-gray-200 focus:bg-gray-50" />
+                  <td key={column.id} className="border-b border-r border-[#e9eae6] px-2 py-2">
+                    <input value={String(row.values[column.name] ?? '')} onChange={(event) => updateCell(row.id, column.name, event.target.value)} className="w-full rounded-[10px] border border-transparent px-2 py-1.5 outline-none focus:border-[#e9eae6] focus:bg-[#f8f8f7]" />
                   </td>
                 ))}
-                <td className="border-b border-gray-200 px-4 py-3" />
+                <td className="border-b border-[#e9eae6] px-4 py-3" />
               </tr>
             ))}
             <tr>
               <td colSpan={draft.columns.length + 4} className="px-4 py-3">
-                <button onClick={addRow} className="text-xl text-gray-700">+</button>
+                <button onClick={addRow} className="text-[20px] text-[#1a1a1a]">+</button>
               </td>
             </tr>
           </tbody>
         </table>
 
         {columnEditorOpen && (
-          <div className="absolute left-[37%] top-14 z-10 w-[300px] rounded-xl border border-gray-200 bg-white p-4 shadow-2xl">
+          <div className="absolute left-[37%] top-14 z-10 w-[300px] rounded-[12px] border border-[#e9eae6] bg-white p-4 shadow-2xl">
             <label className="block">
-              <span className="text-sm font-medium text-gray-700">Name <span className="text-[#ff5a46]">*</span></span>
-              <input value={columnName} onChange={(event) => setColumnName(event.target.value)} placeholder="Enter column name" className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#675cff]" />
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Name <span className="text-[#ff5a46]">*</span></span>
+              <input value={columnName} onChange={(event) => setColumnName(event.target.value)} placeholder="Enter column name" className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-3 py-2.5 text-[13px] outline-none focus:border-[#675cff]" />
             </label>
             <label className="mt-5 block">
-              <span className="text-sm font-medium text-gray-700">Type <span className="text-[#ff5a46]">*</span></span>
-              <select value={columnType} onChange={(event) => setColumnType(event.target.value as WorkflowColumnType)} className="mt-2 w-full rounded-xl border border-[#675cff] px-3 py-2.5 text-sm outline-none">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Type <span className="text-[#ff5a46]">*</span></span>
+              <select value={columnType} onChange={(event) => setColumnType(event.target.value as WorkflowColumnType)} className="mt-2 w-full rounded-[12px] border border-[#675cff] px-3 py-2.5 text-[13px] outline-none">
                 {WORKFLOW_COLUMN_TYPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
             </label>
-            <button onClick={addColumn} className="mt-8 rounded-lg bg-[#ff8b7f] px-4 py-2 text-sm font-bold text-white">Add Column</button>
+            <button onClick={addColumn} className="mt-8 rounded-[10px] bg-[#ff8b7f] px-4 py-2 text-[13px] font-bold text-white">Add Column</button>
           </div>
         )}
       </div>
@@ -3886,40 +3774,39 @@ function WorkflowEditorTopbar(props: {
     { label: 'Resume', action: runAndClose(props.onResume) },
     { label: 'Cancel', action: runAndClose(props.onCancel) },
     { label: 'Rollback', action: runAndClose(props.onRollback) },
-    { label: 'Settings', action: () => { closeMenu(); props.setActiveTab('overview'); } },
     { label: 'Archive', action: runAndClose(props.onArchive), danger: true },
   ];
 
   return (
-    <div className="flex-shrink-0 border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
-      <div className="flex h-16 items-center justify-between px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <button onClick={props.onBack} className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Workflows</button>
-          <span className="text-gray-300 dark:text-gray-600">/</span>
-          <input value={props.workflow?.name ?? ''} onChange={(event) => props.setWorkflow((workflow) => workflow ? { ...workflow, name: event.target.value } : workflow)} className="min-w-[260px] bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white" />
-          <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-400">{props.workflow?.currentVersion?.status ?? 'draft'}</span>
+    <div className="flex-shrink-0 border-b border-[#e9eae6] bg-white">
+      <div className="flex h-14 items-center justify-between px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <button onClick={props.onBack} className="text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a]">Workflows</button>
+          <span className="text-[#e9eae6]">/</span>
+          <input value={props.workflow?.name ?? ''} onChange={(event) => props.setWorkflow((workflow) => workflow ? { ...workflow, name: event.target.value } : workflow)} className="min-w-[260px] bg-transparent text-[14px] font-semibold text-[#1a1a1a] outline-none" />
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase bg-[#f1f1ee] border border-[#e9eae6] text-[#646462]">{props.workflow?.currentVersion?.status ?? 'draft'}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative" ref={menuRef}>
             <div className="flex items-center gap-2">
-              <button onClick={() => setMenuOpen((value) => value === 'edit' ? null : 'edit')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen === 'edit'} aria-label="Edit workflow actions">
+              <button onClick={() => setMenuOpen((value) => value === 'edit' ? null : 'edit')} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]" aria-haspopup="menu" aria-expanded={menuOpen === 'edit'} aria-label="Edit workflow actions">
                 Edit
               </button>
-              <button onClick={() => setMenuOpen((value) => value === 'run' ? null : 'run')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen === 'run'} aria-label="Run workflow actions">
+              <button onClick={() => setMenuOpen((value) => value === 'run' ? null : 'run')} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]" aria-haspopup="menu" aria-expanded={menuOpen === 'run'} aria-label="Run workflow actions">
                 Run
               </button>
             </div>
 
             {menuOpen === 'edit' && (
-              <div className="absolute right-20 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
-                <div className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Workflow actions</div>
-                <div className="border-t border-gray-100" />
+              <div className="absolute right-20 top-full z-50 mt-2 w-72 overflow-hidden rounded-[14px] border border-[#e9eae6] bg-white shadow-2xl">
+                <div className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#646462]">Workflow actions</div>
+                <div className="border-t border-[#f1f1ee]" />
                 <div className="p-2">
                   {editMenuItems.map((item, index) => (
                     <button
                       key={item.label}
                       onClick={item.action}
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-gray-50 ${item.bold ? 'font-semibold text-gray-900' : 'text-gray-700'} ${index === editMenuItems.length - 1 ? 'border-t border-gray-100 mt-2 pt-3' : ''}`}
+                      className={`flex w-full items-center justify-between rounded-[12px] px-3 py-2 text-left text-[13px] hover:bg-[#f8f8f7] ${item.bold ? 'font-semibold text-[#1a1a1a]' : 'text-[#1a1a1a]'} ${index === editMenuItems.length - 1 ? 'border-t border-[#f1f1ee] mt-2 pt-3' : ''}`}
                     >
                       <span>{item.label}</span>
                     </button>
@@ -3929,15 +3816,15 @@ function WorkflowEditorTopbar(props: {
             )}
 
             {menuOpen === 'run' && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
-                <div className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Workflow actions</div>
-                <div className="border-t border-gray-100" />
+              <div className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-[14px] border border-[#e9eae6] bg-white shadow-2xl">
+                <div className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#646462]">Workflow actions</div>
+                <div className="border-t border-[#f1f1ee]" />
                 <div className="p-2">
                   {runMenuItems.map((item, index) => (
                     <button
                       key={item.label}
                       onClick={item.action}
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-gray-50 ${item.danger ? 'text-red-600' : 'text-gray-700'} ${index === runMenuItems.length - 1 ? 'border-t border-gray-100 mt-2 pt-3' : ''}`}
+                      className={`flex w-full items-center justify-between rounded-[12px] px-3 py-2 text-left text-[13px] hover:bg-[#f8f8f7] ${item.danger ? 'text-red-600' : 'text-[#1a1a1a]'} ${index === runMenuItems.length - 1 ? 'border-t border-[#f1f1ee] mt-2 pt-3' : ''}`}
                     >
                       <span>{item.label}</span>
                     </button>
@@ -3946,17 +3833,19 @@ function WorkflowEditorTopbar(props: {
               </div>
             )}
           </div>
-          <button onClick={props.onPublish} className="rounded-lg bg-black px-4 py-1.5 text-xs font-bold text-white hover:opacity-90">Publish</button>
+          <button onClick={props.onPublish} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Publish</button>
         </div>
       </div>
-      <div className="-mb-px flex justify-center">
-        <div className="rounded-t-lg bg-gray-200 p-1">
-          {EDITOR_TABS.map((tab) => (
-            <button key={tab.id} onClick={() => props.setActiveTab(tab.id)} className={`rounded-md px-4 py-2 text-xs font-semibold ${props.activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="-mb-px flex px-5">
+        {EDITOR_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => props.setActiveTab(tab.id)}
+            className={`h-10 px-3 text-[13px] font-medium border-b-2 transition-colors ${props.activeTab === tab.id ? 'border-[#1a1a1a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -3977,7 +3866,7 @@ function WorkflowAddNodePanel(props: {
   agentCatalog?: Array<{ id: string; slug: string; name: string; description?: string; status?: string }>;
 }) {
   return (
-    <aside className="absolute right-0 top-0 z-30 h-full w-[420px] border-l border-gray-200 bg-white shadow-xl">
+    <aside className="absolute right-0 top-0 z-30 h-full w-[420px] border-l border-[#e9eae6] bg-white shadow-xl">
       <AnimatePresence mode="wait" initial={false}>
         {props.screen === 'categories' ? (
           <motion.div
@@ -3987,19 +3876,19 @@ function WorkflowAddNodePanel(props: {
             exit={{ opacity: 0, x: -14 }}
             className="flex h-full flex-col"
           >
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-[#f1f1ee] px-5 py-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">What happens next?</h3>
-                <p className="mt-1 text-xs text-gray-500">Choose the next CRM-AI operation.</p>
+                <h3 className="text-[15px] font-bold text-[#1a1a1a]">What happens next?</h3>
+                <p className="mt-1 text-[12px] text-[#646462]">Choose the next CRM-AI operation.</p>
               </div>
-              <button onClick={props.onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+              <button onClick={props.onClose} className="rounded-[10px] p-2 text-[#646462] hover:bg-[#f8f8f7]">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <div className="border-b border-gray-100 p-5">
-              <div className="flex items-center gap-2 rounded-xl border border-gray-300 px-3 py-2 focus-within:ring-2 focus-within:ring-black/10">
-                <span className="material-symbols-outlined text-base text-gray-400">search</span>
-                <input value={props.search} onChange={(event) => props.setSearch(event.target.value)} placeholder="Search nodes..." className="w-full bg-transparent text-sm outline-none" />
+            <div className="border-b border-[#f1f1ee] p-5">
+              <div className="flex items-center gap-2 rounded-[12px] border border-[#e9eae6] px-3 py-2 focus-within:ring-2 focus-within:ring-black/10">
+                <span className="material-symbols-outlined text-[14px] text-[#646462]">search</span>
+                <input value={props.search} onChange={(event) => props.setSearch(event.target.value)} placeholder="Search nodes..." className="w-full bg-transparent text-[13px] outline-none" />
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 [scrollbar-gutter:stable]">
@@ -4008,23 +3897,23 @@ function WorkflowAddNodePanel(props: {
                     <button
                       key={category.category}
                       onClick={() => props.onOpenCategory(category.category)}
-                      className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                      className={`flex w-full items-center gap-3 rounded-[14px] border px-3 py-3 text-left transition ${
                         props.activeCategory === category.category
-                          ? 'border-gray-300 bg-gray-50 text-gray-900 shadow-sm'
-                          : 'border-transparent text-gray-700 hover:border-gray-200 hover:bg-gray-50'
+                          ? 'border-[#e9eae6] bg-[#f8f8f7] text-[#1a1a1a] shadow-sm'
+                          : 'border-transparent text-[#1a1a1a] hover:border-[#e9eae6] hover:bg-[#f8f8f7]'
                       }`}
                     >
-                      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-gray-700 shadow-sm">
-                        <span className="material-symbols-outlined text-xl">{category.icon}</span>
+                      <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-white text-[#1a1a1a] shadow-sm">
+                        <span className="material-symbols-outlined text-[20px]">{category.icon}</span>
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
-                          <span className="text-sm font-semibold">{category.title}</span>
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-500">{category.count}</span>
+                          <span className="text-[13px] font-semibold">{category.title}</span>
+                          <span className="inline-flex items-center rounded-full border border-[#e9eae6] bg-[#f1f1ee] px-2 py-0.5 text-[11px] font-semibold text-[#646462]">{category.count}</span>
                         </span>
-                        <span className="mt-1 block text-xs leading-5 text-gray-500">{category.subtitle}</span>
+                        <span className="mt-1 block text-[12px] leading-5 text-[#646462]">{category.subtitle}</span>
                       </span>
-                      <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
+                      <span className="material-symbols-outlined text-[14px] text-[#646462]">chevron_right</span>
                     </button>
                   ))}
                 </div>
@@ -4038,37 +3927,37 @@ function WorkflowAddNodePanel(props: {
             exit={{ opacity: 0, x: -14 }}
             className="flex h-full flex-col"
           >
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-              <button onClick={props.onBack} className="flex items-center gap-2 text-gray-500 hover:text-gray-900">
-                <span className="material-symbols-outlined text-lg">arrow_back</span>
-                <span className="text-sm font-semibold">Back</span>
+            <div className="flex items-center justify-between border-b border-[#f1f1ee] px-5 py-4">
+              <button onClick={props.onBack} className="flex items-center gap-2 text-[#646462] hover:text-[#1a1a1a]">
+                <span className="material-symbols-outlined text-[15px]">arrow_back</span>
+                <span className="text-[13px] font-semibold">Back</span>
               </button>
-              <button onClick={props.onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+              <button onClick={props.onClose} className="rounded-[10px] p-2 text-[#646462] hover:bg-[#f8f8f7]">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <div className="border-b border-gray-100 px-5 py-4">
+            <div className="border-b border-[#f1f1ee] px-5 py-4">
               <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 text-gray-700">
-                  <span className="material-symbols-outlined text-xl">{CATEGORY_META[props.activeCategory]?.icon ?? 'grid_view'}</span>
+                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#f8f8f7] text-[#1a1a1a]">
+                  <span className="material-symbols-outlined text-[20px]">{CATEGORY_META[props.activeCategory]?.icon ?? 'grid_view'}</span>
                 </span>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">{CATEGORY_META[props.activeCategory]?.title ?? props.activeCategory}</h3>
-                  <p className="mt-1 text-xs text-gray-500">{CATEGORY_META[props.activeCategory]?.subtitle ?? 'Choose a block for this category.'}</p>
+                  <h3 className="text-[15px] font-bold text-[#1a1a1a]">{CATEGORY_META[props.activeCategory]?.title ?? props.activeCategory}</h3>
+                  <p className="mt-1 text-[12px] text-[#646462]">{CATEGORY_META[props.activeCategory]?.subtitle ?? 'Choose a block for this category.'}</p>
                 </div>
               </div>
-              <div className="mt-4 flex items-center gap-2 rounded-xl border border-gray-300 px-3 py-2 focus-within:ring-2 focus-within:ring-black/10">
-                <span className="material-symbols-outlined text-base text-gray-400">search</span>
-                <input value={props.search} onChange={(event) => props.setSearch(event.target.value)} placeholder="Search nodes..." className="w-full bg-transparent text-sm outline-none" />
+              <div className="mt-4 flex items-center gap-2 rounded-[12px] border border-[#e9eae6] px-3 py-2 focus-within:ring-2 focus-within:ring-black/10">
+                <span className="material-symbols-outlined text-[14px] text-[#646462]">search</span>
+                <input value={props.search} onChange={(event) => props.setSearch(event.target.value)} placeholder="Search nodes..." className="w-full bg-transparent text-[13px] outline-none" />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {/* AI Agent category: show real AI Studio agents as the first section */}
               {props.activeCategory === 'AI Agent' && props.agentCatalog && props.agentCatalog.length > 0 && !props.search && (
                 <section className="mb-5">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                    <h4 className="text-sm font-bold text-gray-700">Your AI Studio Agents</h4>
-                    <span className="text-[11px] uppercase tracking-[0.24em] text-gray-400">{props.agentCatalog.length}</span>
+                  <div className="flex items-center justify-between border-b border-[#f1f1ee] pb-2">
+                    <h4 className="text-[13px] font-bold text-[#1a1a1a]">Your AI Studio Agents</h4>
+                    <span className="text-[11px] uppercase tracking-[0.24em] text-[#646462]">{props.agentCatalog.length}</span>
                   </div>
                   <div className="mt-2 space-y-1">
                     {props.agentCatalog.map((agent) => (
@@ -4084,48 +3973,48 @@ function WorkflowAddNodePanel(props: {
                           description: agent.description ?? `Run the ${agent.name} agent`,
                           defaultConfig: { agent: agent.slug, agentId: agent.id },
                         })}
-                        className="flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-gray-50"
+                        className="flex w-full items-start gap-3 rounded-[14px] px-3 py-3 text-left transition hover:bg-[#f8f8f7]"
                       >
-                        <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm">
-                          <span className="material-symbols-outlined text-lg">smart_toy</span>
+                        <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-[12px] bg-white text-[#646462] shadow-sm">
+                          <span className="material-symbols-outlined text-[15px]">smart_toy</span>
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">
-                            <span className="block text-sm font-semibold text-gray-900">{agent.name}</span>
+                            <span className="block text-[13px] font-semibold text-[#1a1a1a]">{agent.name}</span>
                             {agent.status && agent.status !== 'active' && (
-                              <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">{agent.status}</span>
+                              <span className="rounded-full bg-[#f8f8f7] px-1.5 py-0.5 text-[9px] text-[#646462]">{agent.status}</span>
                             )}
                           </span>
                           {agent.description && (
-                            <span className="mt-1 block text-xs leading-4 text-gray-500 line-clamp-1">{agent.description}</span>
+                            <span className="mt-1 block text-[12px] leading-4 text-[#646462] line-clamp-1">{agent.description}</span>
                           )}
                         </span>
-                        <span className="material-symbols-outlined mt-1 text-base text-gray-400">arrow_forward</span>
+                        <span className="material-symbols-outlined mt-1 text-[14px] text-[#646462]">arrow_forward</span>
                       </button>
                     ))}
                   </div>
-                  <p className="mt-3 text-[10px] text-gray-400">Configure agents in AI Studio → Agents. Each agent runs with its own persona, tools, and knowledge.</p>
+                  <p className="mt-3 text-[10px] text-[#646462]">Configure agents in AI Studio → Agents. Each agent runs with its own persona, tools, and knowledge.</p>
                 </section>
               )}
               {props.sections.length > 0 ? (
                 <div className="space-y-5">
                   {props.sections.map((section) => (
                     <section key={section.title}>
-                      <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                        <h4 className="text-sm font-bold text-gray-700">{section.title}</h4>
-                        <span className="text-[11px] uppercase tracking-[0.24em] text-gray-400">{section.items.length}</span>
+                      <div className="flex items-center justify-between border-b border-[#f1f1ee] pb-2">
+                        <h4 className="text-[13px] font-bold text-[#1a1a1a]">{section.title}</h4>
+                        <span className="text-[11px] uppercase tracking-[0.24em] text-[#646462]">{section.items.length}</span>
                       </div>
                       <div className="mt-2 space-y-1">
                         {section.items.map((spec) => (
-                          <button key={spec.key} onClick={() => props.onSelect(spec)} className="flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-gray-50">
-                            <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm">
-                              <span className="material-symbols-outlined text-lg">{spec.icon}</span>
+                          <button key={spec.key} onClick={() => props.onSelect(spec)} className="flex w-full items-start gap-3 rounded-[14px] px-3 py-3 text-left transition hover:bg-[#f8f8f7]">
+                            <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-[12px] bg-white text-[#646462] shadow-sm">
+                              <span className="material-symbols-outlined text-[15px]">{spec.icon}</span>
                             </span>
                             <span className="min-w-0 flex-1">
-                              <span className="block text-sm font-semibold text-gray-900">{spec.label}</span>
-                              <span className="mt-1 block text-xs leading-5 text-gray-500">{spec.description ?? spec.key}</span>
+                              <span className="block text-[13px] font-semibold text-[#1a1a1a]">{spec.label}</span>
+                              <span className="mt-1 block text-[12px] leading-5 text-[#646462]">{spec.description ?? spec.key}</span>
                             </span>
-                            <span className="material-symbols-outlined mt-1 text-base text-gray-400">arrow_forward</span>
+                            <span className="material-symbols-outlined mt-1 text-[14px] text-[#646462]">arrow_forward</span>
                           </button>
                         ))}
                       </div>
@@ -4133,10 +4022,10 @@ function WorkflowAddNodePanel(props: {
                   ))}
                 </div>
               ) : props.activeCategory !== 'AI Agent' ? (
-                <div className="flex h-full items-center justify-center text-sm text-gray-500">No nodes found.</div>
+                <div className="flex h-full items-center justify-center text-[13px] text-[#646462]">No nodes found.</div>
               ) : null}
               {props.activeCategory === 'AI Agent' && props.sections.length === 0 && (!props.agentCatalog || props.agentCatalog.length === 0) && (
-                <div className="flex h-full items-center justify-center text-sm text-gray-500">No AI agents found. Create one in AI Studio → Agents.</div>
+                <div className="flex h-full items-center justify-center text-[13px] text-[#646462]">No AI agents found. Create one in AI Studio → Agents.</div>
               )}
             </div>
           </motion.div>
@@ -4167,11 +4056,11 @@ function WorkflowContextMenu(props: {
     { label: 'Delete', action: () => props.onDelete(props.node!.id), key: 'Del', danger: true },
   ];
   return (
-    <div className="fixed z-50 w-64 rounded-lg border border-gray-200 bg-white py-2 shadow-2xl" style={{ left: props.contextMenu.x, top: props.contextMenu.y }}>
+    <div className="fixed z-50 w-64 rounded-[10px] border border-[#e9eae6] bg-white py-2 shadow-2xl" style={{ left: props.contextMenu.x, top: props.contextMenu.y }}>
       {items.map((item, index) => (
-        <button key={item.label} onClick={() => { item.action(); props.onClose(); }} className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50 ${item.danger ? 'text-red-600' : 'text-gray-700'} ${index === items.length - 1 ? 'border-t border-gray-100 mt-2 pt-3' : ''}`}>
+        <button key={item.label} onClick={() => { item.action(); props.onClose(); }} className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] hover:bg-[#f8f8f7] ${item.danger ? 'text-red-600' : 'text-[#1a1a1a]'} ${index === items.length - 1 ? 'border-t border-[#f1f1ee] mt-2 pt-3' : ''}`}>
           <span>{item.label}</span>
-          {item.key && <span className="rounded border border-gray-200 px-1.5 py-0.5 text-[10px] text-gray-400">{item.key}</span>}
+          {item.key && <span className="rounded-[6px] border border-[#e9eae6] px-1.5 py-0.5 text-[10px] text-[#646462]">{item.key}</span>}
         </button>
       ))}
     </div>
@@ -4234,33 +4123,33 @@ function AgentPickerField({
         onClick={() => setOpen((o) => !o)}
         className={`${className} flex w-full items-center justify-between text-left`}
       >
-        <span className={selectedAgent ? 'text-gray-900' : 'text-gray-400'}>
+        <span className={selectedAgent ? 'text-[#1a1a1a]' : 'text-[#646462]'}>
           {loading ? 'Loading agents…' : selectedAgent ? (
             <span className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-sm text-orange-400">smart_toy</span>
+              <span className="material-symbols-outlined text-[13px] text-orange-400">smart_toy</span>
               <span>{selectedAgent.name}</span>
-              <span className="text-[10px] text-gray-400">({selectedAgent.slug})</span>
+              <span className="text-[10px] text-[#646462]">({selectedAgent.slug})</span>
             </span>
           ) : value || placeholder || 'Select an AI Studio agent…'}
         </span>
-        <span className="material-symbols-outlined text-sm text-gray-400">
+        <span className="material-symbols-outlined text-[13px] text-[#646462]">
           {open ? 'expand_less' : 'expand_more'}
         </span>
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-auto rounded-[12px] border border-[#e9eae6] bg-white shadow-lg">
           <div className="sticky top-0 bg-white px-3 py-2">
             <input
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search agents…"
-              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-gray-400"
+              className="w-full rounded-[10px] border border-[#e9eae6] px-3 py-1.5 text-[13px] outline-none focus:border-[#d4d4d0]"
             />
           </div>
           {filtered.length === 0 ? (
-            <div className="px-3 py-4 text-center text-xs text-gray-400">
+            <div className="px-3 py-4 text-center text-[12px] text-[#646462]">
               {loading ? 'Loading…' : agents.length === 0 ? 'No agents found. Create one in AI Studio.' : 'No match'}
             </div>
           ) : (
@@ -4269,30 +4158,30 @@ function AgentPickerField({
                 key={a.id}
                 type="button"
                 onClick={() => { onChange(a.slug); setOpen(false); setQuery(''); }}
-                className={`flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-orange-50 ${value === a.slug ? 'bg-orange-50' : ''}`}
+                className={`flex w-full flex-col items-start px-3 py-2 text-left text-[13px] hover:bg-orange-50 ${value === a.slug ? 'bg-orange-50' : ''}`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-sm text-orange-400">smart_toy</span>
-                  <span className="font-medium text-gray-900">{a.name}</span>
-                  <span className="text-[10px] text-gray-400">{a.slug}</span>
+                  <span className="material-symbols-outlined text-[13px] text-orange-400">smart_toy</span>
+                  <span className="font-medium text-[#1a1a1a]">{a.name}</span>
+                  <span className="text-[10px] text-[#646462]">{a.slug}</span>
                   {a.status && a.status !== 'active' && (
-                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">{a.status}</span>
+                    <span className="rounded-full bg-[#f8f8f7] px-1.5 py-0.5 text-[9px] text-[#646462]">{a.status}</span>
                   )}
                 </div>
                 {a.description && (
-                  <span className="ml-6 mt-0.5 text-[11px] text-gray-400 line-clamp-1">{a.description}</span>
+                  <span className="ml-6 mt-0.5 text-[11px] text-[#646462] line-clamp-1">{a.description}</span>
                 )}
               </button>
             ))
           )}
           {/* Manual entry option */}
-          <div className="border-t border-gray-100 px-3 py-2">
+          <div className="border-t border-[#f1f1ee] px-3 py-2">
             <button
               type="button"
               onClick={() => { onChange(query || value); setOpen(false); setQuery(''); }}
-              className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700"
+              className="flex items-center gap-2 text-[12px] text-[#646462] hover:text-[#1a1a1a]"
             >
-              <span className="material-symbols-outlined text-sm">edit</span>
+              <span className="material-symbols-outlined text-[13px]">edit</span>
               Use custom slug: <span className="font-mono font-medium">{query || value || '…'}</span>
             </button>
           </div>
@@ -4309,20 +4198,20 @@ function NodeConfigFields({ node, onConfig, size = 'lg' }: {
 }) {
   const fields = nodeFieldsForKey(node.key);
   const inputCls = size === 'lg'
-    ? 'mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400'
-    : 'mt-1.5 w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-gray-400';
+    ? 'mt-2 w-full rounded-[12px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]'
+    : 'mt-1.5 w-full rounded-[8px] border border-[#e9eae6] px-3 py-1.5 text-[13px] outline-none focus:border-[#d4d4d0]';
 
   // No schema defined → generic fallback for any existing config keys
   if (fields.length === 0) {
     const existingKeys = Object.keys(node.config ?? {}).filter((k) => k !== '_meta');
     if (existingKeys.length === 0) {
-      return <div className="py-6 text-center text-xs text-gray-400">No configuration required for this node.</div>;
+      return <div className="py-6 text-center text-[12px] text-[#646462]">No configuration required for this node.</div>;
     }
     return (
       <div className="space-y-3">
         {existingKeys.map((key) => (
           <label key={key} className="block">
-            <span className="text-xs font-semibold capitalize text-gray-600">{key}</span>
+            <span className="text-[12px] font-semibold capitalize text-[#646462]">{key}</span>
             <input value={node.config[key] ?? ''} onChange={(e) => onConfig(key, e.target.value)} className={inputCls} />
           </label>
         ))}
@@ -4334,8 +4223,8 @@ function NodeConfigFields({ node, onConfig, size = 'lg' }: {
     <div className="space-y-3">
       {fields.map((field) => (
         <label key={field.key} className="block">
-          <span className="text-xs font-semibold text-gray-600">{field.label}</span>
-          {field.hint && <span className="ml-2 text-[10px] text-gray-400">{field.hint}</span>}
+          <span className="text-[12px] font-semibold text-[#646462]">{field.label}</span>
+          {field.hint && <span className="ml-2 text-[10px] text-[#646462]">{field.hint}</span>}
           {field.type === 'agent-picker' ? (
             <AgentPickerField
               value={node.config[field.key] ?? ''}
@@ -4396,37 +4285,37 @@ function WorkflowNodeEditorModal(props: {
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-3 sm:p-5" onClick={props.onClose}>
       <div
-        className="flex h-[94vh] w-[98vw] max-w-[1820px] flex-col overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.18)]"
+        className="flex h-[94vh] w-[98vw] max-w-[1820px] flex-col overflow-hidden rounded-[28px] border border-[#e9eae6] bg-white shadow-[0_30px_100px_rgba(15,23,42,0.18)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex h-16 items-center justify-between border-b border-gray-200 px-6">
+        <div className="flex h-16 items-center justify-between border-b border-[#e9eae6] px-6">
           <div className="flex items-center gap-3">
             <span className="material-symbols-outlined text-orange-500">{props.spec?.icon ?? 'settings'}</span>
             <div>
-              <div className="text-sm font-semibold text-gray-900">{props.node.label}</div>
-              <div className="text-[11px] uppercase tracking-[0.22em] text-gray-400">{props.node.key}</div>
+              <div className="text-[13px] font-semibold text-[#1a1a1a]">{props.node.label}</div>
+              <div className="text-[11px] uppercase tracking-[0.22em] text-[#646462]">{props.node.key}</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={props.onExecute} className="rounded-lg bg-[#ff4f3d] px-3 py-2 text-xs font-bold text-white shadow-sm">Execute step</button>
-            <button onClick={props.onClose} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">Close</button>
+            <button onClick={props.onExecute} className="rounded-[10px] bg-[#ff4f3d] px-3 py-2 text-[12px] font-bold text-white shadow-sm">Execute step</button>
+            <button onClick={props.onClose} className="rounded-[10px] border border-[#e9eae6] px-3 py-2 text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Close</button>
           </div>
         </div>
 
         <div className="grid flex-1 grid-cols-[1.15fr_0.95fr_1.1fr] overflow-hidden bg-white">
-          <section className="border-r border-gray-100 bg-gray-50/70">
-            <div className="flex items-center gap-2 border-b border-gray-200 px-5 py-3 text-[11px] font-bold uppercase tracking-[0.24em] text-gray-400">Input</div>
+          <section className="border-r border-[#f1f1ee] bg-[#f8f8f7]/70">
+            <div className="flex items-center gap-2 border-b border-[#e9eae6] px-5 py-3 text-[11px] font-bold uppercase tracking-[0.24em] text-[#646462]">Input</div>
             <div className="p-5">
               <div className="flex items-center gap-2 pb-4">
-                <button className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm">Mapping</button>
-                <button className="rounded-md px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-white">From AI</button>
+                <button className="rounded-[8px] border border-[#e9eae6] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1a1a1a] shadow-sm">Mapping</button>
+                <button className="rounded-[8px] px-3 py-1.5 text-[12px] font-semibold text-[#646462] hover:bg-white">From AI</button>
               </div>
-              <div className="min-h-[60vh] overflow-auto rounded-2xl border border-gray-200 bg-white p-4 text-sm text-gray-500">
+              <div className="min-h-[60vh] overflow-auto rounded-[14px] border border-[#e9eae6] bg-white p-4 text-[13px] text-[#646462]">
                 {inputData ? (
-                  <pre className="h-full whitespace-pre-wrap break-words text-left text-xs text-gray-700">{JSON.stringify(inputData, null, 2)}</pre>
+                  <pre className="h-full whitespace-pre-wrap break-words text-left text-[12px] text-[#1a1a1a]">{JSON.stringify(inputData, null, 2)}</pre>
                 ) : (
                   <div className="flex h-full min-h-[45vh] flex-col items-center justify-center text-center">
-                    <span className="material-symbols-outlined mb-3 text-3xl">input</span>
+                    <span className="material-symbols-outlined mb-3 text-[28px]">input</span>
                     <b>Parent node hasn't run yet</b>
                     <p className="mt-2 max-w-xs">Run previous nodes or execute the workflow to view input data.</p>
                   </div>
@@ -4435,27 +4324,27 @@ function WorkflowNodeEditorModal(props: {
             </div>
           </section>
 
-          <section className="border-r border-gray-100 bg-white">
-            <div className="flex h-16 items-center justify-between border-b border-gray-200 px-5">
+          <section className="border-r border-[#f1f1ee] bg-white">
+            <div className="flex h-16 items-center justify-between border-b border-[#e9eae6] px-5">
               <div className="flex gap-3">
-                <button onClick={() => props.setMode('parameters')} className={`h-16 border-b-2 text-sm font-semibold ${props.mode === 'parameters' ? 'border-[#ff4f3d] text-[#ff4f3d]' : 'border-transparent text-gray-500'}`}>Parameters</button>
-                <button onClick={() => props.setMode('settings')} className={`h-16 border-b-2 text-sm font-semibold ${props.mode === 'settings' ? 'border-[#ff4f3d] text-[#ff4f3d]' : 'border-transparent text-gray-500'}`}>Settings</button>
+                <button onClick={() => props.setMode('parameters')} className={`h-16 border-b-2 text-[13px] font-semibold ${props.mode === 'parameters' ? 'border-[#ff4f3d] text-[#ff4f3d]' : 'border-transparent text-[#646462]'}`}>Parameters</button>
+                <button onClick={() => props.setMode('settings')} className={`h-16 border-b-2 text-[13px] font-semibold ${props.mode === 'settings' ? 'border-[#ff4f3d] text-[#ff4f3d]' : 'border-transparent text-[#646462]'}`}>Settings</button>
               </div>
             </div>
             <div className="h-[calc(100%-64px)] overflow-y-auto p-5">
               {props.mode === 'parameters' ? (
                 <div className="space-y-4">
                   {props.spec?.description && (
-                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs text-gray-500">{props.spec.description}</div>
+                    <div className="rounded-[12px] border border-[#f1f1ee] bg-[#f8f8f7] px-3 py-2.5 text-[12px] text-[#646462]">{props.spec.description}</div>
                   )}
                   <NodeConfigFields node={props.node} onConfig={props.onConfig} size="lg" />
                   {props.node.type === 'integration' && (
                     <label className="block">
-                      <span className="text-xs font-semibold text-gray-600">Connection</span>
+                      <span className="text-[12px] font-semibold text-[#646462]">Connection</span>
                       <select
                         value={props.node.credentialsRef ?? props.node.config.connector ?? ''}
                         onChange={(event) => props.onCredentials(event.target.value || null)}
-                        className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400"
+                        className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]"
                       >
                         <option value="">Select connector...</option>
                         {props.connectors.map((connector) => (
@@ -4464,92 +4353,92 @@ function WorkflowNodeEditorModal(props: {
                           </option>
                         ))}
                       </select>
-                      <div className="mt-2 text-[11px] text-gray-400">Secrets stay inside Integrations. Workflows only reference the connection.</div>
+                      <div className="mt-2 text-[11px] text-[#646462]">Secrets stay inside Integrations. Workflows only reference the connection.</div>
                     </label>
                   )}
                 </div>
               ) : (
                 <div className="space-y-4">
                   <label className="block">
-                    <span className="text-xs font-semibold text-gray-600">Notes</span>
-                    <textarea value={props.node.ui?.notes ?? ''} onChange={(event) => props.onUi({ notes: event.target.value })} className="mt-2 h-28 w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                    <span className="text-[12px] font-semibold text-[#646462]">Notes</span>
+                    <textarea value={props.node.ui?.notes ?? ''} onChange={(event) => props.onUi({ notes: event.target.value })} className="mt-2 h-28 w-full resize-none rounded-[12px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]" />
                   </label>
-                  <label className="flex items-center justify-between text-sm">
+                  <label className="flex items-center justify-between text-[13px]">
                     <span>Display Note in Flow?</span>
-                    <button onClick={() => props.onUi({ displayNote: !props.node.ui?.displayNote })} className={`h-6 w-11 rounded-full transition ${props.node.ui?.displayNote ? 'bg-gray-900' : 'bg-gray-300'}`}>
+                    <button onClick={() => props.onUi({ displayNote: !props.node.ui?.displayNote })} className={`h-6 w-11 rounded-full transition ${props.node.ui?.displayNote ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
                       <span className={`block h-5 w-5 rounded-full bg-white transition ${props.node.ui?.displayNote ? 'translate-x-5' : 'translate-x-0.5'}`} />
                     </button>
                   </label>
-                  <button onClick={props.onToggle} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50">{props.node.disabled ? 'Activate node' : 'Deactivate node'}</button>
+                  <button onClick={props.onToggle} className="w-full rounded-[12px] border border-[#e9eae6] px-3 py-2 text-[13px] font-semibold hover:bg-[#f8f8f7]">{props.node.disabled ? 'Activate node' : 'Deactivate node'}</button>
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block">
-                      <span className="text-xs font-semibold text-gray-600">Retries</span>
-                      <input type="number" min={0} value={props.node.retryPolicy?.retries ?? ''} onChange={(event) => props.onRetryPolicy({ retries: Number(event.target.value || 0) })} className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                      <span className="text-[12px] font-semibold text-[#646462]">Retries</span>
+                      <input type="number" min={0} value={props.node.retryPolicy?.retries ?? ''} onChange={(event) => props.onRetryPolicy({ retries: Number(event.target.value || 0) })} className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]" />
                     </label>
                     <label className="block">
-                      <span className="text-xs font-semibold text-gray-600">Backoff ms</span>
-                      <input type="number" min={0} value={props.node.retryPolicy?.backoffMs ?? ''} onChange={(event) => props.onRetryPolicy({ backoffMs: Number(event.target.value || 0) })} className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                      <span className="text-[12px] font-semibold text-[#646462]">Backoff ms</span>
+                      <input type="number" min={0} value={props.node.retryPolicy?.backoffMs ?? ''} onChange={(event) => props.onRetryPolicy({ backoffMs: Number(event.target.value || 0) })} className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]" />
                     </label>
                   </div>
-                  <div className="border-t border-gray-100 pt-4">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-3">System Controls</div>
+                  <div className="border-t border-[#f1f1ee] pt-4">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#646462] mb-3">System Controls</div>
                     <div className="space-y-4">
                       <label className="block">
-                        <span className="text-xs font-semibold text-gray-600">Idempotency Key (Template)</span>
+                        <span className="text-[12px] font-semibold text-[#646462]">Idempotency Key (Template)</span>
                         <input 
                           value={props.node.config?.idempotencyKey ?? ''} 
                           onChange={(e) => props.onConfig('idempotencyKey', e.target.value)} 
                           placeholder="e.g. {{order.id}}:cancel"
-                          className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" 
+                          className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]" 
                         />
-                        <p className="mt-1.5 text-[10px] text-gray-400">Prevents the node from running again if the key matches a previous execution in this context.</p>
+                        <p className="mt-1.5 text-[10px] text-[#646462]">Prevents the node from running again if the key matches a previous execution in this context.</p>
                       </label>
                       <div className="grid grid-cols-2 gap-3">
                         <label className="block">
-                          <span className="text-xs font-semibold text-gray-600">Rate Limit Bucket</span>
+                          <span className="text-[12px] font-semibold text-[#646462]">Rate Limit Bucket</span>
                           <input 
                             value={props.node.config?.rateLimitBucket ?? ''} 
                             onChange={(e) => props.onConfig('rateLimitBucket', e.target.value)} 
                             placeholder="e.g. stripe_api"
-                            className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" 
+                            className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]" 
                           />
                         </label>
                         <label className="block">
-                          <span className="text-xs font-semibold text-gray-600">Max / Session</span>
+                          <span className="text-[12px] font-semibold text-[#646462]">Max / Session</span>
                           <input 
                             type="number"
                             value={props.node.config?.rateLimitLimit ?? ''} 
                             onChange={(e) => props.onConfig('rateLimitLimit', e.target.value)} 
                             placeholder="e.g. 5"
-                            className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" 
+                            className="mt-2 w-full rounded-[12px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]" 
                           />
                         </label>
                       </div>
                     </div>
                   </div>
-                  <div className="border-t border-gray-100 pt-4 text-xs text-gray-400">{props.node.key} node version 1.1</div>
+                  <div className="border-t border-[#f1f1ee] pt-4 text-[12px] text-[#646462]">{props.node.key} node version 1.1</div>
                 </div>
               )}
             </div>
           </section>
 
-          <section className="bg-gray-50/80">
-            <div className="flex h-16 items-center justify-between border-b border-gray-200 px-5">
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-gray-400">Output</div>
-              <button onClick={props.onClose} className="rounded p-1 text-gray-500 hover:bg-gray-100"><span className="material-symbols-outlined text-lg">close</span></button>
+          <section className="bg-[#f8f8f7]/80">
+            <div className="flex h-16 items-center justify-between border-b border-[#e9eae6] px-5">
+              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#646462]">Output</div>
+              <button onClick={props.onClose} className="rounded-[6px] p-1 text-[#646462] hover:bg-[#f8f8f7]"><span className="material-symbols-outlined text-[15px]">close</span></button>
             </div>
-            <div className="flex h-[calc(100%-64px)] items-center justify-center p-8 text-center text-sm text-gray-500">
+            <div className="flex h-[calc(100%-64px)] items-center justify-center p-8 text-center text-[13px] text-[#646462]">
               {props.latestStep ? (
                 <div className="flex h-full w-full flex-col gap-3">
-                  <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-2 text-left text-xs text-gray-600">
+                  <div className="flex items-center justify-between rounded-[12px] border border-[#e9eae6] bg-white px-4 py-2 text-left text-[12px] text-[#646462]">
                     <span>Status: <b className="uppercase">{props.latestStep.status}</b></span>
                     <span>{props.latestStep.durationMs ?? props.latestStep.duration_ms ?? 0} ms</span>
                   </div>
-                  <pre className="min-h-0 flex-1 overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-left text-xs text-gray-700">{JSON.stringify(props.latestStep.output ?? props.latestStep, null, 2)}</pre>
+                  <pre className="min-h-0 flex-1 overflow-auto rounded-[12px] border border-[#e9eae6] bg-white p-4 text-left text-[12px] text-[#1a1a1a]">{JSON.stringify(props.latestStep.output ?? props.latestStep, null, 2)}</pre>
                 </div>
               ) : (
                 <div>
-                  <span className="material-symbols-outlined mb-3 text-3xl">output</span>
+                  <span className="material-symbols-outlined mb-3 text-[28px]">output</span>
                   <b className="block">No output data</b>
                   <p className="mt-2">Output will appear here once this node is run.</p>
                 </div>
@@ -4579,51 +4468,51 @@ function WorkflowNodeEditorPanel(props: {
 }) {
   const inputData = props.latestStep?.input ?? (props.node.type === 'trigger' ? { manual: true, source: 'builder' } : null);
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20 h-[42%] border-t border-gray-200 bg-white shadow-2xl">
+    <div className="absolute inset-x-0 bottom-0 z-20 h-[42%] border-t border-[#e9eae6] bg-white shadow-2xl">
       <div className="flex h-full">
-        <section className="w-[38%] border-r border-gray-100 bg-gray-50">
-          <div className="flex h-10 items-center gap-2 border-b border-gray-200 px-4">
+        <section className="w-[38%] border-r border-[#f1f1ee] bg-[#f8f8f7]">
+          <div className="flex h-10 items-center gap-2 border-b border-[#e9eae6] px-4">
             <span className="material-symbols-outlined text-orange-500">{props.spec?.icon ?? 'settings'}</span>
-            <span className="font-semibold text-gray-900">{props.node.label}</span>
+            <span className="font-semibold text-[#1a1a1a]">{props.node.label}</span>
           </div>
           <div className="flex items-center gap-2 px-4 py-3">
-            <button className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold shadow-sm">Mapping</button>
-            <button className="rounded-md px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-white">From AI</button>
+            <button className="rounded-[8px] bg-white px-3 py-1.5 text-[12px] font-semibold shadow-sm">Mapping</button>
+            <button className="rounded-[8px] px-3 py-1.5 text-[12px] font-semibold text-[#646462] hover:bg-white">From AI</button>
           </div>
-          <div className="h-[calc(100%-88px)] overflow-auto p-4 text-sm text-gray-500">
+          <div className="h-[calc(100%-88px)] overflow-auto p-4 text-[13px] text-[#646462]">
             {inputData ? (
-              <pre className="h-full rounded-xl border border-gray-200 bg-white p-4 text-left text-xs text-gray-700">{JSON.stringify(inputData, null, 2)}</pre>
+              <pre className="h-full rounded-[12px] border border-[#e9eae6] bg-white p-4 text-left text-[12px] text-[#1a1a1a]">{JSON.stringify(inputData, null, 2)}</pre>
             ) : (
               <div className="flex h-full flex-col items-center justify-center text-center">
-                <span className="material-symbols-outlined mb-3 text-3xl">input</span>
+                <span className="material-symbols-outlined mb-3 text-[28px]">input</span>
                 <b>Parent node hasn't run yet</b>
                 <p className="mt-2 max-w-xs">Run previous nodes or execute the workflow to view input data.</p>
               </div>
             )}
           </div>
         </section>
-        <section className="w-[24%] border-r border-gray-100 bg-white">
-          <div className="flex h-10 items-center justify-between border-b border-gray-200 px-4">
+        <section className="w-[24%] border-r border-[#f1f1ee] bg-white">
+          <div className="flex h-10 items-center justify-between border-b border-[#e9eae6] px-4">
             <div className="flex gap-3">
-              <button onClick={() => props.setMode('parameters')} className={`h-10 border-b-2 text-sm font-semibold ${props.mode === 'parameters' ? 'border-[#ff4f3d] text-[#ff4f3d]' : 'border-transparent text-gray-500'}`}>Parameters</button>
-              <button onClick={() => props.setMode('settings')} className={`h-10 border-b-2 text-sm font-semibold ${props.mode === 'settings' ? 'border-[#ff4f3d] text-[#ff4f3d]' : 'border-transparent text-gray-500'}`}>Settings</button>
+              <button onClick={() => props.setMode('parameters')} className={`h-10 border-b-2 text-[13px] font-semibold ${props.mode === 'parameters' ? 'border-[#ff4f3d] text-[#ff4f3d]' : 'border-transparent text-[#646462]'}`}>Parameters</button>
+              <button onClick={() => props.setMode('settings')} className={`h-10 border-b-2 text-[13px] font-semibold ${props.mode === 'settings' ? 'border-[#ff4f3d] text-[#ff4f3d]' : 'border-transparent text-[#646462]'}`}>Settings</button>
             </div>
-            <button onClick={props.onExecute} className="rounded-md bg-[#ff4f3d] px-3 py-1.5 text-xs font-bold text-white">Execute step</button>
+            <button onClick={props.onExecute} className="rounded-[8px] bg-[#ff4f3d] px-3 py-1.5 text-[12px] font-bold text-white">Execute step</button>
           </div>
           <div className="h-[calc(100%-40px)] overflow-y-auto p-4">
             {props.mode === 'parameters' ? (
               <div className="space-y-3">
                 {props.spec?.description && (
-                  <div className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-500">{props.spec.description}</div>
+                  <div className="rounded-[8px] border border-[#f1f1ee] bg-[#f8f8f7] px-3 py-2 text-[12px] text-[#646462]">{props.spec.description}</div>
                 )}
                 <NodeConfigFields node={props.node} onConfig={props.onConfig} size="sm" />
                 {props.node.type === 'integration' && (
                   <label className="block">
-                    <span className="text-xs font-semibold text-gray-600">Connection</span>
+                    <span className="text-[12px] font-semibold text-[#646462]">Connection</span>
                     <select
                       value={props.node.credentialsRef ?? props.node.config.connector ?? ''}
                       onChange={(event) => props.onCredentials(event.target.value || null)}
-                      className="mt-2 w-full rounded-md border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400"
+                      className="mt-2 w-full rounded-[8px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]"
                     >
                       <option value="">Select connector...</option>
                       {props.connectors.map((connector) => (
@@ -4632,55 +4521,55 @@ function WorkflowNodeEditorPanel(props: {
                         </option>
                       ))}
                     </select>
-                    <div className="mt-2 text-[11px] text-gray-400">Secrets stay inside Integrations. Workflows only reference the connection.</div>
+                    <div className="mt-2 text-[11px] text-[#646462]">Secrets stay inside Integrations. Workflows only reference the connection.</div>
                   </label>
                 )}
               </div>
             ) : (
               <div className="space-y-4">
                 <label className="block">
-                  <span className="text-xs font-semibold text-gray-600">Notes</span>
-                  <textarea value={props.node.ui?.notes ?? ''} onChange={(event) => props.onUi({ notes: event.target.value })} className="mt-2 h-24 w-full resize-none rounded-md border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                  <span className="text-[12px] font-semibold text-[#646462]">Notes</span>
+                  <textarea value={props.node.ui?.notes ?? ''} onChange={(event) => props.onUi({ notes: event.target.value })} className="mt-2 h-24 w-full resize-none rounded-[8px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]" />
                 </label>
-                <label className="flex items-center justify-between text-sm">
+                <label className="flex items-center justify-between text-[13px]">
                   <span>Display Note in Flow?</span>
-                  <button onClick={() => props.onUi({ displayNote: !props.node.ui?.displayNote })} className={`h-6 w-11 rounded-full transition ${props.node.ui?.displayNote ? 'bg-gray-900' : 'bg-gray-300'}`}>
+                  <button onClick={() => props.onUi({ displayNote: !props.node.ui?.displayNote })} className={`h-6 w-11 rounded-full transition ${props.node.ui?.displayNote ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
                     <span className={`block h-5 w-5 rounded-full bg-white transition ${props.node.ui?.displayNote ? 'translate-x-5' : 'translate-x-0.5'}`} />
                   </button>
                 </label>
-                <button onClick={props.onToggle} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50">{props.node.disabled ? 'Activate node' : 'Deactivate node'}</button>
+                <button onClick={props.onToggle} className="w-full rounded-[8px] border border-[#e9eae6] px-3 py-2 text-[13px] font-semibold hover:bg-[#f8f8f7]">{props.node.disabled ? 'Activate node' : 'Deactivate node'}</button>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="block">
-                    <span className="text-xs font-semibold text-gray-600">Retries</span>
-                    <input type="number" min={0} value={props.node.retryPolicy?.retries ?? ''} onChange={(event) => props.onRetryPolicy({ retries: Number(event.target.value || 0) })} className="mt-2 w-full rounded-md border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                    <span className="text-[12px] font-semibold text-[#646462]">Retries</span>
+                    <input type="number" min={0} value={props.node.retryPolicy?.retries ?? ''} onChange={(event) => props.onRetryPolicy({ retries: Number(event.target.value || 0) })} className="mt-2 w-full rounded-[8px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]" />
                   </label>
                   <label className="block">
-                    <span className="text-xs font-semibold text-gray-600">Backoff ms</span>
-                    <input type="number" min={0} value={props.node.retryPolicy?.backoffMs ?? ''} onChange={(event) => props.onRetryPolicy({ backoffMs: Number(event.target.value || 0) })} className="mt-2 w-full rounded-md border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                    <span className="text-[12px] font-semibold text-[#646462]">Backoff ms</span>
+                    <input type="number" min={0} value={props.node.retryPolicy?.backoffMs ?? ''} onChange={(event) => props.onRetryPolicy({ backoffMs: Number(event.target.value || 0) })} className="mt-2 w-full rounded-[8px] border border-[#e9eae6] px-3 py-2 text-[13px] outline-none focus:border-[#d4d4d0]" />
                   </label>
                 </div>
-                <div className="border-t border-gray-100 pt-4 text-xs text-gray-400">{props.node.key} node version 1.0</div>
+                <div className="border-t border-[#f1f1ee] pt-4 text-[12px] text-[#646462]">{props.node.key} node version 1.0</div>
               </div>
             )}
           </div>
         </section>
-        <section className="flex-1 bg-gray-50">
-          <div className="flex h-10 items-center justify-between border-b border-gray-200 px-4">
-            <div className="text-xs font-bold uppercase tracking-[0.25em] text-gray-400">Output</div>
-            <button onClick={props.onClose} className="rounded p-1 text-gray-500 hover:bg-gray-100"><span className="material-symbols-outlined text-lg">close</span></button>
+        <section className="flex-1 bg-[#f8f8f7]">
+          <div className="flex h-10 items-center justify-between border-b border-[#e9eae6] px-4">
+            <div className="text-[12px] font-bold uppercase tracking-[0.25em] text-[#646462]">Output</div>
+            <button onClick={props.onClose} className="rounded-[6px] p-1 text-[#646462] hover:bg-[#f8f8f7]"><span className="material-symbols-outlined text-[15px]">close</span></button>
           </div>
-          <div className="flex h-[calc(100%-40px)] items-center justify-center p-8 text-center text-sm text-gray-500">
+          <div className="flex h-[calc(100%-40px)] items-center justify-center p-8 text-center text-[13px] text-[#646462]">
             {props.latestStep ? (
               <div className="flex h-full w-full flex-col gap-3">
-                <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-2 text-left text-xs text-gray-600">
+                <div className="flex items-center justify-between rounded-[12px] border border-[#e9eae6] bg-white px-4 py-2 text-left text-[12px] text-[#646462]">
                   <span>Status: <b className="uppercase">{props.latestStep.status}</b></span>
                   <span>{props.latestStep.durationMs ?? props.latestStep.duration_ms ?? 0} ms</span>
                 </div>
-                <pre className="min-h-0 flex-1 overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-left text-xs text-gray-700">{JSON.stringify(props.latestStep.output ?? props.latestStep, null, 2)}</pre>
+                <pre className="min-h-0 flex-1 overflow-auto rounded-[12px] border border-[#e9eae6] bg-white p-4 text-left text-[12px] text-[#1a1a1a]">{JSON.stringify(props.latestStep.output ?? props.latestStep, null, 2)}</pre>
               </div>
             ) : (
               <div>
-                <span className="material-symbols-outlined mb-3 text-3xl">output</span>
+                <span className="material-symbols-outlined mb-3 text-[28px]">output</span>
                 <b className="block">No output data</b>
                 <p className="mt-2">Output will appear here once this node is run.</p>
               </div>
@@ -4704,26 +4593,26 @@ function WorkflowOverview(props: {
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="grid gap-6 xl:grid-cols-12">
-        <div className="xl:col-span-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-card dark:border-gray-800 dark:bg-card-dark">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Workflow purpose</div>
+        <div className="xl:col-span-8 rounded-[14px] border border-[#e9eae6] bg-white p-6 shadow-card dark:border-[#1a1a1a] dark:bg-card-dark">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[#646462]">Workflow purpose</div>
           <textarea
             value={props.workflow?.description ?? ''}
             onChange={(event) => props.setWorkflow((workflow) => workflow ? { ...workflow, description: event.target.value } : workflow)}
-            className="mt-3 min-h-32 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-black/10 dark:border-gray-700 dark:bg-gray-800"
+            className="mt-3 min-h-32 w-full resize-none rounded-[12px] border border-[#e9eae6] bg-[#f8f8f7] p-4 text-[13px] leading-relaxed outline-none focus:ring-2 focus:ring-black/10 dark:border-[#1a1a1a] dark:bg-[#1a1a1a]"
           />
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             {props.workflow?.metrics.map((metric) => (
-              <div key={metric.label} className="rounded-xl border border-gray-100 p-4 dark:border-gray-800">
-                <div className="text-xl font-bold text-gray-900 dark:text-white">{metric.value}</div>
-                <div className="mt-1 text-xs text-gray-500">{metric.label}</div>
+              <div key={metric.label} className="rounded-[12px] border border-[#f1f1ee] p-4 dark:border-[#1a1a1a]">
+                <div className="text-[20px] font-bold text-[#1a1a1a] dark:text-white">{metric.value}</div>
+                <div className="mt-1 text-[12px] text-[#646462]">{metric.label}</div>
               </div>
             ))}
           </div>
         </div>
         <div className="xl:col-span-4 space-y-4">
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card dark:border-gray-800 dark:bg-card-dark">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Validation</div>
-            <div className="mt-3 space-y-2 text-sm">
+          <div className="rounded-[14px] border border-[#e9eae6] bg-white p-5 shadow-card dark:border-[#1a1a1a] dark:bg-card-dark">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-[#646462]">Validation</div>
+            <div className="mt-3 space-y-2 text-[13px]">
               <div className="flex items-center justify-between"><span>Nodes</span><b>{props.nodes.length}</b></div>
               <div className="flex items-center justify-between"><span>Connections</span><b>{props.edges.length}</b></div>
               <div className="flex items-center justify-between"><span>Disabled</span><b>{props.nodes.filter((node) => node.disabled).length}</b></div>
@@ -4732,28 +4621,28 @@ function WorkflowOverview(props: {
             {props.validation?.diagnostics?.length > 0 && (
               <div className="mt-4 space-y-2">
                 {props.validation.diagnostics.slice(0, 5).map((diagnostic: WorkflowDiagnostic, index: number) => (
-                  <div key={`${diagnostic.code}-${index}`} className={`rounded-lg px-3 py-2 text-xs ${diagnostic.severity === 'error' ? 'bg-red-50 text-red-700' : diagnostic.severity === 'warning' ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-600'}`}>
+                  <div key={`${diagnostic.code}-${index}`} className={`rounded-[10px] px-3 py-2 text-[12px] ${diagnostic.severity === 'error' ? 'bg-red-50 text-red-700' : diagnostic.severity === 'warning' ? 'bg-amber-50 text-amber-700' : 'bg-[#f8f8f7] text-[#646462]'}`}>
                     {diagnostic.message}
                   </div>
                 ))}
               </div>
             )}
           </div>
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card dark:border-gray-800 dark:bg-card-dark">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Latest result</div>
-            <div className="mt-3 text-sm font-bold text-gray-900 dark:text-white">{props.runResult?.status ?? props.dryRun?.summary ?? 'No execution yet'}</div>
-            {props.runResult?.error && <div className="mt-2 text-xs text-red-600">{props.runResult.error}</div>}
+          <div className="rounded-[14px] border border-[#e9eae6] bg-white p-5 shadow-card dark:border-[#1a1a1a] dark:bg-card-dark">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-[#646462]">Latest result</div>
+            <div className="mt-3 text-[13px] font-bold text-[#1a1a1a] dark:text-white">{props.runResult?.status ?? props.dryRun?.summary ?? 'No execution yet'}</div>
+            {props.runResult?.error && <div className="mt-2 text-[12px] text-red-600">{props.runResult.error}</div>}
           </div>
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card dark:border-gray-800 dark:bg-card-dark">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Versions</div>
+          <div className="rounded-[14px] border border-[#e9eae6] bg-white p-5 shadow-card dark:border-[#1a1a1a] dark:bg-card-dark">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-[#646462]">Versions</div>
             <div className="mt-3 space-y-2">
               {(props.workflow?.versions ?? []).slice(0, 5).map((version: any) => (
-                <div key={version.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs">
+                <div key={version.id} className="flex items-center justify-between rounded-[10px] bg-[#f8f8f7] px-3 py-2 text-[12px]">
                   <span>v{version.version_number}</span>
-                  <span className="font-bold uppercase text-gray-500">{version.status}</span>
+                  <span className="font-bold uppercase text-[#646462]">{version.status}</span>
                 </div>
               ))}
-              {!(props.workflow?.versions ?? []).length && <div className="text-sm text-gray-500">No version history yet.</div>}
+              {!(props.workflow?.versions ?? []).length && <div className="text-[13px] text-[#646462]">No version history yet.</div>}
             </div>
           </div>
         </div>
@@ -4768,44 +4657,44 @@ function WorkflowRuns(props: { runResult: any; dryRun: any; selectedWorkflow: Wo
     if (['completed', 'resumed'].includes(status)) return 'bg-green-50 text-green-700';
     if (['failed', 'blocked', 'cancelled'].includes(status)) return 'bg-red-50 text-red-700';
     if (['waiting', 'waiting_approval', 'paused'].includes(status)) return 'bg-amber-50 text-amber-700';
-    if (status === 'skipped') return 'bg-gray-100 text-gray-500';
+    if (status === 'skipped') return 'bg-[#f8f8f7] text-[#646462]';
     return 'bg-blue-50 text-blue-700';
   };
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="rounded-2xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-card-dark">
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-gray-800">
+      <div className="rounded-[14px] border border-[#e9eae6] bg-white shadow-card dark:border-[#1a1a1a] dark:bg-card-dark">
+        <div className="flex items-center justify-between border-b border-[#f1f1ee] px-6 py-4 dark:border-[#1a1a1a]">
           <div>
-            <h3 className="font-bold text-gray-900 dark:text-white">Execution timeline</h3>
-            <p className="mt-1 text-xs text-gray-500">Dry-runs, real runs, waiting approvals and node-level status.</p>
+            <h3 className="font-bold text-[#1a1a1a] dark:text-white">Execution timeline</h3>
+            <p className="mt-1 text-[12px] text-[#646462]">Dry-runs, real runs, waiting approvals and node-level status.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={props.onResume} disabled={!(props.runResult?.id ?? props.selectedWorkflow?.recentRuns?.[0]?.id)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Resume</button>
-            <button onClick={props.onCancel} disabled={!(props.runResult?.id ?? props.selectedWorkflow?.recentRuns?.[0]?.id)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
-            <button onClick={props.onRetry} disabled={!(props.runResult?.id ?? props.selectedWorkflow?.recentRuns?.[0]?.id)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+            <button onClick={props.onResume} disabled={!(props.runResult?.id ?? props.selectedWorkflow?.recentRuns?.[0]?.id)} className="rounded-[10px] border border-[#e9eae6] px-3 py-1.5 text-[12px] font-bold text-[#1a1a1a] hover:bg-[#f8f8f7] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#1a1a1a] dark:text-[#e9eae6] dark:hover:bg-[#1a1a1a]">Resume</button>
+            <button onClick={props.onCancel} disabled={!(props.runResult?.id ?? props.selectedWorkflow?.recentRuns?.[0]?.id)} className="rounded-[10px] border border-[#e9eae6] px-3 py-1.5 text-[12px] font-bold text-[#1a1a1a] hover:bg-[#f8f8f7] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#1a1a1a] dark:text-[#e9eae6] dark:hover:bg-[#1a1a1a]">Cancel</button>
+            <button onClick={props.onRetry} disabled={!(props.runResult?.id ?? props.selectedWorkflow?.recentRuns?.[0]?.id)} className="rounded-[10px] border border-[#e9eae6] px-3 py-1.5 text-[12px] font-bold text-[#1a1a1a] hover:bg-[#f8f8f7] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#1a1a1a] dark:text-[#e9eae6] dark:hover:bg-[#1a1a1a]">
               Retry latest
             </button>
           </div>
         </div>
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
           {rows.map((step: any, index: number) => (
-            <div key={step.id ?? step.nodeId ?? index} className="grid grid-cols-12 gap-4 px-6 py-4 text-sm">
-              <div className="col-span-5 flex items-center gap-3 font-bold text-gray-900 dark:text-white">
+            <div key={step.id ?? step.nodeId ?? index} className="grid grid-cols-12 gap-4 px-6 py-4 text-[13px]">
+              <div className="col-span-5 flex items-center gap-3 font-bold text-[#1a1a1a] dark:text-white">
                 <span className={`h-3 w-3 rounded-full ${statusTone(String(step.status)).split(' ')[0]}`} />
                 {step.label ?? step.node_id ?? `Step ${index + 1}`}
               </div>
-              <div className="col-span-3 text-gray-500">{step.node_type ?? step.type ?? step.key ?? 'workflow'}</div>
+              <div className="col-span-3 text-[#646462]">{step.node_type ?? step.type ?? step.key ?? 'workflow'}</div>
               <div className="col-span-2"><span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${statusTone(String(step.status))}`}>{step.status}</span></div>
-              <div className="col-span-2 text-right text-gray-400">
+              <div className="col-span-2 text-right text-[#646462]">
                 {step.steps === undefined && step.workflow_version_id ? (
-                  <button onClick={() => props.onViewSteps(step.id)} className="text-xs font-bold text-gray-700 underline-offset-2 hover:underline dark:text-gray-200">View steps</button>
+                  <button onClick={() => props.onViewSteps(step.id)} className="text-[12px] font-bold text-[#1a1a1a] underline-offset-2 hover:underline dark:text-[#e9eae6]">View steps</button>
                 ) : (
                   step.error ?? step.output?.reason ?? step.started_at ?? ''
                 )}
               </div>
             </div>
           ))}
-          {!rows.length && <div className="px-6 py-10 text-sm text-gray-500">No workflow runs yet. Run a dry-run or execute the published workflow.</div>}
+          {!rows.length && <div className="px-6 py-10 text-[13px] text-[#646462]">No workflow runs yet. Run a dry-run or execute the published workflow.</div>}
         </div>
       </div>
     </div>
@@ -4815,10 +4704,10 @@ function WorkflowRuns(props: { runResult: any; dryRun: any; selectedWorkflow: Wo
 function WorkflowEvaluations({ workflow }: { workflow: Workflow | null }) {
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center shadow-card">
-        <span className="material-symbols-outlined text-4xl text-gray-400">fact_check</span>
-        <h3 className="mt-3 text-lg font-bold text-gray-900">Evaluations are ready for this workflow</h3>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-gray-500">
+      <div className="rounded-[14px] border border-dashed border-[#e9eae6] bg-white p-10 text-center shadow-card">
+        <span className="material-symbols-outlined text-4xl text-[#646462]">fact_check</span>
+        <h3 className="mt-3 text-[15px] font-bold text-[#1a1a1a]">Evaluations are ready for this workflow</h3>
+        <p className="mx-auto mt-2 max-w-xl text-[13px] text-[#646462]">
           Once evaluation metrics are connected, this tab will show test scenarios, pass rates and regression history for {workflow?.name ?? 'this workflow'}.
         </p>
       </div>
@@ -4887,14 +4776,14 @@ function WorkflowActionDialog(props: {
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="w-full max-w-xl rounded-3xl border border-gray-200 bg-white p-6 shadow-2xl">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="w-full max-w-xl rounded-[16px] border border-[#e9eae6] bg-white p-6 shadow-2xl">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-gray-400">Workflow action</div>
-              <h3 className="mt-2 text-xl font-semibold text-gray-900">{titleByKind[props.state.kind]}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-gray-500">{bodyByKind[props.state.kind]}</p>
+              <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#646462]">Workflow action</div>
+              <h3 className="mt-2 text-[20px] font-semibold text-[#1a1a1a]">{titleByKind[props.state.kind]}</h3>
+              <p className="mt-2 text-[13px] leading-relaxed text-[#646462]">{bodyByKind[props.state.kind]}</p>
             </div>
-            <button onClick={props.onClose} className="rounded-xl p-2 text-gray-500 transition hover:bg-gray-100">
+            <button onClick={props.onClose} className="rounded-[12px] p-2 text-[#646462] transition hover:bg-[#f8f8f7]">
               <span className="material-symbols-outlined">close</span>
             </button>
           </div>
@@ -4903,7 +4792,7 @@ function WorkflowActionDialog(props: {
             <input
               value={props.state.value}
               onChange={(event) => props.onChange(event.target.value)}
-              className="mt-6 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-black/10"
+              className="mt-6 w-full rounded-[14px] border border-[#e9eae6] bg-[#f8f8f7] px-4 py-3 text-[13px] text-[#1a1a1a] outline-none focus:ring-2 focus:ring-black/10"
               placeholder="Workflow name"
             />
           )}
@@ -4912,7 +4801,7 @@ function WorkflowActionDialog(props: {
             <textarea
               value={props.state.value}
               onChange={(event) => props.onChange(event.target.value)}
-              className="mt-6 min-h-36 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-900 outline-none focus:ring-2 focus:ring-black/10"
+              className="mt-6 min-h-36 w-full rounded-[14px] border border-[#e9eae6] bg-[#f8f8f7] px-4 py-3 text-[13px] leading-relaxed text-[#1a1a1a] outline-none focus:ring-2 focus:ring-black/10"
               placeholder="Describe what this workflow automates and when teams should use it."
             />
           )}
@@ -4921,7 +4810,7 @@ function WorkflowActionDialog(props: {
             <input
               value={props.state.value}
               onChange={(event) => props.onChange(event.target.value)}
-              className="mt-6 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-black/10"
+              className="mt-6 w-full rounded-[14px] border border-[#e9eae6] bg-[#f8f8f7] px-4 py-3 text-[13px] text-[#1a1a1a] outline-none focus:ring-2 focus:ring-black/10"
               placeholder="https://example.com/workflow.json"
             />
           )}
@@ -4935,13 +4824,13 @@ function WorkflowActionDialog(props: {
                   <button
                     key={category}
                     onClick={() => props.onChange(category)}
-                    className={`rounded-2xl border px-4 py-4 text-left transition ${active ? 'border-black bg-gray-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                    className={`rounded-[14px] border px-4 py-4 text-left transition ${active ? 'border-black bg-[#f8f8f7]' : 'border-[#e9eae6] bg-white hover:bg-[#f8f8f7]'}`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="material-symbols-outlined text-base text-gray-700">{meta.icon}</span>
-                      <div className="text-sm font-semibold text-gray-900">{category}</div>
+                      <span className="material-symbols-outlined text-[14px] text-[#1a1a1a]">{meta.icon}</span>
+                      <div className="text-[13px] font-semibold text-[#1a1a1a]">{category}</div>
                     </div>
-                    <div className="mt-2 text-xs leading-relaxed text-gray-500">{meta.subtitle}</div>
+                    <div className="mt-2 text-[12px] leading-relaxed text-[#646462]">{meta.subtitle}</div>
                   </button>
                 );
               })}
@@ -4949,10 +4838,10 @@ function WorkflowActionDialog(props: {
           )}
 
           <div className="mt-6 flex items-center justify-end gap-3">
-            <button onClick={props.onClose} className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50">
+            <button onClick={props.onClose} className="rounded-full border border-[#e9eae6] px-4 py-2 text-[13px] font-medium text-[#646462] transition hover:bg-[#f8f8f7]">
               Cancel
             </button>
-            <button onClick={props.onConfirm} className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90">
+            <button onClick={props.onConfirm} className="rounded-full bg-black px-4 py-2 text-[13px] font-semibold text-white transition hover:opacity-90">
               {props.state.kind === 'import_url'
                 ? 'Import'
                 : props.state.kind === 'move'
@@ -4971,22 +4860,22 @@ function TemplateModal({ open, onClose, onCreate }: { open: boolean; onClose: ()
     <AnimatePresence>
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-700 dark:bg-card-dark">
+          <div className="w-full max-w-3xl rounded-[14px] border border-[#e9eae6] bg-white p-6 shadow-2xl dark:border-[#1a1a1a] dark:bg-card-dark">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Workflow templates</h3>
-                <p className="text-sm text-gray-500">Start from an operational pattern built for CRM-AI.</p>
+                <h3 className="text-[15px] font-bold text-[#1a1a1a] dark:text-white">Workflow templates</h3>
+                <p className="text-[13px] text-[#646462]">Start from an operational pattern built for CRM-AI.</p>
               </div>
-              <button onClick={onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">
+              <button onClick={onClose} className="rounded-[10px] p-2 text-[#646462] hover:bg-[#f8f8f7] dark:hover:bg-[#1a1a1a]">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               {TEMPLATES.map((template) => (
-                <button key={template.id} onClick={() => onCreate(template)} className="rounded-xl border border-gray-200 p-4 text-left transition hover:border-black hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
-                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">{template.category}</div>
-                  <div className="font-bold text-gray-900 dark:text-white">{template.label}</div>
-                  <div className="mt-2 text-xs leading-relaxed text-gray-500">{template.description}</div>
+                <button key={template.id} onClick={() => onCreate(template)} className="rounded-[12px] border border-[#e9eae6] p-4 text-left transition hover:border-black hover:bg-[#f8f8f7] dark:border-[#1a1a1a] dark:hover:bg-[#1a1a1a]">
+                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#646462]">{template.category}</div>
+                  <div className="font-bold text-[#1a1a1a] dark:text-white">{template.label}</div>
+                  <div className="mt-2 text-[12px] leading-relaxed text-[#646462]">{template.description}</div>
                 </button>
               ))}
             </div>

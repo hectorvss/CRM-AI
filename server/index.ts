@@ -84,6 +84,9 @@ import { sentryOAuthRouter } from './routes/sentryOAuth.js';
 import { plaidIntegrationRouter } from './routes/plaidIntegration.js';
 import { gitlabOAuthRouter } from './routes/gitlabOAuth.js';
 import { discordOAuthRouter } from './routes/discordOAuth.js';
+import { freshdeskIntegrationRouter } from './routes/freshdeskIntegration.js';
+import { googleAnalyticsIntegrationRouter } from './routes/googleAnalyticsIntegration.js';
+import { delightedIntegrationRouter } from './routes/delightedIntegration.js';
 import { toolsRouter } from './routes/tools.js';
 import internalRouter from './routes/internal.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
@@ -293,6 +296,9 @@ app.use('/api/integrations/plaid', plaidIntegrationRouter);
 app.use('/api/integrations/gitlab', gitlabOAuthRouter);
 // Discord: OAuth bot install + REST v10 + interactions endpoint Ed25519.
 app.use('/api/integrations/discord', discordOAuthRouter);
+app.use('/api/integrations/freshdesk', freshdeskIntegrationRouter);
+app.use('/api/integrations/ga', googleAnalyticsIntegrationRouter);
+app.use('/api/integrations/delighted', delightedIntegrationRouter);
 // Unified tool dispatcher — any frontend surface (Copilot, automations,
 // scheduled actions) can invoke any registered planEngine tool by name.
 app.use('/api/tools', toolsRouter);

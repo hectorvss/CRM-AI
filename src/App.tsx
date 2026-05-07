@@ -386,6 +386,9 @@ export default function App() {
     }
   }, [navigationTarget]);
 
+  // No redirect-to-/signin: the SPA has no separate /signin route. We render
+  // the Login form inline below when authenticated=false.
+
   const pageFocus = useMemo(
     () => ({
       caseId: navigationTarget.entityType === 'case' ? navigationTarget.entityId : null,
@@ -411,12 +414,40 @@ export default function App() {
   // Unauthenticated — redirect back to the landing if auth is enabled.
   // supabaseAuthEnabled is updated at runtime after ensureSupabaseClient().
   const hasSupabaseAuth = supabaseAuthEnabled;
+  // CRITICAL: do the redirect inside a useEffect (see hook below). Performing
+  // `window.location.href = ...` directly in render is a side effect during
+  // render — React's StrictMode (and any re-render that hits this branch
+  // before the navigation completes) would re-fire the assignment, kicking off
+  // a new navigation each render. That manifests to the user as the page
+  // "reloading constantly" while the auth state is briefly false.
   if (hasSupabaseAuth && !authenticated) {
-    // If we're at /app and not logged in, send them to the landing signin
-    window.location.href = '/#/signin';
+    // CRITICAL: The SPA does NOT have a separate /#/signin entry — App.tsx is
+    // the single root. Render the Login form inline when the user is
+    // unauthenticated. After successful sign-in `setAuthenticated(true)` (via
+    // the supabase auth state listener) flips this branch and the user lands
+    // on the requested page. No redirect needed.
     return (
-      <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+        <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 border border-gray-200 dark:border-gray-700">
+          <div className="text-center mb-6">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Inicia sesión en Clain</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Introduce tus credenciales para continuar.
+            </p>
+          </div>
+          <Login
+            onLogin={() => {
+              // Clear any throttle flags so we don't show stale UI.
+              try {
+                sessionStorage.removeItem('crmai.appUnauthRedirectAt');
+                sessionStorage.removeItem('crmai.lastUnauthRedirect');
+                sessionStorage.removeItem('crmai.unauthRedirectCount');
+                sessionStorage.removeItem('crmai.unauthRedirectCountAt');
+              } catch { /* ignore */ }
+              setAuthenticated(true);
+            }}
+          />
+        </div>
       </div>
     );
   }

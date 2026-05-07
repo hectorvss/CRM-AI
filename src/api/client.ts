@@ -813,6 +813,40 @@ export const iamApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+  uploadAvatar: (file: File | string) => {
+    if (typeof file === 'string') {
+      return request<{ url: string }>('/iam/me/avatar', {
+        method: 'POST',
+        body: JSON.stringify({ data_url: file }),
+      });
+    }
+    return new Promise<{ url: string }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const dataUrl = String(reader.result || '');
+          const res = await request<{ url: string }>('/iam/me/avatar', {
+            method: 'POST',
+            body: JSON.stringify({ data_url: dataUrl }),
+          });
+          resolve(res);
+        } catch (err) { reject(err); }
+      };
+      reader.onerror = () => reject(reader.error || new Error('No se pudo leer el archivo'));
+      reader.readAsDataURL(file);
+    });
+  },
+  changePassword: (current: string, next: string) =>
+    request<{ ok: boolean }>('/iam/me/password', {
+      method: 'POST',
+      body: JSON.stringify({ current, next }),
+    }),
+  mySessions: () => request<any[]>('/iam/me/sessions').then(unwrapList),
+  revokeSession: (id: string) =>
+    request<{ ok: boolean }>(`/iam/me/sessions/${id}`, { method: 'DELETE' }),
+  myActivity: (limit = 50) =>
+    request<any[]>(`/iam/me/activity?limit=${encodeURIComponent(limit)}`).then(unwrapList),
+  myPermissions: () => request<any>('/iam/me/permissions'),
 };
 
 export const workspacesApi = {

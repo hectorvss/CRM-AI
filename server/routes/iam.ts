@@ -9,10 +9,12 @@ import { getSupabaseAdmin } from '../db/supabase.js';
 import { sendEmail } from '../pipeline/channelSenders.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { createAuditRepository } from '../data/audit.js';
 
 const router = Router();
 const iamRepository = createIAMRepository();
 const workspaceRepository = createWorkspaceRepository();
+const auditRepository = createAuditRepository();
 
 router.use(extractMultiTenant);
 
@@ -230,6 +232,308 @@ router.patch('/me', async (req: MultiTenantRequest, res) => {
   } catch (error) {
     console.error('Error updating user profile:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// ── Personal account endpoints ───────────────────────────────────────────────
+// Self-service. Used by the unified Profile page (avatar upload, password
+// change, sessions, activity, permissions). Intentionally do NOT require
+// settings.write — every user can manage their own account.
+
+// POST /iam/me/avatar — accept either { data_url } JSON or a multipart upload.
+// We persist the resulting URL/data-URL into users.avatar_url. Multipart is
+// optional: if no upload middleware is wired, the JSON path still works.
+router.post('/me/avatar', async (req: MultiTenantRequest, res) => {
+  const userId = req.userId;
+  if (!userId || userId === 'system') {
+    return sendError(res, 401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required');
+  }
+  const { data_url } = (req.body || {}) as { data_url?: string };
+  if (typeof data_url !== 'string' || data_url.length < 10) {
+    return sendError(res, 400, 'INVALID_AVATAR', 'data_url is required (data URI or remote URL)');
+  }
+  if (data_url.length > 5_000_000) {
+    return sendError(res, 413, 'AVATAR_TOO_LARGE', 'El avatar excede el tamaño máximo permitido');
+  }
+  try {
+    await iamRepository.updateUser(userId, { avatarUrl: data_url });
+    if (req.tenantId && req.workspaceId) {
+      try {
+        await auditRepository.logEvent(
+          { tenantId: req.tenantId, workspaceId: req.workspaceId },
+          { actorId: userId, actorType: 'human', action: 'profile.avatar_updated', entityType: 'user', entityId: userId },
+        );
+      } catch { /* non-fatal */ }
+    }
+    res.json({ url: data_url });
+  } catch (error) {
+    console.error('Error updating avatar:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// POST /iam/me/password — change password via Supabase auth admin API.
+// We trust the bearer token to identify the user; current-password verification
+// is performed by re-calling supabase.auth.signInWithPassword with the user's
+// email. If the project is not configured for Supabase auth this returns a
+// graceful 503.
+router.post('/me/password', async (req: MultiTenantRequest, res) => {
+  const userId = req.userId;
+  if (!userId || userId === 'system') {
+    return sendError(res, 401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required');
+  }
+  const { current, next } = (req.body || {}) as { current?: string; next?: string };
+  if (!current || !next) {
+    return sendError(res, 400, 'INVALID_PASSWORD_PAYLOAD', 'Las contraseñas actual y nueva son obligatorias');
+  }
+  if (typeof next !== 'string' || next.length < 8) {
+    return sendError(res, 400, 'PASSWORD_TOO_SHORT', 'La nueva contraseña debe tener al menos 8 caracteres');
+  }
+
+  try {
+    const user = await iamRepository.getUserById(userId);
+    if (!user?.email) {
+      return sendError(res, 404, 'USER_NOT_FOUND', 'No se encontró al usuario');
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    // Verify current password by attempting a sign-in (the admin client uses
+    // service-role and can call signInWithPassword on behalf of users).
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: current,
+    });
+    if (verifyError) {
+      return sendError(res, 400, 'INVALID_CURRENT_PASSWORD', 'La contraseña actual no es correcta');
+    }
+
+    // Update password via admin API.
+    const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+      password: next,
+    });
+    if (updateError) {
+      logger.error('iam/me/password: admin update failed', { error: updateError.message });
+      return sendError(res, 500, 'INTERNAL_ERROR', 'No se pudo actualizar la contraseña');
+    }
+
+    if (req.tenantId && req.workspaceId) {
+      try {
+        await auditRepository.logEvent(
+          { tenantId: req.tenantId, workspaceId: req.workspaceId },
+          { actorId: userId, actorType: 'human', action: 'auth.password_changed', entityType: 'user', entityId: userId },
+        );
+      } catch { /* non-fatal */ }
+    }
+
+    res.json({ ok: true });
+  } catch (error: any) {
+    if (error?.message?.includes('not configured')) {
+      return sendError(res, 503, 'AUTH_NOT_CONFIGURED', 'El proveedor de autenticación no está configurado');
+    }
+    console.error('Error changing password:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// GET /iam/me/sessions — list active sessions for the current user. Reads
+// from the `user_sessions` table directly so we can include device/IP info.
+router.get('/me/sessions', async (req: MultiTenantRequest, res) => {
+  const userId = req.userId;
+  if (!userId || userId === 'system') {
+    return sendError(res, 401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required');
+  }
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('user_sessions')
+      .select('id, user_id, tenant_id, workspace_id, token_hash, expires_at, revoked_at, created_at, last_seen_at, ip, user_agent')
+      .eq('user_id', userId)
+      .is('revoked_at', null)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    let rows: any[] = data || [];
+    if (error) {
+      // Table may not have all columns or may not exist — fall back to empty.
+      logger.warn('iam/me/sessions: select failed, returning empty', { error: error.message });
+      rows = [];
+    }
+
+    // Try to identify the current session by re-hashing the bearer token.
+    const authHeader = req.headers.authorization || '';
+    let currentTokenHash: string | null = null;
+    if (authHeader.toLowerCase().startsWith('bearer ')) {
+      const raw = authHeader.slice(7).trim();
+      currentTokenHash = createHash('sha256').update(raw).digest('hex');
+    }
+
+    const result = rows.map((row: any) => ({
+      id: row.id,
+      device: row.user_agent ? row.user_agent.slice(0, 80) : 'Sesión desconocida',
+      ip: row.ip || null,
+      last_seen: row.last_seen_at || row.created_at || null,
+      created_at: row.created_at || null,
+      expires_at: row.expires_at || null,
+      current: currentTokenHash ? row.token_hash === currentTokenHash : false,
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error listing sessions:', error);
+    res.json([]);
+  }
+});
+
+// DELETE /iam/me/sessions/:id — revoke a non-current session for the user.
+router.delete('/me/sessions/:id', async (req: MultiTenantRequest, res) => {
+  const userId = req.userId;
+  if (!userId || userId === 'system') {
+    return sendError(res, 401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required');
+  }
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('user_sessions')
+      .select('id, token_hash')
+      .eq('id', req.params.id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return sendError(res, 404, 'SESSION_NOT_FOUND', 'Sesión no encontrada');
+    }
+
+    // Guard: can't revoke the current session here (use logout for that).
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.toLowerCase().startsWith('bearer ')) {
+      const raw = authHeader.slice(7).trim();
+      const currentHash = createHash('sha256').update(raw).digest('hex');
+      if (data.token_hash === currentHash) {
+        return sendError(res, 400, 'CANNOT_REVOKE_CURRENT', 'No puedes cerrar tu sesión actual aquí');
+      }
+    }
+
+    await supabase
+      .from('user_sessions')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .eq('user_id', userId);
+
+    if (req.tenantId && req.workspaceId) {
+      try {
+        await auditRepository.logEvent(
+          { tenantId: req.tenantId, workspaceId: req.workspaceId },
+          { actorId: userId, actorType: 'human', action: 'auth.session_revoked', entityType: 'session', entityId: req.params.id },
+        );
+      } catch { /* non-fatal */ }
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error revoking session:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// GET /iam/me/activity?limit=50 — recent audit events filtered to the
+// current actor.
+router.get('/me/activity', async (req: MultiTenantRequest, res) => {
+  const userId = req.userId;
+  if (!userId || userId === 'system') {
+    return sendError(res, 401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required');
+  }
+  if (!req.tenantId || !req.workspaceId) {
+    return res.json([]);
+  }
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('audit_events')
+      .select('id, action, entity_type, entity_id, actor_id, actor_type, metadata, occurred_at')
+      .eq('tenant_id', req.tenantId)
+      .eq('workspace_id', req.workspaceId)
+      .eq('actor_id', userId)
+      .order('occurred_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      logger.warn('iam/me/activity: query failed', { error: error.message });
+      return res.json([]);
+    }
+
+    const rows = (data || []).map((row: any) => ({
+      id: row.id,
+      type: row.action,
+      message: humanizeAction(row.action, row.entity_type),
+      target: row.entity_type && row.entity_id ? `${row.entity_type}#${row.entity_id}` : null,
+      created_at: row.occurred_at,
+      metadata: row.metadata || null,
+    }));
+
+    res.json(rows);
+  } catch (error) {
+    console.error('Error listing personal activity:', error);
+    res.json([]);
+  }
+});
+
+function humanizeAction(action: string, entityType?: string | null): string {
+  const map: Record<string, string> = {
+    'auth.login':            'Inicio de sesión',
+    'auth.logout':           'Cierre de sesión',
+    'auth.password_changed': 'Contraseña actualizada',
+    'auth.session_revoked':  'Sesión revocada',
+    'profile.avatar_updated':'Avatar actualizado',
+    'profile.updated':       'Perfil actualizado',
+  };
+  if (map[action]) return map[action];
+  const noun = entityType ? ` en ${entityType}` : '';
+  return `${action}${noun}`;
+}
+
+// GET /iam/me/permissions — role + permission list + teams for current user.
+router.get('/me/permissions', async (req: MultiTenantRequest, res) => {
+  const userId = req.userId;
+  if (!userId || userId === 'system') {
+    return sendError(res, 401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required');
+  }
+  if (!req.tenantId || !req.workspaceId) {
+    return res.json({ role: null, permissions: [], teams: [] });
+  }
+  try {
+    const supabase = getSupabaseAdmin();
+    let role: any = null;
+    if (req.roleId) {
+      role = await iamRepository.getRoleById(req.roleId, req.tenantId, req.workspaceId);
+    }
+    const permissions = req.permissions || [];
+
+    // Teams the user belongs to (best-effort — the table is optional).
+    let teams: Array<{ id: string; name: string }> = [];
+    try {
+      const { data } = await supabase
+        .from('team_members')
+        .select('team_id, teams(id, name)')
+        .eq('user_id', userId)
+        .eq('tenant_id', req.tenantId)
+        .eq('workspace_id', req.workspaceId);
+      teams = (data || [])
+        .map((row: any) => row.teams)
+        .filter(Boolean)
+        .map((t: any) => ({ id: t.id, name: t.name }));
+    } catch { /* table may not exist — ok */ }
+
+    res.json({
+      role: role
+        ? { id: role.id, name: role.name, description: role.description || null, is_system: role.is_system }
+        : (req.roleId ? { id: req.roleId, name: req.roleId, description: null, is_system: 1 } : null),
+      permissions,
+      teams,
+    });
+  } catch (error) {
+    console.error('Error reading personal permissions:', error);
+    res.json({ role: null, permissions: [], teams: [] });
   }
 });
 

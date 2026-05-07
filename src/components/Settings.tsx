@@ -7,7 +7,7 @@ import NotificationsTab from './settings/Notifications';
 import SecurityAuditTab from './settings/SecurityAudit';
 import BillingUsageTab from './settings/BillingUsage';
 import DataPrivacyTab from './settings/DataPrivacy';
-import PersonalTab from './settings/Personal';
+import PersonalProfileView from './profile/PersonalProfileView';
 import { NavigateInput } from '../types';
 
 type SettingsTab = 'workspace' | 'teams_roles' | 'notifications' | 'security_audit' | 'billing_usage' | 'data_privacy' | 'personal';
@@ -45,7 +45,7 @@ export default function Settings({ onNavigate, initialSection }: SettingsProps) 
     if (['workspace', 'teams_roles', 'notifications', 'security_audit', 'billing_usage', 'data_privacy', 'personal'].includes(nextSection)) {
       setActiveTab(nextSection);
     }
-  }, [initialSection]);
+  }, [initialSection, onNavigate]);
 
   const handleDiscard = useCallback(() => {
     saveHandlerRef.current = null;
@@ -104,7 +104,7 @@ export default function Settings({ onNavigate, initialSection }: SettingsProps) 
             {activeTab === 'security_audit' && <SecurityAuditTab onSaveReady={setSaveHandler} />}
             {activeTab === 'billing_usage' && <BillingUsageTab onSaveReady={setSaveHandler} onNavigate={onNavigate} />}
             {activeTab === 'data_privacy' && <DataPrivacyTab onSaveReady={setSaveHandler} />}
-            {activeTab === 'personal' && <PersonalTab onSaveReady={setSaveHandler} />}
+            {activeTab === 'personal' && <PersonalProfileView onNavigate={onNavigate} showHeader={false} />}
           </TabErrorBoundary>
         </motion.div>
       </AnimatePresence>
