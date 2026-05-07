@@ -28,76 +28,53 @@ const MEMBERSHIP_CACHE_KEY = 'crmai.membership.v1';
  *
  * Guarded by `redirecting` — multiple in-flight 401s only redirect once.
  */
-let redirecting = false;
-const LAST_REDIRECT_KEY = 'crmai.lastUnauthRedirect';
-const COUNT_KEY = 'crmai.unauthRedirectCount';
-const COUNT_RESET_KEY = 'crmai.unauthRedirectCountAt';
+// CHANGED: the auto-redirect-on-401 was creating an unbreakable cross-reload
+// loop with /#/signin (which auto-redirects back when it detects a Supabase
+// session). We now NEVER auto-redirect from this handler. Instead, we show a
+// sticky banner the user can click to manually re-authenticate. This
+// guarantees the user can always reach the app even if iamApi.me 401s
+// sporadically.
+let bannerShown = false;
+function showSessionExpiredBanner() {
+  if (bannerShown) return;
+  bannerShown = true;
+
+  try { localStorage.removeItem(MEMBERSHIP_CACHE_KEY); } catch { /* storage may be disabled */ }
+
+  if (typeof document === 'undefined') return;
+  const ensure = () => {
+    if (!document.body) { setTimeout(ensure, 50); return; }
+    if (document.getElementById('crmai-session-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'crmai-session-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#fef3c7;color:#92400e;padding:8px 12px;text-align:center;z-index:99999;font-family:system-ui,-apple-system,sans-serif;font-size:13px;border-bottom:1px solid #fcd34d;';
+    banner.innerHTML = 'Tu sesión ha expirado. <button id="crmai-resignin" style="background:#92400e;color:#fff;border:none;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:600;margin-left:8px;cursor:pointer">Iniciar sesión</button> <button id="crmai-banner-dismiss" style="background:transparent;color:#92400e;border:none;padding:4px 8px;font-size:12px;cursor:pointer;margin-left:4px">Descartar</button>';
+    document.body.appendChild(banner);
+
+    const resignin = document.getElementById('crmai-resignin');
+    if (resignin) {
+      resignin.addEventListener('click', async () => {
+        try {
+          if (isSupabaseConfigured()) await supabase.auth.signOut();
+        } catch { /* ignore */ }
+        const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        window.location.href = `/#/signin?return=${encodeURIComponent(here)}`;
+      });
+    }
+    const dismiss = document.getElementById('crmai-banner-dismiss');
+    if (dismiss) {
+      dismiss.addEventListener('click', () => { banner.remove(); });
+    }
+  };
+  ensure();
+}
+
 async function handleUnauthorized() {
-  if (redirecting) return;
-
-  // Hard-stop ceiling: if we've already redirected 3+ times in the last
-  // 60s the user is in a redirect storm we cannot recover from automatically.
-  // Halt all further redirects for this session and surface a banner so the
-  // user can see what's happening and reload manually. This is the absolute
-  // backstop for any path that bypasses the 10s throttle below.
-  try {
-    const countRaw = sessionStorage.getItem(COUNT_KEY);
-    const countAt = parseInt(sessionStorage.getItem(COUNT_RESET_KEY) || '0', 10);
-    const now = Date.now();
-    const count = (countRaw && now - countAt < 60000) ? parseInt(countRaw, 10) : 0;
-    if (count >= 3) {
-      console.error('[auth] Hard-stop: 3+ unauthorized redirects in 60s. Halting.');
-      try {
-        document.body.insertAdjacentHTML(
-          'afterbegin',
-          '<div style="position:fixed;top:0;left:0;right:0;background:#fee2e2;color:#b91c1c;padding:8px;text-align:center;z-index:9999;font-family:system-ui;font-size:13px">Sesión expirada — recarga la página manualmente.</div>',
-        );
-      } catch { /* DOM may not be ready */ }
-      return;
-    }
-    sessionStorage.setItem(COUNT_KEY, String(count + 1));
-    sessionStorage.setItem(COUNT_RESET_KEY, String(now));
-  } catch { /* sessionStorage may be unavailable */ }
-
-  // Throttle: if we just redirected within the last 10s, skip. This breaks the
-  // page-reload loop that happens when a 401 fires immediately after the user
-  // lands back on the page (token refresh race / session not yet hydrated).
-  // Without this, the user sees the page constantly "reload".
-  try {
-    const recent = sessionStorage.getItem(LAST_REDIRECT_KEY);
-    if (recent) {
-      const ageMs = Date.now() - parseInt(recent, 10);
-      if (Number.isFinite(ageMs) && ageMs < 10000) {
-        console.warn('[auth] Skipping unauthorized redirect — fired again within 10s. Possible token refresh race.');
-        return;
-      }
-    }
-  } catch { /* sessionStorage may be unavailable */ }
-
-  redirecting = true;
-  try {
-    sessionStorage.setItem(LAST_REDIRECT_KEY, String(Date.now()));
-  } catch { /* sessionStorage may be unavailable */ }
-
-  try {
-    localStorage.removeItem(MEMBERSHIP_CACHE_KEY);
-  } catch { /* storage may be disabled */ }
-
-  try {
-    if (isSupabaseConfigured()) {
-      await supabase.auth.signOut();
-    }
-  } catch (err) {
-    console.error('[auth] signOut failed during 401 handler', err);
-  }
-
-  try {
-    const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const target = `/#/signin?return=${encodeURIComponent(here)}`;
-    window.location.href = target;
-  } catch (err) {
-    console.error('[auth] redirect to /signin failed', err);
-  }
+  // No more auto-redirect. The previous behaviour created an unbreakable
+  // signin↔app cross-reload loop. Instead surface a banner and let the user
+  // re-authenticate deliberately when they choose to.
+  console.warn('[auth] 401 received — auto-redirect disabled. Showing session banner.');
+  showSessionExpiredBanner();
 }
 
 if (typeof window !== 'undefined') {
