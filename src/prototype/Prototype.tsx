@@ -13411,7 +13411,15 @@ function KnowledgeArticleEditor({
   const authorInitial = (authorName[0] || '?').toUpperCase();
 
   return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col" onClick={e => e.stopPropagation()}>
+    // Drawer-style overlay: dimmed backdrop catches clicks to dismiss; the
+    // editor card sits inset from the edges so the LeftNav rail and a slice
+    // of the underlying view stay visible — same behaviour as the legacy
+    // Intercom editor in the screenshots.
+    <div className="fixed inset-0 z-50 bg-black/35 flex" onClick={onClose}>
+      <div
+        className="my-3 mr-3 ml-[88px] flex-1 bg-white rounded-[14px] shadow-[0px_24px_60px_rgba(20,20,20,0.28)] border border-[#e9eae6] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
       {/* Header */}
       <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-4">
         <div className="flex-1 flex items-center gap-2">
@@ -13789,6 +13797,7 @@ function KnowledgeArticleEditor({
             <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10"/></svg>
           </button>
         )}
+      </div>
       </div>
     </div>
   );
