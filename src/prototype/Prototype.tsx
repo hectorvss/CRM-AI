@@ -17145,6 +17145,12 @@ function FinOrientacionContent() {
     setEditing({ ...editing, enabled: next });
     toast.show(next ? 'Pauta habilitada' : 'Pauta pausada');
   }
+  function handleDeletePauta(p: FinPauta, ev?: React.MouseEvent) {
+    ev?.stopPropagation();
+    if (!window.confirm(`¿Eliminar la pauta "${p.title.trim() || 'Sin título'}"?`)) return;
+    pautas.remove(p.id);
+    toast.show('Pauta eliminada');
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -17293,10 +17299,10 @@ function FinOrientacionContent() {
                       </div>
                     ) : (
                       items.map(p => (
-                        <button
+                        <div
                           key={p.id}
                           onClick={() => openEdit(p)}
-                          className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] text-left"
+                          className="group w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto_32px] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] text-left cursor-pointer"
                         >
                           <p className="text-[13.5px] font-medium text-[#1a1a1a] truncate">{p.title.trim() || 'Sin título'}</p>
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
@@ -17308,7 +17314,14 @@ function FinOrientacionContent() {
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${p.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
                             {p.enabled ? 'Habilitado' : 'Pausado'}
                           </span>
-                        </button>
+                          <button
+                            onClick={(e) => handleDeletePauta(p, e)}
+                            title="Eliminar pauta"
+                            className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                        </div>
                       ))
                     )}
                     <div className="px-4 py-2.5">
