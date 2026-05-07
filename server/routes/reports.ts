@@ -197,6 +197,142 @@ router.get('/sla', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
+// ── GET /api/reports/conversations ───────────────────────────────────────────
+
+router.get('/conversations', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getConversations({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports conversations error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/reports/finagent ─────────────────────────────────────────────────
+
+router.get('/finagent', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getFinAgent({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports finagent error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/reports/teammate ─────────────────────────────────────────────────
+
+router.get('/teammate', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getTeammate({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports teammate error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/reports/tickets ──────────────────────────────────────────────────
+
+router.get('/tickets', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getTickets({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports tickets error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/reports/articles ─────────────────────────────────────────────────
+
+router.get('/articles', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getArticles({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports articles error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/reports/responsiveness ──────────────────────────────────────────
+
+router.get('/responsiveness', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getResponsiveness({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports responsiveness error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/reports/csat ─────────────────────────────────────────────────────
+
+router.get('/csat', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getCsat({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports csat error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/reports/effectiveness ───────────────────────────────────────────
+
+router.get('/effectiveness', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const channel = normalizeChannelParam(req.query.channel);
+    const data = await reportRepository.getEffectiveness({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!
+    }, period, channel);
+    res.json(data);
+  } catch (error) {
+    console.error('Reports effectiveness error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/summary', async (req: MultiTenantRequest, res: Response) => {
   try {
     const period = String(req.query.period ?? '30d');

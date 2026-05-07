@@ -5080,7 +5080,7 @@ function UsersTable({
         <div className="flex items-center justify-between bg-[#f8f8f7] rounded-[6px] px-[15px] py-[10px] border border-[#e9eae6]">
           <span className="text-[13px] text-[#1a1a1a]">
             Exige la verificación de identidad para proteger los datos de tus usuarios.{" "}
-            <span className="underline cursor-pointer">Configurar verificación de identidad.</span>
+            <button onClick={() => { if (typeof window !== 'undefined') { const u = new URL(window.location.href); u.searchParams.set('view', 'workspaceSecurity'); window.location.href = u.toString(); } }} className="underline cursor-pointer hover:text-black">Configurar verificación de identidad.</button>
           </span>
           <button onClick={() => setShowVerifyBanner(false)} className="text-[13px] text-[#646462] ml-4 hover:text-[#1a1a1a] flex-shrink-0">✕</button>
         </div>
@@ -5168,6 +5168,15 @@ function ContactsCommon({
   const [bulkTagIds, setBulkTagIds] = useState<string[] | null>(null);
   const [bulkMsgIds, setBulkMsgIds] = useState<string[] | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  // Trial banner — dismissable, persisted across reloads.
+  const [bannerHidden, setBannerHidden] = useState<boolean>(() => {
+    try { return typeof window !== 'undefined' && window.localStorage.getItem('clain.contacts.trialBanner') === '1'; }
+    catch { return false; }
+  });
+  function dismissBanner() {
+    setBannerHidden(true);
+    try { window.localStorage.setItem('clain.contacts.trialBanner', '1'); } catch { /* ignore */ }
+  }
 
   useEffect(() => {
     if (!toast) return;
@@ -5203,13 +5212,15 @@ function ContactsCommon({
         />
       ) : (
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {!bannerHidden && (
           <div className="flex items-center justify-between px-4 py-2 bg-[#e7e2fd] border border-[#b09efa] rounded-[10px] mx-4 mt-3 flex-shrink-0">
             <span className="text-[13px] text-[#1a1a1a]">
               Quedan <strong>14 días</strong> en tu prueba de Advanced.{" "}
-              <span className="underline cursor-pointer">Explorar planes</span>
+              <button onClick={() => onNavigate('billing' as View)} className="underline cursor-pointer hover:text-black">Explorar planes</button>
             </span>
-            <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">✕</button>
+            <button onClick={dismissBanner} className="text-[13px] text-[#646462] hover:text-[#1a1a1a]" title="Ocultar">✕</button>
           </div>
+          )}
           <ContactsPageHeader onBack={onBack} title={title} onCreate={() => setCreateOpen(true)} />
           <div className="flex-1 overflow-y-auto min-h-0">
             {!loading && all.length === 0 && <ImportHero />}
@@ -5318,7 +5329,7 @@ function _AllLeadsTableSection_REMOVED() {
           <img src={ICON_INFO} alt="" className="w-4 h-4 flex-shrink-0 mr-[10px]" />
           <span className="text-[14px] font-medium text-[#1a1a1a] flex-1">
             Exige la verificación de identidad para proteger las conversaciones con los clientes y evitar la suplantación de identidad.{" "}
-            <span className="underline cursor-pointer">Configurar verificación de identidad.</span>
+            <button onClick={() => { if (typeof window !== 'undefined') { const u = new URL(window.location.href); u.searchParams.set('view', 'workspaceSecurity'); window.location.href = u.toString(); } }} className="underline cursor-pointer hover:text-black">Configurar verificación de identidad.</button>
           </span>
         </div>
       </div>
@@ -14028,7 +14039,7 @@ function FinAtributosContent() {
             <button className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
             </button>
-            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button onClick={() => openCrmView('automation')} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo</span>
             </button>
@@ -14050,7 +14061,11 @@ function FinAtributosContent() {
             <div>Escalado</div>
           </div>
           {rows.map(r => (
-            <div key={r.name} className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 py-3.5 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a]">
+            <button
+              key={r.name}
+              onClick={() => openCrmView('automation')}
+              className="w-full text-left grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 py-3.5 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a] hover:bg-[#fafafa]"
+            >
               <div className="flex items-center gap-2">
                 <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
                 <span>{r.name}</span>
@@ -14062,7 +14077,7 @@ function FinAtributosContent() {
               <div className="text-[#646462]">—</div>
               <div className="text-[#646462]">—</div>
               <div className="text-[#646462]">—</div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -14075,9 +14090,11 @@ function FinEscalamientoContent() {
   const IMG_ESCALATION_BANNER = `${FIGMA_CDN}/b1517b7b-b13a-40c8-83a1-46a7a4839098`;
   const IMG_ESCALATION_LINK_BOOK = `${FIGMA_CDN}/34e259b7-ba78-42e5-9f7a-f48a3961b433`;
   const IMG_ESCALATION_CLOSE = `${FIGMA_CDN}/34dfc6d2-2f3f-4639-aa68-6573e7f751a7`;
+  const { dismissed: heroDismissed, dismiss: dismissHero } = useDismissibleHero('escalamiento');
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
+      {!heroDismissed && (
       <div className="flex-shrink-0 px-4 pt-4">
         <div className="relative bg-white rounded-[16px] shadow-[0px_1px_2px_rgba(20,20,20,0.15)] px-6 py-5 flex gap-6 items-start">
           <div className="flex-1 min-w-0 max-w-[640px] flex flex-col gap-4">
@@ -14101,11 +14118,12 @@ function FinEscalamientoContent() {
           <div className="relative w-[388px] h-[192px] rounded-[12px] overflow-hidden flex-shrink-0">
             <img src={IMG_ESCALATION_BANNER} alt="Escalation examples" className="absolute inset-0 w-full h-full object-cover" />
           </div>
-          <button aria-label="Cerrar" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+          <button onClick={dismissHero} aria-label="Cerrar" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
             <span className="w-4 h-4" style={{ backgroundImage: `url(${IMG_ESCALATION_CLOSE})`, backgroundSize: 'cover' }} />
           </button>
         </div>
       </div>
+      )}
 
       {/* Escalamiento section header */}
       <div className="flex-shrink-0 border-b border-[#e9eae6]">
@@ -14168,7 +14186,7 @@ function FinEscalamientoContent() {
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
               </button>
               <div className="px-4 py-2.5 border-t border-[#e9eae6]">
-                <button className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
+                <button onClick={() => openCrmView('automation')} className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                   <span>Nuevo</span>
                 </button>
@@ -14190,13 +14208,13 @@ function FinEscalamientoContent() {
               </div>
             </div>
             <div className="mt-3 ml-9 flex items-center gap-2 flex-wrap">
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <button onClick={() => openCrmView('automation')} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                 <span>Nuevo</span>
               </button>
-              <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px]">
+              <button onClick={() => openCrmView('automation')} className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px] hover:bg-[#f8f8f7]">
                 Transfiere las solicitudes de VPN o de elusión a un nivel superior
-              </span>
+              </button>
               <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[160px]">
                 Escala las soli…
               </span>
@@ -14215,10 +14233,29 @@ function FinProcedimientosContent() {
   const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
   const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
   const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
-  const procedures: { title: string; status: 'Draft' }[] = [
-    { title: 'Untitled', status: 'Draft' },
-    { title: 'Untitled', status: 'Draft' },
-  ];
+  const { dismissed: heroDismissed, dismiss: dismissHero } = useDismissibleHero('procedures');
+  // Pull live workflow rows kind=procedure; fall back to two visible drafts
+  // so the page never goes empty before any are created.
+  const { data: workflowsData } = useApi(() => workflowsApi.list(), [], []);
+  const procedures = useMemo(() => {
+    const list = Array.isArray(workflowsData) ? workflowsData : [];
+    const filtered = list.filter((w: any) => {
+      const kind = String(w.kind || w.type || '').toLowerCase();
+      const tags = Array.isArray(w.tags) ? w.tags.map((t: any) => String(t).toLowerCase()) : [];
+      return kind === 'procedure' || tags.includes('procedure');
+    });
+    if (filtered.length > 0) {
+      return filtered.map((w: any) => ({
+        id: String(w.id),
+        title: w.name || w.title || 'Sin título',
+        status: String(w.status || 'draft').toLowerCase() === 'published' ? 'Activo' : 'Draft',
+      }));
+    }
+    return [
+      { id: '__draft1', title: 'Untitled', status: 'Draft' },
+      { id: '__draft2', title: 'Untitled', status: 'Draft' },
+    ];
+  }, [workflowsData]);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
@@ -14234,7 +14271,7 @@ function FinProcedimientosContent() {
               <span>Aprender</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button onClick={() => openCrmView('automation')} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo procedimiento</span>
             </button>
@@ -14262,6 +14299,7 @@ function FinProcedimientosContent() {
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-6 py-5 flex flex-col gap-5">
           {/* Hero card peach */}
+          {!heroDismissed && (
           <div className="relative bg-[#ffccb2] rounded-[16px] px-8 pt-[54px] pb-12 flex gap-8 items-start overflow-hidden">
             <div className="flex-1 min-w-0 max-w-[605px] flex flex-col gap-[15.4px]">
               <h2 className="text-[40px] text-[#1a1a1a] leading-[40px] tracking-[-1.2px]" style={{ fontFamily: "'Segoe UI', sans-serif" }}>
@@ -14291,18 +14329,23 @@ function FinProcedimientosContent() {
             <div className="relative w-[400px] h-[264px] rounded-[8px] overflow-hidden flex-shrink-0">
               <img src={IMG_PROCEDURES_BANNER} alt="Procedimientos" className="absolute inset-0 w-full h-full object-cover" />
             </div>
-            <button aria-label="Cerrar" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+            <button onClick={dismissHero} aria-label="Cerrar" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
               <span className="w-4 h-4" style={{ backgroundImage: `url(${IMG_PROCEDURES_CLOSE})`, backgroundSize: 'cover' }} />
             </button>
           </div>
+          )}
 
           {/* Procedimientos list */}
           <div>
             <h3 className="text-[14px] font-bold text-[#1a1a1a]">Procedimientos</h3>
             <p className="mt-0.5 text-[13px] text-[#646462]">Automatice las consultas complejas con instrucciones paso a paso para Fin.</p>
             <div className="mt-3 flex flex-col gap-2">
-              {procedures.map((p, i) => (
-                <div key={i} className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
+              {procedures.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => openCrmView('automation')}
+                  className="w-full text-left bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40"
+                >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.title}</p>
@@ -14318,10 +14361,20 @@ function FinProcedimientosContent() {
                       <span>Errores: <span className="text-[#1a1a1a]">0</span></span>
                     </div>
                   </div>
-                  <button className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]">
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (p.id.startsWith('__')) return;
+                      if (typeof window !== 'undefined' && !window.confirm(`¿Archivar el procedimiento "${p.title}"?`)) return;
+                      try { await workflowsApi.archive(p.id); window.location.reload(); } catch { /* surface via reload */ }
+                    }}
+                    className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]"
+                  >
                     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
-                  </button>
-                </div>
+                  </span>
+                </button>
               ))}
             </div>
           </div>
