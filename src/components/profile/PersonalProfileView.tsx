@@ -263,7 +263,7 @@ export default function PersonalProfileView({ onNavigate, showHeader = false }: 
   const inputCls = 'w-full h-8 px-2.5 text-[13px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-indigo-500';
 
   return (
-    <div className="w-full max-w-6xl mx-auto">
+    <div className="w-full">
       {showHeader && (
         <div className="px-4 pt-4 pb-2">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tu perfil</h1>
@@ -388,8 +388,10 @@ export default function PersonalProfileView({ onNavigate, showHeader = false }: 
         </div>
       </div>
 
-      {/* ── Two columns ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mx-4 my-4">
+      {/* ── Two columns — left (Perfil público) toma 3/5 del ancho,
+           right (Tus conversaciones) los 2/5 restantes y sus tarjetas
+           se estiran a w-full dentro de su columna. ──────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mx-4 my-4">
         {/* ── Left: Tú / Perfil público ─────────────────────────────── */}
         <div>
           <div className="text-[11px] uppercase tracking-wider text-gray-500 font-bold mb-2 px-1">Tú</div>
