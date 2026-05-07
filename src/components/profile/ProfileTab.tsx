@@ -174,16 +174,26 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
     return () => { cancelled = true; };
   }, []);
 
-  const handleAvatarUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setAvatarUrl(typeof reader.result === 'string' ? reader.result : '');
-    };
-    reader.readAsDataURL(file);
-    event.target.value = '';
+    try {
+      // Upload to backend so the avatar URL is real and persisted server-side
+      // (the previous implementation only stored the file as a data URL in
+      // local state, which got persisted as the avatar_url verbatim).
+      const res = await iamApi.uploadAvatar(file);
+      setAvatarUrl(res.url);
+    } catch {
+      // Fallback: if upload fails (e.g. offline), preview as data URL so the
+      // user still sees their selection; saved on next "Guardar" via updateMe.
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAvatarUrl(typeof reader.result === 'string' ? reader.result : '');
+      };
+      reader.readAsDataURL(file);
+    }
   }, []);
 
   const handleSave = useCallback(async () => {

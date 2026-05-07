@@ -82,6 +82,13 @@ export default function PersonalProfileView({ onNavigate, showHeader = false }: 
   const preferences = useMemo(() => parsePreferences(user?.preferences), [user]);
   const profilePrefs = preferences.profile || {};
 
+  // Pending profile patches accumulator. Between a successful PATCH and the
+  // refetched user landing, `profilePrefs` is stale (still the pre-save
+  // snapshot). Without this, two field edits in quick succession cause the
+  // second to overwrite the first because both build their payload from the
+  // same `profilePrefs`. We layer pending patches on top until refetch lands.
+  const pendingProfileRef = useRef<Record<string, any>>({});
+
   // ── Editable state ────────────────────────────────────────────────────
   const [name, setName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string>('');
@@ -137,13 +144,25 @@ export default function PersonalProfileView({ onNavigate, showHeader = false }: 
     return () => clearTimeout(t);
   }, [statusMsg]);
 
+  // When fresh user data arrives, drop any pending patches that the server
+  // has now confirmed (they're already baked into profilePrefs).
+  useEffect(() => {
+    pendingProfileRef.current = {};
+  }, [user]);
+
   // ── Persistence ───────────────────────────────────────────────────────
   const persist = useCallback(async (patch: Record<string, any>) => {
     try {
-      const next = {
-        ...preferences,
-        profile: { ...profilePrefs, ...patch.profile },
+      // Layer: stored profile prefs → pending (un-refetched) patches → this patch.
+      const mergedProfile = {
+        ...profilePrefs,
+        ...pendingProfileRef.current,
+        ...(patch.profile || {}),
       };
+      if (patch.profile) {
+        pendingProfileRef.current = { ...pendingProfileRef.current, ...patch.profile };
+      }
+      const next = { ...preferences, profile: mergedProfile };
       const body: Record<string, any> = { preferences: next };
       if (typeof patch.name === 'string') body.name = patch.name;
       if (Object.prototype.hasOwnProperty.call(patch, 'avatar_url')) body.avatar_url = patch.avatar_url;
