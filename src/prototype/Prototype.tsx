@@ -9,8 +9,9 @@ import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
+import Profile from '../components/Profile';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'profile' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -479,7 +480,7 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
         </button>
         {/* Perfil */}
         <button
-          onClick={() => onNavigate('personal')}
+          onClick={() => onNavigate('profile')}
           className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}
         >
           <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7] flex-shrink-0">
@@ -22813,6 +22814,7 @@ function PrototypeApp() {
       case 'settings': return <SettingsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;
       case 'imports':  return <ImportsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;
       case 'personal': return <PersonalView view={view} onNavigate={setView} />;
+      case 'profile':  return <Profile />;
       case 'security':       return <SecurityView view={view} onNavigate={setView} onBack={() => setView('personal')} />;
       case 'notifications':  return <NotificationsView view={view} onNavigate={setView} />;
       case 'visible':        return <VisibleView view={view} onNavigate={setView} />;
