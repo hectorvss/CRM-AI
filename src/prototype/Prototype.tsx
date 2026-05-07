@@ -14085,23 +14085,36 @@ function KnowledgeView() {
     }
   }
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  // Pre-filled draft handed from Vacíos / Resumen / Fuentes → Articulos.
-  // Optional visibility lets the Resumen "Artículo público / interno" cards
-  // open the editor with the right field already set.
+  // Pre-filled draft handed from Vacíos / Resumen / Fuentes → Articulos
+  // (kept for the Articulos table, which still uses externalDraft to seed
+  // its own inline editor when the user explicitly navigated there).
   const [pendingDraft, setPendingDraft] = useState<{ title: string; content: string; type?: string; visibility?: string } | null>(null);
+  // Top-level editor overlay. Any child sub-view that wants to create or
+  // edit an article opens THIS modal in-place rather than navigating away.
+  const [editorPrefill, setEditorPrefill] = useState<any | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  // Domains shared by sidebar + every editor invocation. Refresh whenever a
+  // folder changes or an article is saved so dropdowns stay in sync.
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [refreshKey], []);
+  const domainsAll = Array.isArray(domainsData) ? domainsData : [];
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     setToast({ message, type });
     window.setTimeout(() => setToast(null), 2500);
   }
-  // Open the editor in create mode from outside the Articulos view.
+  // Open the editor IN PLACE on top of whatever sub-view is showing.
   function startCreate(opts: { type?: string; visibility?: 'public' | 'internal' } = {}) {
-    setPendingDraft({
-      title: '',
-      content: '',
+    const visibility = opts.visibility || 'public';
+    setEditorPrefill({
       type: opts.type || 'ARTICLE',
-      visibility: opts.visibility || 'public',
+      visibility,
+      // Default Fin flags by visibility — public articles power Fin Service,
+      // internal ones power Copilot only.
+      fin_service: visibility === 'public',
+      fin_sales: false,
+      copilot_enabled: true,
+      domain_id: activeFolderId || null,
     });
-    setSub('articulos');
+    setEditorOpen(true);
   }
   function draftFromGap(g: any) {
     const title = String(g?.topic || 'Nuevo artículo').trim();
@@ -14123,8 +14136,17 @@ function KnowledgeView() {
       `- Dominio sugerido: ${g?.suggestedDomain || 'Sin clasificar'}`,
       `- Aprobaciones pendientes vinculadas: ${g?.pendingApprovals ?? 0}`,
     ];
-    setPendingDraft({ title, content: lines.join('\n'), type: 'ARTICLE' });
-    setSub('articulos');
+    // Open the editor in place with the gap content pre-filled, no navigation.
+    setEditorPrefill({
+      title,
+      content: lines.join('\n'),
+      type: 'ARTICLE',
+      visibility: 'public',
+      fin_service: true,
+      copilot_enabled: true,
+      domain_id: activeFolderId || null,
+    });
+    setEditorOpen(true);
     showToast('Borrador preparado, revísalo antes de publicar');
   }
   function openCrmView(v: string) {
@@ -14180,6 +14202,16 @@ function KnowledgeView() {
               setFolderModal(null);
             }
           }}
+          onAction={showToast}
+        />
+      )}
+      {/* Top-level article editor — opens IN PLACE on top of any sub-view. */}
+      {editorOpen && (
+        <KnowledgeArticleEditor
+          initial={editorPrefill}
+          domains={domainsAll}
+          onClose={() => { setEditorOpen(false); setEditorPrefill(null); }}
+          onSaved={() => { setRefreshKey(k => k + 1); }}
           onAction={showToast}
         />
       )}
