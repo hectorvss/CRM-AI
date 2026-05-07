@@ -452,31 +452,51 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
       </div>
 
       <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
-        {/* Configurar (with green dot) */}
-        <button className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}>
-          <div className="relative flex-shrink-0">
-            <div className="w-4 h-4 rounded-full border border-[#1a1a1a] flex items-center justify-center">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
-            </div>
-          </div>
-          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Configurar</span>}
-        </button>
+        {/* Pasa a Pro — upgrade CTA card */}
+        {expanded ? (
+          <button
+            type="button"
+            className="w-full mb-1 rounded-[10px] bg-gradient-to-br from-[#e7e2fd] to-[#f4f4ff] border border-[#d6d0f8] hover:border-[#b09efa] px-2.5 py-2 flex items-center gap-2 text-left transition-colors"
+          >
+            <span className="w-6 h-6 rounded-md bg-[#5b21b6] flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-[12.5px] font-semibold text-[#1a1a1a]">Pasa a Pro</span>
+              <span className="block text-[11px] text-[#646462] truncate">Desbloquea funciones premium</span>
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            title="Pasa a Pro"
+            className="w-full h-9 mb-1 flex items-center justify-center rounded-lg bg-gradient-to-br from-[#e7e2fd] to-[#f4f4ff] border border-[#d6d0f8] hover:border-[#b09efa]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#5b21b6]"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>
+          </button>
+        )}
+
         {/* Buscar */}
         <button className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}>
-          <img src={ICON_SEARCH} alt="" className="w-4 h-4 flex-shrink-0" />
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
           {expanded && <>
             <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Buscar</span>
             <span className="text-[10px] text-[#646462] bg-white border border-[#e9eae6] rounded px-1 py-0.5">Ctrl K</span>
           </>}
         </button>
+
         {/* Ajustes */}
         <button
           onClick={() => onNavigate('settings')}
           className={`w-full h-9 flex items-center rounded-lg ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${isSettings ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"}`}
         >
-          <img src={ICON_SETTINGS} alt="" className="w-4 h-4 flex-shrink-0" />
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4">
+            <circle cx="8" cy="8" r="2.3"/>
+            <path d="M8 1.5v1.6M8 12.9v1.6M2.4 8h1.6M11.9 8h1.6M3.8 3.8l1.1 1.1M11.1 11.1l1.1 1.1M3.8 12.2l1.1-1.1M11.1 4.9l1.1-1.1" strokeLinecap="round"/>
+          </svg>
           {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Ajustes</span>}
         </button>
+
         {/* Perfil — popover menu (Intercom-style) */}
         <ProfileMenuButton expanded={expanded} />
       </div>
@@ -643,14 +663,13 @@ function ProfileMenuButton({ expanded }: { expanded: boolean }) {
         onClick={() => { setOpen(v => !v); setSubmenu(null); }}
         className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${open ? 'bg-white/80' : ''}`}
       >
-        <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7] flex-shrink-0 flex items-center justify-center">
-          {user?.avatar_url ? (
-            <img src={user.avatar_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
-          ) : (
-            <span className="text-[8.5px] font-bold text-[#646462]">{initials}</span>
-          )}
-          <div className={`absolute bottom-[-2px] right-[-2px] w-[7px] h-[7px] rounded-[3.6px] border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
-        </div>
+        <span className="relative flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+            <circle cx="8" cy="5.5" r="2.6"/>
+            <path d="M2.5 14c0-2.8 2.5-5 5.5-5s5.5 2.2 5.5 5" strokeLinecap="round"/>
+          </svg>
+          <span className={`absolute -bottom-0.5 -right-0.5 w-[7px] h-[7px] rounded-full border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
+        </span>
         {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Perfil</span>}
       </button>
 
