@@ -17065,9 +17065,9 @@ function FinPautaEditor({
             value={body}
             onChange={e => setBody(e.target.value)}
             placeholder="Escriba aquí..."
-            className="w-full min-h-[280px] text-[16px] text-[#1a1a1a] leading-[24px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
+            className="w-full min-h-[72px] text-[16px] text-[#1a1a1a] leading-[24px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
           />
-          <div className="mt-6 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {FIN_PAUTA_SUGGESTIONS.map(s => (
               <button
                 key={s.label}
