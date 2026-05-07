@@ -241,7 +241,6 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'trigger', key: 'trigger.chat_message', label: 'On chat message', category: 'Trigger', icon: 'forum', requiresConfig: true, description: 'Starts when a user sends a message to the chat surface.' },
   { type: 'trigger', key: 'trigger.workflow_error', label: 'On workflow error', category: 'Trigger', icon: 'error_outline', requiresConfig: true, description: 'Starts when another workflow fails. Use this to handle errors centrally.' },
   { type: 'trigger', key: 'trigger.subworkflow_called', label: 'When called by another workflow', category: 'Trigger', icon: 'login', requiresConfig: false, description: 'Starts when another workflow invokes this one via Execute sub-workflow.' },
-  { type: 'trigger', key: 'trigger.evaluation_run', label: 'When running evaluation', category: 'Trigger', icon: 'science', requiresConfig: false, description: 'Starts when this workflow is invoked by an Evaluations dataset run.' },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Flow', icon: 'alt_route', requiresConfig: true, description: 'Branch based on a numeric amount.' },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Flow', icon: 'rule', requiresConfig: true, description: 'Branch based on status.' },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Flow', icon: 'gpp_maybe', requiresConfig: true, description: 'Branch based on risk.' },
@@ -780,9 +779,6 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
   'trigger.subworkflow_called': [
     { key: 'expectedInputs', label: 'Expected input fields (comma-separated, optional)', type: 'text', placeholder: 'caseId, customerId' },
   ],
-  'trigger.evaluation_run': [
-    { key: 'datasetId', label: 'Dataset id (optional)', type: 'text', placeholder: 'evaluations dataset id' },
-  ],
   // ── Scheduled trigger ─────────────────────────────────────────────────────
   'trigger.schedule': [
     { key: 'cron', label: 'Cron expression', type: 'text', placeholder: '0 9 * * 1-5', hint: 'Standard cron (min hour day month weekday). E.g. "0 9 * * 1-5" = every weekday at 9 AM' },
@@ -1225,7 +1221,7 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
       { title: 'Popular', items: pick(['manual.run', 'webhook.received', 'trigger.schedule', 'trigger.form_submission', 'trigger.chat_message']) },
       { title: 'Support', items: pick(['case.created', 'case.updated', 'message.received', 'sla.breached']) },
       { title: 'Commerce', items: pick(['order.updated', 'shipment.updated', 'payment.failed', 'payment.dispute.created', 'return.created']) },
-      { title: 'System', items: pick(['customer.updated', 'approval.decided', 'trigger.workflow_error', 'trigger.subworkflow_called', 'trigger.evaluation_run']) },
+      { title: 'System', items: pick(['customer.updated', 'approval.decided', 'trigger.workflow_error', 'trigger.subworkflow_called']) },
     ],
   };
 

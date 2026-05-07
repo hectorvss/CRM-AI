@@ -57,7 +57,6 @@ const NODE_CATALOG = [
   { type: 'trigger', key: 'trigger.chat_message', label: 'On chat message', category: 'Trigger', icon: 'forum', requiresConfig: true },
   { type: 'trigger', key: 'trigger.workflow_error', label: 'On workflow error', category: 'Trigger', icon: 'error_outline', requiresConfig: false },
   { type: 'trigger', key: 'trigger.subworkflow_called', label: 'When called by another workflow', category: 'Trigger', icon: 'login', requiresConfig: false },
-  { type: 'trigger', key: 'trigger.evaluation_run', label: 'When running evaluation', category: 'Trigger', icon: 'science', requiresConfig: false },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Condition', icon: 'attach_money', requiresConfig: true },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Condition', icon: 'rule', requiresConfig: true },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Condition', icon: 'gpp_maybe', requiresConfig: true },
@@ -166,7 +165,6 @@ const NODE_CONTRACTS: Record<string, WorkflowNodeContract> = {
   'trigger.chat_message': { required: ['channel'], optional: ['agentId'], sideEffects: 'none' },
   'trigger.workflow_error': { optional: ['sourceWorkflowId', 'severity'], sideEffects: 'none' },
   'trigger.subworkflow_called': { optional: ['expectedInputs'], sideEffects: 'none' },
-  'trigger.evaluation_run': { optional: ['datasetId'], sideEffects: 'none' },
   'amount.threshold': { required: ['field', 'operator', 'amount'], branchLabels: ['true', 'false'], sideEffects: 'none' },
   'status.matches': { required: ['field', 'value'], optional: ['operator'], branchLabels: ['true', 'false'], sideEffects: 'none' },
   'risk.level': { required: ['field', 'value'], optional: ['operator'], branchLabels: ['true', 'false'], sideEffects: 'none' },
@@ -925,13 +923,12 @@ function workflowMatchesTrigger(version: any, eventType: string) {
     'customer.updated': ['customer.updated', 'customer_updated'],
     'sla.breached': ['sla.breached', 'sla_breached', 'sla.breach'],
     'payment.dispute.created': ['payment.dispute.created', 'payment_dispute_created', 'dispute.created'],
-    'shipment.updated': ['shipment.updated', 'shipment_updated', 'fulfillment.updated'],
+    'shipment.updated': ['shipment.updated', 'shipment_updated', 'fulfillment.updated', 'shipping.updated'],
     'manual.run': ['manual.run', 'manual'],
     'trigger.form_submission': ['trigger.form.submission', 'form.submitted', 'form_submitted'],
     'trigger.chat_message': ['trigger.chat.message', 'chat.message', 'chat_message'],
     'trigger.workflow_error': ['trigger.workflow.error', 'workflow.error', 'workflow_failed'],
     'trigger.subworkflow_called': ['trigger.subworkflow.called', 'subworkflow.called', 'subworkflow'],
-    'trigger.evaluation_run': ['trigger.evaluation.run', 'evaluation.run', 'eval.run'],
   };
   const accepted = new Set([normalizedEvent, ...(aliases[normalizedEvent] ?? []).map(normalizeTriggerName)]);
   return accepted.has(triggerType) || accepted.has(nodeTrigger);
