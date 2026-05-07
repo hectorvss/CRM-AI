@@ -3,7 +3,7 @@
 // Navigate via the left-nav icons. All assets from Figma CDN (7-day TTL).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, reportsApi, workflowsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
@@ -790,6 +790,137 @@ function titleCase(value?: string | null) {
   return (value || 'Sin dato')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dropdown — single reusable popover-menu component used in place of native
+// <select> across the prototype. Matches the design ref the user shared:
+// rounded card, optional left icon, optional right-aligned keyboard
+// shortcut, optional divider before an item, optional danger styling.
+//
+// Usage:
+//   <Dropdown
+//     value={typeFilter}
+//     onChange={setTypeFilter}
+//     items={[
+//       { value: 'any',     label: 'Tipo: cualquiera' },
+//       { value: 'article', label: 'Artículo' },
+//       { value: 'policy',  label: 'Política' },
+//     ]}
+//   />
+//
+// For action menus (no value, just buttons) pass items with a `onSelect`
+// override or use the generic `onChange` callback (each item's value is
+// just the id of the action that fires).
+// ─────────────────────────────────────────────────────────────────────────────
+type DropdownItem = {
+  value: string;
+  label: string;
+  icon?: ReactNode;
+  shortcut?: string;
+  danger?: boolean;
+  divider?: boolean;
+  disabled?: boolean;
+};
+
+function Dropdown({
+  value,
+  items,
+  onChange,
+  placement = 'bottom-start',
+  triggerLabel,
+  triggerClassName,
+  menuClassName,
+  renderTrigger,
+  align = 'left',
+  width,
+}: {
+  value?: string;
+  items: DropdownItem[];
+  onChange: (v: string) => void;
+  placement?: 'bottom-start' | 'bottom-end' | 'top-start' | 'top-end';
+  triggerLabel?: string;
+  triggerClassName?: string;
+  menuClassName?: string;
+  renderTrigger?: (selected: DropdownItem | undefined, isOpen: boolean) => ReactNode;
+  align?: 'left' | 'right';
+  width?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const selected = items.find(it => it.value === value);
+  // Close on Escape, click-outside.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    function onClick(e: MouseEvent) {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t)) return;
+      if (menuRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClick);
+    };
+  }, [open]);
+
+  const positionClass = placement === 'top-start' || placement === 'top-end'
+    ? 'bottom-[calc(100%+4px)]'
+    : 'top-[calc(100%+4px)]';
+  const alignClass = align === 'right' ? 'right-0' : 'left-0';
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={triggerRef}
+        onClick={() => setOpen(o => !o)}
+        type="button"
+        className={triggerClassName ?? `h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${open ? 'border-[#1a1a1a]' : ''}`}
+      >
+        {renderTrigger
+          ? renderTrigger(selected, open)
+          : <>
+              <span className="truncate">{selected?.label ?? triggerLabel ?? '—'}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </>}
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className={`absolute ${positionClass} ${alignClass} z-30 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 ${menuClassName ?? ''}`}
+          style={{ minWidth: width ?? 200 }}
+          role="menu"
+        >
+          {items.map((it, idx) => (
+            <Fragment key={it.value + idx}>
+              {it.divider && idx > 0 && <div className="my-1 border-t border-[#f1f1ee]" />}
+              <button
+                type="button"
+                disabled={it.disabled}
+                onClick={() => { if (!it.disabled) { onChange(it.value); setOpen(false); } }}
+                className={`w-full flex items-center gap-2.5 px-3 h-9 text-[13px] text-left ${
+                  it.disabled
+                    ? 'text-[#a4a4a2] cursor-not-allowed'
+                    : it.danger
+                      ? 'text-[#b91c1c] hover:bg-[#fef2f2]'
+                      : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
+                } ${value === it.value && !it.danger ? 'font-semibold bg-[#f8f8f7]' : ''}`}
+                role="menuitem"
+              >
+                {it.icon && <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{it.icon}</span>}
+                <span className="flex-1 truncate">{it.label}</span>
+                {it.shortcut && <span className="text-[11.5px] text-[#646462] font-mono flex-shrink-0">{it.shortcut}</span>}
+              </button>
+            </Fragment>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function relativeTime(value?: string | null) {
@@ -14527,24 +14658,36 @@ function KnowledgeContentLibrary({
             />
             {search && <button onClick={() => setSearch('')} title="Limpiar"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>}
           </div>
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as any)} className="h-8 px-2 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a]">
-            <option value="any">Todos los tipos</option>
-            <option value="article">Artículos</option>
-            <option value="snippet">Fragmentos</option>
-            <option value="policy">Políticas</option>
-            <option value="website">Sitios web</option>
-            <option value="document">Documentos</option>
-          </select>
-          <select value={visibilityFilter} onChange={e => setVisibilityFilter(e.target.value as any)} className="h-8 px-2 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a]">
-            <option value="any">Visibilidad</option>
-            <option value="public">Público</option>
-            <option value="internal">Interno</option>
-          </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="h-8 px-2 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a]">
-            <option value="any">Cualquier estado</option>
-            <option value="published">Publicados</option>
-            <option value="draft">Borradores</option>
-          </select>
+          <Dropdown
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v as any)}
+            items={[
+              { value: 'any',      label: 'Todos los tipos' },
+              { value: 'article',  label: 'Artículos' },
+              { value: 'snippet',  label: 'Fragmentos' },
+              { value: 'policy',   label: 'Políticas' },
+              { value: 'website',  label: 'Sitios web' },
+              { value: 'document', label: 'Documentos' },
+            ]}
+          />
+          <Dropdown
+            value={visibilityFilter}
+            onChange={(v) => setVisibilityFilter(v as any)}
+            items={[
+              { value: 'any',      label: 'Visibilidad' },
+              { value: 'public',   label: 'Público' },
+              { value: 'internal', label: 'Interno' },
+            ]}
+          />
+          <Dropdown
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v as any)}
+            items={[
+              { value: 'any',       label: 'Cualquier estado' },
+              { value: 'published', label: 'Publicados', icon: <span className="w-2 h-2 rounded-full bg-[#15803d]"/> },
+              { value: 'draft',     label: 'Borradores', icon: <span className="w-2 h-2 rounded-full bg-[#a4a4a2]"/> },
+            ]}
+          />
           {(typeFilter !== 'any' || statusFilter !== 'any' || visibilityFilter !== 'any' || search) && (
             <button
               onClick={() => { setSearch(''); setTypeFilter('any'); setStatusFilter('any'); setVisibilityFilter('any'); }}
@@ -14759,20 +14902,35 @@ function KnowledgeArticulos({
           placeholder="Buscar por título o contenido…"
           className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
         />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]">
-          <option value="all">Estado: cualquiera</option>
-          <option value="published">Publicado</option>
-          <option value="draft">Borrador</option>
-        </select>
-        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]">
-          <option value="all">Tipo: cualquiera</option>
-          {KH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select value={healthFilter} onChange={e => setHealthFilter(e.target.value as any)} className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]">
-          <option value="all">Salud: cualquiera</option>
-          <option value="ok">Al día</option>
-          <option value="stale">Desactualizados</option>
-        </select>
+        <Dropdown
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v as any)}
+          triggerClassName="h-9 px-3 rounded-lg border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          items={[
+            { value: 'all',       label: 'Estado: cualquiera' },
+            { value: 'published', label: 'Publicado',          icon: <span className="w-2 h-2 rounded-full bg-[#15803d]"/> },
+            { value: 'draft',     label: 'Borrador',           icon: <span className="w-2 h-2 rounded-full bg-[#a4a4a2]"/> },
+          ]}
+        />
+        <Dropdown
+          value={typeFilter}
+          onChange={setTypeFilter}
+          triggerClassName="h-9 px-3 rounded-lg border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          items={[
+            { value: 'all', label: 'Tipo: cualquiera' },
+            ...KH_TYPE_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+          ]}
+        />
+        <Dropdown
+          value={healthFilter}
+          onChange={(v) => setHealthFilter(v as any)}
+          triggerClassName="h-9 px-3 rounded-lg border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          items={[
+            { value: 'all',   label: 'Salud: cualquiera' },
+            { value: 'ok',    label: 'Al día',           icon: <span className="w-2 h-2 rounded-full bg-[#15803d]"/> },
+            { value: 'stale', label: 'Desactualizados',  icon: <span className="w-2 h-2 rounded-full bg-[#dc2626]"/> },
+          ]}
+        />
       </div>
       {/* Bulk-action bar — appears as soon as one or more rows are selected. */}
       {selectedIds.size > 0 && (
