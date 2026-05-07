@@ -10,7 +10,7 @@ import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows from '../components/Workflows';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -5590,14 +5590,14 @@ const DATOS_SUB: { label: string; nav: View | null }[] = [
   { label: "Personas",                     nav: 'people' },
   { label: "Empresas",                     nav: 'companies' },
   { label: "Conversaciones",               nav: 'settings' },
-  { label: "Objetos personalizados",       nav: null },
+  { label: "Objetos personalizados",       nav: 'customObjects' },
   { label: "Importaciones y exportaciones", nav: 'imports' },
-  { label: "Temas",                        nav: null },
+  { label: "Temas",                        nav: 'topics' },
 ];
 
 const WORKSPACE_SUB: { label: string; nav: View | null; warn?: boolean }[] = [
-  { label: "General",                nav: null },
-  { label: "Compañeros de equipo",   nav: null },
+  { label: "General",                nav: 'workspaceGeneral' },
+  { label: "Compañeros de equipo",   nav: 'workspaceTeammates' },
   { label: "Horario de atención",    nav: 'workspaceHours' },
   { label: "Marcas",                 nav: 'workspaceBrands' },
   { label: "Seguridad",              nav: 'workspaceSecurity', warn: true },
@@ -5613,8 +5613,8 @@ const CANALES_SUB: { label: string; nav: View | null }[] = [
   { label: "Correo electrónico",        nav: 'email' },
   { label: "Teléfono",                  nav: 'phone' },
   { label: "WhatsApp",                  nav: 'whatsapp' },
-  { label: "Switch",                    nav: null },
-  { label: "Slack",                     nav: null },
+  { label: "Switch",                    nav: 'switchChannel' },
+  { label: "Slack",                     nav: 'slackChannel' },
   { label: "Discord",                   nav: 'discord' },
   { label: "SMS",                       nav: 'sms' },
   { label: "Canales de redes sociales", nav: 'social' },
@@ -5633,8 +5633,8 @@ const IA_SUB: { label: string; nav: View | null }[] = [
 const INTEG_SUB: { label: string; nav: View | null }[] = [
   { label: "Tienda de aplicaciones",   nav: 'appStore' },
   { label: "Conectores de datos",      nav: 'connectors' },
-  { label: "Autenticación",            nav: null },
-  { label: "Centro para desarrolladores", nav: null },
+  { label: "Autenticación",            nav: 'auth' },
+  { label: "Centro para desarrolladores", nav: 'developer' },
 ];
 const PERSONAL_SUB: { label: string; nav: View | null }[] = [
   { label: "Información",            nav: 'personal' },
@@ -5647,13 +5647,13 @@ const PERSONAL_SUB: { label: string; nav: View | null }[] = [
 ];
 
 function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies';
+  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies' || view === 'customObjects' || view === 'topics';
   const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'inboxTeam';
   const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin';
-  const isIntegSection = view === 'appStore' || view === 'connectors';
-  const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands';
+  const isIntegSection = view === 'appStore' || view === 'connectors' || view === 'auth' || view === 'developer';
+  const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands' || view === 'workspaceGeneral' || view === 'workspaceTeammates';
   const isSuscripcionSection = view === 'billing';
-  const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels';
+  const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels' || view === 'switchChannel' || view === 'slackChannel';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
@@ -5861,22 +5861,26 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoPeopleS}    label="Personas"                      nav={'people'} />
             <SubRow icon={IcoCompaniesS} label="Empresas"                      nav={'companies'} />
             <SubRow icon={IcoConvS}      label="Conversaciones"                nav={'settings'} />
-            <SubRow icon={IcoCustomS}    label="Objetos personalizados"        nav={null} />
+            <SubRow icon={IcoCustomS}    label="Objetos personalizados"        nav={'customObjects'} />
             <SubRow icon={IcoImportsS}   label="Importaciones y exportaciones" nav={'imports'} />
-            <SubRow icon={IcoTopicsS}    label="Temas"                         nav={null} />
+            <SubRow icon={IcoTopicsS}    label="Temas"                         nav={'topics'} />
           </div>
         )}
 
         {/* Standalone bottom items */}
-        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+        <button
+          onClick={() => onNavigate('helpCenter')}
+          className={`flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] text-left ${view === 'helpCenter' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold' : 'hover:bg-[#f3f3f1]'}`}
+        >
           <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoHelpGrp}</div>
           <span className="flex-1">Centro de ayuda</span>
-          <Chev on={false} />
         </button>
-        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+        <button
+          onClick={() => onNavigate('outbound')}
+          className={`flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] text-left ${view === 'outbound' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold' : 'hover:bg-[#f3f3f1]'}`}
+        >
           <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoOutboundGrp}</div>
           <span className="flex-1">Canales salientes</span>
-          <Chev on={false} />
         </button>
 
         {/* Personal */}
@@ -21272,10 +21276,10 @@ function FinFlujosTrabajoContent() {
   if (builderId !== null) {
     return (
       <div className="flex flex-col h-full min-h-0 bg-white">
-        <div className="flex-shrink-0 h-12 border-b border-[#e9eae6] px-4 flex items-center gap-2">
+        <div className="flex-shrink-0 h-11 border-b border-[#e9eae6] px-4 flex items-center">
           <button
             onClick={() => setBuilderId(null)}
-            className="h-8 px-3 rounded-md hover:bg-[#f8f8f7] text-[13px] font-medium text-[#1a1a1a] flex items-center gap-1.5"
+            className="h-8 px-2.5 -ml-1 rounded-md hover:bg-[#f8f8f7] text-[13px] font-medium text-[#1a1a1a] flex items-center gap-1.5"
           >
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Volver a flujos de trabajo
@@ -22739,6 +22743,15 @@ function PrototypeApp() {
       case 'knowledge':return <KnowledgeView />;
       case 'reports':  return <ReportsView />;
       case 'outbound': return <OutboundView />;
+      case 'workspaceGeneral':    return <WorkspaceGeneralView view={view} onNavigate={setView} />;
+      case 'workspaceTeammates':  return <WorkspaceTeammatesView view={view} onNavigate={setView} />;
+      case 'auth':                return <AuthSettingsView view={view} onNavigate={setView} />;
+      case 'developer':           return <DeveloperView view={view} onNavigate={setView} />;
+      case 'customObjects':       return <CustomObjectsView view={view} onNavigate={setView} />;
+      case 'topics':              return <TopicsView view={view} onNavigate={setView} />;
+      case 'switchChannel':       return <SwitchChannelView view={view} onNavigate={setView} />;
+      case 'slackChannel':        return <SlackChannelView view={view} onNavigate={setView} />;
+      case 'helpCenter':          return <HelpCenterSettingsView view={view} onNavigate={setView} />;
     }
   }
 
