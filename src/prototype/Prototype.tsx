@@ -10,7 +10,7 @@ import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -452,29 +452,14 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
       </div>
 
       <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
-        {/* Pasa a Pro — upgrade CTA card */}
-        {expanded ? (
-          <button
-            type="button"
-            className="w-full mb-1 rounded-[10px] bg-gradient-to-br from-[#e7e2fd] to-[#f4f4ff] border border-[#d6d0f8] hover:border-[#b09efa] px-2.5 py-2 flex items-center gap-2 text-left transition-colors"
-          >
-            <span className="w-6 h-6 rounded-md bg-[#5b21b6] flex items-center justify-center flex-shrink-0">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-[12.5px] font-semibold text-[#1a1a1a]">Pasa a Pro</span>
-              <span className="block text-[11px] text-[#646462] truncate">Desbloquea funciones premium</span>
-            </span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            title="Pasa a Pro"
-            className="w-full h-9 mb-1 flex items-center justify-center rounded-lg bg-gradient-to-br from-[#e7e2fd] to-[#f4f4ff] border border-[#d6d0f8] hover:border-[#b09efa]"
-          >
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#5b21b6]"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>
-          </button>
-        )}
+        {/* Upgrade — lightning bolt button */}
+        <button
+          onClick={() => onNavigate('billing')}
+          className={`w-full h-9 flex items-center rounded-lg ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${view === 'billing' || view === 'featuresComparison' ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"}`}
+        >
+          <svg viewBox="0 0 16 16" className="w-5 h-5 flex-shrink-0 fill-[#111]"><path d="M9.5 1 L4 9h4.5L6.5 15 13 7H8.5z"/></svg>
+          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Upgrade</span>}
+        </button>
 
         {/* Buscar */}
         <button className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}>
@@ -8157,144 +8142,742 @@ function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View
 
 // ── AppStoreView ──────────────────────────────────────────────────────────────
 
-type AppCardData = { name: string; img: string; desc: string };
-const APP_STORE_POPULAR: AppCardData[] = [
-  { name: 'Salesforce',        img: IMG_APP_SALESFORCE, desc: 'Sync data and streamline workflows for sales, marketing…' },
-  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
-  { name: 'Google Analytics',  img: IMG_APP_GA,         desc: 'Measure the impact of your Messenger on website…' },
-  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
-];
-const APP_STORE_NEW: AppCardData[] = [
-  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
-  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
-  { name: 'WhatsApp',          img: IMG_APP_WHATSAPP,   desc: 'Easily receive and reply to WhatsApp messages from your…' },
-  { name: 'Delighted Inc.',    img: IMG_APP_DELIGHTED,  desc: 'Sync customer feedback and trigger surveys based on key…' },
-];
-const APP_STORE_FREE: AppCardData[] = [
-  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
-  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
-  { name: 'Quick Links',       img: IMG_APP_QUICKLINKS, desc: 'Save time by creating smart links for your common tools or…' },
-  { name: 'Get a Demo',        img: IMG_APP_DEMO,       desc: 'Capture and qualify leads who want a product demo' },
-];
-const APP_STORE_SUPPORT: AppCardData[] = [
-  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
-  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
-  { name: 'WhatsApp',          img: IMG_APP_WHATSAPP,   desc: 'Easily receive and reply to WhatsApp messages from your…' },
-  { name: 'Stripe',            img: IMG_APP_STRIPE,     desc: 'View Stripe data from Intercom' },
+const STORE_INTEGRATIONS = [
+  // ── CRM ────────────────────────────────────────────────────────────────────
+  {
+    id: 'salesforce', name: 'Salesforce', category: 'CRM',
+    desc: 'Sincroniza contactos, oportunidades y casos con Salesforce.',
+    domain: 'salesforce.com', connected: false, color: '#00A1E0', backendLive: true,
+    // OAuth popup → /api/integrations/salesforce/install
+    auth: 'oauth', connectRoute: '/api/integrations/salesforce/install',
+    permissions: ['Leer y escribir contactos, cuentas y oportunidades','Crear y actualizar casos de soporte (Salesforce Cases)','Registrar actividades y tareas desde conversaciones','Acceder a campos personalizados del objeto Contact'],
+    fields: [],
+  },
+  {
+    id: 'hubspot', name: 'HubSpot', category: 'CRM',
+    desc: 'Sincroniza contactos y deals de HubSpot con el inbox.',
+    domain: 'hubspot.com', connected: true, color: '#FF7A59', backendLive: true,
+    // OAuth popup → /api/integrations/hubspot/install
+    auth: 'oauth', connectRoute: '/api/integrations/hubspot/install',
+    permissions: ['Leer y escribir contactos, empresas y deals','Sincronizar pipelines de ventas y etapas de negocio','Crear notas y tareas vinculadas a contactos','Acceder al historial de actividad del contacto'],
+    fields: [],
+  },
+  {
+    id: 'zendesk', name: 'Zendesk', category: 'CRM',
+    desc: 'Importa tickets de Zendesk y gestiona todo desde Clain.',
+    domain: 'zendesk.com', connected: false, color: '#03363D', backendLive: true,
+    // OAuth popup → /api/integrations/zendesk/install?subdomain=<value>
+    auth: 'oauth', connectRoute: '/api/integrations/zendesk/install',
+    permissions: ['Leer y crear tickets de soporte','Actualizar estado, prioridad y asignatario de tickets','Acceder a datos del usuario y organización','Sincronizar comentarios entre Zendesk y Clain'],
+    fields: [
+      { key: 'subdomain', label: 'Subdominio de Zendesk', placeholder: 'mi-empresa', type: 'text', hint: 'Solo el prefijo — de mi-empresa.zendesk.com', required: true, queryParam: true },
+    ],
+  },
+  {
+    id: 'freshdesk', name: 'Freshdesk', category: 'CRM',
+    desc: 'Centraliza tickets de Freshdesk en la bandeja de Clain.',
+    domain: 'freshdesk.com', connected: false, color: '#2DC26B', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Leer y crear tickets de Freshdesk','Actualizar estado, prioridad y agente asignado','Acceder a datos de contacto y empresa del cliente','Ver el historial de conversaciones previas'],
+    fields: [
+      { key: 'subdomain', label: 'Subdominio de Freshdesk', placeholder: 'mi-empresa', type: 'text', hint: 'Solo el prefijo — de mi-empresa.freshdesk.com', required: true },
+      { key: 'api_key',   label: 'API Key',                 placeholder: 'Pega tu API key de Freshdesk…', type: 'password', hint: 'Profile Settings → Your API Key (esquina inferior izquierda en Freshdesk)', required: true },
+    ],
+  },
+  // ── Canales ─────────────────────────────────────────────────────────────────
+  {
+    id: 'whatsapp', name: 'WhatsApp Business', category: 'Canales',
+    desc: 'Recibe y responde mensajes de WhatsApp desde el inbox.',
+    domain: 'whatsapp.com', connected: true, color: '#25D366', backendLive: true,
+    // POST /api/integrations/whatsapp/connect  { phone_number_id, access_token, waba_id, app_secret, verify_token }
+    auth: 'apikey', connectRoute: '/api/integrations/whatsapp/connect',
+    permissions: ['Enviar y recibir mensajes desde tu número de negocio','Gestionar plantillas de mensajes aprobadas por Meta','Acceder al perfil de contacto del cliente en WhatsApp','Ver estado de entrega y lectura de mensajes'],
+    fields: [
+      { key: 'phone_number_id', label: 'Phone Number ID',              placeholder: '102938475610293',           type: 'text',     hint: 'Meta for Developers → Tu App → WhatsApp → Configuración del teléfono', required: true },
+      { key: 'waba_id',         label: 'WhatsApp Business Account ID', placeholder: '109283746150293',           type: 'text',     hint: 'Meta Business Manager → Cuentas de WhatsApp → ID de cuenta', required: true },
+      { key: 'access_token',    label: 'System User Access Token',     placeholder: 'EAAxxxxx…',                 type: 'password', hint: 'Meta Business Manager → Usuarios del sistema → Generar token (permanente)', required: true },
+      { key: 'app_secret',      label: 'App Secret',                   placeholder: 'Desde configuración App Meta', type: 'password', hint: 'Meta for Developers → Tu App → Configuración → App Secret', required: true },
+      { key: 'verify_token',    label: 'Verify Token (webhook)',        placeholder: 'mi-token-secreto-123',      type: 'text',     hint: 'Cadena que eliges tú — se usará para verificar el webhook de Meta', required: false },
+    ],
+  },
+  {
+    id: 'instagram', name: 'Instagram', category: 'Canales',
+    desc: 'Gestiona DMs de Instagram desde tu bandeja de entrada.',
+    domain: 'instagram.com', connected: true, color: '#E1306C', backendLive: true,
+    // POST /api/integrations/instagram/connect  { ig_user_id, page_id, page_access_token, app_secret }
+    auth: 'apikey', connectRoute: '/api/integrations/instagram/connect',
+    permissions: ['Leer y responder mensajes directos de la cuenta de negocio','Acceder al perfil público del remitente','Ver menciones y comentarios en publicaciones (solo lectura)','Recibir notificaciones de nuevos mensajes en tiempo real'],
+    fields: [
+      { key: 'ig_user_id',        label: 'Instagram Business Account ID', placeholder: '17841400123456789', type: 'text',     hint: 'Meta Business Suite → Configuración → Cuenta de Instagram → ID', required: true },
+      { key: 'page_id',           label: 'Facebook Page ID',              placeholder: '123456789012345',   type: 'text',     hint: 'Tu cuenta de Instagram de negocio debe estar vinculada a una Facebook Page. ID en Configuración → Información de la página', required: true },
+      { key: 'page_access_token', label: 'Page Access Token',             placeholder: 'EAAxxxxx…',         type: 'password', hint: 'Graph API Explorer → selecciona tu página → genera token con instagram_basic + instagram_manage_messages', required: true },
+      { key: 'app_secret',        label: 'App Secret',                    placeholder: 'Desde Meta App',    type: 'password', hint: 'Meta for Developers → Tu App → Configuración básica → App Secret', required: true },
+    ],
+  },
+  {
+    id: 'slack', name: 'Slack', category: 'Canales',
+    desc: 'Notificaciones de conversaciones y escalados en Slack.',
+    domain: 'slack.com', connected: true, color: '#4A154B', backendLive: true,
+    // OAuth popup → /api/integrations/slack/install
+    auth: 'oauth', connectRoute: '/api/integrations/slack/install',
+    permissions: ['Enviar notificaciones a canales y usuarios seleccionados','Crear canales de escalado automático por equipo','Leer mensajes en canales de Slack conectados','Acceder al directorio de miembros del workspace'],
+    fields: [],
+  },
+  {
+    id: 'twilio', name: 'SMS · Twilio', category: 'Canales',
+    desc: 'Envía y recibe SMS a través de Twilio en el workspace.',
+    domain: 'twilio.com', connected: false, color: '#F22F46', backendLive: true,
+    // POST /api/integrations/twilio/connect  { account_sid, auth_token, default_sms_from }
+    auth: 'apikey', connectRoute: '/api/integrations/twilio/connect',
+    permissions: ['Enviar y recibir SMS desde números Twilio asignados','Acceder al historial de mensajes de la cuenta','Gestionar números de teléfono y rutas de entrada','Ver estado de entrega de cada mensaje enviado'],
+    fields: [
+      { key: 'account_sid',      label: 'Account SID',            placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', type: 'text',     hint: 'Twilio Console → Dashboard → Account SID (empieza por AC)', required: true },
+      { key: 'auth_token',       label: 'Auth Token',             placeholder: '••••••••••••••••••••••••••••••••',   type: 'password', hint: 'Twilio Console → Dashboard → Auth Token (junto al Account SID)', required: true },
+      { key: 'default_sms_from', label: 'Número SMS por defecto', placeholder: '+34600000000',                       type: 'text',     hint: 'Twilio Console → Phone Numbers → Tu número comprado (formato E.164)', required: false },
+    ],
+  },
+  // ── Pagos ───────────────────────────────────────────────────────────────────
+  {
+    id: 'stripe', name: 'Stripe', category: 'Pagos',
+    desc: 'Consulta suscripciones, pagos y facturas desde cada caso.',
+    domain: 'stripe.com', connected: true, color: '#635BFF', backendLive: true,
+    // Two options: OAuth Connect → /api/integrations/stripe/install
+    //              Manual API key → POST /api/integrations/stripe/manual-connect
+    auth: 'stripe', connectRoute: '/api/integrations/stripe/install',
+    permissions: ['Leer datos de clientes, suscripciones y planes (solo lectura)','Consultar historial de pagos, facturas y reembolsos','Ver estado de disputas y chargebacks activos','Acceder a metadatos de productos y precios configurados'],
+    fields: [
+      { key: 'secret_key',     label: 'Secret Key',      placeholder: 'sk_live_•••••• o rk_live_••••••', type: 'password', hint: 'Stripe Dashboard → Developers → API keys → Secret key', required: true },
+      { key: 'webhook_secret', label: 'Webhook Secret',  placeholder: 'whsec_••••••••••••••••••••',        type: 'password', hint: 'Stripe Dashboard → Developers → Webhooks → Signing secret del endpoint apuntando a tu dominio', required: false },
+    ],
+  },
+  {
+    id: 'shopify', name: 'Shopify', category: 'Comercio',
+    desc: 'Accede a pedidos y clientes de Shopify en conversaciones.',
+    domain: 'shopify.com', connected: false, color: '#96BF48', backendLive: true,
+    // OAuth popup → /api/integrations/shopify/install?shop=<shop>
+    auth: 'oauth', connectRoute: '/api/integrations/shopify/install',
+    permissions: ['Leer pedidos, estado de envío y devoluciones','Acceder al catálogo de productos y variantes','Consultar datos del cliente y su historial de compras','Ver inventario y estado de stock por producto'],
+    fields: [
+      { key: 'shop', label: 'Dominio de tu tienda Shopify', placeholder: 'mi-tienda.myshopify.com', type: 'text', hint: 'El dominio .myshopify.com de tu tienda (Shopify Admin → Settings → Domains)', required: true, queryParam: true },
+    ],
+  },
+  // ── Productividad ───────────────────────────────────────────────────────────
+  {
+    id: 'jira', name: 'Jira', category: 'Productividad',
+    desc: 'Crea issues de Jira desde conversaciones y sincroniza estado.',
+    domain: 'atlassian.com', connected: false, color: '#0052CC', backendLive: true,
+    auth: 'oauth', connectRoute: '/api/integrations/jira/install',
+    permissions: ['Crear y actualizar issues en proyectos seleccionados','Leer estado, prioridad y asignatario de issues','Adjuntar conversaciones de Clain a issues existentes','Sincronizar cambios de estado entre Jira y Clain'],
+    fields: [],
+  },
+  {
+    id: 'linear', name: 'Linear', category: 'Productividad',
+    desc: 'Crea y enlaza issues de Linear desde el inbox de soporte.',
+    domain: 'linear.app', connected: true, color: '#5E6AD2', backendLive: true,
+    auth: 'oauth', connectRoute: '/api/integrations/linear/install',
+    permissions: ['Crear y actualizar issues en equipos seleccionados','Leer proyectos, ciclos y estados del workspace','Vincular conversaciones de soporte a issues de Linear','Sincronizar resolución de issues con cierre de conversación'],
+    fields: [],
+  },
+  {
+    id: 'notion', name: 'Notion', category: 'Productividad',
+    desc: 'Guarda notas de conversaciones y crea páginas de Notion.',
+    domain: 'notion.so', connected: false, color: '#000000', backendLive: true,
+    auth: 'oauth', connectRoute: '/api/integrations/notion/install',
+    permissions: ['Crear páginas en bases de datos seleccionadas','Leer y escribir bloques en páginas compartidas contigo','Guardar transcripciones y resúmenes de conversaciones','Acceder a bases de datos del workspace compartidas'],
+    fields: [],
+  },
+  {
+    id: 'github', name: 'GitHub', category: 'Productividad',
+    desc: 'Vincula issues de GitHub a conversaciones para bugs.',
+    domain: 'github.com', connected: false, color: '#24292E', backendLive: true,
+    auth: 'oauth', connectRoute: '/api/integrations/github/install',
+    permissions: ['Crear issues en repositorios seleccionados','Leer título, estado, etiquetas y comentarios de issues','Vincular conversaciones de soporte a issues existentes','Ver pull requests relacionados con issues abiertos'],
+    fields: [],
+  },
+  // ── Analítica ───────────────────────────────────────────────────────────────
+  {
+    id: 'ga', name: 'Google Analytics', category: 'Analítica',
+    desc: 'Mide el impacto del widget de chat en las conversiones.',
+    domain: 'google.com', connected: false, color: '#E37400', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Leer métricas de sesiones y eventos del sitio web','Acceder a datos de conversión vinculados al widget de chat','Ver informes de tráfico y fuentes de adquisición','Leer objetivos y embudos de conversión configurados'],
+    fields: [
+      { key: 'measurement_id', label: 'Measurement ID (GA4)', placeholder: 'G-XXXXXXXXXX', type: 'text', hint: 'Google Analytics → Admin → Data Streams → Tu stream → Measurement ID', required: true },
+    ],
+  },
+  {
+    id: 'delighted', name: 'Delighted', category: 'Analítica',
+    desc: 'Dispara encuestas CSAT y NPS basadas en conversaciones.',
+    domain: 'delighted.com', connected: false, color: '#FF6E6E', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Enviar encuestas CSAT y NPS al cerrar conversaciones','Leer respuestas y puntuaciones de encuestas enviadas','Acceder a datos de personas encuestadas','Crear y gestionar campañas de encuesta por segmento'],
+    fields: [
+      { key: 'api_key', label: 'API Key', placeholder: 'Pega tu API key de Delighted…', type: 'password', hint: 'Delighted → Settings → API → Your API Key', required: true },
+    ],
+  },
+  // ── IA ──────────────────────────────────────────────────────────────────────
+  {
+    id: 'openai', name: 'OpenAI', category: 'IA',
+    desc: 'Conecta GPT-4o para respuestas generativas en el workspace.',
+    domain: 'openai.com', connected: true, color: '#10A37F', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Llamar a modelos GPT-4o y GPT-4o mini vía API','Enviar el contexto de la conversación como prompt','Usar function calling para automatizaciones del agente','Procesar imágenes adjuntas en conversaciones (visión)'],
+    fields: [
+      { key: 'api_key', label: 'API Key', placeholder: 'sk-proj-••••••••••••••••••••••••••••••••', type: 'password', hint: 'platform.openai.com → API keys → Create new secret key', required: true },
+    ],
+  },
+  {
+    id: 'anthropic', name: 'Anthropic', category: 'IA',
+    desc: 'Usa Claude como modelo base para el agente AI de Clain.',
+    domain: 'anthropic.com', connected: true, color: '#D97706', backendLive: false,
+    auth: 'apikey', connectRoute: null,
+    permissions: ['Llamar a Claude 3.5 Sonnet y Claude 3 Haiku vía API','Enviar historial de conversación como contexto del modelo','Ejecutar herramientas personalizadas del agente AI','Procesar documentos y archivos adjuntos en conversaciones'],
+    fields: [
+      { key: 'api_key', label: 'API Key', placeholder: 'sk-ant-api03-••••••••••••••••••••••••••••••', type: 'password', hint: 'console.anthropic.com → API Keys → Create Key', required: true },
+    ],
+  },
+  {
+    id: 'zapier', name: 'Zapier', category: 'IA',
+    desc: 'Conecta Clain con miles de apps a través de Zaps automáticos.',
+    domain: 'zapier.com', connected: false, color: '#FF4A00', backendLive: false,
+    auth: 'oauth', connectRoute: null,
+    permissions: ['Activar Zaps desde eventos de conversaciones (trigger)','Enviar datos de contacto, caso y etiquetas a Zapier','Recibir acciones de Zapier en el inbox de Clain','Acceder a la lista de Zaps activos en tu cuenta'],
+    fields: [],
+  },
 ];
 
-function AppCard({ name, img, desc }: { name: string; img: string; desc: string }) {
+const STORE_CATS = ['Todas', 'CRM', 'Canales', 'Pagos', 'Comercio', 'Productividad', 'Analítica', 'IA'];
+
+// ── Logo sources: Figma MCP primary, Clearbit + Google S2 as fallbacks ─────────
+const INTEG_LOGO_OVERRIDES: Record<string, string> = {
+  salesforce:  IMG_APP_SALESFORCE,
+  instagram:   IMG_APP_INSTAGRAM,
+  ga:          IMG_APP_GA,
+  jira:        IMG_APP_JIRA,
+  whatsapp:    IMG_APP_WHATSAPP,
+  delighted:   IMG_APP_DELIGHTED,
+  stripe:      IMG_APP_STRIPE,
+};
+
+// Three-level logo with graceful degradation
+function AppLogoImg({ id, domain, name, color, size = 36 }: {
+  id: string; domain: string; name: string; color: string; size?: number;
+}) {
+  // source index: 0 = Figma MCP, 1 = Clearbit, 2 = Google S2 favicon, 3 = letter fallback
+  const sources = [
+    INTEG_LOGO_OVERRIDES[id] ?? null,
+    `https://logo.clearbit.com/${domain}`,
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+  ].filter(Boolean) as string[];
+
+  const [idx, setIdx] = useState(0);
+
+  if (idx >= sources.length) {
+    return (
+      <div style={{
+        width: size, height: size,
+        borderRadius: Math.round(size * 0.22),
+        background: color,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <span style={{ color: '#fff', fontWeight: 800, fontSize: Math.round(size * 0.5) }}>{name[0]}</span>
+      </div>
+    );
+  }
   return (
-    <div className="bg-white border border-[#e9eae6] rounded-[6px] px-[21px] pt-[21px] pb-[21px] flex flex-col gap-[15px] hover:border-[#c8c9c4] cursor-pointer">
-      <img src={img} alt="" className="w-12 h-12 rounded-[8px]" />
-      <p className="text-[16px] font-medium text-[#1a1a1a] leading-[24px]">{name}</p>
-      <p className="text-[14px] text-[#646462] leading-[20px] line-clamp-3">{desc}</p>
+    <img
+      key={sources[idx]}
+      src={sources[idx]}
+      alt={name}
+      style={{ width: size, height: size, objectFit: 'contain', borderRadius: Math.round(size * 0.15) }}
+      onError={() => setIdx(i => i + 1)}
+    />
+  );
+}
+
+// ── Connect Modal — real backend integration ─────────────────────────────────
+type IntegField = {
+  key: string; label: string; placeholder: string;
+  type: 'text' | 'password'; hint?: string;
+  required: boolean; queryParam?: boolean;
+};
+
+/** Open OAuth popup and resolve when the backend redirects back */
+function openOAuthPopup(url: string): Promise<'connected' | 'error' | 'closed'> {
+  return new Promise(resolve => {
+    const w = 520, h = 700;
+    const left = window.screenX + (window.outerWidth - w) / 2;
+    const top  = window.screenY + (window.outerHeight - h) / 2;
+    const popup = window.open(url, 'clain_oauth', `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0`);
+    if (!popup) { resolve('error'); return; }
+
+    // Listen for postMessage (oauthConnectors.ts uses window.opener.postMessage)
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'oauth_success') { cleanup(); resolve('connected'); }
+      if (e.data?.type === 'oauth_error')   { cleanup(); resolve('error'); }
+    };
+    window.addEventListener('message', onMsg);
+
+    // Poll popup URL for the individual route pattern (?connected= / ?error=)
+    const poll = window.setInterval(() => {
+      if (!popup || popup.closed) { cleanup(); resolve('closed'); return; }
+      try {
+        const href = popup.location.href;
+        if (href.includes('connected=')) { cleanup(); popup.close(); resolve('connected'); }
+        else if (href.includes('error=')) { cleanup(); popup.close(); resolve('error'); }
+      } catch { /* cross-origin — still navigating to provider */ }
+    }, 500);
+
+    function cleanup() {
+      window.clearInterval(poll);
+      window.removeEventListener('message', onMsg);
+    }
+  });
+}
+
+function ConnectModal({ integ, onClose, onConnected }: {
+  integ: typeof STORE_INTEGRATIONS[0];
+  onClose: () => void;
+  onConnected: () => void;
+}) {
+  const [vals, setVals]           = useState<Record<string, string>>({});
+  const [step, setStep]           = useState<'form' | 'loading' | 'done' | 'error'>('form');
+  const [errorMsg, setErrorMsg]   = useState('');
+  const [errors, setErrors]       = useState<Record<string, boolean>>({});
+  // Stripe: show oauth-vs-manual tabs
+  const [stripeTab, setStripeTab] = useState<'oauth' | 'manual'>('oauth');
+
+  const isOAuth   = integ.auth === 'oauth' || integ.auth === 'stripe';
+  const isStripe  = integ.auth === 'stripe';
+
+  const setVal = (key: string, v: string) => {
+    setVals(p => ({ ...p, [key]: v }));
+    setErrors(p => ({ ...p, [key]: false }));
+  };
+
+  const requiredFields = (integ.fields as IntegField[]).filter(f => f.required && !f.queryParam);
+  const canSubmit = requiredFields.every(f => (vals[f.key] ?? '').trim() !== '');
+
+  // ── OAuth (popup) ──────────────────────────────────────────────────────────
+  const handleOAuth = async () => {
+    if (!integ.connectRoute) return;
+
+    // Build query params from fields marked queryParam:true
+    let url = integ.connectRoute as string;
+    const paramFields = (integ.fields as IntegField[]).filter(f => f.queryParam);
+    if (paramFields.length > 0) {
+      // Validate pre-params
+      const newErrs: Record<string, boolean> = {};
+      let ok = true;
+      paramFields.forEach(f => {
+        if (f.required && !(vals[f.key] ?? '').trim()) { newErrs[f.key] = true; ok = false; }
+      });
+      if (!ok) { setErrors(newErrs); return; }
+      const qs = paramFields.map(f => `${f.key}=${encodeURIComponent(vals[f.key] ?? '')}`).join('&');
+      url = `${url}?${qs}`;
+    }
+
+    setStep('loading');
+    const result = await openOAuthPopup(url);
+    if (result === 'connected') {
+      setStep('done');
+      onConnected();
+    } else if (result === 'closed') {
+      setStep('form'); // user closed popup manually
+    } else {
+      setErrorMsg('La autorización falló o fue cancelada. Inténtalo de nuevo.');
+      setStep('error');
+    }
+  };
+
+  // ── API Key POST /connect ──────────────────────────────────────────────────
+  const handleApiKey = async (overrideRoute?: string) => {
+    const route = overrideRoute ?? integ.connectRoute;
+
+    // Validate
+    const newErrs: Record<string, boolean> = {};
+    let ok = true;
+    (integ.fields as IntegField[]).forEach(f => {
+      if (f.required && !(vals[f.key] ?? '').trim()) { newErrs[f.key] = true; ok = false; }
+    });
+    if (!ok) { setErrors(newErrs); return; }
+
+    if (!route) {
+      // No backend yet — just simulate
+      setStep('done'); onConnected(); return;
+    }
+
+    setStep('loading');
+    try {
+      const res = await fetch(route, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(vals),
+      });
+      if (res.ok) {
+        setStep('done'); onConnected();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setErrorMsg(body.error ?? `Error ${res.status}`);
+        setStep('error');
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? 'Error de red. Verifica que el servidor está activo.');
+      setStep('error');
+    }
+  };
+
+  // ── Stripe manual-connect ──────────────────────────────────────────────────
+  const handleStripeManual = () => handleApiKey('/api/integrations/stripe/manual-connect');
+
+  const handleConnect = () => {
+    if (integ.auth === 'oauth') return handleOAuth();
+    if (integ.auth === 'stripe') {
+      return stripeTab === 'oauth' ? handleOAuth() : handleStripeManual();
+    }
+    return handleApiKey();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+      onClick={step === 'loading' ? undefined : onClose}
+    >
+      <div
+        className="bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col"
+        style={{ width: 520, maxHeight: '90vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* ── Loading overlay ── */}
+        {step === 'loading' && (
+          <div className="flex flex-col items-center justify-center gap-4 py-16 px-10">
+            <div className="w-10 h-10 rounded-full border-4 border-[#e9eae6] border-t-[#1a1a1a] animate-spin" />
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">
+              {integ.auth === 'oauth' || (integ.auth === 'stripe' && stripeTab === 'oauth')
+                ? 'Esperando autorización en la ventana emergente…'
+                : 'Validando credenciales…'}
+            </p>
+            <p className="text-[12px] text-[#646462] text-center">
+              {integ.auth === 'oauth' || (integ.auth === 'stripe' && stripeTab === 'oauth')
+                ? `Completa el proceso en la ventana de ${integ.name} y vuelve aquí.`
+                : 'Conectando con el servidor de ' + integ.name + '…'}
+            </p>
+          </div>
+        )}
+
+        {/* ── Error ── */}
+        {step === 'error' && (
+          <div className="flex flex-col items-center gap-4 px-10 py-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#fee2e2] flex items-center justify-center mb-1">
+              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
+                <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#dc2626" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <p className="text-[18px] font-bold text-[#1a1a1a]">Error al conectar</p>
+            <p className="text-[13px] text-[#646462] leading-[1.6] max-w-[340px]">{errorMsg}</p>
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => setStep('form')} className="h-10 px-6 rounded-full bg-[#222] text-white text-[13px] font-semibold hover:bg-black">Reintentar</button>
+              <button onClick={onClose} className="h-10 px-6 rounded-full border border-[#e9eae6] text-[13px] font-semibold text-[#646462] hover:border-[#c8c9c4]">Cerrar</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Success ── */}
+        {step === 'done' && (
+          <div className="flex flex-col items-center gap-4 px-10 py-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#dcfce7] flex items-center justify-center mb-1">
+              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
+                <path d="M5 12l5 5L19 7" stroke="#15803d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <p className="text-[20px] font-bold text-[#1a1a1a]">{integ.name} conectado</p>
+            <p className="text-[13.5px] text-[#646462] leading-[1.65] max-w-[320px]">
+              La integración está activa. Los datos comenzarán a sincronizarse en los próximos minutos.
+            </p>
+            <button onClick={onClose} className="mt-3 h-10 px-8 rounded-full bg-[#222] text-white text-[13px] font-semibold hover:bg-black">Listo</button>
+          </div>
+        )}
+
+        {/* ── Form ── */}
+        {step === 'form' && (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-4 px-7 pt-6 pb-5 border-b border-[#e9eae6] flex-shrink-0">
+              <div className="w-[52px] h-[52px] rounded-[14px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center overflow-hidden flex-shrink-0">
+                <AppLogoImg id={integ.id} domain={integ.domain} name={integ.name} color={integ.color} size={36} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-[18px] font-bold text-[#1a1a1a] leading-tight">{integ.name}</p>
+                  {integ.backendLive ? (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#15803d] bg-[#dcfce7] px-2 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" /> Disponible
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-[#b45309] bg-[#fef3c7] px-2 py-0.5 rounded-full">Próximamente</span>
+                  )}
+                </div>
+                <p className="text-[12px] text-[#646462] mt-0.5">
+                  {integ.category} · {isOAuth ? 'OAuth 2.0' : 'API Key'}
+                </p>
+              </div>
+              <button onClick={onClose} className="w-8 h-8 rounded-full bg-[#f3f3f1] hover:bg-[#e9e9e7] flex items-center justify-center flex-shrink-0 transition-colors">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none">
+                  <path d="M3 3l10 10M13 3L3 13" stroke="#646462" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <div className="px-7 py-5 flex flex-col gap-5">
+                <p className="text-[13.5px] text-[#646462] leading-[1.65]">{integ.desc}</p>
+
+                {/* Permissions */}
+                <div className="bg-[#f8f8f7] rounded-[12px] p-4">
+                  <p className="text-[11px] font-semibold text-[#646462] uppercase tracking-wider mb-3">Acceso que se concede</p>
+                  <div className="flex flex-col gap-2">
+                    {(integ.permissions as string[]).map(p => (
+                      <div key={p} className="flex items-start gap-2.5">
+                        <div className="w-4 h-4 rounded-full bg-[#dcfce7] flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <svg viewBox="0 0 10 10" className="w-2.5 h-2.5" fill="none">
+                            <path d="M2 5l2 2 4-4" stroke="#15803d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                        <span className="text-[13px] text-[#1a1a1a] leading-[1.45]">{p}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Stripe: toggle OAuth vs manual */}
+                {isStripe && (
+                  <div className="flex gap-1 border-b border-[#e9eae6]">
+                    {(['oauth', 'manual'] as const).map(t => (
+                      <button key={t} onClick={() => setStripeTab(t)}
+                        className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${stripeTab === t ? 'border-[#1a1a1a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+                        {t === 'oauth' ? 'Stripe Connect (recomendado)' : 'API Key manual'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Fields / OAuth explanation */}
+                {(integ.auth === 'apikey' || (isStripe && stripeTab === 'manual')) ? (
+                  // API key fields
+                  <div className="flex flex-col gap-4">
+                    {(integ.auth === 'apikey' || (isStripe && stripeTab === 'manual')) && (
+                      <p className="text-[11px] font-semibold text-[#646462] uppercase tracking-wider -mb-1">Credenciales de acceso</p>
+                    )}
+                    {(integ.fields as IntegField[])
+                      .filter(f => !f.queryParam)
+                      .map(f => (
+                      <div key={f.key} className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[13px] font-semibold text-[#1a1a1a]">
+                            {f.label}{f.required && <span className="text-[#e53e3e] ml-0.5">*</span>}
+                          </label>
+                          {!f.required && <span className="text-[11px] text-[#646462]">Opcional</span>}
+                        </div>
+                        <input
+                          type={f.type === 'password' ? 'password' : 'text'}
+                          value={vals[f.key] ?? ''}
+                          onChange={e => setVal(f.key, e.target.value)}
+                          placeholder={f.placeholder}
+                          className={`w-full border rounded-[10px] px-3.5 py-2.5 text-[13px] focus:outline-none bg-[#fafaf9] ${
+                            errors[f.key] ? 'border-[#e53e3e]' : 'border-[#e9eae6] focus:border-[#222]'
+                          } ${f.type === 'password' ? 'font-mono' : ''}`}
+                        />
+                        {f.hint && <p className="text-[11.5px] text-[#646462] leading-[1.5]"><span className="font-semibold">Dónde encontrarlo: </span>{f.hint}</p>}
+                        {errors[f.key] && <p className="text-[11.5px] text-[#e53e3e]">Este campo es obligatorio</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  // OAuth explanation + pre-params if needed
+                  <div className="flex flex-col gap-4">
+                    {/* Pre-OAuth query-param inputs (e.g. Zendesk subdomain, Shopify shop) */}
+                    {(integ.fields as IntegField[]).filter(f => f.queryParam).map(f => (
+                      <div key={f.key} className="flex flex-col gap-1.5">
+                        <label className="text-[13px] font-semibold text-[#1a1a1a]">
+                          {f.label}{f.required && <span className="text-[#e53e3e] ml-0.5">*</span>}
+                        </label>
+                        <input
+                          type="text"
+                          value={vals[f.key] ?? ''}
+                          onChange={e => setVal(f.key, e.target.value)}
+                          placeholder={f.placeholder}
+                          className={`w-full border rounded-[10px] px-3.5 py-2.5 text-[13px] focus:outline-none bg-[#fafaf9] ${
+                            errors[f.key] ? 'border-[#e53e3e]' : 'border-[#e9eae6] focus:border-[#222]'
+                          }`}
+                        />
+                        {f.hint && <p className="text-[11.5px] text-[#646462]"><span className="font-semibold">Dónde: </span>{f.hint}</p>}
+                        {errors[f.key] && <p className="text-[11.5px] text-[#e53e3e]">Este campo es obligatorio</p>}
+                      </div>
+                    ))}
+                    {/* OAuth card */}
+                    <div className="flex items-center gap-3 bg-[#f8f8f7] rounded-[12px] px-4 py-3.5">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-[14px]" style={{ background: integ.color }}>
+                        {integ.name[0]}
+                      </div>
+                      <div>
+                        <p className="text-[13px] font-semibold text-[#1a1a1a]">
+                          {isStripe && stripeTab === 'oauth' ? 'Stripe Connect OAuth' : 'Autenticación OAuth 2.0'}
+                        </p>
+                        <p className="text-[12px] text-[#646462] mt-0.5">
+                          Se abrirá una ventana segura de {integ.name} para autorizar el acceso. No almacenamos tu contraseña.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-7 pb-6 pt-4 border-t border-[#e9eae6] flex gap-2.5 flex-shrink-0">
+              <button
+                onClick={handleConnect}
+                className="flex-1 h-10 rounded-full bg-[#222] text-white text-[13px] font-semibold hover:bg-black transition-colors"
+              >
+                {integ.auth === 'oauth' || (isStripe && stripeTab === 'oauth')
+                  ? `Conectar con ${integ.name}`
+                  : 'Guardar y conectar'}
+              </button>
+              <button onClick={onClose} className="h-10 px-5 rounded-full border border-[#e9eae6] text-[13px] font-semibold text-[#646462] hover:border-[#c8c9c4] hover:text-[#1a1a1a] transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
 function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [search, setSearch] = useState('');
-  const categories = ['Todas las colecciones', 'Popular', 'New & noteworthy', 'Gratis', 'Para equipos de soporte'];
-  const [activeCategory, setActiveCategory] = useState('Todas las colecciones');
+  const [search, setSearch]         = useState('');
+  const [category, setCategory]     = useState('Todas');
+  const [connecting, setConnecting] = useState<typeof STORE_INTEGRATIONS[0] | null>(null);
+  const [connected, setConnected]   = useState<Set<string>>(
+    () => new Set(STORE_INTEGRATIONS.filter(i => i.connected).map(i => i.id))
+  );
+
+  const filtered = STORE_INTEGRATIONS.filter(i => {
+    const matchCat = category === 'Todas' || i.category === category;
+    const matchQ   = !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.desc.toLowerCase().includes(search.toLowerCase());
+    return matchCat && matchQ;
+  });
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
+
+        {/* Main panel */}
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+
+          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">App Store</h1>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2" strokeWidth="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/></svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search for an app..." className="border border-[#e9eae6] rounded-full pl-8 pr-3 py-[6px] text-[13px] w-48 focus:outline-none focus:border-[#3b59f6]" />
-              </div>
-              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-                Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-              </button>
+            <div>
+              <h1 className="text-[20px] font-bold text-[#1a1a1a]">Integraciones</h1>
+              <p className="text-[13px] text-[#646462] mt-0.5">Conecta Clain con las herramientas que ya usas</p>
+            </div>
+            <div className="relative">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2" strokeWidth="1.5">
+                <circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/>
+              </svg>
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar integración..."
+                className="border border-[#e9eae6] rounded-full pl-8 pr-3 py-[6px] text-[13px] w-52 focus:outline-none focus:border-[#222]"
+              />
             </div>
           </div>
-          <div className="flex flex-1 min-h-0 overflow-hidden">
-            {/* Left categories sidebar */}
-            <div className="w-[200px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col overflow-y-auto">
-              <div className="px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-1">Manage</p>
-                {['Your installed apps'].map(item => <button key={item} className="w-full text-left px-2 py-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f3f3f1] rounded-[6px]">{item}</button>)}
-              </div>
-              <div className="px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-1">Featured</p>
-                {categories.map(cat => <button key={cat} onClick={() => setActiveCategory(cat)} className={`w-full text-left px-2 py-1.5 text-[13px] rounded-[6px] ${activeCategory === cat ? 'bg-[#f3f3f1] font-medium text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#f3f3f1]'}`}>{cat}</button>)}
-              </div>
-              <div className="px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-1">Works with</p>
-                {['Outbound', 'Help Desk', 'Automations', 'Messenger'].map(item => <button key={item} className="w-full text-left px-2 py-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f3f3f1] rounded-[6px]">{item}</button>)}
-              </div>
-              <div className="px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-1">Categories</p>
-                {['Analytics', 'Automation', 'CRM', 'Data & Enrichment', 'For AI & Automation', 'For marketing teams', 'For sales teams', 'For Support Admins', 'For Support Agents', 'Issue tracking & ticketing', 'Lead capture', 'Marketing automation', 'Phone & video', 'Scheduling', 'Surveys & Feedback'].map(item => <button key={item} className="w-full text-left px-2 py-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a] hover:bg-[#f3f3f1] rounded-[6px]">{item}</button>)}
-              </div>
+
+          {/* Category pills + stats */}
+          <div className="px-6 pt-4 pb-3 border-b border-[#e9eae6] flex-shrink-0">
+            <div className="flex gap-2 flex-wrap mb-3">
+              {STORE_CATS.map(cat => (
+                <button key={cat} onClick={() => setCategory(cat)}
+                  className={`px-3.5 py-1.5 text-[12px] font-semibold rounded-full border transition-colors ${
+                    category === cat
+                      ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]'
+                      : 'bg-white text-[#646462] border-[#e9eae6] hover:border-[#1a1a1a] hover:text-[#1a1a1a]'
+                  }`}>
+                  {cat}
+                </button>
+              ))}
             </div>
-            {/* Main content */}
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8">
-              {/* Banner cards */}
-              <div className="grid grid-cols-2 gap-0">
-                <a href="#" className="relative h-[300px] rounded-[16px] overflow-hidden bg-[#f0f1ef] flex flex-col items-center pb-[51px] pt-[55px] px-[40px]" data-node-id="1:30005">
-                  <img src={IMG_APPSTORE_BUILT} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                  <div className="relative flex-1 flex items-start w-full max-w-[324px]">
-                    <p className="text-[36px] font-bold leading-[46.8px] text-black" style={{ textShadow: '0px 0px 5px white' }}>Built by Intercom</p>
+            <div className="flex items-center gap-4">
+              <span className="text-[12px] text-[#646462]">{filtered.length} integraciones</span>
+              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-[#15803d]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" />
+                {filtered.filter(i => connected.has(i.id)).length} conectadas
+              </span>
+            </div>
+          </div>
+
+          {/* Integration grid */}
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            <div className="grid grid-cols-3 gap-4 xl:grid-cols-4">
+              {filtered.map(integ => {
+                const isConn = connected.has(integ.id);
+                return (
+                  <div
+                    key={integ.id}
+                    className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex flex-col gap-3 hover:border-[#c8c9c4] hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition-all cursor-pointer"
+                  >
+                    {/* Logo + badge */}
+                    <div className="flex items-start justify-between">
+                      <div className="w-[48px] h-[48px] rounded-[12px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <AppLogoImg id={integ.id} domain={integ.domain} name={integ.name} color={integ.color} size={32} />
+                      </div>
+                      {isConn && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-[#15803d] bg-[#dcfce7] px-2 py-0.5 rounded-full">
+                          <span className="w-1 h-1 rounded-full bg-[#22c55e] inline-block" />
+                          Conectado
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Name + desc */}
+                    <div className="flex-1">
+                      <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">{integ.name}</p>
+                      <p className="text-[12px] text-[#646462] leading-[1.55] line-clamp-2">{integ.desc}</p>
+                    </div>
+
+                    {/* CTA */}
+                    <button
+                      onClick={() => setConnecting(integ)}
+                      className={`w-full h-[34px] rounded-full text-[12px] font-semibold border transition-colors ${
+                        isConn
+                          ? 'border-[#e9eae6] text-[#646462] hover:border-[#1a1a1a] hover:text-[#1a1a1a] bg-white'
+                          : 'bg-[#1a1a1a] border-[#1a1a1a] text-white hover:bg-black'
+                      }`}
+                    >
+                      {isConn ? 'Configurar' : 'Conectar'}
+                    </button>
                   </div>
-                  <div className="relative self-start">
-                    <span className="inline-block border border-black rounded-[6px] px-[17px] py-[11px] text-[14px] text-black bg-white/30 backdrop-blur-sm">View collection →</span>
-                  </div>
-                </a>
-                <a href="#" className="relative h-[300px] rounded-[16px] overflow-hidden bg-[#f0f1ef] flex flex-col items-center pb-[51px] pt-[55px] px-[40px]" data-node-id="1:30014">
-                  <img src={IMG_APPSTORE_MEETING} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                  <div className="relative flex-1 flex items-start w-full max-w-[324px]">
-                    <p className="text-[36px] font-bold leading-[46.8px] text-white" style={{ textShadow: '0px 0px 5px black' }}>Seamlessly<br/>schedule meetings</p>
-                  </div>
-                  <div className="relative self-start">
-                    <span className="inline-block border border-white rounded-[6px] px-[17px] py-[11px] text-[14px] text-white">View collection →</span>
-                  </div>
-                </a>
-              </div>
-              {/* Popular */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[15px] font-semibold text-[#1a1a1a]">Popular</p>
-                  <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
-                </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_POPULAR.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
-              </div>
-              {/* New & noteworthy */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[15px] font-semibold text-[#1a1a1a]">New & noteworthy</p>
-                  <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
-                </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_NEW.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
-              </div>
-              {/* Free apps */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[15px] font-semibold text-[#1a1a1a]">Free apps to install</p>
-                  <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
-                </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_FREE.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
-              </div>
-              {/* For support teams */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[15px] font-semibold text-[#1a1a1a]">For support teams</p>
-                  <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
-                </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_SUPPORT.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
-              </div>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Modal */}
+      {connecting && (
+        <ConnectModal
+          integ={connecting}
+          onClose={() => setConnecting(null)}
+          onConnected={() => setConnected(prev => new Set([...prev, connecting!.id]))}
+        />
+      )}
     </div>
   );
 }
@@ -9080,135 +9663,768 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
   );
 }
 
-// ── BillingView (1-46200 + 1-47188) ───────────────────────────────────────────
+// ── BillingView ──────────────────────────────────────────────────────────────
 
-function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [tab, setTab] = useState<'suscripcion' | 'facturas' | 'pago'>('suscripcion');
-  const { data: sub, loading: subLoading } = useApi(() => billingApi.subscription('org_default'), [], null);
-  const { data: usageData, loading: usageLoading } = useApi(() => billingApi.usage(), [], null);
-  const { data: ledger, loading: ledgerLoading } = useApi(() => billingApi.ledger('org_default'), [], []);
-  const planName = sub?.planId ?? sub?.plan_id ?? sub?.plan?.name ?? 'Advanced';
-  const trialEnd = sub?.trialEndsAt ?? sub?.trial_ends_at ?? null;
-  const trialEndStr = trialEnd ? new Date(trialEnd).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : '20 may 2026';
-  const monthlyAmount = sub?.amountCents != null ? `USD ${(sub.amountCents / 100).toFixed(2)}` : 'USD 0.00';
-  const tabs = [
-    { id: 'suscripcion' as const, label: 'Suscripción' },
-    { id: 'facturas'    as const, label: 'Facturas' },
-    { id: 'pago'        as const, label: 'Detalles de pago' },
-  ];
+const LC = {
+  text:    '#111111',
+  text60:  'rgba(17,17,17,0.6)',
+  text80:  'rgba(17,17,17,0.8)',
+  border:  '#d3cec6',
+  bg:      '#faf9f6',
+  bg2:     '#f5f1ea',
+  accent:  '#0007cb',
+} as const;
 
+function LandingCornerDots({ size = 8, color = LC.border }: { size?: number; color?: string }) {
+  const s: React.CSSProperties = { position: 'absolute', width: size, height: size, background: color };
   return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
-      <TrialBanner />
-      <div className="flex flex-1 min-h-0 gap-2">
-        <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Facturación</h1>
-            <div className="flex items-center gap-2">
-              {tab === 'suscripcion' && <>
-                <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-                  Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-                </button>
-                <button className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Deja un comentario</button>
-              </>}
-            </div>
-          </div>
-          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
-            {tabs.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
-                  tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
-                }`}>
-                {t.label}
+    <>
+      <span style={{ ...s, top: 0, left: 0 }} />
+      <span style={{ ...s, top: 0, right: 0 }} />
+      <span style={{ ...s, bottom: 0, left: 0 }} />
+      <span style={{ ...s, bottom: 0, right: 0 }} />
+    </>
+  );
+}
+
+function LandingBullet({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+      <span style={{ color: LC.accent, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>✓</span>
+      <span style={{ fontSize: 13, color: LC.text80, lineHeight: '1.5' }}>{children}</span>
+    </div>
+  );
+}
+
+const PLANS = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    subtitle: 'Incluye Clain AI Agent',
+    desc: 'El plan de soporte al cliente para particulares, startups y pequeñas empresas.',
+    originalPrice: 149,
+    monthlyPrice: 49,
+    annualPrice: 42,
+    seatLabel: 'por equipo/mes',
+    cta: 'Actualizar a Starter',
+    badge: null,
+    featuresLabel: 'FUNCIONES PRINCIPALES',
+    features: [
+      'Clain AI Agent (autónomo)',
+      '5.000 créditos AI/mes — total del workspace',
+      'Bandeja de entrada con vistas compartidas',
+      'Knowledge Hub',
+      '3 puestos incluidos',
+    ],
+  },
+  {
+    id: 'growth',
+    name: 'Growth',
+    subtitle: 'Incluye Clain AI Agent',
+    desc: 'Potentes herramientas de automatización y funciones de IA para equipos de soporte en crecimiento.',
+    originalPrice: 399,
+    monthlyPrice: 129,
+    annualPrice: 109,
+    seatLabel: 'por equipo/mes',
+    cta: 'Actualizar a Growth',
+    badge: 'Más popular',
+    featuresLabel: 'TODO LO DE STARTER, MÁS',
+    features: [
+      '20.000 créditos AI/mes — total del workspace',
+      'Tickets y monitorización SLA',
+      'Constructor de flujos de automatización',
+      'Asignación round-robin',
+      'Informes + AI Insights',
+      '8 puestos incluidos',
+    ],
+  },
+  {
+    id: 'scale',
+    name: 'Scale',
+    subtitle: 'Incluye Clain AI Agent',
+    desc: 'Funciones de colaboración, seguridad y multimarca para grandes equipos de soporte.',
+    originalPrice: 899,
+    monthlyPrice: 299,
+    annualPrice: 254,
+    seatLabel: 'por equipo/mes',
+    cta: 'Actualizar a Scale',
+    badge: null,
+    featuresLabel: 'TODO LO DE GROWTH, MÁS',
+    features: [
+      '60.000 créditos AI/mes — total del workspace',
+      'SSO y gestión de identidad',
+      'Soporte HIPAA',
+      'Acuerdos de nivel de servicio (SLA)',
+      'Centro de ayuda multimarca',
+      '20 puestos incluidos',
+    ],
+  },
+];
+
+const BUSINESS_PLAN = {
+  name: 'Business',
+  subtitle: 'Plan personalizado, habla con ventas',
+  desc: 'Para organizaciones con necesidades personalizadas de capacidad, gobernanza, seguridad y cumplimiento.',
+  featuresLabel: 'TODO LO DE SCALE, MÁS',
+  features: [
+    'Asignación personalizada de créditos AI',
+    'Asignación personalizada de puestos',
+    'Seguridad y cumplimiento de nivel empresarial',
+    'Bring Your Own Model (BYOM)',
+    'SLA personalizado y garantías de disponibilidad',
+    'Onboarding personalizado y gestor de éxito dedicado',
+  ],
+};
+
+const FAQS = [
+  { q: '¿Cómo funciona el precio de Clain?', a: 'El precio de Clain tiene dos componentes — Puestos: pagas por compañero de equipo según tu plan (Starter, Growth, Scale). Uso: pagas por lo que usas (p. ej. resultados de Clain, canales de mensajería). Todos los planes incluyen acceso al helpdesk de Clain y a Clain AI Agent.' },
+  { q: '¿Cómo se cobra Clain AI Agent?', a: 'Clain AI Agent está incluido en todos los planes con una asignación mensual de créditos. Un crédito = una interacción resuelta. Uso flexible a €0,012 por resultado.' },
+  { q: '¿Puedo usar Clain con mi helpdesk actual?', a: 'Sí. Clain se integra con Zendesk, HubSpot, Salesforce, Freshdesk y otros a través de API.' },
+  { q: '¿Qué planes ofrece Clain?', a: 'Starter, Growth, Scale en autoservicio + Business empresarial. Todos incluyen AI Agent e integraciones ilimitadas.' },
+  { q: '¿Qué es un puesto (Full vs Lite)?', a: 'Un puesto Full es un compañero de equipo con acceso completo de inicio de sesión. Los puestos Lite son colaboradores de solo lectura incluidos gratis en cada plan.' },
+  { q: '¿Hay cargos adicionales por uso?', a: 'Solo si superas la asignación mensual de créditos con el uso flexible activado.' },
+  { q: '¿Necesito firmar un contrato?', a: 'No. Autoservicio mensual/anual, sin compromiso. Business utiliza MSA + DPA.' },
+  { q: '¿Cuál es el mínimo para empezar?', a: 'Prueba gratuita de 14 días, sin tarjeta requerida.' },
+  { q: '¿Hay una prueba gratuita?', a: 'Sí — 14 días, acceso completo, sin tarjeta.' },
+  { q: '¿Cómo cambio mi plan o puestos?', a: 'Autoservicio en Facturación → Suscripción.' },
+  { q: '¿Hay descuentos disponibles?', a: '20% de descuento anual. Las startups de menos de 2 años obtienen un 50% de descuento el primer año.' },
+];
+
+const CREDIT_PACKS = [
+  {
+    id: 'pack-5k',
+    label: '5.000 créditos',
+    credits: '5.000',
+    price: '€79',
+    pricePerK: '€15,8/k',
+    tagline: 'Para equipos pequeños',
+    detail: {
+      headline: '5.000 créditos adicionales — €79',
+      models: 'GPT-4o mini, Claude 3 Haiku, Gemini 1.5 Flash',
+      capacity: 'Up to 5M tokens / ~10k automated tasks',
+      includes: [
+        '~10.000 tareas automatizadas',
+        'Hasta 5M tokens procesados',
+        'Modelos rápidos y eficientes en coste',
+        'Se consumen después de agotar la cuota mensual del plan',
+      ],
+      bestFor: 'Startups o equipos pequeños que quieren ampliar su cuota puntualmente sin sobrepasar su presupuesto.',
+      note: 'Los créditos del pack permanecen disponibles mientras tu suscripción esté activa.',
+    },
+  },
+  {
+    id: 'pack-20k',
+    label: '20.000 créditos',
+    credits: '20.000',
+    price: '€249',
+    pricePerK: '€12,45/k',
+    tagline: 'El más popular',
+    popular: true,
+    detail: {
+      headline: '20.000 créditos adicionales — €249',
+      models: 'GPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro',
+      capacity: 'Up to 20M tokens / ~40k automated tasks',
+      includes: [
+        '~40.000 tareas automatizadas',
+        'Hasta 20M tokens procesados',
+        'Acceso a modelos de gama alta (GPT-4o, Claude 3.5 Sonnet)',
+        'Ideal para picos de demanda o campañas de soporte',
+      ],
+      bestFor: 'Equipos en crecimiento con volumen variable que necesitan potencia de modelos premium.',
+      note: 'El pack más comprado. Un 21% más barato por crédito que el pack de 5.000.',
+    },
+  },
+  {
+    id: 'pack-50k',
+    label: '50.000 créditos',
+    credits: '50.000',
+    price: '€549',
+    pricePerK: '€10,98/k',
+    tagline: 'Mayor capacidad',
+    detail: {
+      headline: '50.000 créditos adicionales — €549',
+      models: 'All models + Custom fine-tuned models',
+      capacity: 'Up to 50M tokens / ~100k automated tasks',
+      includes: [
+        '~100.000 tareas automatizadas',
+        'Hasta 50M tokens procesados',
+        'Acceso a todos los modelos, incluidos los fine-tuned personalizados',
+        'Máxima capacidad para operaciones de soporte intensivas',
+      ],
+      bestFor: 'Operaciones de soporte grandes con alto volumen y constante. El precio por crédito más bajo disponible.',
+      note: 'Un 31% más barato por crédito que el pack de 5.000. Disponible facturación anual con descuento adicional.',
+    },
+  },
+  {
+    id: 'flexible',
+    label: 'Uso Flexible',
+    credits: null as string | null,
+    price: '€19',
+    pricePerK: '€19 / 1.000 créd.',
+    tagline: 'Sin compromiso',
+    detail: {
+      headline: '€19 por cada 1.000 créditos extra',
+      models: 'Todos los modelos disponibles en tu plan',
+      capacity: 'Sin límite de tokens — paga solo lo que uses',
+      includes: [
+        'Se activa solo después de agotar los créditos mensuales incluidos',
+        'Facturado mensualmente según el uso real extra',
+        'Protección de gasto máximo mensual y alertas de uso',
+        'Activa y desactiva cuando quieras desde Facturación',
+      ],
+      bestFor: 'Equipos con volumen impredecible o que quieren validar el ROI del AI antes de comprometerse con un pack fijo.',
+      note: 'No hay coste si no superas tu cuota mensual. Solo pagas por los créditos extra realmente consumidos.',
+    },
+  },
+];
+
+function BillingCreditsBlock({ selectedPack, setSelectedPack, currentPlan }: {
+  selectedPack: string;
+  setSelectedPack: (id: string) => void;
+  currentPlan: string;
+}) {
+  const pack = CREDIT_PACKS.find(p => p.id === selectedPack) || CREDIT_PACKS[1];
+  return (
+    <div style={{ borderBottom: `1px solid ${LC.border}` }}>
+      {/* Header */}
+      <div style={{ padding: '32px 64px 24px', borderBottom: `1px solid ${LC.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+          <p style={{ fontSize: 20, fontWeight: 800, color: LC.text }}>Créditos AI</p>
+          <span style={{ fontSize: 11, fontWeight: 700, background: LC.accent, color: '#fff', padding: '2px 8px', letterSpacing: '0.04em' }}>COMPARTIDOS POR EQUIPO</span>
+        </div>
+        <p style={{ fontSize: 13, color: LC.text60, lineHeight: '1.7', maxWidth: 680 }}>
+          Cada plan incluye una asignación mensual de créditos AI <strong style={{ color: LC.text }}>compartida entre todo el equipo</strong>, no por puesto. Añadir puestos <strong style={{ color: LC.text }}>no añade créditos</strong> — los packs adicionales se compran aparte.
+        </p>
+      </div>
+      {/* Body */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.8fr' }}>
+        {/* Left — selector */}
+        <div style={{ borderRight: `1px solid ${LC.border}`, padding: '24px 0' }}>
+          <p style={{ fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.1em', padding: '0 28px', marginBottom: 12 }}>Selecciona un pack</p>
+          {CREDIT_PACKS.map(pk => {
+            const sel = pk.id === selectedPack;
+            return (
+              <button key={pk.id} onClick={() => setSelectedPack(pk.id)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', border: 'none', background: sel ? LC.bg2 : 'transparent', borderLeft: sel ? `3px solid ${LC.accent}` : '3px solid transparent', cursor: 'pointer', textAlign: 'left', gap: 12 }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <p style={{ fontSize: 13, fontWeight: sel ? 700 : 500, color: LC.text, marginBottom: 2 }}>{pk.label}</p>
+                    {pk.popular && <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: LC.accent, padding: '1px 5px', letterSpacing: '0.04em' }}>POPULAR</span>}
+                  </div>
+                  <p style={{ fontSize: 11, color: LC.text60 }}>{pk.tagline}</p>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <p style={{ fontSize: 16, fontWeight: 700, color: LC.text }}>{pk.price}</p>
+                  {pk.pricePerK && <p style={{ fontSize: 10, color: LC.text60 }}>{pk.pricePerK}</p>}
+                </div>
               </button>
+            );
+          })}
+          {/* Subscription allowances */}
+          <div style={{ margin: '20px 28px 0', padding: '16px', background: LC.bg2, border: `1px solid ${LC.border}` }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Incluido en tu suscripción</p>
+            {[
+              { plan: 'Starter', credits: '5.000/mes',  cur: currentPlan.toLowerCase().includes('starter') },
+              { plan: 'Growth',  credits: '20.000/mes', cur: currentPlan.toLowerCase().includes('growth') },
+              { plan: 'Scale',   credits: '60.000/mes', cur: currentPlan.toLowerCase().includes('scale') },
+            ].map(r => (
+              <div key={r.plan} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: `1px solid ${LC.border}` }}>
+                <span style={{ fontSize: 12, color: LC.text, fontWeight: r.cur ? 700 : 400 }}>
+                  {r.plan}{r.cur && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: LC.accent }}>TU PLAN</span>}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: LC.text }}>{r.credits}</span>
+              </div>
+            ))}
+            <p style={{ fontSize: 11, color: LC.text60, marginTop: 10 }}>Los créditos no usados <strong style={{ color: LC.text }}>no se acumulan</strong>.</p>
+          </div>
+        </div>
+        {/* Right — detail */}
+        <div style={{ padding: '28px 40px', display: 'flex', flexDirection: 'column' }}>
+          <p style={{ fontSize: 22, fontWeight: 800, color: LC.text, marginBottom: 8 }}>{pack.detail.headline}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            <p style={{ fontSize: 13, color: LC.text60 }}><strong style={{ color: LC.text }}>Modelos:</strong> {pack.detail.models}</p>
+            <p style={{ fontSize: 13, color: LC.text60 }}><strong style={{ color: LC.text }}>Capacidad:</strong> {pack.detail.capacity}</p>
+          </div>
+          <p style={{ fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Qué incluye</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+            {pack.detail.includes.map(item => (
+              <div key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <span style={{ color: LC.accent, fontWeight: 700, flexShrink: 0, fontSize: 14 }}>✓</span>
+                <span style={{ fontSize: 13, color: LC.text, lineHeight: '1.5' }}>{item}</span>
+              </div>
             ))}
           </div>
-          <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
-            {tab === 'suscripcion' && <>
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h2 className="text-[16px] font-bold text-[#1a1a1a]">Prueba gratuita</h2>
-                  <p className="text-[13px] text-[#646462] mt-1">{`Fecha de finalización de la prueba: ${trialEndStr}`}</p>
-                </div>
-                <p className="text-[14px] font-semibold text-[#1a1a1a]">{monthlyAmount}</p>
-              </div>
-              {/* Plan card */}
-              <div className="border border-[#e9eae6] rounded-[12px] mb-4">
-                <div className="px-5 py-3 border-b border-[#e9eae6] flex items-center justify-between">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">Plan</p>
-                  <button className="text-[13px] text-[#646462] flex items-center gap-1 hover:text-[#1a1a1a]">≡ Ver funciones incluidas</button>
-                </div>
-                <div className="px-5 py-4 flex items-center gap-3">
-                  <span className="text-[14px] font-medium text-[#1a1a1a]">{subLoading ? '…' : planName}</span>
-                  <span className="bg-[#e0e7ff] text-[#4338ca] rounded-full px-2 py-0.5 text-[11px] font-medium">Prueba De Advanced</span>
-                  <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1 ml-auto">⚙ Cambiar plan</button>
-                </div>
-                <div className="px-5 py-3 border-t border-[#e9eae6] bg-[#fafaf9]">
-                  <p className="text-[12px] text-[#646462] flex items-start gap-2"><span className="text-[#3b59f6]">ⓘ</span>Los cambios de plazas pueden tardar hasta 24 horas en reflejarse aquí.</p>
-                </div>
-              </div>
-              {/* Complementos card */}
-              <div className="border border-[#e9eae6] rounded-[12px]">
-                <div className="px-5 py-3 border-b border-[#e9eae6]">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">Complementos</p>
-                </div>
-                {[['Asistencia proactiva Plus', 'Prueba'], ['Fin AI Copilot', 'Prueba'], ['Pro', 'Prueba']].map(([n, b]) => (
-                  <div key={n} className="px-5 py-3 border-b border-[#f3f3f1] last:border-0 flex items-center gap-3">
-                    <span className="text-[13px] text-[#1a1a1a]">{n}</span>
-                    <span className="bg-[#e0e7ff] text-[#4338ca] rounded-full px-2 py-0.5 text-[11px] font-medium">{b}</span>
-                  </div>
-                ))}
-              </div>
-            </>}
-
-            {tab === 'facturas' && (
-              ledgerLoading ? (
-                <p className="text-[13px] text-[#646462]">Cargando facturas…</p>
-              ) : ledger.length === 0 ? (
-                <p className="text-[13px] text-[#646462]">No hay facturas disponibles aún.</p>
-              ) : (
-                <table className="w-full text-[13px]">
-                  <thead><tr className="border-b border-[#e9eae6]">
-                    {['Fecha', 'Descripción', 'Importe', 'Estado'].map(h => <th key={h} className="text-left px-4 py-2 font-medium text-[#646462]">{h}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {ledger.map((row: any, i: number) => (
-                      <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
-                        <td className="px-4 py-3">{row.date ? new Date(row.date).toLocaleDateString('es-ES') : '—'}</td>
-                        <td className="px-4 py-3 text-[#1a1a1a]">{row.description ?? row.desc ?? '—'}</td>
-                        <td className="px-4 py-3">{row.amountCents != null ? `USD ${(row.amountCents / 100).toFixed(2)}` : row.amount ?? '—'}</td>
-                        <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${row.status === 'paid' ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#fef9c3] text-[#854d0e]'}`}>{row.status ?? '—'}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
-            )}
-
-            {tab === 'pago' && <>
-              <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-4">Pago</h2>
-              <div className="flex flex-col gap-2 mb-8">
-                <p className="text-[13px] text-[#1a1a1a]"><span>📅</span> <strong>Fecha de facturación:</strong> 5th de cada mes</p>
-                <p className="text-[13px] text-[#1a1a1a]"><span>💳</span> Facturado a: no se agregó una tarjeta de crédito. <a href="#" className="text-[#3b59f6] underline ml-1">Agregar tarjeta</a></p>
-                <p className="text-[13px] text-[#1a1a1a]"><span>🏢</span> Ubicación de la empresa: no se agregó la dirección de la empresa. <a href="#" className="text-[#3b59f6] underline ml-1">Agregar dirección de la empresa</a></p>
-                <p className="text-[13px] text-[#1a1a1a]"><span>🏢</span> Nombre de la empresa: Acme. <a href="#" className="text-[#3b59f6] underline ml-1">Editar nombre de la empresa</a></p>
-              </div>
-              <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Contactos de facturación</h2>
-              <p className="text-[13px] text-[#646462] mb-3">Envía facturas, excedentes y otros mensajes relacionados con la facturación a la siguiente lista: <span className="text-[#646462]">⓵</span></p>
-              <div className="border border-[#e9eae6] rounded-[8px] p-3 mb-2 flex flex-wrap items-center gap-2">
-                <span className="bg-[#f3f3f1] rounded-full px-3 py-1 text-[13px] text-[#1a1a1a]">hectorvidal041103@gmail.com</span>
-                <input placeholder="Ingresa una dirección de correo electrónico" className="flex-1 min-w-[200px] outline-none text-[13px] bg-transparent" />
-              </div>
-              <p className="text-[12px] text-[#646462] mb-4">Puedes agregar varias direcciones de correo electrónico separándolas con una coma o un espacio.</p>
-              <button className="bg-[#f3f3f1] text-[#646462] rounded-full px-4 py-[7px] text-[13px] font-semibold cursor-not-allowed">Guardar</button>
-            </>}
+          <div style={{ background: LC.bg2, border: `1px solid ${LC.border}`, padding: '16px 20px', marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Ideal para</p>
+            <p style={{ fontSize: 13, color: LC.text, lineHeight: '1.6' }}>{pack.detail.bestFor}</p>
+          </div>
+          <p style={{ fontSize: 12, color: LC.text60, lineHeight: '1.6', marginBottom: 24 }}>
+            <strong style={{ color: LC.text }}>Nota: </strong>{pack.detail.note}
+          </p>
+          <div style={{ marginTop: 'auto' }}>
+            <button style={{ height: 44, padding: '0 28px', fontSize: 14, fontWeight: 700, background: LC.text, color: '#fff', border: 'none', cursor: 'pointer' }}>
+              {pack.id === 'flexible' ? 'Activar uso flexible' : `Comprar ${pack.label}`}
+            </button>
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+function BillingFaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderTop: `1px solid ${LC.border}` }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+      >
+        <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>{q}</span>
+        <span style={{ fontSize: 18, color: LC.text60, transform: open ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0, marginLeft: 12 }}>+</span>
+      </button>
+      {open && (
+        <p style={{ fontSize: 14, color: LC.text80, lineHeight: '1.6', paddingBottom: 16, margin: 0 }}>{a}</p>
+      )}
+    </div>
+  );
+}
+
+function BillingPlanCard({ plan, billing, current, isLaunch }: { plan: typeof PLANS[0]; billing: 'monthly' | 'annual'; current: string; isLaunch: boolean }) {
+  // Launch mode pins the discounted annual rate regardless of billing cadence
+  const price = isLaunch ? plan.annualPrice : (billing === 'annual' ? plan.annualPrice : plan.monthlyPrice);
+  const isCurrent = current.toLowerCase().includes(plan.id);
+  const borderColor = plan.badge ? LC.accent : LC.border;
+  return (
+    <div style={{ position: 'relative', border: `1px solid ${borderColor}`, background: plan.badge ? LC.bg2 : LC.bg, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <LandingCornerDots color={borderColor} />
+      {plan.badge && (
+        <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: LC.accent, color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 10px', whiteSpace: 'nowrap' }}>
+          {plan.badge}
+        </div>
+      )}
+      {/* ① Fixed-height info block — same height on every card → price row always aligns */}
+      <div style={{ height: 268, padding: '24px 24px 0', display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${borderColor}` }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{plan.name}</p>
+        <p style={{ fontSize: 12, color: LC.text, marginBottom: 6 }}>{plan.subtitle}</p>
+        <p style={{ fontSize: 12, color: LC.text60, lineHeight: '1.5', marginBottom: 0, flex: 1 }}>{plan.desc}</p>
+        {/* Price pinned to bottom of fixed block */}
+        <div style={{ marginTop: 'auto', paddingBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>Desde</span>
+              {plan.originalPrice && (
+                <span style={{ fontSize: 15, color: LC.text60, textDecoration: 'line-through' }}>€{plan.originalPrice}/mes</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+              <span style={{ fontSize: 36, fontWeight: 800, color: LC.text, letterSpacing: '-0.6px', lineHeight: 1 }}>€{price}</span>
+              <span style={{ fontSize: 12, color: LC.text80 }}>{plan.seatLabel}</span>
+            </div>
+          </div>
+          {billing === 'annual' && !isLaunch && (
+            <p style={{ fontSize: 11, color: LC.text60, marginTop: 6 }}>Facturado anualmente · €{plan.monthlyPrice}/mes si mensual</p>
+          )}
+          {isLaunch && (
+            <p style={{ fontSize: 11, color: LC.accent, marginTop: 6, fontWeight: 600 }}>Precio lanzamiento · 73% de descuento hasta 31 dic 2026</p>
+          )}
+        </div>
+      </div>
+      {/* ② CTA — fixed height so buttons always align */}
+      <div style={{ height: 68, padding: '12px 24px', display: 'flex', alignItems: 'center', borderBottom: `1px solid ${borderColor}` }}>
+        <button style={{ width: '100%', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${isCurrent ? LC.border : LC.accent}`, background: isCurrent ? LC.bg2 : LC.accent, color: isCurrent ? LC.text60 : '#fff' }}>
+          {isCurrent ? 'Plan actual' : plan.cta}
+        </button>
+      </div>
+      {/* ③ Features — flex:1 fills remaining height */}
+      <div style={{ padding: '20px 24px 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <p style={{ fontSize: 10, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 18 }}>{plan.featuresLabel}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {plan.features.map(f => <LandingBullet key={f}>{f}</LandingBullet>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [billing, setBilling] = useState<'monthly' | 'annual'>('annual');
+  const [selectedPack, setSelectedPack] = useState('pack-20k');
+  // Launch-pricing toggle: when on, all plans show their 73%-off launch rate
+  // until 31 dic 2026. Independent from monthly/annual billing cadence.
+  const [isLaunch, setIsLaunch] = useState(false);
+  const { data: sub } = useApi(() => billingApi.subscription('org_default'), [], null);
+  const currentPlan = sub?.planId ?? sub?.plan_id ?? sub?.plan?.name ?? 'growth';
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden" style={{ background: LC.bg }}>
+      <TrialBanner />
+      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        {/* Hero */}
+        <div style={{ borderBottom: `1px solid ${LC.border}`, padding: '48px 64px 40px', position: 'relative' }}>
+          <LandingCornerDots />
+          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 12 }}>Facturación &amp; Planes</p>
+          <h1 style={{ fontSize: 36, fontWeight: 800, color: LC.text, marginBottom: 12, lineHeight: '1.15' }}>
+            El plan perfecto<br />para tu equipo
+          </h1>
+          <p style={{ fontSize: 15, color: LC.text60, marginBottom: 32, maxWidth: 480 }}>
+            Empieza gratis y escala cuando lo necesites. Sin contratos, sin sorpresas.
+          </p>
+          {/* Billing toggle + launch-price tab */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'inline-flex', border: `1px solid ${LC.border}`, background: LC.bg2, padding: 3 }}>
+              {(['monthly', 'annual'] as const).map(b => (
+                <button key={b} onClick={() => setBilling(b)}
+                  style={{ padding: '6px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: billing === b ? '#fff' : 'transparent', color: billing === b ? LC.text : LC.text60, boxShadow: billing === b ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}
+                >
+                  {b === 'monthly' ? 'Mensual' : 'Anual'}{b === 'annual' ? ' (-15%)' : ''}
+                </button>
+              ))}
+            </div>
+            {/* Square launch-price tab — sits next to the monthly/annual toggle */}
+            <button
+              onClick={() => setIsLaunch(v => !v)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 10,
+                padding: '8px 16px',
+                border: `1px solid ${isLaunch ? LC.accent : LC.border}`,
+                background: isLaunch ? LC.accent : '#fff',
+                color: isLaunch ? '#fff' : LC.text,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Precio lanzamiento</span>
+              <span style={{ width: 3, height: 3, borderRadius: '50%', background: isLaunch ? '#fff' : LC.text }} />
+              <span style={{ fontSize: 13 }}>Hasta 31 dic 2026</span>
+              <span style={{ width: 3, height: 3, borderRadius: '50%', background: isLaunch ? '#fff' : LC.text }} />
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Ahorra 73%</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Plans grid */}
+        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
+          <div style={{ display: 'flex', gap: 0, border: `1px solid ${LC.border}` }}>
+            {PLANS.map((plan, i) => (
+              <Fragment key={plan.id}>
+                {i > 0 && <div style={{ width: 1, background: LC.border, flexShrink: 0 }} />}
+                <BillingPlanCard plan={plan} billing={billing} current={currentPlan} isLaunch={isLaunch} />
+              </Fragment>
+            ))}
+            {/* Business column — same 3-section structure as BillingPlanCard */}
+            <div style={{ width: 1, background: LC.border, flexShrink: 0 }} />
+            <div style={{ position: 'relative', border: 'none', background: LC.bg, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <LandingCornerDots color={LC.border} />
+              {/* ① Fixed-height info block — matches BillingPlanCard height:268 */}
+              <div style={{ height: 268, padding: '24px 24px 0', display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${LC.border}` }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{BUSINESS_PLAN.name}</p>
+                <p style={{ fontSize: 12, color: LC.text, marginBottom: 6 }}>{BUSINESS_PLAN.subtitle}</p>
+                <p style={{ fontSize: 12, color: LC.text60, lineHeight: '1.5', marginBottom: 0, flex: 1 }}>{BUSINESS_PLAN.desc}</p>
+                <div style={{ marginTop: 'auto', paddingBottom: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>Precio</span>
+                      <span style={{ fontSize: 15, color: LC.text60 }}>por contrato</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                      <span style={{ fontSize: 36, fontWeight: 800, color: LC.text, letterSpacing: '-0.6px', lineHeight: 1 }}>Custom</span>
+                      <span style={{ fontSize: 12, color: LC.text80 }}>negociado</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* ② CTA — same fixed height as BillingPlanCard */}
+              <div style={{ height: 68, padding: '12px 24px', display: 'flex', alignItems: 'center', borderBottom: `1px solid ${LC.border}` }}>
+                <button style={{ width: '100%', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${LC.accent}`, background: LC.accent, color: '#fff' }}>
+                  Hablar con ventas
+                </button>
+              </div>
+              {/* ③ Features */}
+              <div style={{ padding: '20px 24px 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 18 }}>{BUSINESS_PLAN.featuresLabel}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {BUSINESS_PLAN.features.map(f => <LandingBullet key={f}>{f}</LandingBullet>)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Features comparison link */}
+          <div style={{ marginTop: 20, textAlign: 'center' }}>
+            <button
+              onClick={() => onNavigate('featuresComparison')}
+              style={{ fontSize: 13, color: LC.accent, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: 600 }}
+            >
+              Ver comparación completa de funciones →
+            </button>
+          </div>
+        </div>
+
+        {/* AI Credits — selector + detail (real packs €79 / €249 / €549 / flexible) */}
+        <BillingCreditsBlock selectedPack={selectedPack} setSelectedPack={setSelectedPack} currentPlan={currentPlan} />
+
+        {/* ── Seats — full width ───────────────────────────────────────────────── */}
+        <div style={{ borderBottom: `1px solid ${LC.border}` }}>
+          {/* Section header */}
+          <div style={{ padding: '32px 64px 0' }}>
+            <p style={{ fontSize: 20, fontWeight: 800, color: LC.text, marginBottom: 6 }}>Puestos adicionales</p>
+            <p style={{ fontSize: 13, color: LC.text60, lineHeight: '1.7', maxWidth: 680, marginBottom: 28 }}>
+              Cada plan incluye puestos de base. Añade más en cualquier momento — la facturación <strong style={{ color: LC.text }}>se prorratea automáticamente</strong> hasta tu próxima fecha de renovación. Los puestos Lite (solo lectura) son <strong style={{ color: LC.text }}>gratuitos e ilimitados</strong> en todos los planes.
+            </p>
+          </div>
+          {/* Table */}
+          <div style={{ borderTop: `1px solid ${LC.border}` }}>
+            {/* Header row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr', padding: '0 64px', background: LC.bg2, borderBottom: `1px solid ${LC.border}` }}>
+              {['Plan', 'Puestos incluidos', 'Precio / puesto extra', 'Colaboradores Lite', ''].map((h, i) => (
+                <div key={h + i} style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</div>
+              ))}
+            </div>
+            {[
+              { id: 'starter',  name: 'Starter',  seats: 3,    extraPrice: '€25 / mes',     note: 'Empieza desde aquí' },
+              { id: 'growth',   name: 'Growth',   seats: 8,    extraPrice: '€22 / mes',     note: 'Más popular' },
+              { id: 'scale',    name: 'Scale',    seats: 20,   extraPrice: '€19 / mes',     note: 'Para equipos grandes' },
+              { id: 'business', name: 'Business', seats: null, extraPrice: 'Personalizado', note: 'Habla con ventas' },
+            ].map(row => {
+              const isCurrent = currentPlan.toLowerCase().includes(row.id);
+              return (
+                <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr', padding: '0 64px', borderBottom: `1px solid ${LC.border}`, background: isCurrent ? LC.bg2 : 'transparent' }}>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 14, fontWeight: isCurrent ? 700 : 500, color: LC.text }}>{row.name}</span>
+                    {isCurrent && <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: LC.accent, padding: '2px 7px', letterSpacing: '0.04em' }}>ACTUAL</span>}
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: LC.text }}>{row.seats != null ? `${row.seats} puestos` : 'Personalizado'}</span>
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 400, color: isCurrent ? LC.accent : LC.text }}>{row.extraPrice}</span>
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: LC.text }}>Ilimitados · Gratis</span>
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    {isCurrent ? (
+                      <button style={{ height: 34, padding: '0 16px', fontSize: 12, fontWeight: 600, background: LC.text, color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Añadir puesto
+                      </button>
+                    ) : (
+                      <button onClick={() => onNavigate('billing')} style={{ height: 34, padding: '0 16px', fontSize: 12, fontWeight: 600, background: 'transparent', color: LC.text60, border: `1px solid ${LC.border}`, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Cambiar a {row.name}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ padding: '16px 64px 32px' }}>
+            <p style={{ fontSize: 12, color: LC.text60 }}>
+              * El precio por puesto extra se aplica al puesto adicional por encima del límite incluido en tu plan. Se prorratea desde el momento de la activación.
+            </p>
+          </div>
+        </div>
+
+        {/* FAQs — full width */}
+        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 24 }}>Preguntas frecuentes</p>
+          <div>
+            {FAQS.map(f => <BillingFaqItem key={f.q} q={f.q} a={f.a} />)}
+            <div style={{ borderTop: `1px solid ${LC.border}` }} />
+          </div>
+        </div>
+
+        {/* Final CTA */}
+        <div style={{ padding: '48px 64px', position: 'relative', textAlign: 'center' }}>
+          <LandingCornerDots />
+          <p style={{ fontSize: 24, fontWeight: 800, color: LC.text, marginBottom: 12 }}>¿Tienes preguntas?</p>
+          <p style={{ fontSize: 14, color: LC.text60, marginBottom: 24 }}>Nuestro equipo está disponible para ayudarte a elegir el plan adecuado.</p>
+          <button style={{ padding: '12px 32px', fontSize: 14, fontWeight: 700, background: LC.accent, color: '#fff', border: 'none', cursor: 'pointer' }}>
+            Hablar con ventas
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── FeaturesComparisonView ────────────────────────────────────────────────────
+
+const FEATURE_SECTIONS = [
+  {
+    title: 'Bandeja de entrada',
+    rows: [
+      { feature: 'Bandeja de entrada compartida', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Reglas de asignación automática', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Vistas personalizadas', starter: '3', growth: 'Ilimitadas', scale: 'Ilimitadas', business: 'Ilimitadas' },
+      { feature: 'Mención de compañeros', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Notas internas', starter: true, growth: true, scale: true, business: true },
+    ],
+  },
+  {
+    title: 'AI & Automatización',
+    rows: [
+      { feature: 'AI Copilot', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Fin AI Agent', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Créditos AI incluidos', starter: '0', growth: '500/mes', scale: '2.000/mes', business: 'Personalizado' },
+      { feature: 'Flujos de trabajo automatizados', starter: '5', growth: 'Ilimitados', scale: 'Ilimitados', business: 'Ilimitados' },
+      { feature: 'Resolución automática con AI', starter: false, growth: false, scale: true, business: true },
+    ],
+  },
+  {
+    title: 'Centro de ayuda',
+    rows: [
+      { feature: 'Centro de ayuda público', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Múltiples centros de ayuda', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Artículos ilimitados', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Personalización avanzada', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Búsqueda por IA', starter: false, growth: true, scale: true, business: true },
+    ],
+  },
+  {
+    title: 'Canales',
+    rows: [
+      { feature: 'Chat en vivo (web)', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Correo electrónico', starter: true, growth: true, scale: true, business: true },
+      { feature: 'WhatsApp', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Instagram', starter: false, growth: true, scale: true, business: true },
+      { feature: 'SMS', starter: false, growth: false, scale: true, business: true },
+    ],
+  },
+  {
+    title: 'Informes',
+    rows: [
+      { feature: 'Informes básicos', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Informes personalizados', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Exportación de datos (CSV)', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Panel de rendimiento de agentes', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Informes de CSAT', starter: false, growth: true, scale: true, business: true },
+    ],
+  },
+  {
+    title: 'Seguridad & Acceso',
+    rows: [
+      { feature: 'SSO / SAML', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Roles personalizados', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Log de auditoría', starter: false, growth: false, scale: false, business: true },
+      { feature: '2FA obligatorio', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Revisión de seguridad avanzada', starter: false, growth: false, scale: false, business: true },
+    ],
+  },
+  {
+    title: 'Integraciones',
+    rows: [
+      { feature: 'Slack', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Salesforce', starter: false, growth: true, scale: true, business: true },
+      { feature: 'HubSpot', starter: false, growth: true, scale: true, business: true },
+      { feature: 'API pública', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Webhooks', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Límite de velocidad API', starter: '100/min', growth: '500/min', scale: '2.000/min', business: 'Personalizado' },
+    ],
+  },
+  {
+    title: 'Soporte',
+    rows: [
+      { feature: 'Centro de ayuda', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Soporte por chat', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Soporte prioritario', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Gestor de cuenta dedicado', starter: false, growth: false, scale: false, business: true },
+      { feature: 'Implementación guiada', starter: false, growth: false, scale: false, business: true },
+    ],
+  },
+];
+
+function FcCell({ value }: { value: boolean | string }) {
+  if (value === true)  return <span style={{ color: LC.accent, fontSize: 16, fontWeight: 700 }}>✓</span>;
+  if (value === false) return <span style={{ color: LC.border, fontSize: 16, fontWeight: 700 }}>—</span>;
+  return <span style={{ fontSize: 12, color: LC.text80 }}>{value}</span>;
+}
+
+function FeaturesComparisonView({ view: _view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const cols = ['2fr', '1fr', '1fr', '1fr', '1fr'];
+  const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: cols.join(' ') };
+  const PLANS_FC = ['Starter', 'Growth', 'Scale', 'Business'];
+  const planKeys: Array<'starter' | 'growth' | 'scale' | 'business'> = ['starter', 'growth', 'scale', 'business'];
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden" style={{ background: LC.bg }}>
+      <TrialBanner />
+      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        {/* Header */}
+        <div style={{ borderBottom: `1px solid ${LC.border}`, padding: '32px 64px 28px', position: 'relative', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <LandingCornerDots />
+          <button
+            onClick={() => onNavigate('billing')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: LC.text60, background: 'none', border: `1px solid ${LC.border}`, padding: '6px 14px', cursor: 'pointer', flexShrink: 0 }}
+          >
+            ← Volver a planes
+          </button>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Comparativa completa</p>
+            <h1 style={{ fontSize: 28, fontWeight: 800, color: LC.text, lineHeight: '1.15' }}>Funciones por plan</h1>
+          </div>
+        </div>
+
+        {/* Sticky plan header */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 10, background: LC.bg, borderBottom: `1px solid ${LC.border}` }}>
+          <div style={{ ...gridStyle, padding: '0 64px' }}>
+            <div style={{ padding: '16px 0' }} />
+            {PLANS_FC.map((p, i) => (
+              <div key={p} style={{ padding: '16px 12px', textAlign: 'center', borderLeft: `1px solid ${LC.border}`, background: i === 3 ? '#111' : 'transparent' }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: i === 3 ? '#fff' : LC.text, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{p}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Feature sections */}
+        <div style={{ padding: '0 64px 64px' }}>
+          {FEATURE_SECTIONS.map(section => (
+            <div key={section.title} style={{ marginTop: 32 }}>
+              {/* Section header */}
+              <div style={{ ...gridStyle, borderBottom: `2px solid ${LC.text}`, paddingBottom: 8, marginBottom: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{section.title}</p>
+                {PLANS_FC.map((p, i) => (
+                  <div key={p} style={{ borderLeft: `1px solid ${LC.border}`, background: i === 3 ? '#111' : 'transparent' }} />
+                ))}
+              </div>
+              {/* Rows */}
+              {section.rows.map((row, ri) => (
+                <div key={row.feature} style={{ ...gridStyle, borderBottom: `1px solid ${LC.border}`, background: ri % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.015)' }}>
+                  <div style={{ padding: '12px 0', fontSize: 13, color: LC.text80 }}>{row.feature}</div>
+                  {planKeys.map((k, i) => (
+                    <div key={k} style={{ padding: '12px', textAlign: 'center', borderLeft: `1px solid ${LC.border}`, background: i === 3 ? '#111' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FcCell value={row[k]} />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
+
+          {/* Bottom CTA */}
+          <div style={{ marginTop: 48, border: `1px solid ${LC.border}`, padding: '40px', position: 'relative', textAlign: 'center' }}>
+            <LandingCornerDots />
+            <p style={{ fontSize: 20, fontWeight: 800, color: LC.text, marginBottom: 8 }}>¿Listo para empezar?</p>
+            <p style={{ fontSize: 14, color: LC.text60, marginBottom: 24 }}>Prueba cualquier plan gratis durante 14 días, sin tarjeta de crédito.</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                onClick={() => onNavigate('billing')}
+                style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700, background: LC.accent, color: '#fff', border: 'none', cursor: 'pointer' }}
+              >
+                Ver planes y precios
+              </button>
+              <button style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700, background: 'transparent', color: LC.text, border: `1.5px solid ${LC.border}`, cursor: 'pointer' }}>
+                Hablar con ventas
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // ── MessengerView (1-48766 + 1-50442 + 1-52109) ───────────────────────────────
 
@@ -23126,7 +24342,8 @@ function PrototypeApp() {
       case 'workspaceMultilingual': return <WorkspaceMultilingualView view={view} onNavigate={setView} />;
       case 'workspaceHours':        return <HorarioAtencionView view={view} onNavigate={setView} />;
       case 'workspaceBrands':       return <MarcasView view={view} onNavigate={setView} />;
-      case 'billing':        return <BillingView view={view} onNavigate={setView} />;
+      case 'billing':            return <BillingView view={view} onNavigate={setView} />;
+      case 'featuresComparison': return <FeaturesComparisonView view={view} onNavigate={setView} />;
       case 'messenger':      return <MessengerView view={view} onNavigate={setView} />;
       case 'email':          return <EmailView view={view} onNavigate={setView} />;
       case 'phone':          return <PhoneView view={view} onNavigate={setView} />;
