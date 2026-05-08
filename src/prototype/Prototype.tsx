@@ -510,7 +510,7 @@ type ThemeOpt = 'light' | 'dark' | 'system';
 const THEME_OPTIONS: { value: ThemeOpt; label: string }[] = [
   { value: 'light',  label: 'Claro' },
   { value: 'dark',   label: 'Oscuro' },
-  { value: 'system', label: 'Sistema' },
+  { value: 'system', label: 'Sistema de coincidencias' },
 ];
 const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
   { value: 'es',    label: 'Español' },
@@ -606,21 +606,39 @@ function ProfileMenuButton({ expanded }: { expanded: boolean }) {
     if (typeof window !== 'undefined') window.location.reload();
   }
 
-  function MainRow({ label, sub, onClick, danger, chev, onClose }: { label: string; sub?: string; onClick?: () => void; danger?: boolean; chev?: boolean; onClose?: boolean }) {
+  function MainRow({ label, sub, onClick, danger, chev, isOpenSub }: { label: string; sub?: string; onClick?: () => void; danger?: boolean; chev?: boolean; isOpenSub?: boolean }) {
     return (
       <button
         type="button"
         onClick={() => {
           onClick?.();
-          if (onClose !== false && !chev) setOpen(false);
+          if (!chev) setOpen(false);
         }}
-        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${danger ? 'text-[#b91c1c] hover:bg-[#fef2f2]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${
+          danger
+            ? 'text-[#b91c1c] hover:bg-[#fef2f2]'
+            : isOpenSub
+              ? 'text-[#1a1a1a] bg-[#f8f8f7]'
+              : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
+        }`}
       >
         <span className="flex-1 truncate">
-          {label}
-          {sub && <span className="text-[#646462] font-normal"> {sub}</span>}
+          <span className="font-semibold">{label}</span>
+          {sub && <span className="text-[#1a1a1a] font-normal"> {sub}</span>}
         </span>
         {chev && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>}
+      </button>
+    );
+  }
+
+  function PlainRow({ label, onClick, danger }: { label: string; onClick?: () => void; danger?: boolean }) {
+    return (
+      <button
+        type="button"
+        onClick={() => { onClick?.(); setOpen(false); }}
+        className={`w-full flex items-center px-3 h-9 text-[13px] text-left ${danger ? 'text-[#b91c1c] hover:bg-[#fef2f2]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+      >
+        <span className="flex-1 truncate">{label}</span>
       </button>
     );
   }
@@ -630,29 +648,15 @@ function ProfileMenuButton({ expanded }: { expanded: boolean }) {
       <button
         type="button"
         onClick={onClick}
-        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${active ? 'bg-[#f8f8f7] font-semibold text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${active ? 'text-[#fa7938] font-semibold' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
       >
-        <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-          {active && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="2"><path d="M3 8l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-        </span>
         <span className="flex-1 truncate">{label}</span>
+        {active && (
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#fa7938] flex-shrink-0" strokeWidth="2">
+            <path d="M3 8l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
       </button>
-    );
-  }
-
-  function SubHeader({ title }: { title: string }) {
-    return (
-      <div className="flex items-center gap-1.5 px-2 py-2 border-b border-[#e9eae6]">
-        <button
-          type="button"
-          onClick={() => setSubmenu(null)}
-          className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
-          aria-label="Volver"
-        >
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-        <span className="text-[13px] font-semibold text-[#1a1a1a]">{title}</span>
-      </div>
     );
   }
 
@@ -674,108 +678,94 @@ function ProfileMenuButton({ expanded }: { expanded: boolean }) {
       </button>
 
       {open && (
-        <div
-          role="menu"
-          className="absolute z-50 left-full ml-2 bottom-0 w-[280px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] overflow-hidden"
-        >
-          {submenu === null && (
-            <div className="py-1.5">
-              <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-[#e9eae6]">
-                <div className="relative w-7 h-7 rounded-full overflow-hidden bg-[#f8f8f7] flex items-center justify-center">
-                  {user?.avatar_url ? (
-                    <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-[12px] font-semibold text-[#646462]">{initials}</span>
-                  )}
-                  <div className={`absolute bottom-0 right-0 w-[8px] h-[8px] rounded-full border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{userName}</p>
-                  {userEmail && <p className="text-[11px] text-[#646462] truncate">{userEmail}</p>}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setAway(v => !v)}
-                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-              >
-                <span className="flex-1 text-left">Modo ausente</span>
-                <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors flex-shrink-0 ${away ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
-                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${away ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                </span>
-              </button>
-
-              <div className="border-t border-[#e9eae6] my-1" />
-
-              <MainRow label="Tema:"             sub={themeLabel}            chev onClose={false} onClick={() => setSubmenu('theme')} />
-              <MainRow label="Idioma:"           sub={langLabel}             chev onClose={false} onClick={() => setSubmenu('language')} />
-              <MainRow label="Espacio de trabajo:" sub={currentWorkspaceName} chev onClose={false} onClick={() => setSubmenu('workspace')} />
-
-              <div className="border-t border-[#e9eae6] my-1" />
-
-              <MainRow label="Centro de ayuda"        onClick={() => window.open('https://www.intercom.com/help', '_blank')} />
-              <MainRow label="Foro de la comunidad"   onClick={() => window.open('https://community.intercom.com', '_blank')} />
-              <MainRow label="Página de estado"       onClick={() => window.open('https://www.intercomstatus.com', '_blank')} />
-              <MainRow label="Términos y políticas"   onClick={() => window.open('https://www.intercom.com/terms-and-policies', '_blank')} />
-
-              <div className="border-t border-[#e9eae6] my-1" />
-
-              <MainRow label="Cerrar sesión" danger onClick={handleSignOut} />
-            </div>
-          )}
-
-          {submenu === 'theme' && (
-            <div className="py-1">
-              <SubHeader title="Tema" />
-              <div className="py-1">
-                {THEME_OPTIONS.map(opt => (
-                  <CheckRow
-                    key={opt.value}
-                    active={theme === opt.value}
-                    label={opt.label}
-                    onClick={() => { setTheme(opt.value); setSubmenu(null); }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {submenu === 'language' && (
-            <div className="py-1">
-              <SubHeader title="Idioma" />
-              <div className="py-1 max-h-[280px] overflow-y-auto">
-                {LANGUAGE_OPTIONS.map(opt => (
-                  <CheckRow
-                    key={opt.value}
-                    active={lang === opt.value}
-                    label={opt.label}
-                    onClick={() => { setLang(opt.value); setSubmenu(null); }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {submenu === 'workspace' && (
-            <div className="py-1">
-              <SubHeader title="Espacio de trabajo" />
-              <div className="py-1 max-h-[280px] overflow-y-auto">
-                {workspaces.length === 0 ? (
-                  <div className="px-3 py-3 text-[12.5px] text-[#646462]">Sin espacios de trabajo disponibles.</div>
+        <div className="absolute z-50 left-full ml-2 bottom-0">
+          {/* Main menu — relative wrapper so submenu can anchor next to it */}
+          <div
+            role="menu"
+            className="relative w-[300px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] py-1.5"
+          >
+            <div className="flex items-center gap-2.5 px-3 py-2.5">
+              <div className="relative w-9 h-9 rounded-full overflow-hidden bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
                 ) : (
-                  workspaces.map((ws: any) => (
-                    <CheckRow
-                      key={ws.id}
-                      active={ws.id === currentWorkspaceId}
-                      label={ws.name || ws.slug || ws.id}
-                      onClick={() => handleSwitchWorkspace(ws)}
-                    />
-                  ))
+                  <span className="text-[13px] font-semibold text-[#646462]">{initials}</span>
                 )}
+                <span className={`absolute bottom-[-1px] left-[-1px] w-[10px] h-[10px] rounded-full border-2 border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-[#1a1a1a] truncate">{userName}</p>
+                {userEmail && <p className="text-[11.5px] text-[#646462] truncate">{userEmail}</p>}
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setAway(v => !v)}
+              className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+            >
+              <span className="flex-1 text-left">Modo ausente</span>
+              <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors flex-shrink-0 ${away ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
+                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${away ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+              </span>
+            </button>
+
+            <div className="border-t border-[#e9eae6] my-1" />
+
+            <MainRow label="Tema:"               sub={themeLabel}             chev isOpenSub={submenu === 'theme'}     onClick={() => setSubmenu(submenu === 'theme' ? null : 'theme')} />
+            <MainRow label="Idioma:"             sub={langLabel}              chev isOpenSub={submenu === 'language'}  onClick={() => setSubmenu(submenu === 'language' ? null : 'language')} />
+            <MainRow label="Espacio de trabajo:" sub={currentWorkspaceName}   chev isOpenSub={submenu === 'workspace'} onClick={() => setSubmenu(submenu === 'workspace' ? null : 'workspace')} />
+
+            <div className="border-t border-[#e9eae6] my-1" />
+
+            <PlainRow label="Centro de ayuda de Intercom"      onClick={() => window.open('https://www.intercom.com/help', '_blank')} />
+            <PlainRow label="Foro de la Comunidad de Intercom" onClick={() => window.open('https://community.intercom.com', '_blank')} />
+            <PlainRow label="Página de estado"                 onClick={() => window.open('https://www.intercomstatus.com', '_blank')} />
+            <PlainRow label="Términos y políticas"             onClick={() => window.open('https://www.intercom.com/terms-and-policies', '_blank')} />
+
+            <div className="border-t border-[#e9eae6] my-1" />
+
+            <PlainRow label="Cerrar sesión" onClick={handleSignOut} />
+
+            {/* Cascading submenu — anchored top-aligned to the right of main */}
+            {submenu && (
+              <div
+                role="menu"
+                className="absolute z-50 left-full ml-2 top-0 w-[260px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] py-1.5 max-h-[420px] overflow-y-auto"
+              >
+              {submenu === 'theme' && THEME_OPTIONS.map(opt => (
+                <CheckRow
+                  key={opt.value}
+                  active={theme === opt.value}
+                  label={opt.label}
+                  onClick={() => { setTheme(opt.value); setSubmenu(null); }}
+                />
+              ))}
+
+              {submenu === 'language' && LANGUAGE_OPTIONS.map(opt => (
+                <CheckRow
+                  key={opt.value}
+                  active={lang === opt.value}
+                  label={opt.label}
+                  onClick={() => { setLang(opt.value); setSubmenu(null); }}
+                />
+              ))}
+
+              {submenu === 'workspace' && (
+                workspaces.length === 0 ? (
+                  <div className="px-3 py-3 text-[12.5px] text-[#646462]">Sin espacios de trabajo disponibles.</div>
+                ) : workspaces.map((ws: any) => (
+                  <CheckRow
+                    key={ws.id}
+                    active={ws.id === currentWorkspaceId}
+                    label={ws.name || ws.slug || ws.id}
+                    onClick={() => handleSwitchWorkspace(ws)}
+                  />
+                ))
+              )}
+            </div>
           )}
+          </div>
         </div>
       )}
     </div>
