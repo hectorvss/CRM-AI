@@ -258,7 +258,7 @@ export async function getReportOverview(
     let csatAvg: number | null = null;
     try {
       const { data: csat } = await supabase
-        .from('csat_surveys')
+        .from('csat_survey_responses')
         .select('rating')
         .eq('tenant_id', scope.tenantId)
         .eq('workspace_id', scope.workspaceId)

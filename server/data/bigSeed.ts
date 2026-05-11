@@ -955,16 +955,14 @@ export async function seedBigDataset(input: SeedInput): Promise<void> {
       id: `seed-csat-${i + 1}-${stub}`,
       tenant_id: tenantId,
       workspace_id: workspaceId,
-      case_id: caseIds[d.caseIdx],
-      customer_id: d.custId,
+      contact_id: d.custId,
       rating: d.rating,
-      comment: d.comment,
-      channel: d.channel,
+      feedback_message: d.comment,
       created_at: isoDaysAgo(25 - i * 2),
     }));
 
-    const { error } = await supabase.from('csat_surveys').insert(rows);
-    if (error) logger.warn('bigSeed: csat_surveys insert failed (non-fatal)', { error: error.message });
+    const { error } = await supabase.from('csat_survey_responses').insert(rows);
+    if (error) logger.warn('bigSeed: csat_survey_responses insert failed (non-fatal)', { error: error.message });
   }
 
   // ── 13. Audit events (30) ─────────────────────────────────────────────────────
@@ -1182,8 +1180,8 @@ export async function deleteBigSeed(tenantId: string, workspaceId: string): Prom
   // CSAT surveys
   try {
     const csatIds = Array.from({ length: 10 }, (_, i) => `seed-csat-${i + 1}-${stub}`);
-    await supabase.from('csat_surveys').delete().in('id', csatIds).eq('tenant_id', tenantId);
-  } catch (err) { logger.warn('bigSeed cleanup: csat_surveys delete failed', { error: String(err) }); }
+    await supabase.from('csat_survey_responses').delete().in('id', csatIds).eq('tenant_id', tenantId);
+  } catch (err) { logger.warn('bigSeed cleanup: csat_survey_responses delete failed', { error: String(err) }); }
 
   // Linked identities
   try {
