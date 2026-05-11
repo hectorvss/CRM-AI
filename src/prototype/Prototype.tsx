@@ -7895,7 +7895,105 @@ function SettingsInicioContent({ onNavigate }: { onNavigate?: (v: View) => void 
           { icon: 'lockuser', bg: '#e9d5ff', name: 'Acceso a la cuenta',     desc: 'Administra cuentas asociadas, incluyendo qué espacios de trabajo puedes usar.', target: 'accountAccess' },
           { icon: 'globe',    bg: '#cffafe', name: 'Multilingüe',            desc: 'Configura los ajustes de traducción de tu cuenta.', target: 'multilingual' },
         ]} />
+
+        {/* ── Developer: Seed Data ───────────────────────────────────────── */}
+        <SeedDataPanel />
       </div>
+    </div>
+  );
+}
+
+// ── SeedDataPanel — inject / delete big seed dataset from the UI ──────────────
+function SeedDataPanel() {
+  const [seedStatus, setSeedStatus] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
+  const [seedMsg, setSeedMsg]       = useState('');
+  const [delStatus, setDelStatus]   = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
+
+  async function getToken(): Promise<string | null> {
+    try {
+      const { supabase } = await import('../api/supabase');
+      const { data } = await supabase.auth.getSession();
+      return data.session?.access_token ?? null;
+    } catch { return null; }
+  }
+
+  async function handleSeed() {
+    setSeedStatus('loading'); setSeedMsg('');
+    const token = await getToken();
+    try {
+      const res = await fetch('/api/admin/seed/big', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      const body = await res.json().catch(() => ({})) as any;
+      if (res.ok) { setSeedStatus('ok');  setSeedMsg(body.message ?? 'Dataset inyectado.'); }
+      else        { setSeedStatus('err'); setSeedMsg(body.error ?? `Error ${res.status}`); }
+    } catch (e: any) {
+      setSeedStatus('err'); setSeedMsg(e.message ?? 'Error de red');
+    }
+  }
+
+  async function handleDelete() {
+    setDelStatus('loading');
+    const token = await getToken();
+    try {
+      const res = await fetch('/api/admin/seed/big', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      const body = await res.json().catch(() => ({})) as any;
+      if (res.ok) { setDelStatus('ok');  setSeedMsg(body.message ?? 'Datos eliminados.'); }
+      else        { setDelStatus('err'); setSeedMsg(body.error ?? `Error ${res.status}`); }
+    } catch (e: any) {
+      setDelStatus('err'); setSeedMsg(e.message ?? 'Error de red');
+    }
+  }
+
+  const btnBase = 'inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+
+  return (
+    <div className="mt-6 rounded-[16px] border border-dashed border-[#e9eae6] bg-[#fafafa] p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="material-symbols-outlined text-[18px] text-[#646462]">science</span>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">Datos de prueba</h3>
+        <span className="ml-2 rounded-full bg-[#fef3c7] px-2 py-0.5 text-[10px] font-bold text-[#92400e] uppercase tracking-wide">Developer</span>
+      </div>
+      <p className="text-[13px] text-[#646462] mb-5 max-w-xl">
+        Inyecta un conjunto grande de datos ficticios (8 clientes, 20 casos, 15 pedidos, 60 mensajes, aprobaciones, CSAT…) en tu workspace para ver cómo se comporta el frontend con datos reales. Elimínalos después con el botón de borrado.
+      </p>
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          disabled={seedStatus === 'loading'}
+          onClick={handleSeed}
+          className={`${btnBase} bg-[#3b59f6] text-white hover:bg-[#2d46d6]`}
+        >
+          {seedStatus === 'loading'
+            ? <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />Inyectando…</>
+            : <><span className="material-symbols-outlined text-[15px]">add_circle</span>Inyectar datos de prueba</>}
+        </button>
+        <button
+          disabled={delStatus === 'loading'}
+          onClick={handleDelete}
+          className={`${btnBase} bg-white text-[#dc2626] border border-[#fca5a5] hover:bg-[#fef2f2]`}
+        >
+          {delStatus === 'loading'
+            ? <><span className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />Eliminando…</>
+            : <><span className="material-symbols-outlined text-[15px]">delete</span>Eliminar datos de prueba</>}
+        </button>
+        {seedMsg && (
+          <span className={`text-[12px] font-medium ${
+            seedStatus === 'ok' || delStatus === 'ok' ? 'text-emerald-600' :
+            seedStatus === 'err' || delStatus === 'err' ? 'text-red-600' : 'text-[#646462]'
+          }`}>
+            {seedStatus === 'ok' || delStatus === 'ok' ? '✓ ' : seedStatus === 'err' || delStatus === 'err' ? '✗ ' : ''}{seedMsg}
+          </span>
+        )}
+      </div>
+      {(seedStatus === 'ok') && (
+        <p className="mt-3 text-[12px] text-[#646462]">
+          Recarga la página o navega a <strong>Casos</strong>, <strong>Clientes</strong> o <strong>Bandeja</strong> para ver los datos inyectados.
+        </p>
+      )}
     </div>
   );
 }
