@@ -240,7 +240,6 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'trigger', key: 'trigger.workflow_error', label: 'On workflow error', category: 'Trigger', icon: 'error_outline', requiresConfig: true, description: 'Starts when another workflow fails. Use this to handle errors centrally.' },
   { type: 'trigger', key: 'trigger.subworkflow_called', label: 'When called by another workflow', category: 'Trigger', icon: 'login', requiresConfig: false, description: 'Starts when another workflow invokes this one via Execute sub-workflow.' },
   { type: 'trigger', key: 'trigger.evaluation_run', label: 'When running evaluation', category: 'Trigger', icon: 'science', requiresConfig: false, description: 'Starts when this workflow is invoked by an Evaluations dataset run.' },
-  { type: 'condition', key: 'ai.condition', label: 'AI condition', category: 'AI', icon: 'auto_awesome', requiresConfig: true, description: 'Use an LLM to evaluate a true/false condition. Describe the condition in plain language.' },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Flow', icon: 'alt_route', requiresConfig: true, description: 'Branch based on a numeric amount.' },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Flow', icon: 'rule', requiresConfig: true, description: 'Branch based on status.' },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Flow', icon: 'gpp_maybe', requiresConfig: true, description: 'Branch based on risk.' },
@@ -334,7 +333,7 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'trigger', key: 'trigger.schedule', label: 'Schedule (cron)', category: 'Trigger', icon: 'event_repeat', requiresConfig: true, description: 'Run the workflow on a cron schedule.' },
 ];
 
-export const TEMPLATES = [
+const TEMPLATES = [
   {
     id: 'refund_guarded',
     label: 'Guarded refund',
@@ -875,12 +874,6 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'topic', label: 'Allowed topic (optional)', type: 'text', placeholder: 'customer support' },
     { key: 'target', label: 'Result variable', type: 'text', placeholder: 'guardResult' },
   ],
-  // ── AI condition ─────────────────────────────────────────────────────────
-  'ai.condition': [
-    { key: 'prompt', label: 'Condition (plain language)', type: 'textarea', placeholder: 'e.g. The customer is asking about a refund and the order is less than 30 days old', hint: 'LLM returns true/false. Use {{template}} variables for context.' },
-    { key: 'model', label: 'Model (optional)', type: 'select', options: ['', 'gemini-2.0-flash', 'gpt-4o-mini', 'claude-haiku-4-5'], hint: 'Defaults to the workspace default LLM' },
-    { key: 'context_fields', label: 'Context fields (optional)', type: 'text', placeholder: 'case.description, customer.segment', hint: 'Comma-separated context fields injected into the LLM call' },
-  ],
   // ── HTTP ──────────────────────────────────────────────────────────────────
   'data.http_request': [
     { key: 'url', label: 'URL', type: 'text', placeholder: 'https://api.example.com/endpoint', hint: 'Supports {{template}} interpolation' },
@@ -1264,25 +1257,16 @@ function mapWorkflow(w: any): Workflow {
   };
 }
 
-type NodeAccent = {
-  border: string;       // card border color class
-  accent: string;       // top strip background
-  iconBg: string;       // icon pill background
-  iconFg: string;       // icon color
-  label: string;        // category label text
-  labelBg: string;      // category label pill bg
-};
-
-function nodeTone(type: NodeType): NodeAccent {
-  const tones: Record<NodeType, NodeAccent> = {
-    trigger: { border: 'border-blue-200', accent: 'bg-blue-500', iconBg: 'bg-blue-50', iconFg: 'text-blue-600', label: 'Trigger', labelBg: 'bg-blue-50 text-blue-600' },
-    condition: { border: 'border-amber-200', accent: 'bg-amber-400', iconBg: 'bg-amber-50', iconFg: 'text-amber-600', label: 'Condition', labelBg: 'bg-amber-50 text-amber-600' },
-    action: { border: 'border-emerald-200', accent: 'bg-emerald-500', iconBg: 'bg-emerald-50', iconFg: 'text-emerald-600', label: 'Action', labelBg: 'bg-emerald-50 text-emerald-600' },
-    agent: { border: 'border-violet-200', accent: 'bg-violet-500', iconBg: 'bg-violet-50', iconFg: 'text-violet-600', label: 'AI Agent', labelBg: 'bg-violet-50 text-violet-600' },
-    policy: { border: 'border-slate-200', accent: 'bg-slate-400', iconBg: 'bg-slate-50', iconFg: 'text-slate-600', label: 'Policy', labelBg: 'bg-slate-50 text-slate-600' },
-    knowledge: { border: 'border-cyan-200', accent: 'bg-cyan-500', iconBg: 'bg-cyan-50', iconFg: 'text-cyan-600', label: 'Knowledge', labelBg: 'bg-cyan-50 text-cyan-600' },
-    integration: { border: 'border-orange-200', accent: 'bg-orange-500', iconBg: 'bg-orange-50', iconFg: 'text-orange-600', label: 'Integration', labelBg: 'bg-orange-50 text-orange-600' },
-    utility: { border: 'border-gray-200', accent: 'bg-gray-400', iconBg: 'bg-gray-50', iconFg: 'text-gray-600', label: 'Utility', labelBg: 'bg-gray-50 text-gray-600' },
+function nodeTone(type: NodeType) {
+  const tones: Record<NodeType, string> = {
+    trigger: 'border-blue-200 bg-white text-blue-700',
+    condition: 'border-amber-200 bg-white text-amber-700',
+    action: 'border-emerald-200 bg-white text-emerald-700',
+    agent: 'border-gray-200 bg-white text-gray-800',
+    policy: 'border-slate-200 bg-white text-slate-800',
+    knowledge: 'border-cyan-200 bg-white text-cyan-700',
+    integration: 'border-orange-200 bg-white text-orange-700',
+    utility: 'border-gray-200 bg-white text-gray-700',
   };
   return tones[type] ?? tones.action;
 }
@@ -1490,20 +1474,19 @@ function templateEdges(template: (typeof TEMPLATES)[number], nodes: WorkflowNode
 function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
   const node = data.workflowNode;
   const isCompact = ['knowledge', 'integration', 'utility'].includes(node.type);
-  const tone = nodeTone(node.type);
   const blockingDiagnostic = data.diagnostics?.find((diagnostic) => diagnostic.severity === 'error');
   const warningDiagnostic = data.diagnostics?.find((diagnostic) => diagnostic.severity === 'warning');
-  const hasStatusProblem = data.latestStatus === 'failed' || data.latestStatus === 'blocked' || blockingDiagnostic;
-  const hasStatusWarn = !hasStatusProblem && (warningDiagnostic || data.latestStatus === 'waiting');
-  const hasStatusOk = !hasStatusProblem && !hasStatusWarn && data.latestStatus === 'completed';
-  const cardBorder = hasStatusProblem
-    ? 'border-red-300'
-    : hasStatusWarn
-      ? 'border-amber-300'
-      : hasStatusOk
-        ? 'border-green-300'
-        : tone.border;
-  const selectedRing = data.selected ? 'ring-2 ring-offset-1 ring-blue-400' : '';
+  const statusTone = data.latestStatus === 'failed' || data.latestStatus === 'blocked'
+    ? 'border-red-300 ring-red-100'
+    : blockingDiagnostic
+      ? 'border-red-300 ring-red-100'
+      : warningDiagnostic
+        ? 'border-amber-300 ring-amber-100'
+    : data.latestStatus === 'completed'
+      ? 'border-green-300 ring-green-100'
+      : data.latestStatus === 'waiting'
+        ? 'border-amber-300 ring-amber-100'
+        : 'border-gray-200 ring-gray-100';
 
   if (node.key === 'flow.note') {
     return (
@@ -1523,29 +1506,21 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
   if (node.type === 'trigger') {
     return (
       <div className={`group relative flex flex-col items-center ${node.disabled ? 'opacity-45' : ''}`}>
+        <span className="absolute -left-7 top-12 material-symbols-outlined text-sm text-red-400">bolt</span>
         <button
           onClick={() => data.onSelect(node.id)}
           onContextMenu={(event) => {
             event.preventDefault();
             data.onMenu(node.id, { x: event.clientX, y: event.clientY });
           }}
-          className={`relative flex h-28 w-28 items-center justify-center rounded-[28px] border-2 bg-white shadow-sm transition hover:shadow-lg ${cardBorder} ${selectedRing}`}
+          className={`relative flex h-28 w-28 items-center justify-center rounded-[28px] border bg-white shadow-sm transition hover:shadow-md ${data.selected ? 'ring-4 ring-gray-200' : ''} ${statusTone}`}
         >
-          {/* accent ring */}
-          <span className={`absolute inset-0 rounded-[26px] ${tone.accent} opacity-10`} />
-          <Handle type="source" id="main" position={Position.Right} className="!h-4 !w-4 !border-blue-400 !bg-white" />
-          <span className={`material-symbols-outlined text-5xl ${tone.iconFg}`}>{data.spec?.icon ?? 'chat'}</span>
+          <Handle type="source" id="main" position={Position.Right} className="!h-4 !w-4 !border-gray-400 !bg-white" />
+          <span className="material-symbols-outlined text-5xl text-gray-700">{data.spec?.icon ?? 'chat'}</span>
           {blockingDiagnostic && <NodeDiagnosticDot tone="error" />}
           {!blockingDiagnostic && warningDiagnostic && <NodeDiagnosticDot tone="warning" />}
         </button>
-        <div className="mt-2 max-w-40 text-center text-[13px] font-semibold leading-tight text-gray-900">{node.label}</div>
-        <span className={`mt-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone.labelBg}`}>Trigger</span>
-        <button
-          onClick={() => data.onAdd(node.id, 'main')}
-          className="absolute -right-8 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 shadow-sm opacity-0 transition hover:border-blue-400 hover:text-blue-600 group-hover:opacity-100"
-        >
-          <span className="material-symbols-outlined text-sm">add</span>
-        </button>
+        <div className="mt-3 max-w-40 text-center text-base font-semibold leading-tight text-gray-900">{node.label}</div>
         <NodeInlineControls data={data} />
       </div>
     );
@@ -1561,23 +1536,15 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
             event.preventDefault();
             data.onMenu(node.id, { x: event.clientX, y: event.clientY });
           }}
-          className={`relative flex h-24 w-24 items-center justify-center rounded-full border-2 bg-white shadow-sm transition hover:shadow-lg ${cardBorder} ${selectedRing}`}
+          className={`flex h-24 w-24 items-center justify-center rounded-full border bg-white shadow-sm transition hover:shadow-md ${data.selected ? 'ring-4 ring-gray-200' : ''} ${statusTone}`}
         >
-          <span className={`absolute inset-0 rounded-full ${tone.accent} opacity-10`} />
-          <span className={`material-symbols-outlined text-4xl ${tone.iconFg}`}>{data.spec?.icon ?? 'settings'}</span>
+          <span className={`material-symbols-outlined text-4xl ${node.type === 'integration' ? 'text-orange-500' : 'text-gray-700'}`}>{data.spec?.icon ?? 'settings'}</span>
           {blockingDiagnostic && <NodeDiagnosticDot tone="error" />}
           {!blockingDiagnostic && warningDiagnostic && <NodeDiagnosticDot tone="warning" />}
         </button>
         <Handle type="source" id="main" position={Position.Bottom} className="!h-4 !w-4 !rotate-45 !rounded-none !border-gray-400 !bg-white" />
-        <div className="mt-2 max-w-44 text-center text-[13px] font-semibold text-gray-900">{node.label}</div>
-        <span className={`mt-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone.labelBg}`}>{tone.label}</span>
+        <div className="mt-3 max-w-44 text-center text-sm font-semibold text-gray-900">{node.label}</div>
         {node.ui?.displayNote && node.ui?.notes && <div className="mt-1 max-w-44 text-center text-[11px] text-gray-500">{node.ui.notes}</div>}
-        <button
-          onClick={() => data.onAdd(node.id, 'main')}
-          className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 shadow-sm opacity-0 transition hover:border-blue-400 hover:text-blue-600 group-hover:opacity-100"
-        >
-          <span className="material-symbols-outlined text-sm">add</span>
-        </button>
         <NodeInlineControls data={data} />
       </div>
     );
@@ -1585,103 +1552,71 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
 
   return (
     <div className={`group relative ${node.disabled ? 'opacity-45' : ''}`}>
-      <Handle type="target" id="main" position={Position.Left} className="!h-4 !w-4 !border-gray-300 !bg-white" />
+      <Handle type="target" id="main" position={Position.Left} className="!h-4 !w-4 !border-gray-400 !bg-white" />
       <button
         onClick={() => data.onSelect(node.id)}
         onContextMenu={(event) => {
           event.preventDefault();
           data.onMenu(node.id, { x: event.clientX, y: event.clientY });
         }}
-        className={`relative overflow-hidden w-72 rounded-xl border-2 bg-white text-left shadow-sm transition hover:shadow-md ${cardBorder} ${selectedRing}`}
+        className={`relative min-h-24 w-72 rounded-xl border bg-white px-5 py-4 text-left shadow-sm transition hover:shadow-md ${data.selected ? 'ring-4 ring-gray-200' : ''} ${statusTone}`}
       >
-        {/* colored top accent strip */}
-        <div className={`h-1 w-full ${tone.accent}`} />
-        <div className="px-4 pt-3 pb-3">
-          <div className="flex items-center gap-3">
-            {/* icon pill */}
-            <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${tone.iconBg}`}>
-              <span className={`material-symbols-outlined text-xl ${tone.iconFg}`}>{data.spec?.icon ?? 'settings'}</span>
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <div className="truncate text-[13px] font-semibold text-gray-900">{node.label}</div>
-                {data.spec?.requiresConfig && !node.config && (
-                  <span className="flex-shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-600">Setup</span>
-                )}
-              </div>
-              <div className="mt-0.5 flex items-center gap-1.5">
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${tone.labelBg}`}>{tone.label}</span>
-                {data.spec?.sensitive && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-500">Sensitive</span>}
-              </div>
-            </div>
+        <div className="flex items-center gap-4">
+          <span className={`material-symbols-outlined text-5xl ${nodeTone(node.type).split(' ').at(-1)}`}>{data.spec?.icon ?? 'settings'}</span>
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold text-gray-900">{node.label}</div>
+            <div className="mt-1 text-xs text-gray-500">{node.key}</div>
           </div>
-          {data.spec?.description && (
-            <div className="mt-2 text-[11px] leading-relaxed text-gray-400 line-clamp-2">{data.spec.description}</div>
-          )}
-          {(data.latestStatus || blockingDiagnostic || warningDiagnostic) && (
-            <div className="mt-2 flex items-center gap-1.5">
-              {data.latestStatus && (
-                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                  hasStatusProblem ? 'bg-red-50 text-red-600' : hasStatusWarn ? 'bg-amber-50 text-amber-600' : hasStatusOk ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'
-                }`}>{data.latestStatus}</span>
-              )}
-              {blockingDiagnostic && <span className="text-[11px] font-medium text-red-600">{blockingDiagnostic.message}</span>}
-              {!blockingDiagnostic && warningDiagnostic && <span className="text-[11px] font-medium text-amber-600">{warningDiagnostic.message}</span>}
-            </div>
-          )}
-          {node.ui?.displayNote && node.ui?.notes && <div className="mt-1.5 text-[11px] italic text-gray-400">{node.ui.notes}</div>}
         </div>
-        {blockingDiagnostic && <NodeDiagnosticDot tone="error" />}
-        {!blockingDiagnostic && warningDiagnostic && <NodeDiagnosticDot tone="warning" />}
+        {data.latestStatus && <div className="mt-3 inline-flex rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase text-gray-500">{data.latestStatus}</div>}
+        {blockingDiagnostic && <div className="mt-3 text-[11px] font-semibold text-red-600">{blockingDiagnostic.message}</div>}
+        {!blockingDiagnostic && warningDiagnostic && <div className="mt-3 text-[11px] font-semibold text-amber-600">{warningDiagnostic.message}</div>}
+        {node.ui?.displayNote && node.ui?.notes && <div className="mt-2 text-xs text-gray-500">{node.ui.notes}</div>}
       </button>
       {node.type === 'condition' ? (
         <>
           {node.key === 'flow.switch' ? (
             <>
-              <Handle type="source" id="vip" position={Position.Right} className="!top-[22%] !h-4 !w-4 !border-green-400 !bg-white" />
-              <Handle type="source" id="standard" position={Position.Right} className="!top-[50%] !h-4 !w-4 !border-amber-400 !bg-white" />
-              <Handle type="source" id="other" position={Position.Right} className="!top-[78%] !h-4 !w-4 !border-red-400 !bg-white" />
-              <button onClick={() => data.onAdd(node.id, 'vip')} className="absolute -right-8 top-[22%] -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-green-300 bg-white text-green-600 shadow-sm opacity-0 transition group-hover:opacity-100"><span className="material-symbols-outlined text-sm">add</span></button>
-              <button onClick={() => data.onAdd(node.id, 'standard')} className="absolute -right-8 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-amber-300 bg-white text-amber-600 shadow-sm opacity-0 transition group-hover:opacity-100"><span className="material-symbols-outlined text-sm">add</span></button>
-              <button onClick={() => data.onAdd(node.id, 'other')} className="absolute -right-8 top-[78%] -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-red-300 bg-white text-red-500 shadow-sm opacity-0 transition group-hover:opacity-100"><span className="material-symbols-outlined text-sm">add</span></button>
+              <Handle type="source" id="vip" position={Position.Right} className="!top-[22%] !h-4 !w-4 !border-green-500 !bg-white" />
+              <Handle type="source" id="standard" position={Position.Right} className="!top-[50%] !h-4 !w-4 !border-amber-500 !bg-white" />
+              <Handle type="source" id="other" position={Position.Right} className="!top-[78%] !h-4 !w-4 !border-red-500 !bg-white" />
+              <button onClick={() => data.onAdd(node.id, 'vip')} className="absolute -right-14 top-4 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'standard')} className="absolute -right-14 top-1/2 -translate-y-1/2 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'other')} className="absolute -right-14 bottom-4 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
             </>
           ) : (
             <>
-              <Handle type="source" id="true" position={Position.Right} className="!top-[34%] !h-4 !w-4 !border-green-400 !bg-white" />
-              <Handle type="source" id="false" position={Position.Right} className="!top-[66%] !h-4 !w-4 !border-red-400 !bg-white" />
-              <button onClick={() => data.onAdd(node.id, 'true')} className="absolute -right-8 top-[34%] -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-green-300 bg-white text-green-600 shadow-sm opacity-0 transition group-hover:opacity-100"><span className="material-symbols-outlined text-sm">add</span></button>
-              <button onClick={() => data.onAdd(node.id, 'false')} className="absolute -right-8 top-[66%] -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-red-300 bg-white text-red-500 shadow-sm opacity-0 transition group-hover:opacity-100"><span className="material-symbols-outlined text-sm">add</span></button>
+              <Handle type="source" id="true" position={Position.Right} className="!top-[34%] !h-4 !w-4 !border-green-500 !bg-white" />
+              <Handle type="source" id="false" position={Position.Right} className="!top-[66%] !h-4 !w-4 !border-red-500 !bg-white" />
+              <button onClick={() => data.onAdd(node.id, 'true')} className="absolute -right-14 top-5 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'false')} className="absolute -right-14 bottom-5 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
             </>
           )}
         </>
       ) : (
         <>
-          <Handle type="source" id="main" position={Position.Right} className="!h-4 !w-4 !border-gray-300 !bg-white" />
-          <button
-            onClick={() => data.onAdd(node.id, 'main')}
-            className="absolute -right-8 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 shadow-sm opacity-0 transition hover:border-blue-400 hover:text-blue-600 group-hover:opacity-100"
-          >
-            <span className="material-symbols-outlined text-sm">add</span>
-          </button>
+          <Handle type="source" id="main" position={Position.Right} className="!h-4 !w-4 !border-gray-400 !bg-white" />
+          <button onClick={() => data.onAdd(node.id, 'main')} className="absolute -right-14 top-1/2 -translate-y-1/2 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+          
           {(node.type === 'action' || node.type === 'agent' || node.type === 'integration') && (
             <>
-              <Handle type="source" id="error" position={Position.Bottom} className="!h-4 !w-4 !border-red-400 !bg-white" />
-              <button
-                onClick={() => data.onAdd(node.id, 'error')}
-                className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-red-500 shadow-sm opacity-0 transition group-hover:opacity-100"
+              <Handle type="source" id="error" position={Position.Bottom} className="!h-4 !w-4 !border-red-500 !bg-white" />
+              <button 
+                onClick={() => data.onAdd(node.id, 'error')} 
+                className="absolute -bottom-10 left-1/2 -translate-x-1/2 rounded-md bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 opacity-0 transition group-hover:opacity-100 border border-red-100 shadow-sm"
               >
-                <span className="material-symbols-outlined text-xs">add</span> On failure
+                ON FAILURE
               </button>
             </>
           )}
         </>
       )}
       {node.type === 'agent' && (
-        <div className="absolute -bottom-10 left-8 flex gap-8 text-[11px] text-gray-400">
+        <div className="absolute -bottom-11 left-10 flex gap-9 text-[11px] text-gray-500">
           {['chatModel', 'memory', 'tool'].map((port) => (
-            <button key={port} onClick={() => data.onAdd(node.id, port)} className="relative hover:text-violet-600">
-              <span className="absolute -top-3 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border border-gray-200 bg-white" />
-              {port === 'chatModel' ? 'Model' : port === 'memory' ? 'Memory' : 'Tool'}
+            <button key={port} onClick={() => data.onAdd(node.id, port)} className="relative">
+              <span className="absolute -top-3 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border border-gray-300 bg-white" />
+              {port === 'chatModel' ? 'Chat Model*' : port === 'memory' ? 'Memory' : 'Tool'}
             </button>
           ))}
         </div>
