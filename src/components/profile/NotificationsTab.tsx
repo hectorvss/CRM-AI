@@ -1,246 +1,168 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useApi } from '../../api/hooks';
-import { iamApi, workspacesApi } from '../../api/client';
+import { iamApi } from '../../api/client';
 import LoadingState from '../LoadingState';
+import { DetailSection, DetailRow } from './sections';
 
 type SaveHandler = (() => Promise<void> | void) | null;
-type Props = { onSaveReady?: (handler: SaveHandler) => void };
-
-const FALLBACK_USER = {
-  preferences: {},
-  name: 'System',
-  email: 'system@crm-ai.local',
+type Props = {
+  // Parent does the single iamApi.me fetch — see Profile.tsx.
+  user: any | null;
+  userLoading?: boolean;
+  onSaveReady?: (handler: SaveHandler) => void;
 };
 
-function parsePreferences(preferences: any) {
-  if (!preferences) return {};
-  if (typeof preferences === 'string') {
-    try {
-      return JSON.parse(preferences);
-    } catch {
-      return {};
-    }
+const FALLBACK_USER = { preferences: {}, name: '', email: '' };
+
+function parsePreferences(prefs: any): Record<string, any> {
+  if (!prefs) return {};
+  if (typeof prefs === 'string') {
+    try { return JSON.parse(prefs); } catch { return {}; }
   }
-  return preferences;
+  return prefs;
 }
 
-export default function NotificationsTab({ onSaveReady }: Props) {
-  const { data: user, loading } = useApi<any>(iamApi.me);
-  const { data: workspace } = useApi<any>(workspacesApi.currentContext);
+// ── Notifications model ─────────────────────────────────────────────────────
+// Per-channel matrix: each channel × each event type has its own boolean.
+// This is the shape the backend already accepts under preferences.notifications.
+type ChannelKey = 'email' | 'push' | 'sms' | 'slack';
+type EventKey = 'assigned' | 'mentioned' | 'sla' | 'daily';
+
+const CHANNELS: { key: ChannelKey; label: string; helper: string }[] = [
+  { key: 'email', label: 'Email',   helper: 'Recibirás avisos en tu correo.' },
+  { key: 'push',  label: 'Push',    helper: 'Notificaciones en el navegador / móvil.' },
+  { key: 'sms',   label: 'SMS',     helper: 'Solo para alertas críticas.' },
+  { key: 'slack', label: 'Slack',   helper: 'En tu canal personal de Slack.' },
+];
+
+const EVENTS: { key: EventKey; label: string }[] = [
+  { key: 'assigned',  label: 'Asignado' },
+  { key: 'mentioned', label: 'Mencionado' },
+  { key: 'sla',       label: 'SLA en riesgo' },
+  { key: 'daily',     label: 'Resumen diario' },
+];
+
+function ToggleRow({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}
+    >
+      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${value ? 'translate-x-5' : 'translate-x-1'}`} />
+    </button>
+  );
+}
+
+type Matrix = Record<ChannelKey, Record<EventKey, boolean>>;
+
+const DEFAULT_MATRIX: Matrix = {
+  email: { assigned: true,  mentioned: true,  sla: true,  daily: true },
+  push:  { assigned: true,  mentioned: true,  sla: true,  daily: false },
+  sms:   { assigned: false, mentioned: false, sla: true,  daily: false },
+  slack: { assigned: true,  mentioned: true,  sla: false, daily: false },
+};
+
+export default function NotificationsTab({ user, userLoading, onSaveReady }: Props) {
+  const loading = Boolean(userLoading);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
-  const workspaceSettings = useMemo(() => {
-    if (!workspace?.settings) return {};
-    if (typeof workspace.settings === 'string') {
-      try {
-        return JSON.parse(workspace.settings);
-      } catch {
-        return {};
+  // Memoise — `preferences.notifications || {}` creates a new {} every render
+  // when no notifications are stored. That fresh ref makes `handleSave` and
+  // `hasChanges` unstable, which causes the parent's setSaveHandler to fire on
+  // every render and triggers an infinite re-render loop (looks like a reload).
+  const stored = useMemo<Record<string, any>>(
+    () => preferences.notifications || {},
+    [preferences],
+  );
+
+  const [matrix, setMatrix] = useState<Matrix>(DEFAULT_MATRIX);
+  const [dailyDigestEnabled, setDailyDigestEnabled] = useState(true);
+  const [digestHour, setDigestHour] = useState('09:00');
+
+  useEffect(() => {
+    const initial: Matrix = JSON.parse(JSON.stringify(DEFAULT_MATRIX));
+    for (const c of CHANNELS) {
+      for (const e of EVENTS) {
+        const v = stored?.[c.key]?.[e.key];
+        if (typeof v === 'boolean') initial[c.key][e.key] = v;
       }
     }
-    return workspace.settings;
-  }, [workspace]);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [inAppNotifications, setInAppNotifications] = useState(true);
-  const [approvalRequests, setApprovalRequests] = useState(true);
-  const [caseEscalations, setCaseEscalations] = useState(true);
-  const [mentions, setMentions] = useState(true);
-  const [workflowFailures, setWorkflowFailures] = useState(false);
-  const [securityAlerts, setSecurityAlerts] = useState(true);
-  const [emailDigest, setEmailDigest] = useState('Real-time (Immediate)');
-  const [notifyAssignedCases, setNotifyAssignedCases] = useState(true);
-  const [notifyApprovals, setNotifyApprovals] = useState(true);
-  const [notifyAIFailures, setNotifyAIFailures] = useState(false);
-  const [quietStart, setQuietStart] = useState('10:00 PM');
-  const [quietEnd, setQuietEnd] = useState('07:00 AM');
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    const workspaceDefaults = workspaceSettings.notifications || {};
-    setEmailNotifications(preferences.notifications?.email ?? workspaceDefaults.email ?? true);
-    setInAppNotifications(preferences.notifications?.inApp ?? workspaceDefaults.inApp ?? true);
-    setApprovalRequests(preferences.notifications?.approvalRequests ?? workspaceDefaults.approvalRequests ?? true);
-    setCaseEscalations(preferences.notifications?.caseEscalations ?? workspaceDefaults.caseEscalations ?? true);
-    setMentions(preferences.notifications?.mentions ?? workspaceDefaults.mentions ?? true);
-    setWorkflowFailures(preferences.notifications?.workflowFailures ?? workspaceDefaults.workflowFailures ?? false);
-    setSecurityAlerts(preferences.notifications?.securityAlerts ?? workspaceDefaults.securityAlerts ?? true);
-    setEmailDigest(preferences.notifications?.emailDigest ?? workspaceDefaults.emailDigest ?? 'Real-time (Immediate)');
-    setNotifyAssignedCases(preferences.notifications?.personal?.assignedCases ?? workspaceDefaults.personal?.assignedCases ?? true);
-    setNotifyApprovals(preferences.notifications?.personal?.approvals ?? workspaceDefaults.personal?.approvals ?? true);
-    setNotifyAIFailures(preferences.notifications?.personal?.aiFailures ?? workspaceDefaults.personal?.aiFailures ?? false);
-    setQuietStart(preferences.notifications?.quietHours?.start ?? workspaceDefaults.quietHours?.start ?? '10:00 PM');
-    setQuietEnd(preferences.notifications?.quietHours?.end ?? workspaceDefaults.quietHours?.end ?? '07:00 AM');
-  }, [preferences, workspaceSettings]);
+    setMatrix(initial);
+    if (typeof stored?.dailyDigest?.enabled === 'boolean') setDailyDigestEnabled(stored.dailyDigest.enabled);
+    if (typeof stored?.dailyDigest?.hour === 'string') setDigestHour(stored.dailyDigest.hour);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
 
   const handleSave = useCallback(async () => {
-    setIsSaving(true);
-    setStatusMessage(null);
-    try {
-      await iamApi.updateMe({
-        preferences: {
-          ...preferences,
-          notifications: {
-            email: emailNotifications,
-            inApp: inAppNotifications,
-            approvalRequests,
-            caseEscalations,
-            mentions,
-            workflowFailures,
-            securityAlerts,
-            emailDigest,
-            quietHours: { start: quietStart, end: quietEnd },
-            personal: {
-              assignedCases: notifyAssignedCases,
-              approvals: notifyApprovals,
-              aiFailures: notifyAIFailures,
-            },
-          },
+    await iamApi.updateMe({
+      preferences: {
+        ...preferences,
+        notifications: {
+          ...stored,
+          ...matrix,
+          dailyDigest: { enabled: dailyDigestEnabled, hour: digestHour },
         },
-      });
-      setStatusMessage('Notification preferences saved.');
-    } catch (saveError: any) {
-      setStatusMessage(saveError?.message || 'Unable to save notification preferences.');
-      throw saveError;
-    } finally {
-      setIsSaving(false);
+      },
+    });
+  }, [preferences, stored, matrix, dailyDigestEnabled, digestHour]);
+
+  // Detect drift vs stored to drive the floating Save bar.
+  const hasChanges = useMemo(() => {
+    for (const c of CHANNELS) {
+      for (const e of EVENTS) {
+        const cur = matrix[c.key][e.key];
+        const orig = (stored?.[c.key]?.[e.key] ?? DEFAULT_MATRIX[c.key][e.key]);
+        if (cur !== orig) return true;
+      }
     }
-  }, [
-    approvalRequests,
-    caseEscalations,
-    emailDigest,
-    emailNotifications,
-    inAppNotifications,
-    mentions,
-    notifyAIFailures,
-    notifyApprovals,
-    notifyAssignedCases,
-    preferences,
-    quietEnd,
-    quietStart,
-    securityAlerts,
-    workflowFailures,
-  ]);
+    if (dailyDigestEnabled !== (stored?.dailyDigest?.enabled ?? true)) return true;
+    if (digestHour !== (stored?.dailyDigest?.hour ?? '09:00')) return true;
+    return false;
+  }, [matrix, dailyDigestEnabled, digestHour, stored]);
 
   useEffect(() => {
-    onSaveReady?.(handleSave);
+    onSaveReady?.(hasChanges ? handleSave : null);
     return () => onSaveReady?.(null);
-  }, [handleSave, onSaveReady]);
+  }, [hasChanges, handleSave, onSaveReady]);
 
-  if (loading) return <LoadingState title="Loading notification settings" message="Fetching your notification preferences." compact />;
+  function toggle(channel: ChannelKey, event: EventKey) {
+    setMatrix(prev => ({
+      ...prev,
+      [channel]: { ...prev[channel], [event]: !prev[channel][event] },
+    }));
+  }
+
+  if (loading) return <LoadingState title="Cargando notificaciones" message="Recuperando tus preferencias." compact />;
 
   return (
-    <div className="space-y-8">
-      {statusMessage && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
-          {statusMessage}
-        </div>
-      )}
-
-      <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Channel Preferences</h2>
-          <span className="material-symbols-outlined text-gray-400">notifications</span>
-        </div>
-        <div className="p-6 space-y-6">
-          {[
-            ['Email Notifications', 'Receive alerts and digests via email', emailNotifications, setEmailNotifications],
-            ['In-App Notifications', 'Show badges and toasts while using the app', inAppNotifications, setInAppNotifications],
-          ].map(([label, desc, value, setter]) => (
-            <div key={String(label)} className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">{label as string}</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{desc as string}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => (setter as React.Dispatch<React.SetStateAction<boolean>>)((current) => !current)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${value ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-            </div>
+    <div className="py-3">
+      {CHANNELS.map(channel => (
+        <DetailSection key={channel.key} title={channel.label} helper={channel.helper}>
+          {EVENTS.map(event => (
+            <DetailRow key={event.key} label={event.label}>
+              <ToggleRow
+                value={matrix[channel.key][event.key]}
+                onChange={() => toggle(channel.key, event.key)}
+              />
+            </DetailRow>
           ))}
-        </div>
-      </section>
+        </DetailSection>
+      ))}
 
-      <div className="grid grid-cols-2 gap-8">
-        <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Alert Types</h2>
-            <span className="material-symbols-outlined text-gray-400">tune</span>
-          </div>
-          <div className="p-6 space-y-6">
-            {[
-              ['Approval Requests', approvalRequests, setApprovalRequests],
-              ['Case Escalations', caseEscalations, setCaseEscalations],
-              ['Mentions (@alex)', mentions, setMentions],
-              ['Workflow Failures', workflowFailures, setWorkflowFailures],
-              ['Security Alerts', securityAlerts, setSecurityAlerts],
-            ].map(([label, value, setter]) => (
-              <div key={String(label)} className="flex items-center justify-between">
-                <span className="text-sm text-gray-700 dark:text-gray-300">{label as string}</span>
-                <button
-                  type="button"
-                  onClick={() => (setter as React.Dispatch<React.SetStateAction<boolean>>)((current) => !current)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${value ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <div className="space-y-8">
-          <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Email Digest</h2>
-              <span className="material-symbols-outlined text-gray-400">mail</span>
-            </div>
-            <div className="p-6">
-              <select value={emailDigest} onChange={e => setEmailDigest(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm appearance-none">
-                <option>Real-time (Immediate)</option>
-                <option>Daily Digest (Morning)</option>
-                <option>Important Only</option>
-                <option>Off</option>
-              </select>
-            </div>
-          </section>
-
-          <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Personal Escalations</h2>
-              <span className="material-symbols-outlined text-gray-400">priority_high</span>
-            </div>
-            <div className="p-6 space-y-4">
-              {[
-                ['Notify me on assigned cases', 'When a case is directly assigned to you', notifyAssignedCases, setNotifyAssignedCases],
-                ['Notify me on my approvals', 'When an approval requires your specific review', notifyApprovals, setNotifyApprovals],
-                ['Notify me on AI action failures', 'When an automated AI action fails on your cases', notifyAIFailures, setNotifyAIFailures],
-              ].map(([label, desc, value, setter]) => (
-                <label key={String(label)} className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={Boolean(value)} onChange={() => (setter as React.Dispatch<React.SetStateAction<boolean>>)((current) => !current)} className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                  <div>
-                    <span className="block text-sm font-medium text-gray-900 dark:text-white">{label as string}</span>
-                    <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc as string}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </section>
-        </div>
-      </div>
-
-      <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 p-6 flex items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-bold text-indigo-900 dark:text-indigo-200 mb-1">Personal Notification Policy</h3>
-          <p className="text-xs text-indigo-800/70 dark:text-indigo-300/70">These preferences are stored on your user profile and override workspace defaults only where you choose to change them.</p>
-        </div>
-        <button type="button" onClick={() => void handleSave().catch(() => undefined)} disabled={isSaving} className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold">
-          Save preferences
-        </button>
-      </div>
+      <DetailSection title="Resumen diario" helper="Un único correo agrupando lo más importante del día.">
+        <DetailRow label="Habilitado">
+          <ToggleRow value={dailyDigestEnabled} onChange={setDailyDigestEnabled} />
+        </DetailRow>
+        <DetailRow label="Hora de envío">
+          <input
+            type="time"
+            value={digestHour}
+            onChange={e => setDigestHour(e.target.value)}
+            disabled={!dailyDigestEnabled}
+            className="h-7 text-[13px] px-2 rounded-md border border-[#e9eae6] bg-white text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] disabled:opacity-50"
+          />
+        </DetailRow>
+      </DetailSection>
     </div>
   );
 }

@@ -546,6 +546,7 @@ const CASE_AUTO_CREATE_TOPICS = new Set<string>([
 function topicToWorkflowEvent(source: string, topic: string): string {
   // Source-specific overrides (more specific than the global map)
   if (source === 'shopify') {
+    if (topic.startsWith('fulfillments/')) return 'shipment.updated';
     if (topic.startsWith('orders/'))    return 'order.updated';
     if (topic.startsWith('refunds/'))   return 'payment.refunded';
     if (topic === 'customers/create')   return 'customer.created';
@@ -666,8 +667,11 @@ function topicToWorkflowEvent(source: string, topic: string): string {
   // Knowledge
   if (source === 'gdrive') return 'knowledge.changed';
 
-  // Shipping
-  if (['ups', 'dhl'].includes(source)) return 'shipping.updated';
+  // Shipping — emit canonical `shipment.updated` so workflows whose start node
+  // is `shipment.updated` actually fire (the alias matcher in workflows.ts also
+  // accepts `shipping.updated` and `fulfillment.updated`, but the catalog key
+  // is `shipment.updated`).
+  if (['ups', 'dhl'].includes(source)) return 'shipment.updated';
 
   // Team chat (case-insensitive — Slack uses 'message', Teams uses 'chatMessage')
   if (['slack', 'teams'].includes(source)) {

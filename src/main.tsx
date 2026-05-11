@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import PrototypeApp from './prototype/PrototypeApp.tsx';
 import Prototype from './prototype/Prototype.tsx';
 import InboxPrototype2 from './prototype/InboxPrototype2.tsx';
 import PageErrorBoundary from './components/PageErrorBoundary.tsx';
@@ -28,30 +29,53 @@ const MEMBERSHIP_CACHE_KEY = 'crmai.membership.v1';
  *
  * Guarded by `redirecting` — multiple in-flight 401s only redirect once.
  */
-let redirecting = false;
-async function handleUnauthorized() {
-  if (redirecting) return;
-  redirecting = true;
+// CHANGED: the auto-redirect-on-401 was creating an unbreakable cross-reload
+// loop with /#/signin (which auto-redirects back when it detects a Supabase
+// session). We now NEVER auto-redirect from this handler. Instead, we show a
+// sticky banner the user can click to manually re-authenticate. This
+// guarantees the user can always reach the app even if iamApi.me 401s
+// sporadically.
+let bannerShown = false;
+function showSessionExpiredBanner() {
+  if (bannerShown) return;
+  bannerShown = true;
 
-  try {
-    localStorage.removeItem(MEMBERSHIP_CACHE_KEY);
-  } catch { /* storage may be disabled */ }
+  try { localStorage.removeItem(MEMBERSHIP_CACHE_KEY); } catch { /* storage may be disabled */ }
 
-  try {
-    if (isSupabaseConfigured()) {
-      await supabase.auth.signOut();
+  if (typeof document === 'undefined') return;
+  const ensure = () => {
+    if (!document.body) { setTimeout(ensure, 50); return; }
+    if (document.getElementById('crmai-session-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'crmai-session-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#fef3c7;color:#92400e;padding:8px 12px;text-align:center;z-index:99999;font-family:system-ui,-apple-system,sans-serif;font-size:13px;border-bottom:1px solid #fcd34d;';
+    banner.innerHTML = 'Tu sesión ha expirado. <button id="crmai-resignin" style="background:#92400e;color:#fff;border:none;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:600;margin-left:8px;cursor:pointer">Iniciar sesión</button> <button id="crmai-banner-dismiss" style="background:transparent;color:#92400e;border:none;padding:4px 8px;font-size:12px;cursor:pointer;margin-left:4px">Descartar</button>';
+    document.body.appendChild(banner);
+
+    const resignin = document.getElementById('crmai-resignin');
+    if (resignin) {
+      resignin.addEventListener('click', async () => {
+        try {
+          if (isSupabaseConfigured()) await supabase.auth.signOut();
+        } catch { /* ignore */ }
+        const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        window.location.href = `/#/signin?return=${encodeURIComponent(here)}`;
+      });
     }
-  } catch (err) {
-    console.error('[auth] signOut failed during 401 handler', err);
-  }
+    const dismiss = document.getElementById('crmai-banner-dismiss');
+    if (dismiss) {
+      dismiss.addEventListener('click', () => { banner.remove(); });
+    }
+  };
+  ensure();
+}
 
-  try {
-    const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const target = `/#/signin?return=${encodeURIComponent(here)}`;
-    window.location.href = target;
-  } catch (err) {
-    console.error('[auth] redirect to /signin failed', err);
-  }
+async function handleUnauthorized() {
+  // No more auto-redirect. The previous behaviour created an unbreakable
+  // signin↔app cross-reload loop. Instead surface a banner and let the user
+  // re-authenticate deliberately when they choose to.
+  console.warn('[auth] 401 received — auto-redirect disabled. Showing session banner.');
+  showSessionExpiredBanner();
 }
 
 if (typeof window !== 'undefined') {
@@ -119,27 +143,41 @@ function Root() {
     );
   }
 
-  // When `?prototype=1` is set, render the new Fin/Inbox prototype inside
-  // the same auth-bootstrapped shell so its components can hit the live API
-  // (agents, reports, operations, …). Without auth the prototype still
-  // renders, but `useApi` calls fall back to empty state.
-  if (protoParam === '1') {
+  // Routing logic:
+  //  ?app=1          → legacy App.tsx UI (escape hatch for devs, never shown to end users)
+  //  ?prototype=1    → raw Prototype (no auth gates, DEV shortcut for rapid iteration)
+  //  ?prototype=2    → InboxPrototype2 (DEV only)
+  //  everything else → PrototypeApp (new UI + full auth gates) — the production default
+  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const wantLegacyApp = params.get('app') === '1' || protoParam === '0';
+  const wantRawProto1 = protoParam === '1';  // dev shortcut — no auth
+  const wantRawProto2 = protoParam === '2';
+
+  if (wantLegacyApp) {
+    return (
+      <PageErrorBoundary page="root">
+        <App />
+      </PageErrorBoundary>
+    );
+  }
+  if (wantRawProto1) {
     return (
       <PageErrorBoundary page="prototype">
         <PrototypeShell><Prototype /></PrototypeShell>
       </PageErrorBoundary>
     );
   }
-  if (protoParam === '2') {
+  if (wantRawProto2) {
     return (
       <PageErrorBoundary page="prototype">
         <PrototypeShell><InboxPrototype2 /></PrototypeShell>
       </PageErrorBoundary>
     );
   }
+  // Default — both DEV and PROD: full auth-gated Prototype UI
   return (
-    <PageErrorBoundary page="root">
-      <App />
+    <PageErrorBoundary page="prototype">
+      <PrototypeApp />
     </PageErrorBoundary>
   );
 }

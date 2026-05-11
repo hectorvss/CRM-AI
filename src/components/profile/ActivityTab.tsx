@@ -1,6 +1,5 @@
-import React, { useMemo } from 'react';
-import { useApi } from '../../api/hooks';
-import { auditApi, iamApi, operationsApi } from '../../api/client';
+import React, { useEffect, useMemo, useState } from 'react';
+import { iamApi } from '../../api/client';
 import LoadingState from '../LoadingState';
 import { NavigateInput } from '../../types';
 
@@ -8,176 +7,170 @@ type Props = {
   onNavigate?: (target: NavigateInput) => void;
 };
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return '-';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+const FILTERS: Array<{ id: string; label: string; match: (type: string) => boolean }> = [
+  { id: 'all',       label: 'Todo',      match: () => true },
+  { id: 'auth',      label: 'Auth',      match: t => t.startsWith('auth.') },
+  { id: 'edits',     label: 'Edits',     match: t => t.startsWith('profile.') || t.includes('.update') || t.includes('.created') || t.includes('.deleted') },
+  { id: 'workflows', label: 'Workflows', match: t => t.startsWith('workflow') },
+  { id: 'ia',        label: 'IA',        match: t => t.startsWith('agent') || t.startsWith('ai.') || t.includes('agent') },
+];
+
+const ACTION_LABELS: Record<string, string> = {
+  'auth.login': 'Inicio de sesión',
+  'auth.logout': 'Cierre de sesión',
+  'auth.password_changed': 'Contraseña actualizada',
+  'auth.session_revoked': 'Sesión revocada',
+  'profile.avatar_updated': 'Avatar actualizado',
+  'profile.updated': 'Perfil actualizado',
+};
+
+const ICON_FOR: Record<string, string> = {
+  auth: 'login',
+  profile: 'person',
+  workflow: 'account_tree',
+  agent: 'smart_toy',
+  ai: 'smart_toy',
+  default: 'history',
+};
+
+function relTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso).getTime();
+  if (Number.isNaN(d)) return String(iso);
+  const diff = Date.now() - d;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return 'Hace unos segundos';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `Hace ${min} min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `Hace ${hr} h`;
+  const days = Math.floor(hr / 24);
+  if (days < 30) return `Hace ${days} d`;
+  return new Date(iso).toLocaleDateString();
 }
 
-function isWithinLastDays(value: string | null | undefined, days: number) {
-  if (!value) return false;
-  const timestamp = new Date(value).getTime();
-  if (Number.isNaN(timestamp)) return false;
-  return Date.now() - timestamp <= days * 24 * 60 * 60 * 1000;
+function fullTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
 }
 
-export default function ActivityTab({ onNavigate }: Props) {
-  const { data: auditLog, loading } = useApi(() => auditApi.workspaceAll().catch(() => []), [], []);
-  const { data: agentRuns } = useApi(() => operationsApi.agentRuns().catch(() => []), [], []);
-  const { data: user } = useApi(() => iamApi.me().catch(() => null), [], null);
+function pickIcon(type: string): string {
+  const key = (type || '').split('.')[0];
+  return ICON_FOR[key] || ICON_FOR.default;
+}
 
-  const recentEvents = useMemo(() => {
-    const auditRows = Array.isArray(auditLog) ? auditLog.slice(0, 6).map((row: any) => ({
-      action: row.action || row.event_type || row.change_type || 'Audit event',
-      resource: row.entity_type && row.entity_id ? `${row.entity_type} #${row.entity_id}` : row.resource || 'Workspace',
-      time: formatDate(row.created_at || row.occurred_at || row.updated_at),
-      tone: row.severity === 'error' ? 'red' : row.severity === 'warning' ? 'orange' : 'green',
-    })) : [];
+function describe(ev: any): string {
+  const t = ev?.type || '';
+  if (ACTION_LABELS[t]) return ACTION_LABELS[t];
+  if (ev?.message) return ev.message;
+  return t || 'Evento';
+}
 
-    const runRows = Array.isArray(agentRuns) ? agentRuns.slice(0, 4).map((run: any) => ({
-      action: run.status === 'failed' ? 'Agent run failed' : 'Agent run completed',
-      resource: run.agent_name || run.agent_id || 'Agent',
-      time: formatDate(run.started_at || run.created_at || run.finished_at),
-      tone: run.status === 'failed' ? 'red' : 'blue',
-    })) : [];
+export default function ActivityTab({ onNavigate: _onNavigate }: Props) {
+  const [limit, setLimit] = useState(50);
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>('all');
+  const [hasMore, setHasMore] = useState(false);
 
-    return [...auditRows, ...runRows];
-  }, [agentRuns, auditLog]);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    iamApi.myActivity(limit)
+      .then(rows => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        setItems(list);
+        setHasMore(list.length >= limit);
+      })
+      .catch(() => { if (!cancelled) setItems([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [limit]);
 
-  const summaryRows = useMemo(() => {
-    const auditRows = Array.isArray(auditLog) ? auditLog : [];
-    const runRows = Array.isArray(agentRuns) ? agentRuns : [];
-    const audit30d = auditRows.filter((row: any) => isWithinLastDays(row.created_at || row.occurred_at || row.updated_at, 30));
-    const agent30d = runRows.filter((run: any) => isWithinLastDays(run.started_at || run.created_at || run.finished_at, 30));
-
-    return [
-      ['Audit events', String(audit30d.length)],
-      ['Agent runs', String(agent30d.length)],
-      ['Sensitive actions', String(audit30d.filter((row: any) => ['high', 'critical'].includes(String(row.risk_level || row.risk))).length)],
-      ['Approvals touched', String(audit30d.filter((row: any) => String(row.entity_type).toLowerCase() === 'approval').length)],
-      ['Cases touched', String(audit30d.filter((row: any) => String(row.entity_type).toLowerCase() === 'case').length)],
-    ];
-  }, [agentRuns, auditLog]);
-
-  const accountLog = useMemo(() => {
-    const userId = user?.id;
-    const userEmail = user?.email;
-    const rows = (Array.isArray(auditLog) ? auditLog : []).filter((row: any) => {
-      const actorId = row.actor_id || row.user_id || row.created_by;
-      const actorEmail = row.actor_email || row.email;
-      return (userId && actorId === userId) || (userEmail && actorEmail === userEmail);
-    });
-
-    const normalized = rows.slice(0, 6).map((row: any) => ({
-      title: row.action || row.event_type || 'Account activity',
-      time: formatDate(row.created_at || row.occurred_at || row.updated_at),
-      icon: row.actor_type === 'agent' ? 'smart_toy' : row.action?.toLowerCase().includes('login') ? 'login' : 'history',
-    }));
-
-    if (normalized.length > 0) {
-      return normalized;
-    }
-
-    return [
-      {
-        title: 'Signed in',
-        time: 'Current authenticated session',
-        icon: 'login',
-      },
-    ];
-  }, [auditLog, user?.email, user?.id]);
-
-  if (loading) return <LoadingState title="Loading recent activity" message="Pulling the latest audit and agent run history." compact />;
+  const matcher = useMemo(() => FILTERS.find(f => f.id === filter)?.match || (() => true), [filter]);
+  const visible = useMemo(() => items.filter((e: any) => matcher(String(e.type || ''))), [items, matcher]);
 
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-3 gap-8">
-        <div className="col-span-2 space-y-8">
-          <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Recent Operational Activity</h2>
-              <span className="material-symbols-outlined text-gray-400">list_alt</span>
-            </div>
-            <div className="p-0">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-                    <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Action</th>
-                    <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Resource</th>
-                    <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 text-right">Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentEvents.length === 0 && (
-                    <tr>
-                      <td className="px-6 py-10 text-sm text-gray-500" colSpan={3}>No recent workspace activity yet.</td>
-                    </tr>
-                  )}
-                  {recentEvents.map((event, index) => (
-                    <tr key={`${event.action}-${index}`} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                      <td className="px-6 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${event.tone === 'red' ? 'bg-red-500' : event.tone === 'orange' ? 'bg-orange-500' : event.tone === 'blue' ? 'bg-blue-500' : 'bg-green-500'}`} />
-                          <span className="text-sm font-medium text-gray-900 dark:text-white">{event.action}</span>
+    <div>
+      {/* Filter pills */}
+      <div className="px-6 pt-4 pb-2 flex flex-wrap gap-2 border-b border-[#e9eae6]">
+        {FILTERS.map(f => {
+          const active = filter === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              className={`h-7 px-3 rounded-full text-[12px] font-medium transition-colors ${
+                active ? 'bg-[#1a1a1a] text-white' : 'bg-[#f4f4f3] text-[#1a1a1a] hover:bg-[#ebebe9]'
+              }`}
+            >
+              {f.label}
+            </button>
+          );
+        })}
+        <span className="ml-auto text-[11.5px] text-[#646462] self-center">
+          {visible.length} de {items.length} eventos
+        </span>
+      </div>
+
+      {/* Timeline */}
+      <div className="px-6 py-4">
+        {loading && items.length === 0 ? (
+          <LoadingState title="Cargando actividad" message="Revisando tu historial" compact />
+        ) : visible.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-[13px] text-[#646462]">No hay eventos para este filtro.</p>
+          </div>
+        ) : (
+          <div className="relative pl-6">
+            {/* vertical line */}
+            <span className="absolute left-2 top-1 bottom-1 w-px bg-[#e9eae6]" aria-hidden="true" />
+            <ul className="space-y-3">
+              {visible.map((ev: any, idx: number) => (
+                <li key={ev.id || idx} className="relative">
+                  {/* dot */}
+                  <span className="absolute -left-[18px] top-2.5 w-2.5 h-2.5 rounded-full bg-white border-2 border-[#1a1a1a]" aria-hidden="true" />
+                  <div className="rounded-[12px] border border-[#e9eae6] bg-white px-4 py-3 hover:bg-[#f8f8f7] transition-colors">
+                    <div className="flex items-start gap-3">
+                      <span className="material-symbols-outlined text-[#646462] text-[18px] mt-0.5">{pickIcon(String(ev.type || ''))}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-[13px] font-medium text-[#1a1a1a]">{describe(ev)}</p>
+                          <span className="inline-flex items-center h-5 px-2 rounded-full bg-[#f4f4f3] border border-[#e9eae6] text-[10.5px] font-semibold text-[#1a1a1a] uppercase tracking-wide">
+                            {(String(ev.type || '').split('.')[0]) || 'event'}
+                          </span>
                         </div>
-                      </td>
-                      <td className="px-6 py-3">
-                        <span className="text-sm text-gray-600 dark:text-gray-300">{event.resource}</span>
-                      </td>
-                      <td className="px-6 py-3 text-right">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{event.time}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20 text-center">
-              <button
-                type="button"
-                onClick={() => onNavigate?.({ page: 'settings', entityType: 'setting', section: 'security_audit', sourceContext: 'profile_activity' })}
-                className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-              >
-                View full audit log
-              </button>
-            </div>
-          </section>
-        </div>
-
-        <div className="col-span-1 space-y-8">
-          <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Activity Summary (30d)</h2>
-              <span className="material-symbols-outlined text-gray-400">bar_chart</span>
-            </div>
-            <div className="p-6 space-y-4">
-              {summaryRows.map(([label, value]) => (
-                <div key={String(label)} className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
-                  <span className="text-sm font-bold text-gray-900 dark:text-white">{value}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Account Log</h2>
-              <span className="material-symbols-outlined text-gray-400">manage_accounts</span>
-            </div>
-            <div className="p-0">
-              {accountLog.map((entry, index) => (
-                <div key={`${entry.title}-${index}`} className={`p-4 flex gap-3 ${index < accountLog.length - 1 ? 'border-b border-gray-50 dark:border-gray-800/50' : ''}`}>
-                  <span className="material-symbols-outlined text-gray-400 text-[18px] mt-0.5">{entry.icon}</span>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{entry.title}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.time}</p>
+                        {ev.target && (
+                          <p className="text-[11.5px] text-[#646462] mt-0.5 truncate">{ev.target}</p>
+                        )}
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[11.5px] text-[#1a1a1a]">{relTime(ev.created_at)}</p>
+                        <p className="text-[10.5px] text-[#646462]">{fullTime(ev.created_at)}</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
-          </section>
-        </div>
+            </ul>
+          </div>
+        )}
+
+        {hasMore && (
+          <div className="mt-4 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setLimit(l => l + 50)}
+              disabled={loading}
+              className="h-9 px-4 rounded-md border border-[#e9eae6] text-[12.5px] font-medium hover:bg-[#f8f8f7] disabled:opacity-50"
+            >
+              {loading ? 'Cargando…' : 'Cargar más'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

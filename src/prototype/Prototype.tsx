@@ -1,16 +1,16 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // Unified prototype – Inbox + Contacts (connected screens)
 // Navigate via the left-nav icons. All assets from Figma CDN (7-day TTL).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Fragment, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, auditApi, billingApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, policyRulesApi, reportsApi, workflowsApi, workspacesApi } from '../api/client';
+import { agentApi, agentsApi, aiApi, aiFeedbackApi, assignmentPoliciesApi, attachmentsApi, auditApi, billingApi, callsApi, cannedResponsesApi, casesApi, companiesApi, connectorsApi, customAttributesApi, customFiltersApi, customRolesApi, customersApi, dataImportsApi, emailTemplatesApi, iamApi, inboxesApi, knowledgeApi, macrosApi, mcpServersApi, mentionsApi, notificationsApi, policyRulesApi, reportsApi, slaPoliciesApi, automationRulesApi, visualFlowsApi, workflowsApi, workingHoursApi, workspacesApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison';
+type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -436,6 +436,14 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
             visual, ICON_KNOWLEDGE is Fin's, etc. ICON_INBOX is reserved for the top logo.
             A new inline SVG arrow is added for Canales salientes. */}
         <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'}`}>
+          {/* Super Agent — top-level entry, always first, thick-ring icon */}
+          <NavBtnSvg nav="superAgent" label="Super Agent">
+            <svg viewBox="0 0 16 16" className="w-[18px] h-[18px]" fill="none">
+              <circle cx="8" cy="8" r="6.25" stroke={view === 'superAgent' ? '#6366f1' : '#1a1a1a'} strokeWidth="2.75"/>
+              <circle cx="8" cy="8" r="1.75" fill={view === 'superAgent' ? '#6366f1' : '#1a1a1a'}/>
+            </svg>
+          </NavBtnSvg>
+          <div className={`${expanded ? 'mx-0.5' : 'mx-1'} h-px bg-[#e2e2e0] my-0.5`} />
           <NavBtn nav="inbox"     icon={ICON_FIN}       label="Inbox"             badge={4} />
           <NavBtn nav="fin"       icon={ICON_KNOWLEDGE} label="Fin AI Agent" />
           <NavBtn nav="knowledge" icon={ICON_REPORTS}   label="Conocimiento" />
@@ -495,7 +503,7 @@ type ThemeOpt = 'light' | 'dark' | 'system';
 const THEME_OPTIONS: { value: ThemeOpt; label: string }[] = [
   { value: 'light',  label: 'Claro' },
   { value: 'dark',   label: 'Oscuro' },
-  { value: 'system', label: 'Sistema' },
+  { value: 'system', label: 'Sistema de coincidencias' },
 ];
 const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
   { value: 'es',    label: 'Español' },
@@ -591,21 +599,39 @@ function ProfileMenuButton({ expanded }: { expanded: boolean }) {
     if (typeof window !== 'undefined') window.location.reload();
   }
 
-  function MainRow({ label, sub, onClick, danger, chev, onClose }: { label: string; sub?: string; onClick?: () => void; danger?: boolean; chev?: boolean; onClose?: boolean }) {
+  function MainRow({ label, sub, onClick, danger, chev, isOpenSub }: { label: string; sub?: string; onClick?: () => void; danger?: boolean; chev?: boolean; isOpenSub?: boolean }) {
     return (
       <button
         type="button"
         onClick={() => {
           onClick?.();
-          if (onClose !== false && !chev) setOpen(false);
+          if (!chev) setOpen(false);
         }}
-        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${danger ? 'text-[#b91c1c] hover:bg-[#fef2f2]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${
+          danger
+            ? 'text-[#b91c1c] hover:bg-[#fef2f2]'
+            : isOpenSub
+              ? 'text-[#1a1a1a] bg-[#f8f8f7]'
+              : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
+        }`}
       >
         <span className="flex-1 truncate">
-          {label}
-          {sub && <span className="text-[#646462] font-normal"> {sub}</span>}
+          <span className="font-semibold">{label}</span>
+          {sub && <span className="text-[#1a1a1a] font-normal"> {sub}</span>}
         </span>
         {chev && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>}
+      </button>
+    );
+  }
+
+  function PlainRow({ label, onClick, danger }: { label: string; onClick?: () => void; danger?: boolean }) {
+    return (
+      <button
+        type="button"
+        onClick={() => { onClick?.(); setOpen(false); }}
+        className={`w-full flex items-center px-3 h-9 text-[13px] text-left ${danger ? 'text-[#b91c1c] hover:bg-[#fef2f2]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+      >
+        <span className="flex-1 truncate">{label}</span>
       </button>
     );
   }
@@ -615,29 +641,15 @@ function ProfileMenuButton({ expanded }: { expanded: boolean }) {
       <button
         type="button"
         onClick={onClick}
-        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${active ? 'bg-[#f8f8f7] font-semibold text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${active ? 'text-[#fa7938] font-semibold' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
       >
-        <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-          {active && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="2"><path d="M3 8l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-        </span>
         <span className="flex-1 truncate">{label}</span>
+        {active && (
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#fa7938] flex-shrink-0" strokeWidth="2">
+            <path d="M3 8l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
       </button>
-    );
-  }
-
-  function SubHeader({ title }: { title: string }) {
-    return (
-      <div className="flex items-center gap-1.5 px-2 py-2 border-b border-[#e9eae6]">
-        <button
-          type="button"
-          onClick={() => setSubmenu(null)}
-          className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
-          aria-label="Volver"
-        >
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-        <span className="text-[13px] font-semibold text-[#1a1a1a]">{title}</span>
-      </div>
     );
   }
 
@@ -659,108 +671,94 @@ function ProfileMenuButton({ expanded }: { expanded: boolean }) {
       </button>
 
       {open && (
-        <div
-          role="menu"
-          className="absolute z-50 left-full ml-2 bottom-0 w-[280px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] overflow-hidden"
-        >
-          {submenu === null && (
-            <div className="py-1.5">
-              <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-[#e9eae6]">
-                <div className="relative w-7 h-7 rounded-full overflow-hidden bg-[#f8f8f7] flex items-center justify-center">
-                  {user?.avatar_url ? (
-                    <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-[12px] font-semibold text-[#646462]">{initials}</span>
-                  )}
-                  <div className={`absolute bottom-0 right-0 w-[8px] h-[8px] rounded-full border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{userName}</p>
-                  {userEmail && <p className="text-[11px] text-[#646462] truncate">{userEmail}</p>}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setAway(v => !v)}
-                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-              >
-                <span className="flex-1 text-left">Modo ausente</span>
-                <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors flex-shrink-0 ${away ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
-                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${away ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                </span>
-              </button>
-
-              <div className="border-t border-[#e9eae6] my-1" />
-
-              <MainRow label="Tema:"             sub={themeLabel}            chev onClose={false} onClick={() => setSubmenu('theme')} />
-              <MainRow label="Idioma:"           sub={langLabel}             chev onClose={false} onClick={() => setSubmenu('language')} />
-              <MainRow label="Espacio de trabajo:" sub={currentWorkspaceName} chev onClose={false} onClick={() => setSubmenu('workspace')} />
-
-              <div className="border-t border-[#e9eae6] my-1" />
-
-              <MainRow label="Centro de ayuda"        onClick={() => window.open('https://www.intercom.com/help', '_blank')} />
-              <MainRow label="Foro de la comunidad"   onClick={() => window.open('https://community.intercom.com', '_blank')} />
-              <MainRow label="Página de estado"       onClick={() => window.open('https://www.intercomstatus.com', '_blank')} />
-              <MainRow label="Términos y políticas"   onClick={() => window.open('https://www.intercom.com/terms-and-policies', '_blank')} />
-
-              <div className="border-t border-[#e9eae6] my-1" />
-
-              <MainRow label="Cerrar sesión" danger onClick={handleSignOut} />
-            </div>
-          )}
-
-          {submenu === 'theme' && (
-            <div className="py-1">
-              <SubHeader title="Tema" />
-              <div className="py-1">
-                {THEME_OPTIONS.map(opt => (
-                  <CheckRow
-                    key={opt.value}
-                    active={theme === opt.value}
-                    label={opt.label}
-                    onClick={() => { setTheme(opt.value); setSubmenu(null); }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {submenu === 'language' && (
-            <div className="py-1">
-              <SubHeader title="Idioma" />
-              <div className="py-1 max-h-[280px] overflow-y-auto">
-                {LANGUAGE_OPTIONS.map(opt => (
-                  <CheckRow
-                    key={opt.value}
-                    active={lang === opt.value}
-                    label={opt.label}
-                    onClick={() => { setLang(opt.value); setSubmenu(null); }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {submenu === 'workspace' && (
-            <div className="py-1">
-              <SubHeader title="Espacio de trabajo" />
-              <div className="py-1 max-h-[280px] overflow-y-auto">
-                {workspaces.length === 0 ? (
-                  <div className="px-3 py-3 text-[12.5px] text-[#646462]">Sin espacios de trabajo disponibles.</div>
+        <div className="absolute z-50 left-full ml-2 bottom-0">
+          {/* Main menu — relative wrapper so submenu can anchor next to it */}
+          <div
+            role="menu"
+            className="relative w-[300px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] py-1.5"
+          >
+            <div className="flex items-center gap-2.5 px-3 py-2.5">
+              <div className="relative w-9 h-9 rounded-full overflow-hidden bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
                 ) : (
-                  workspaces.map((ws: any) => (
-                    <CheckRow
-                      key={ws.id}
-                      active={ws.id === currentWorkspaceId}
-                      label={ws.name || ws.slug || ws.id}
-                      onClick={() => handleSwitchWorkspace(ws)}
-                    />
-                  ))
+                  <span className="text-[13px] font-semibold text-[#646462]">{initials}</span>
                 )}
+                <span className={`absolute bottom-[-1px] left-[-1px] w-[10px] h-[10px] rounded-full border-2 border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-[#1a1a1a] truncate">{userName}</p>
+                {userEmail && <p className="text-[11.5px] text-[#646462] truncate">{userEmail}</p>}
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setAway(v => !v)}
+              className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+            >
+              <span className="flex-1 text-left">Modo ausente</span>
+              <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors flex-shrink-0 ${away ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
+                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${away ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+              </span>
+            </button>
+
+            <div className="border-t border-[#e9eae6] my-1" />
+
+            <MainRow label="Tema:"               sub={themeLabel}             chev isOpenSub={submenu === 'theme'}     onClick={() => setSubmenu(submenu === 'theme' ? null : 'theme')} />
+            <MainRow label="Idioma:"             sub={langLabel}              chev isOpenSub={submenu === 'language'}  onClick={() => setSubmenu(submenu === 'language' ? null : 'language')} />
+            <MainRow label="Espacio de trabajo:" sub={currentWorkspaceName}   chev isOpenSub={submenu === 'workspace'} onClick={() => setSubmenu(submenu === 'workspace' ? null : 'workspace')} />
+
+            <div className="border-t border-[#e9eae6] my-1" />
+
+            <PlainRow label="Centro de ayuda de Intercom"      onClick={() => window.open('https://www.intercom.com/help', '_blank')} />
+            <PlainRow label="Foro de la Comunidad de Intercom" onClick={() => window.open('https://community.intercom.com', '_blank')} />
+            <PlainRow label="Página de estado"                 onClick={() => window.open('https://www.intercomstatus.com', '_blank')} />
+            <PlainRow label="Términos y políticas"             onClick={() => window.open('https://www.intercom.com/terms-and-policies', '_blank')} />
+
+            <div className="border-t border-[#e9eae6] my-1" />
+
+            <PlainRow label="Cerrar sesión" onClick={handleSignOut} />
+
+            {/* Cascading submenu — anchored top-aligned to the right of main */}
+            {submenu && (
+              <div
+                role="menu"
+                className="absolute z-50 left-full ml-2 top-0 w-[260px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] py-1.5 max-h-[420px] overflow-y-auto"
+              >
+              {submenu === 'theme' && THEME_OPTIONS.map(opt => (
+                <CheckRow
+                  key={opt.value}
+                  active={theme === opt.value}
+                  label={opt.label}
+                  onClick={() => { setTheme(opt.value); setSubmenu(null); }}
+                />
+              ))}
+
+              {submenu === 'language' && LANGUAGE_OPTIONS.map(opt => (
+                <CheckRow
+                  key={opt.value}
+                  active={lang === opt.value}
+                  label={opt.label}
+                  onClick={() => { setLang(opt.value); setSubmenu(null); }}
+                />
+              ))}
+
+              {submenu === 'workspace' && (
+                workspaces.length === 0 ? (
+                  <div className="px-3 py-3 text-[12.5px] text-[#646462]">Sin espacios de trabajo disponibles.</div>
+                ) : workspaces.map((ws: any) => (
+                  <CheckRow
+                    key={ws.id}
+                    active={ws.id === currentWorkspaceId}
+                    label={ws.name || ws.slug || ws.id}
+                    onClick={() => handleSwitchWorkspace(ws)}
+                  />
+                ))
+              )}
+            </div>
           )}
+          </div>
         </div>
       )}
     </div>
@@ -810,7 +808,7 @@ const CheckIconMinimal = ({ className = '' }: { className?: string }) => (
 
 function SidebarNavItem({
   icon, label, count, active = false, onClick,
-}: { icon: string | ReactNode; label: string; count?: number; active?: boolean; onClick?: () => void }) {
+}: { key?: string | number | null; icon: string | ReactNode; label: string; count?: number; active?: boolean; onClick?: () => void }) {
   return (
     <button
       type="button"
@@ -832,25 +830,10 @@ function SidebarNavItem({
   );
 }
 
-type InboxScope =
-  | 'search'
-  | 'inbox'
-  | 'mentions'
-  | 'created'
-  | 'all'
-  | 'unassigned'
-  | 'spam'
-  | 'dashboard'
-  | 'fin-all'
-  | 'fin-resolved'
-  | 'fin-escalated'
-  | 'fin-pending'
-  | 'fin-spam'
-  | 'v-messenger'
-  | 'v-email'
-  | 'v-whatsapp'
-  | 'v-phone'
-  | 'v-tickets';
+type InboxScope = 'search' | 'inbox' | 'mentions' | 'created' | 'all' | 'unassigned' | 'spam' | 'dashboard'
+  | 'fin-all' | 'fin-resolved' | 'fin-escalated' | 'fin-pending' | 'fin-spam'
+  | 'v-messenger' | 'v-email' | 'v-whatsapp' | 'v-phone' | 'v-tickets'
+  | `team:${string}` | `agent:${string}`;
 
 function InboxSidebar({
   active,
@@ -859,6 +842,10 @@ function InboxSidebar({
   onAction,
   onCollapse,
   onNewConversation,
+  teams = [],
+  teammates = [],
+  onTeamsChanged,
+  onNewTeammate,
 }: {
   active: InboxScope;
   onScopeChange: (scope: InboxScope) => void;
@@ -866,14 +853,25 @@ function InboxSidebar({
   onAction?: (message: string, type?: 'success' | 'error') => void;
   onCollapse?: () => void;
   onNewConversation?: () => void;
+  teams?: any[];
+  teammates?: any[];
+  onTeamsChanged?: () => void;
+  onNewTeammate?: () => void;
 }) {
   const notify = (msg: string) => onAction?.(msg, 'success');
   // 4 expandable sections (Fin para servicio / Inbox para el equipo / Compañeros de equipo / Vistas)
   // — same expand/collapse pattern as the Fin AI Agent sidebar.
   const [openFin, setOpenFin] = useState(true);
-  const [openTeamInbox, setOpenTeamInbox] = useState(false);
-  const [openTeammates, setOpenTeammates] = useState(false);
+  const [openTeamInbox, setOpenTeamInbox] = useState(true);
+  const [openTeammates, setOpenTeammates] = useState(true);
   const [openVistas, setOpenVistas] = useState(true);
+  // Create team modal
+  const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamDescription, setNewTeamDescription] = useState('');
+  const [creatingTeam, setCreatingTeam] = useState(false);
+  // Show all teams always
+  const pinnedTeams = teams;
   // Reusable inline-SVG chevron — guaranteed right→down rotation regardless of asset.
   // Closed: points right `>` (no rotation). Open: rotate-90 → points down `v`.
   const Chevron = ({ open }: { open: boolean }) => (
@@ -952,20 +950,39 @@ function InboxSidebar({
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Inbox para el equipo</span>
             <div className="flex items-center gap-1">
               <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); notify('Crear inbox de equipo — próximamente'); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); notify('Crear inbox de equipo — próximamente'); } }}
-                className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7] cursor-pointer"
-                title="Crear inbox de equipo"
-              >
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-              </span>
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); setShowCreateTeamModal(true); setNewTeamName(''); setNewTeamDescription(''); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setShowCreateTeamModal(true); setNewTeamName(''); setNewTeamDescription(''); } }}
+                  className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7] cursor-pointer"
+                  title="Crear equipo"
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                </span>
               <span className="w-5 h-4 flex items-center justify-center"><Chevron open={openTeamInbox} /></span>
             </div>
           </button>
           {openTeamInbox && (
-            <div className="px-3 py-2 pl-4 mt-0.5 text-[12.5px] text-[#646462] italic">Aún no hay inboxes de equipo.</div>
+            <div className="flex flex-col gap-0.5 pl-1 mt-0.5">
+              {pinnedTeams.length === 0 ? (
+                <p className="text-[12px] italic text-[#9a9a98] px-3 py-1">Aún no hay equipos. Pulsa + para crear uno.</p>
+              ) : (
+                pinnedTeams.map((team: any) => {
+                  const tid = team.id ?? team.team_id;
+                  const tscope = `team:${tid}` as InboxScope;
+                  return (
+                    <SidebarNavItem
+                      key={tid}
+                      icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M2 5a3 3 0 1 1 3.78 2.9A5 5 0 0 1 10 10H6a5 5 0 0 1 4.22-2.1A3 3 0 1 1 14 5a3 3 0 0 1-2.22 2.9A7 7 0 0 1 14 12H2a7 7 0 0 1 2.22-4.1A3 3 0 0 1 2 5z"/></svg>}
+                      label={team.name ?? team.title ?? 'Equipo'}
+                      active={active === tscope}
+                      count={counts[tscope]}
+                      onClick={() => onScopeChange(tscope)}
+                    />
+                  );
+                })
+              )}
+            </div>
           )}
         </div>
 
@@ -976,8 +993,8 @@ function InboxSidebar({
               <span
                 role="button"
                 tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); notify('Invitar compañero de equipo — próximamente'); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); notify('Invitar compañero de equipo — próximamente'); } }}
+                onClick={(e) => { e.stopPropagation(); if (onNewTeammate) onNewTeammate(); else notify('Invitar compañero de equipo — próximamente'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); if (onNewTeammate) onNewTeammate(); else notify('Invitar compañero de equipo — próximamente'); } }}
                 className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7] cursor-pointer"
                 title="Invitar compañero"
               >
@@ -987,7 +1004,36 @@ function InboxSidebar({
             </div>
           </button>
           {openTeammates && (
-            <div className="px-3 py-2 pl-4 mt-0.5 text-[12.5px] text-[#646462] italic">Aún no hay compañeros conectados.</div>
+            <div className="flex flex-col gap-0.5 pl-1 mt-0.5">
+              {teammates.length === 0 ? (
+                <p className="text-[12px] italic text-[#9a9a98] px-3 py-1">Aún no hay compañeros conectados.</p>
+              ) : (
+                teammates.map((member: any) => {
+                  const mid = member.id ?? member.user_id;
+                  const ascope = `agent:${mid}` as InboxScope;
+                  const initials = (member.full_name ?? member.name ?? 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+                  const isOnline = member.status === 'active' || member.online === true;
+                  return (
+                    <button
+                      key={mid}
+                      onClick={() => onScopeChange(ascope)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-left hover:bg-[#e9eae6] transition-colors ${active === ascope ? 'bg-[#e9eae6]' : ''}`}
+                    >
+                      <div className="relative flex-shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-[10px] font-bold text-white">
+                          {initials}
+                        </div>
+                        {isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border-2 border-white" />}
+                      </div>
+                      <span className="text-[13px] text-[#1a1a1a] truncate">{member.full_name ?? member.name ?? 'Usuario'}</span>
+                      {counts[ascope] != null && counts[ascope]! > 0 && (
+                        <span className="ml-auto text-[11px] font-semibold text-[#646462]">{counts[ascope]}</span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
           )}
         </div>
 
@@ -1014,6 +1060,56 @@ function InboxSidebar({
           </button>
         </div>
       </div>
+
+      {/* Create team modal */}
+      {showCreateTeamModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30" onClick={() => setShowCreateTeamModal(false)}>
+          <div className="bg-white rounded-2xl shadow-[0_8px_40px_rgba(20,20,20,0.22)] w-80 p-6 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Crear equipo</h3>
+            <div className="flex flex-col gap-2">
+              <input
+                autoFocus
+                placeholder="Nombre del equipo *"
+                value={newTeamName}
+                onChange={e => setNewTeamName(e.target.value)}
+                className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]"
+              />
+              <input
+                placeholder="Descripción (opcional)"
+                value={newTeamDescription}
+                onChange={e => setNewTeamDescription(e.target.value)}
+                className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowCreateTeamModal(false)}
+                className="px-4 py-1.5 rounded-lg border border-[#e9eae6] text-[13px] text-[#646462] hover:bg-[#f8f8f7]"
+              >Cancelar</button>
+              <button
+                disabled={!newTeamName.trim() || creatingTeam}
+                onClick={async () => {
+                  if (!newTeamName.trim()) return;
+                  setCreatingTeam(true);
+                  try {
+                    await (iamApi as any).createTeam({ name: newTeamName.trim(), description: newTeamDescription.trim() || undefined });
+                    setShowCreateTeamModal(false);
+                    setNewTeamName('');
+                    setNewTeamDescription('');
+                    onTeamsChanged?.();
+                    onAction?.('Equipo creado correctamente', 'success');
+                  } catch {
+                    onAction?.('Error al crear el equipo', 'error');
+                  } finally {
+                    setCreatingTeam(false);
+                  }
+                }}
+                className="px-4 py-1.5 rounded-lg bg-[#6366f1] text-white text-[13px] font-medium hover:bg-[#4f46e5] disabled:opacity-50 disabled:cursor-not-allowed"
+              >{creatingTeam ? 'Creando…' : 'Crear'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1039,6 +1135,10 @@ type Conversation = {
   orderId?: string;
   sourceChannel?: string;
   aiSummary?: string;
+  resolvedBy?: string | null;
+  approvalState?: string;
+  approvalRequestId?: string | null;
+  aiHandled?: boolean;
   raw?: any;
 };
 const conversations: Conversation[] = [
@@ -1329,13 +1429,12 @@ function mapCaseToPrototypeConversation(c: any): Conversation {
     orderId: orderIds[0],
     sourceChannel: channel,
     aiSummary: c.aiDiagnosis || c.ai_diagnosis || c.aiRecommendedAction || c.ai_recommended_action,
+    resolvedBy: c.resolved_by ?? null,
+    approvalState: c.approval_state ?? 'not_required',
+    approvalRequestId: c.active_approval_request_id ?? null,
+    aiHandled: c.resolved_by === 'ai' || (c.ai_confidence != null && c.ai_confidence > 0.1),
     raw: c,
   };
-}
-
-function isAssignedToMe(conv: Conversation) {
-  const raw = conv.raw || {};
-  return Boolean(raw.assigned_user_id || conv.assignee);
 }
 
 function isSpamConversation(conv: Conversation) {
@@ -1343,7 +1442,7 @@ function isSpamConversation(conv: Conversation) {
   return haystack.includes('spam') || haystack.includes('correo no deseado');
 }
 
-function matchesInboxScope(conv: Conversation, scope: InboxScope) {
+function matchesInboxScope(conv: Conversation, scope: InboxScope, currentUserId: string | null = null) {
   const channel = (conv.sourceChannel || conv.channel || '').toLowerCase();
   const raw = conv.raw || {};
   const tags = (conv.tags || []).join(' ').toLowerCase();
@@ -1351,25 +1450,46 @@ function matchesInboxScope(conv: Conversation, scope: InboxScope) {
     case 'search':
     case 'all':
     case 'dashboard':
-    case 'fin-all':
       return true;
+    case 'fin-all':
+      return conv.aiHandled === true || raw.resolved_by === 'ai' || (raw.ai_confidence != null && raw.ai_confidence > 0.1);
     case 'inbox':
-      return isAssignedToMe(conv) && !isSpamConversation(conv);
-    case 'mentions':
-      return tags.includes('mention') || tags.includes('mencion') || String(raw.mentions || '').length > 0;
+      if (!currentUserId) return Boolean(raw.assigned_user_id || conv.assignee) && !isSpamConversation(conv);
+      return (raw.assigned_user_id === currentUserId || raw.assignee_id === currentUserId) && !isSpamConversation(conv);
+    case 'mentions': {
+      if (!currentUserId) return tags.includes('mention') || tags.includes('mencion');
+      const mentionsList: any[] = Array.isArray(raw.mentions) ? raw.mentions : [];
+      const isMentioned = mentionsList.some((m: any) => m === currentUserId || m?.user_id === currentUserId || m?.id === currentUserId);
+      return isMentioned || tags.includes('mention') || tags.includes('mencion');
+    }
     case 'created':
-      return Boolean(raw.created_by_user_id || raw.createdByUserId || raw.created_by || raw.createdBy);
+      if (!currentUserId) return Boolean(raw.created_by_user_id || raw.createdByUserId || raw.created_by || raw.createdBy);
+      return raw.created_by_user_id === currentUserId || raw.created_by === currentUserId || raw.createdBy === currentUserId;
     case 'unassigned':
       return !raw.assigned_user_id && !conv.assignee;
     case 'spam':
-    case 'fin-spam':
       return isSpamConversation(conv);
+    case 'fin-spam':
+      // Spam: AI-classified spam OR AI-blocked cases
+      return conv.aiHandled === true && (isSpamConversation(conv) || String(raw.status ?? '').toLowerCase() === 'blocked');
     case 'fin-resolved':
-      return ['resolved', 'closed'].includes(String(conv.status || '').toLowerCase());
+      // Resolved: AI handled AND conversation is in a terminal state
+      return conv.aiHandled === true && ['resolved', 'closed', 'done', 'completed'].includes(String(conv.status ?? raw.status ?? '').toLowerCase());
     case 'fin-escalated':
-      return String(conv.status || '').toLowerCase() === 'escalated';
+      // Escalated: explicitly escalated, approval expired, blocked, OR rejected
+      return conv.aiHandled === true && (
+        String(conv.status ?? raw.status ?? '').toLowerCase() === 'escalated' ||
+        String(conv.status ?? raw.status ?? '').toLowerCase() === 'blocked' ||
+        raw.approval_state === 'pending' ||
+        raw.approval_state === 'expired' ||
+        raw.approval_state === 'rejected'
+      );
     case 'fin-pending':
-      return ['waiting', 'pending', 'snoozed'].includes(String(conv.status || '').toLowerCase());
+      // Pending: AI waiting for human action — snoozed or explicitly pending
+      return conv.aiHandled === true && (
+        raw.approval_state === 'pending' ||
+        ['waiting', 'pending', 'snoozed'].includes(String(conv.status ?? raw.status ?? '').toLowerCase())
+      );
     case 'v-messenger':
       return channel.includes('messenger') || channel.includes('web') || channel.includes('chat');
     case 'v-email':
@@ -1381,12 +1501,22 @@ function matchesInboxScope(conv: Conversation, scope: InboxScope) {
     case 'v-tickets':
       return channel.includes('ticket') || String(conv.raw?.type || '').toLowerCase().includes('ticket');
     default:
+      if (scope.startsWith('team:')) {
+        const teamId = scope.replace('team:', '');
+        return raw.assigned_team_id === teamId;
+      }
+      if (scope.startsWith('agent:')) {
+        const agentId = scope.replace('agent:', '');
+        return raw.assigned_user_id === agentId;
+      }
       return true;
   }
 }
 
 function inboxScopeTitle(scope: InboxScope) {
-  const titles: Record<InboxScope, string> = {
+  if (scope.startsWith('team:')) return `Equipo: ${scope.replace('team:', '')}`;
+  if (scope.startsWith('agent:')) return `Agente: ${scope.replace('agent:', '')}`;
+  const titles: Record<string, string> = {
     search: 'Buscar',
     inbox: 'Tu bandeja de entrada',
     mentions: 'Menciones',
@@ -1406,7 +1536,7 @@ function inboxScopeTitle(scope: InboxScope) {
     'v-phone': 'Phone & SMS',
     'v-tickets': 'Tickets',
   };
-  return titles[scope];
+  return titles[scope] ?? scope;
 }
 
 function ConversationCard({ conv, isSelected, onSelect }: { conv: Conversation; isSelected: boolean; onSelect: () => void }) {
@@ -1660,25 +1790,44 @@ function ChatMessage({ msg }: { msg: Message }) {
 
 function PrototypeMergeModal({
   sourceId,
+  sourceConv,
   onClose,
   onMerged,
   onAction,
 }: {
   sourceId: string;
+  sourceConv?: any;
   onClose: () => void;
   onMerged: () => void;
   onAction: (message: string, type?: 'success' | 'error') => void;
 }) {
-  const [targetId, setTargetId] = useState('');
+  const [query, setQuery] = useState('');
+  const [selectedTarget, setSelectedTarget] = useState<any>(null);
   const [merging, setMerging] = useState(false);
+  const { data: allCases, loading } = useApi(
+    () => casesApi.list({ limit: '50' }),
+    [], []
+  );
+
+  const candidates = useMemo(() => {
+    const list = Array.isArray(allCases) ? allCases : [];
+    const q = query.trim().toLowerCase();
+    return list
+      .filter((c: any) => c.id !== sourceId && c.status !== 'merged')
+      .filter((c: any) => {
+        if (!q) return true;
+        const hay = [c.id, c.case_number, c.customer_id, c.type, c.status].filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 8);
+  }, [allCases, query, sourceId]);
 
   async function doMerge() {
-    const id = targetId.trim();
-    if (!id) return;
+    if (!selectedTarget || merging) return;
     setMerging(true);
     try {
-      await casesApi.merge(id, sourceId);
-      onAction('Casos fusionados');
+      await casesApi.merge(selectedTarget.id, sourceId);
+      onAction('Casos fusionados correctamente');
       onMerged();
       onClose();
     } catch (err: any) {
@@ -1688,21 +1837,127 @@ function PrototypeMergeModal({
     }
   }
 
+  // Mini ticket card for the stacked preview
+  function TicketCard({ conv, dim = false }: { conv: any; dim?: boolean }) {
+    const status = conv?.status ?? '—';
+    const statusColor = status === 'open' ? 'bg-green-100 text-green-800'
+      : status === 'closed' ? 'bg-gray-100 text-gray-600'
+      : status === 'snoozed' ? 'bg-amber-100 text-amber-800'
+      : status === 'escalated' ? 'bg-red-100 text-red-700'
+      : 'bg-blue-100 text-blue-800';
+    const ch = conv?.source_channel ?? conv?.channel ?? '—';
+    const custId = conv?.customer_id ?? '—';
+    const num = conv?.case_number ?? conv?.id?.slice(0, 10) ?? '—';
+    return (
+      <div className={`w-full rounded-xl border border-[#e9eae6] bg-white px-4 py-3 transition-opacity ${dim ? 'opacity-50' : ''}`}>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] font-mono text-[#646462]">{num}</span>
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColor}`}>{status}</span>
+        </div>
+        <div className="text-[13px] font-semibold text-[#1a1a1a] truncate">{custId}</div>
+        <div className="text-[11.5px] text-[#646462] truncate mt-0.5">{conv?.type ?? '—'} · {ch}</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
-      <div className="w-[360px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5" onClick={event => event.stopPropagation()}>
-        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Fusionar conversación</h3>
-        <p className="text-[13px] text-[#646462] mb-4">Introduce el ID del caso destino. El caso actual se fusionará dentro de ese caso.</p>
-        <input
-          value={targetId}
-          onChange={event => setTargetId(event.target.value)}
-          placeholder="case_001..."
-          className="w-full h-10 rounded-xl border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-        />
-        <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onClose} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a]">Cancelar</button>
-          <button onClick={doMerge} disabled={!targetId.trim() || merging} className="h-8 px-4 rounded-full bg-[#222] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">
-            {merging ? 'Fusionando...' : 'Fusionar'}
+    <div className="fixed inset-0 z-[100] bg-black/30 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[520px] max-h-[80vh] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_20px_60px_rgba(20,20,20,0.28)] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-[#e9eae6]">
+          <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-0.5">Fusionar conversación</h3>
+          <p className="text-[12.5px] text-[#646462]">El caso actual se fusionará dentro del caso destino. Se conservarán todos los mensajes y notas.</p>
+        </div>
+
+        {/* Stacked preview — shows both tickets overlapping */}
+        {selectedTarget ? (
+          <div className="px-6 pt-4 pb-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-3">Vista previa de fusión</p>
+            <div className="relative">
+              {/* Target card (back — will absorb the source) */}
+              <div className="transform translate-y-3 translate-x-2 scale-[0.97] absolute inset-x-0">
+                <TicketCard conv={selectedTarget} dim />
+              </div>
+              {/* Source card (front — will be merged into target) */}
+              <div className="relative z-10 shadow-md rounded-xl">
+                <TicketCard conv={sourceConv ?? { id: sourceId, status: 'open' }} />
+              </div>
+            </div>
+            {/* Arrow */}
+            <div className="flex items-center justify-center gap-2 mt-10 mb-1">
+              <svg viewBox="0 0 20 20" className="w-5 h-5 fill-[#646462]"><path d="M10 3a1 1 0 0 1 1 1v9.586l2.293-2.293a1 1 0 1 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L9 13.586V4a1 1 0 0 1 1-1z"/></svg>
+              <span className="text-[12px] text-[#646462]">se fusionará en → <strong className="text-[#1a1a1a]">{selectedTarget.case_number ?? selectedTarget.id}</strong></span>
+            </div>
+          </div>
+        ) : (
+          <div className="px-6 pt-4 pb-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-2">Caso de origen</p>
+            <TicketCard conv={sourceConv ?? { id: sourceId, status: 'open' }} />
+          </div>
+        )}
+
+        {/* Search */}
+        <div className="px-6 pt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-2">Selecciona el caso destino</p>
+          <input
+            autoFocus
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar por ID, número, cliente o tipo…"
+            className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-2"
+          />
+        </div>
+
+        {/* Case list */}
+        <div className="flex-1 overflow-y-auto px-6 pb-2 min-h-[100px]">
+          {loading && <div className="text-[13px] text-[#646462] py-3">Cargando casos…</div>}
+          {!loading && candidates.length === 0 && (
+            <div className="text-[13px] text-[#646462] py-3">No hay casos disponibles para fusionar.</div>
+          )}
+          {candidates.map((c: any) => {
+            const isSelected = selectedTarget?.id === c.id;
+            const ch = c.source_channel ?? c.channel ?? '—';
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedTarget(isSelected ? null : c)}
+                className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 transition-colors ${
+                  isSelected ? 'bg-[#1a1a1a] text-white' : 'hover:bg-[#f8f8f7]'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-[11px] font-bold ${isSelected ? 'bg-white/20 text-white' : 'bg-[#e9eae6] text-[#646462]'}`}>
+                  {ch[0]?.toUpperCase() ?? 'C'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-[13px] font-semibold truncate ${isSelected ? 'text-white' : 'text-[#1a1a1a]'}`}>
+                    {c.case_number ?? c.id}
+                  </div>
+                  <div className={`text-[11.5px] truncate ${isSelected ? 'text-white/70' : 'text-[#646462]'}`}>
+                    {c.customer_id ?? '—'} · {c.type ?? '—'} · {c.status ?? '—'}
+                  </div>
+                </div>
+                {isSelected && (
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white flex-shrink-0"><path d="M13.7 3.3a1 1 0 0 0-1.4 0L6 9.6 3.7 7.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l7-7a1 1 0 0 0 0-1.4z"/></svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-[#e9eae6] flex items-center justify-between">
+          <button onClick={onClose} className="h-9 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#e9eae6]">
+            Cancelar
+          </button>
+          <button
+            onClick={doMerge}
+            disabled={!selectedTarget || merging}
+            className="h-9 px-5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:opacity-40 hover:bg-[#333] transition-colors"
+          >
+            {merging ? 'Fusionando…' : selectedTarget ? `Fusionar en ${selectedTarget.case_number ?? selectedTarget.id}` : 'Selecciona un caso'}
           </button>
         </div>
       </div>
@@ -1728,6 +1983,12 @@ const NEW_CONV_CHANNELS: Array<{ value: string; label: string }> = [
 ];
 const NEW_CONV_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
+// ── Recipient type for new-conversation picker ───────────────────────────────
+type NewConvRecipient =
+  | { kind: 'customer'; id: string; name: string; email: string; segment?: string; channel?: string }
+  | { kind: 'member';   id: string; userId: string; name: string; email: string; role?: string }
+  | { kind: 'team';     id: string; name: string; description?: string };
+
 function NewConversationModal({
   onClose,
   onCreated,
@@ -1743,28 +2004,105 @@ function NewConversationModal({
   const [tagsInput, setTagsInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Recipient state
+  const [recipientQuery, setRecipientQuery] = useState('');
+  const [recipientFocus, setRecipientFocus] = useState(false);
+  const [selectedRecipient, setSelectedRecipient] = useState<NewConvRecipient | null>(null);
+
+  // Fetch all three lists in parallel
+  const { data: rawCustomers, loading: loadingCust }   = useApi(() => customersApi.list({ limit: '80' }), [], []);
+  const { data: rawMembers,   loading: loadingMem  }   = useApi(() => iamApi.members(), [], []);
+  const { data: rawTeams,     loading: loadingTeams }  = useApi(() => iamApi.teams(), [], []);
+
+  const customers: NewConvRecipient[] = useMemo(() => {
+    const list = Array.isArray(rawCustomers) ? rawCustomers : [];
+    return list.map((c: any) => ({
+      kind: 'customer' as const,
+      id: c.id,
+      name: c.canonical_name || c.name || c.id,
+      email: c.canonical_email || c.email || '',
+      segment: c.segment,
+      channel: c.preferred_channel,
+    }));
+  }, [rawCustomers]);
+
+  const members: NewConvRecipient[] = useMemo(() => {
+    const list = Array.isArray(rawMembers) ? rawMembers : [];
+    return list.map((m: any) => ({
+      kind: 'member' as const,
+      id: m.id || m.user_id,
+      userId: m.user_id || m.id,
+      name: m.name || m.full_name || m.email || m.id,
+      email: m.email || '',
+      role: m.role_name,
+    }));
+  }, [rawMembers]);
+
+  const teams: NewConvRecipient[] = useMemo(() => {
+    const list = Array.isArray(rawTeams) ? rawTeams : (rawTeams as any)?.teams ?? [];
+    return list.map((t: any) => ({
+      kind: 'team' as const,
+      id: t.id || t.team_id,
+      name: t.name || t.id,
+      description: t.description,
+    }));
+  }, [rawTeams]);
+
+  // Filter by search query
+  const q = recipientQuery.trim().toLowerCase();
+  const filteredCustomers = q
+    ? customers.filter(c => `${c.name} ${(c as any).email ?? ''}`.toLowerCase().includes(q))
+    : customers;
+  const filteredMembers   = q
+    ? members.filter(m => `${m.name} ${(m as any).email ?? ''} ${(m as any).role ?? ''}`.toLowerCase().includes(q))
+    : members;
+  const filteredTeams     = q
+    ? teams.filter(t => `${t.name} ${(t as any).description ?? ''}`.toLowerCase().includes(q))
+    : teams;
+
+  const showDropdown = recipientFocus && !selectedRecipient &&
+    (filteredCustomers.length > 0 || filteredMembers.length > 0 || filteredTeams.length > 0);
+
+  function pickRecipient(r: NewConvRecipient) {
+    setSelectedRecipient(r);
+    setRecipientQuery('');
+    setRecipientFocus(false);
+  }
+
+  function clearRecipient() {
+    setSelectedRecipient(null);
+    setRecipientQuery('');
+  }
+
+  // Segment / kind pill colours
+  function segmentColor(seg?: string) {
+    if (seg === 'vip') return 'bg-amber-100 text-amber-800';
+    if (seg === 'premium') return 'bg-purple-100 text-purple-700';
+    return 'bg-gray-100 text-gray-600';
+  }
+
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const tags = tagsInput
-        .split(',')
-        .map(t => t.trim())
-        .filter(Boolean)
-        .slice(0, 10);
-      const created = await casesApi.create({
+      const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean).slice(0, 10);
+      const payload: Record<string, any> = {
         type: type.trim() || 'general',
         priority,
         status: 'open',
         source_channel: channel,
         tags,
-      });
-      const newId = created?.id || created?.case?.id;
-      if (!newId) {
-        onAction('Caso creado pero sin id devuelto', 'error');
-        onClose();
-        return;
+      };
+      if (selectedRecipient?.kind === 'customer') {
+        payload.customer_id = selectedRecipient.id;
+      } else if (selectedRecipient?.kind === 'member') {
+        payload.assigned_user_id = selectedRecipient.userId;
+      } else if (selectedRecipient?.kind === 'team') {
+        payload.assigned_team_id = selectedRecipient.id;
       }
+      const created = await casesApi.create(payload);
+      const newId = created?.id || created?.case?.id;
+      if (!newId) { onAction('Caso creado sin ID devuelto', 'error'); onClose(); return; }
       onAction('Conversación creada');
       onCreated(newId);
       onClose();
@@ -1775,69 +2113,226 @@ function NewConversationModal({
     }
   }
 
+  const loading = loadingCust || loadingMem || loadingTeams;
+
   return (
-    <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] bg-black/25 flex items-center justify-center" onClick={onClose}>
       <div
-        className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
-        onClick={event => event.stopPropagation()}
+        className="w-[520px] max-h-[90vh] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_20px_60px_rgba(20,20,20,0.26)] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Nueva conversación</h3>
-        <p className="text-[12.5px] text-[#646462] mb-4">Crea un caso vacío. Después podrás escribir, asignar y vincular pedidos desde el panel.</p>
-
-        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Canal</label>
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {NEW_CONV_CHANNELS.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => setChannel(opt.value)}
-              className={`h-7 px-3 rounded-full text-[11.5px] font-semibold border ${channel === opt.value ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6] hover:bg-[#ededea]'}`}
-            >
-              {opt.label}
-            </button>
-          ))}
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-[#e9eae6]">
+          <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-0.5">Nueva conversación</h3>
+          <p className="text-[12.5px] text-[#646462]">Elige el destinatario y configura el canal antes de enviar.</p>
         </div>
 
-        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Prioridad</label>
-        <div className="flex gap-1.5 mb-3">
-          {NEW_CONV_PRIORITIES.map(opt => (
-            <button
-              key={opt}
-              onClick={() => setPriority(opt)}
-              className={`h-7 px-3 rounded-full text-[11.5px] font-semibold border ${priority === opt ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6] hover:bg-[#ededea]'}`}
-            >
-              {titleCase(opt)}
-            </button>
-          ))}
+        <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4">
+
+          {/* ── Para (recipient picker) ─────────────────────────────────── */}
+          <div>
+            <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Para</label>
+            {selectedRecipient ? (
+              /* Selected chip */
+              <div className="flex items-center gap-2 h-10 px-3 rounded-xl border border-[#1a1a1a] bg-[#f8f8f7]">
+                <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${selectedRecipient.kind === 'customer' ? 'bg-[#e7e2fd] text-[#5b21b6]' : selectedRecipient.kind === 'member' ? 'bg-[#d1fae5] text-[#065f46]' : 'bg-[#dbeafe] text-[#1e40af]'}`}>
+                  {selectedRecipient.kind === 'customer' ? 'C' : selectedRecipient.kind === 'member' ? 'M' : 'E'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[13px] font-semibold text-[#1a1a1a] truncate">{selectedRecipient.name}</span>
+                  {selectedRecipient.kind !== 'team' && (
+                    <span className="text-[11.5px] text-[#646462] ml-1.5">{(selectedRecipient as any).email}</span>
+                  )}
+                  {selectedRecipient.kind === 'team' && (
+                    <span className="text-[11.5px] text-[#646462] ml-1.5">Equipo</span>
+                  )}
+                </div>
+                <button onClick={clearRecipient} className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-[#e9eae6] text-[#646462]">
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-current"><path d="M9.5 2.5 6 6m0 0L2.5 9.5M6 6 2.5 2.5M6 6l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
+                </button>
+              </div>
+            ) : (
+              /* Search input + dropdown */
+              <div className="relative">
+                <input
+                  autoFocus
+                  value={recipientQuery}
+                  onChange={e => setRecipientQuery(e.target.value)}
+                  onFocus={() => setRecipientFocus(true)}
+                  onBlur={() => setTimeout(() => setRecipientFocus(false), 150)}
+                  placeholder={loading ? 'Cargando destinatarios…' : 'Buscar cliente, miembro o equipo…'}
+                  className="w-full h-10 rounded-xl border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+                {showDropdown && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-[#e9eae6] rounded-xl shadow-[0px_8px_24px_rgba(20,20,20,0.14)] max-h-[280px] overflow-y-auto">
+
+                    {/* Clientes */}
+                    {filteredCustomers.length > 0 && (
+                      <>
+                        <div className="px-3 pt-2.5 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-[#646462]">
+                          Clientes ({filteredCustomers.length})
+                        </div>
+                        {filteredCustomers.slice(0, 12).map(r => (
+                          <button
+                            key={r.id}
+                            onMouseDown={() => pickRecipient(r)}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#f8f8f7] text-left"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-[#e7e2fd] flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-[#5b21b6]">
+                              {r.name[0]?.toUpperCase() ?? 'C'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-semibold text-[#1a1a1a] truncate">{r.name}</div>
+                              <div className="text-[11.5px] text-[#646462] truncate">{(r as any).email || '—'}</div>
+                            </div>
+                            {(r as any).segment && (
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${segmentColor((r as any).segment)}`}>
+                                {(r as any).segment}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                        {filteredCustomers.length > 12 && (
+                          <div className="px-3 py-1.5 text-[11.5px] text-[#646462]">+{filteredCustomers.length - 12} más — refina la búsqueda</div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Miembros del equipo */}
+                    {filteredMembers.length > 0 && (
+                      <>
+                        <div className={`px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-[#646462] ${filteredCustomers.length > 0 ? 'pt-2 border-t border-[#f0f0ee] mt-1' : 'pt-2.5'}`}>
+                          Miembros del equipo ({filteredMembers.length})
+                        </div>
+                        {filteredMembers.map(r => (
+                          <button
+                            key={r.id}
+                            onMouseDown={() => pickRecipient(r)}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#f8f8f7] text-left"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-[#d1fae5] flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-[#065f46]">
+                              {r.name[0]?.toUpperCase() ?? 'M'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-semibold text-[#1a1a1a] truncate">{r.name}</div>
+                              <div className="text-[11.5px] text-[#646462] truncate">{(r as any).email || '—'}</div>
+                            </div>
+                            {(r as any).role && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 flex-shrink-0">
+                                {(r as any).role}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </>
+                    )}
+
+                    {/* Equipos */}
+                    {filteredTeams.length > 0 && (
+                      <>
+                        <div className={`px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-[#646462] ${(filteredCustomers.length > 0 || filteredMembers.length > 0) ? 'pt-2 border-t border-[#f0f0ee] mt-1' : 'pt-2.5'}`}>
+                          Equipos ({filteredTeams.length})
+                        </div>
+                        {filteredTeams.map(r => (
+                          <button
+                            key={r.id}
+                            onMouseDown={() => pickRecipient(r)}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#f8f8f7] text-left"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-[#dbeafe] flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-[#1e40af]">
+                              E
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-semibold text-[#1a1a1a] truncate">{r.name}</div>
+                              {(r as any).description && (
+                                <div className="text-[11.5px] text-[#646462] truncate">{(r as any).description}</div>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </>
+                    )}
+
+                    {/* Empty state */}
+                    {filteredCustomers.length === 0 && filteredMembers.length === 0 && filteredTeams.length === 0 && (
+                      <div className="px-3 py-4 text-[13px] text-[#646462] text-center">Sin resultados para «{recipientQuery}»</div>
+                    )}
+                    <div className="h-1" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Canal ──────────────────────────────────────────────────────── */}
+          <div>
+            <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Canal</label>
+            <div className="flex flex-wrap gap-1.5">
+              {NEW_CONV_CHANNELS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setChannel(opt.value)}
+                  className={`h-7 px-3 rounded-full text-[11.5px] font-semibold border transition-colors ${channel === opt.value ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6] hover:bg-[#ededea]'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Prioridad ──────────────────────────────────────────────────── */}
+          <div>
+            <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Prioridad</label>
+            <div className="flex gap-1.5">
+              {NEW_CONV_PRIORITIES.map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => setPriority(opt)}
+                  className={`h-7 px-3 rounded-full text-[11.5px] font-semibold border transition-colors ${priority === opt ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6] hover:bg-[#ededea]'}`}
+                >
+                  {titleCase(opt)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Tipo + Etiquetas ────────────────────────────────────────────── */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Tipo</label>
+              <input
+                value={type}
+                onChange={e => setType(e.target.value)}
+                placeholder="general / refund / billing…"
+                className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Etiquetas</label>
+              <input
+                value={tagsInput}
+                onChange={e => setTagsInput(e.target.value)}
+                placeholder="vip, refund, demo"
+                className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+              />
+            </div>
+          </div>
+
         </div>
 
-        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Tipo</label>
-        <input
-          value={type}
-          onChange={e => setType(e.target.value)}
-          placeholder="general / refund / shipment / billing…"
-          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
-        />
-
-        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Etiquetas (separadas por coma)</label>
-        <input
-          value={tagsInput}
-          onChange={e => setTagsInput(e.target.value)}
-          placeholder="vip, refund, demo"
-          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-        />
-
-        <div className="flex items-center justify-end gap-2 mt-5">
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-[#e9eae6] flex items-center justify-between">
           <button
             onClick={onClose}
             disabled={submitting}
-            className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]"
+            className="h-9 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]"
           >
             Cancelar
           </button>
           <button
             onClick={submit}
             disabled={submitting}
-            className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
+            className="h-9 px-5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:opacity-40 hover:bg-[#333] transition-colors"
           >
             {submitting ? 'Creando…' : 'Crear conversación'}
           </button>
@@ -2098,7 +2593,7 @@ function StatusChangeModal({
   }
 
   return (
-    <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] bg-black/25 flex items-center justify-center" onClick={onClose}>
       <div
         className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
         onClick={event => event.stopPropagation()}
@@ -2149,6 +2644,14 @@ function StatusChangeModal({
 // Renders the member list from /iam/members, search-filters by name/email/role,
 // calls casesApi.assign(caseId, user_id) and closes on success.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Deterministic avatar colour from a string (member id or name)
+function avatarColor(seed: string): string {
+  const palette = ['#e7e2fd', '#d1fae5', '#fee2e2', '#fef3c7', '#dbeafe', '#fce7f3', '#e0f2fe', '#f0fdf4'];
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) & 0xffffffff;
+  return palette[Math.abs(h) % palette.length];
+}
 
 function AssignModal({
   caseId,
@@ -2201,7 +2704,7 @@ function AssignModal({
   }
 
   return (
-    <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] bg-black/25 flex items-center justify-center" onClick={onClose}>
       <div
         className="w-[440px] max-h-[560px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5 flex flex-col"
         onClick={event => event.stopPropagation()}
@@ -2239,6 +2742,9 @@ function AssignModal({
               {filteredMembers.map((m: any) => {
                 const name = m.name || m.full_name || m.email || 'Sin nombre';
                 const initial = String(name).slice(0, 1).toUpperCase();
+                const seed = m.id || m.user_id || m.email || name;
+                const bgColor = avatarColor(seed);
+                const isOnline = m.status === 'active' || m.online === true || m.availability === 'online';
                 return (
                   <button
                     key={m.id || m.user_id || m.email}
@@ -2246,14 +2752,21 @@ function AssignModal({
                     disabled={submitting}
                     className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#f3f3f1] text-left disabled:opacity-50"
                   >
-                    <div className="w-7 h-7 rounded-full bg-[#e7e2fd] flex items-center justify-center flex-shrink-0">
-                      <span className="text-[12px] font-semibold text-[#1a1a1a]">{initial}</span>
+                    <div className="relative flex-shrink-0">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: bgColor }}>
+                        <span className="text-[12px] font-semibold text-[#1a1a1a]">{initial}</span>
+                      </div>
+                      {isOnline && (
+                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-white" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{name}</p>
                       {m.email && <p className="text-[11.5px] text-[#646462] truncate">{m.email}</p>}
                     </div>
-                    {m.role_name && <span className="text-[11px] text-[#646462] flex-shrink-0">{titleCase(m.role_name)}</span>}
+                    {m.role_name && (
+                      <span className="text-[10.5px] text-[#646462] bg-[#f3f3f1] rounded px-1.5 py-0.5 flex-shrink-0">{titleCase(m.role_name)}</span>
+                    )}
                   </button>
                 );
               })}
@@ -2299,6 +2812,152 @@ function AssignModal({
             Cancelar
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ApprovalBanner ──────────────────────────────────────────────────────────
+// Shown at the top of the conversation thread when a case has approval_state
+// === 'pending' or status === 'escalated'. Lets an agent approve, reject, or
+// further escalate the action the AI recommended.
+function ApprovalBanner({
+  caseId,
+  approvalState,
+  aiRecommendation,
+  riskLevel,
+  onApproved,
+  onRejected,
+}: {
+  caseId: string;
+  approvalState?: string;
+  aiRecommendation?: string;
+  riskLevel?: string;
+  onApproved?: () => void;
+  onRejected?: () => void;
+}) {
+  const [busy, setBusy] = useState<'approve' | 'reject' | 'escalate' | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  async function handleAction(action: 'approve' | 'reject' | 'escalate') {
+    setBusy(action);
+    try {
+      if (action === 'approve') {
+        await casesApi.patch(caseId, { approval_state: 'approved', status: 'in_progress' });
+        setDone('Aprobado');
+        onApproved?.();
+      } else if (action === 'reject') {
+        await casesApi.patch(caseId, { approval_state: 'rejected', status: 'closed' });
+        setDone('Rechazado');
+        onRejected?.();
+      } else {
+        await casesApi.patch(caseId, { status: 'escalated', assigned_user_id: null });
+        setDone('Escalado a humano');
+        onApproved?.();
+      }
+    } catch (err) {
+      console.error('ApprovalBanner action failed:', err);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const riskColor = riskLevel === 'high' || riskLevel === 'critical'
+    ? 'bg-red-100 text-red-700 border-red-300'
+    : riskLevel === 'medium'
+    ? 'bg-amber-100 text-amber-700 border-amber-300'
+    : 'bg-green-100 text-green-700 border-green-300';
+
+  if (done) {
+    return (
+      <div className="mx-4 mb-3 rounded-xl bg-green-50 border border-green-200 px-4 py-3 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-green-600 flex-shrink-0"><path d="M13.7 3.3a1 1 0 0 0-1.4 0L6 9.6 3.7 7.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l7-7a1 1 0 0 0 0-1.4z"/></svg>
+        <span className="text-[13px] text-green-800 font-medium">{done} correctamente</span>
+      </div>
+    );
+  }
+
+  // Expired / rejected — show historical context banner, allow re-open
+  if (approvalState === 'expired' || approvalState === 'rejected') {
+    const isExpired = approvalState === 'expired';
+    return (
+      <div className={`mx-4 mb-3 rounded-xl border px-4 py-3 ${isExpired ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-200'}`}>
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className={`w-4 h-4 flex-shrink-0 ${isExpired ? 'fill-orange-500' : 'fill-red-500'}`}><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 7a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
+          <div className="flex-1 min-w-0">
+            <span className={`text-[13px] font-semibold ${isExpired ? 'text-orange-900' : 'text-red-900'}`}>
+              {isExpired ? 'Aprobación expirada — la IA escaló al equipo' : 'Acción rechazada por el agente'}
+            </span>
+            {aiRecommendation && (
+              <p className={`text-[12px] mt-0.5 leading-relaxed ${isExpired ? 'text-orange-800' : 'text-red-800'}`}>{aiRecommendation}</p>
+            )}
+          </div>
+          {riskLevel && (
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 ${riskColor}`}>
+              Riesgo: {riskLevel}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <button
+            onClick={() => handleAction('approve')}
+            disabled={busy !== null}
+            className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-[12px] font-semibold transition-colors"
+          >
+            {busy === 'approve' ? '…' : 'Aprobar ahora'}
+          </button>
+          <button
+            onClick={() => handleAction('escalate')}
+            disabled={busy !== null}
+            className="px-3 py-1.5 rounded-lg bg-[#f8f8f7] border border-[#e9eae6] hover:bg-[#e9eae6] disabled:opacity-50 text-[#1a1a1a] text-[12px] font-semibold transition-colors"
+          >
+            {busy === 'escalate' ? '…' : 'Re-escalar'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-4 mb-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+      <div className="flex items-start gap-2 mb-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-amber-500 flex-shrink-0 mt-0.5"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 7a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[13px] font-semibold text-amber-900">Acción pendiente de aprobación</span>
+            {riskLevel && (
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${riskColor}`}>
+                Riesgo: {riskLevel}
+              </span>
+            )}
+          </div>
+          {aiRecommendation && (
+            <p className="text-[12px] text-amber-800 mt-0.5 leading-relaxed">{aiRecommendation}</p>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => handleAction('approve')}
+          disabled={busy !== null}
+          className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-[12px] font-semibold transition-colors"
+        >
+          {busy === 'approve' ? '…' : 'Aprobar'}
+        </button>
+        <button
+          onClick={() => handleAction('reject')}
+          disabled={busy !== null}
+          className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[12px] font-semibold transition-colors"
+        >
+          {busy === 'reject' ? '…' : 'Rechazar'}
+        </button>
+        <button
+          onClick={() => handleAction('escalate')}
+          disabled={busy !== null}
+          className="px-3 py-1.5 rounded-lg bg-[#f8f8f7] border border-[#e9eae6] hover:bg-[#e9eae6] disabled:opacity-50 text-[#1a1a1a] text-[12px] font-semibold transition-colors"
+        >
+          {busy === 'escalate' ? '…' : 'Escalar a humano'}
+        </button>
       </div>
     </div>
   );
@@ -2762,6 +3421,26 @@ function ConversationPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 py-4">
+        {selectedConv.aiHandled && ['pending', 'expired', 'rejected'].includes(selectedConv.approvalState ?? '') && (
+          <ApprovalBanner
+            caseId={selectedConv.id}
+            approvalState={selectedConv.approvalState}
+            aiRecommendation={selectedConv.raw?.ai_recommended_action}
+            riskLevel={selectedConv.riskLevel}
+            onApproved={onRefresh}
+            onRejected={onRefresh}
+          />
+        )}
+        {(selectedConv.status === 'escalated' || selectedConv.status === 'blocked') && !selectedConv.approvalState && (
+          <ApprovalBanner
+            caseId={selectedConv.id}
+            approvalState="pending"
+            aiRecommendation={selectedConv.raw?.ai_recommended_action}
+            riskLevel={selectedConv.riskLevel}
+            onApproved={onRefresh}
+            onRejected={onRefresh}
+          />
+        )}
         {displayMessages.length === 0 && (
           <div className="text-center py-10 text-[13px] text-[#646462]">
             No hay mensajes en este caso todavía. Escribe abajo para empezar la conversación.
@@ -2974,6 +3653,7 @@ function ConversationPanel({
       {showMergeModal && (
         <PrototypeMergeModal
           sourceId={selectedConv.id}
+          sourceConv={selectedConv.raw ?? selectedConv}
           onClose={() => setShowMergeModal(false)}
           onMerged={onRefresh}
           onAction={onAction}
@@ -4258,9 +4938,36 @@ function InboxView() {
   function togglePanel(which: keyof PanelState) {
     setPanels(p => ({ ...p, [which]: !p[which] }));
   }
+  const { data: meData } = useApi(() => iamApi.me(), [], null);
+  const currentUserId: string | null = (meData as any)?.id ?? (meData as any)?.userId ?? (meData as any)?.user_id ?? null;
+  const [teamsRefresh, setTeamsRefresh] = useState(0);
+  const { data: teamsData } = useApi(() => iamApi.teams(), [teamsRefresh], []);
+  const { data: membersData } = useApi(() => iamApi.members(), [], []);
+  const teams: any[] = Array.isArray(teamsData) ? teamsData : (teamsData as any)?.data ?? (teamsData as any)?.teams ?? [];
+  const teammates: any[] = Array.isArray(membersData) ? membersData : (membersData as any)?.data ?? (membersData as any)?.members ?? [];
   const { data: apiCases, loading, error } = useApi(
-    () => casesApi.list(),
-    [refreshKey],
+    () => {
+      const params: Record<string, string> = {};
+      if (scope === 'unassigned') params.scope = 'unassigned';
+      if (scope === 'spam') params.status = 'spam';
+      if (scope === 'inbox' && currentUserId) params.assigned_user_id = currentUserId;
+      if (scope === 'created' && currentUserId) params.created_by = currentUserId;
+      // Fin AI scopes — fetch all ai_handled cases; client matchesInboxScope handles sub-filtering
+      if (scope === 'fin-all' || scope === 'fin-resolved' || scope === 'fin-escalated' || scope === 'fin-pending' || scope === 'fin-spam') {
+        params.ai_handled = 'true';
+      }
+      // Dynamic team/agent scopes
+      if (scope.startsWith('team:')) params.assigned_team_id = scope.replace('team:', '');
+      if (scope.startsWith('agent:')) params.assigned_agent_id = scope.replace('agent:', '');
+      // Channel views — comma-separated = OR (server supports .in() filter)
+      if (scope === 'v-messenger') params.source_channel = 'messenger,web_chat,chat';
+      if (scope === 'v-email') params.source_channel = 'email';
+      if (scope === 'v-whatsapp') params.source_channel = 'whatsapp,social';
+      if (scope === 'v-phone') params.source_channel = 'phone,sms';
+      if (scope === 'v-tickets') params.source_channel = 'ticket,tickets';
+      return casesApi.list(Object.keys(params).length ? params : undefined);
+    },
+    [refreshKey, scope, currentUserId],
     [],
   );
   // Real backend data only — no mock fallback. Empty list = empty UI.
@@ -4292,15 +4999,29 @@ function InboxView() {
         return haystack.includes(q);
       });
     }
-    return liveConversations.filter(conv => matchesInboxScope(conv, scope));
-  }, [liveConversations, scope, globalSearchQuery]);
+    return liveConversations.filter(conv => matchesInboxScope(conv, scope, currentUserId));
+  }, [liveConversations, scope, globalSearchQuery, currentUserId]);
   const counts = useMemo(() => {
-    const scopes: InboxScope[] = ['inbox', 'mentions', 'created', 'all', 'unassigned', 'spam', 'fin-all', 'fin-resolved', 'fin-escalated', 'fin-pending', 'fin-spam', 'v-messenger', 'v-email', 'v-whatsapp', 'v-phone', 'v-tickets'];
-    return scopes.reduce<Partial<Record<InboxScope, number>>>((acc, key) => {
-      acc[key] = liveConversations.filter(conv => matchesInboxScope(conv, key)).length;
-      return acc;
-    }, {});
-  }, [liveConversations]);
+    const staticScopes: InboxScope[] = ['inbox', 'mentions', 'created', 'all', 'unassigned', 'spam', 'fin-all', 'fin-resolved', 'fin-escalated', 'fin-pending', 'fin-spam', 'v-messenger', 'v-email', 'v-whatsapp', 'v-phone', 'v-tickets'];
+    const result: Partial<Record<InboxScope, number>> = {};
+    for (const key of staticScopes) {
+      result[key] = liveConversations.filter(conv => matchesInboxScope(conv, key, currentUserId)).length;
+    }
+    // Dynamic team/agent scopes
+    for (const team of teams) {
+      const tid = team.id ?? team.team_id;
+      if (!tid) continue;
+      const key = `team:${tid}` as InboxScope;
+      result[key] = liveConversations.filter(conv => matchesInboxScope(conv, key, currentUserId)).length;
+    }
+    for (const member of teammates) {
+      const mid = member.id ?? member.user_id;
+      if (!mid) continue;
+      const key = `agent:${mid}` as InboxScope;
+      result[key] = liveConversations.filter(conv => matchesInboxScope(conv, key, currentUserId)).length;
+    }
+    return result;
+  }, [liveConversations, currentUserId, teams, teammates]);
   const selectedConv = scopedConversations.find(c => c.id === selectedConvId) ?? scopedConversations[0] ?? liveConversations[0];
   const { data: inboxView } = useApi(
     () => selectedConv?.id ? casesApi.inboxView(selectedConv.id) : Promise.resolve(null),
@@ -4506,7 +5227,22 @@ function InboxView() {
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         {panels.left ? (
-          <InboxSidebar active={scope} onScopeChange={changeScope} counts={counts} onAction={showToast} onCollapse={() => togglePanel('left')} onNewConversation={() => setShowNewConvModal(true)} />
+          <InboxSidebar
+              active={scope}
+              onScopeChange={changeScope}
+              counts={counts}
+              onAction={showToast}
+              onCollapse={() => togglePanel('left')}
+              onNewConversation={() => setShowNewConvModal(true)}
+              teams={teams}
+              teammates={teammates}
+              onTeamsChanged={() => setTeamsRefresh(k => k + 1)}
+              onNewTeammate={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('view', 'workspaceTeammates');
+                window.location.href = url.toString();
+              }}
+            />
         ) : (
           <CollapsedRail side="left" label="Mostrar sidebar" onClick={() => togglePanel('left')} />
         )}
@@ -4698,21 +5434,317 @@ function useContactsData() {
   return { all, users, active, fresh, leads, loading, error, refetch };
 }
 
+// ── New Message Template Picker ───────────────────────────────────────────────
+const MSG_CATEGORIES_LIST = ['Todo', 'Recuperar la interacción', 'Generación de prospectos', 'Transaccional', 'Incorporación', 'Asistencia a clientes', 'Interacción'];
+const MSG_TYPES_LIST = [
+  { icon: '💬', label: 'Chat',                          contentType: 'chat'      },
+  { icon: '📢', label: 'Banner',                        contentType: 'banner'    },
+  { icon: '📋', label: 'Publicar',                      contentType: 'post'      },
+  { icon: '✉️',  label: 'Correo electrónico',            contentType: 'email'     },
+  { icon: '🔔', label: 'Notificación instantánea móvil', contentType: 'push'      },
+  { icon: '🧭', label: 'Recorrido de producto',          contentType: 'chat'      },
+  { icon: '✅', label: 'Lista de verificación',          contentType: 'chat'      },
+  { icon: '📱', label: 'SMS',                           contentType: 'sms'       },
+  { icon: '📊', label: 'Encuesta',                      contentType: 'chat'      },
+  { icon: '🎠', label: 'Carrusel móvil',                contentType: 'push'      },
+  { icon: '⚡', label: 'Flujo de trabajo',               contentType: 'all'       },
+  { icon: '📰', label: 'Noticias',                      contentType: 'post'      },
+  { icon: '💚', label: 'WhatsApp',                      contentType: 'whatsapp'  },
+  { icon: '📡', label: 'Difusión',                      contentType: 'all'       },
+  { icon: '🎮', label: 'Difusión en Discord',           contentType: 'chat'      },
+];
+const QUICK_TPLS = [
+  { icon: '📢', kind: 'Post', title: 'Announce a new feature to drive adoption', preview: "Hey ✨FirstName✨ 🚀\nWe just released a new feature\nTake a look" },
+  { icon: '📢', kind: 'Post', title: 'Offer a discount to boost sales',          preview: "See something you like? ✨\nEnjoy 10% off with this code:\nSUMMER10"  },
+  { icon: '📢', kind: 'Post', title: 'Become a power user',                      preview: "Become a ✨AppName✨ pro\nWatch and learn online today 💪"            },
+  { icon: '💬', kind: 'Chat', title: 'Ask for feedback after a purchase',        preview: "Hey ✨FirstName✨ 👋 what did\nyou think of your recent purchase?"      },
+];
+function NewMessageTemplateModal({ onClose, onSelect }: {
+  onClose: () => void;
+  onSelect: (contentType: string, title: string) => void;
+}) {
+  const [cat, setCat] = useState('Todo');
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,.45)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-[16px] shadow-2xl w-[780px] max-h-[84vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+          <h2 className="text-[18px] font-semibold text-[#1a1a1a]">Elegir una plantilla</h2>
+          <div className="flex items-center gap-3">
+            <button className="px-4 py-1.5 text-[13px] font-medium border border-[#e9eae6] rounded-full text-[#1a1a1a] hover:bg-[#f5f5f4]">Probar una demostración</button>
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f5f5f4] text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-1 min-h-0">
+          <div className="w-[180px] flex-shrink-0 border-r border-[#e9eae6] py-3 px-2 overflow-y-auto">
+            {MSG_CATEGORIES_LIST.map(c => (
+              <button key={c} onClick={() => setCat(c)} className={`w-full text-left px-3 py-2 rounded-[8px] text-[13px] font-medium mb-0.5 transition-colors ${cat === c ? 'bg-[#f0f0ee] text-[#1a1a1a]' : 'text-[#646462] hover:bg-[#f8f8f7] hover:text-[#1a1a1a]'}`}>{c}</button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Comenzar desde cero</p>
+            <div className="grid grid-cols-3 gap-2 mb-6">
+              {MSG_TYPES_LIST.map(t => (
+                <button key={t.label} onClick={() => onSelect(t.contentType, t.label)} className="flex items-center gap-2.5 px-3 py-3 border border-[#e9eae6] rounded-[10px] hover:border-[#3b59f6] hover:bg-[#eff3ff] transition-colors text-left group">
+                  <span className="text-[18px] flex-shrink-0">{t.icon}</span>
+                  <span className="text-[12.5px] font-medium text-[#1a1a1a] group-hover:text-[#3b59f6] leading-tight">{t.label}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">O elige un inicio rápido</p>
+            <div className="grid grid-cols-2 gap-3 pb-4">
+              {QUICK_TPLS.map(t => (
+                <button key={t.title} onClick={() => onSelect('chat', t.title)} className="border border-[#e9eae6] rounded-[10px] overflow-hidden hover:border-[#3b59f6] hover:shadow-md transition-all text-left">
+                  <div className="bg-[#f8f8f7] px-4 py-3 border-b border-[#e9eae6] min-h-[80px] flex flex-col justify-center">
+                    <p className="text-[11.5px] text-[#646462] whitespace-pre-line leading-relaxed">{t.preview}</p>
+                  </div>
+                  <div className="px-3 py-2">
+                    <p className="text-[10.5px] text-[#646462] font-medium mb-0.5">{t.icon} {t.kind}</p>
+                    <p className="text-[12px] font-semibold text-[#1a1a1a] leading-tight">{t.title}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Contacts Map View ─────────────────────────────────────────────────────────
+// City name → [lat, lng] used to resolve the "City, Country" location field
+const CITY_COORDS: Record<string, [number, number]> = {
+  // Europe
+  'London': [51.5074, -0.1278], 'Madrid': [40.4168, -3.7038], 'Barcelona': [41.3851, 2.1734],
+  'Paris': [48.8566, 2.3522], 'Berlin': [52.52, 13.405], 'Amsterdam': [52.3676, 4.9041],
+  'Rome': [41.9028, 12.4964], 'Vienna': [48.2082, 16.3738], 'Lisbon': [38.7223, -9.1393],
+  'Brussels': [50.8503, 4.3517], 'Stockholm': [59.3293, 18.0686], 'Zurich': [47.3769, 8.5417],
+  'Munich': [48.1351, 11.582], 'Milan': [45.4654, 9.1859], 'Warsaw': [52.2297, 21.0122],
+  'Prague': [50.0755, 14.4378], 'Budapest': [47.4979, 19.0402], 'Athens': [37.9838, 23.7275],
+  'Helsinki': [60.1699, 24.9384], 'Bucharest': [44.4268, 26.1025], 'Hamburg': [53.5753, 10.0153],
+  'Valencia': [39.4699, -0.3763], 'Seville': [37.3891, -5.9845], 'Bilbao': [43.263, -2.935],
+  // Americas
+  'New York': [40.7128, -74.006], 'Los Angeles': [34.0522, -118.2437], 'Chicago': [41.8781, -87.6298],
+  'Toronto': [43.6532, -79.3832], 'São Paulo': [-23.5505, -46.6333], 'Buenos Aires': [-34.6037, -58.3816],
+  'Mexico City': [19.4326, -99.1332], 'Miami': [25.7617, -80.1918], 'San Francisco': [37.7749, -122.4194],
+  'Boston': [42.3601, -71.0589], 'Seattle': [47.6062, -122.3321], 'Montreal': [45.5017, -73.5673],
+  'Lima': [-12.0464, -77.0428], 'Bogotá': [4.711, -74.0721], 'Santiago': [-33.4489, -70.6693],
+  // Asia & Pacific
+  'Tokyo': [35.6762, 139.6503], 'Shanghai': [31.2304, 121.4737], 'Beijing': [39.9042, 116.4074],
+  'Seoul': [37.5665, 126.978], 'Singapore': [1.3521, 103.8198], 'Mumbai': [19.076, 72.8777],
+  'Dubai': [25.2048, 55.2708], 'Hong Kong': [22.3193, 114.1694], 'Bangkok': [13.7563, 100.5018],
+  'Sydney': [-33.8688, 151.2093], 'Melbourne': [-37.8136, 144.9631], 'Bangalore': [12.9716, 77.5946],
+  'Jakarta': [-6.2088, 106.8456], 'Kuala Lumpur': [3.1390, 101.6869], 'Tel Aviv': [32.0853, 34.7818],
+  'Taipei': [25.0330, 121.5654], 'Osaka': [34.6937, 135.5023], 'Riyadh': [24.7136, 46.6753],
+  // Africa
+  'Cairo': [30.0444, 31.2357], 'Lagos': [6.5244, 3.3792], 'Nairobi': [-1.2921, 36.8219],
+  'Johannesburg': [-26.2041, 28.0473], 'Casablanca': [33.5731, -7.5898],
+  // Russia
+  'Moscow': [55.7558, 37.6173], 'Saint Petersburg': [59.9343, 30.3351],
+};
+
+function parseLocationCity(locationStr: string): string {
+  // Parse "Madrid, ES" → "Madrid",  "New York, US" → "New York"
+  if (!locationStr) return '';
+  const parts = locationStr.split(',');
+  return parts[0].trim();
+}
+
+function ContactsMapView({ customers }: { customers: any[] }) {
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const leafletMapRef = useRef<any>(null);
+
+  // Compute per-city customer counts
+  const customerDots = useMemo(() => {
+    const cityCount: Record<string, number> = {};
+    for (const c of customers) {
+      const city = parseLocationCity(c.location || c.city || '');
+      if (city && CITY_COORDS[city]) cityCount[city] = (cityCount[city] || 0) + 1;
+    }
+    return Object.entries(cityCount).map(([city, count]) => ({ city, count, coords: CITY_COORDS[city] }));
+  }, [customers]);
+
+  // Compute per-company locations (group customers by company, pick most frequent city)
+  const companyDots = useMemo(() => {
+    const compCity: Record<string, Record<string, number>> = {};
+    for (const c of customers) {
+      const co = c.company || c.canonical_name;
+      if (!co) continue;
+      const city = parseLocationCity(c.location || c.city || '');
+      if (!city || !CITY_COORDS[city]) continue;
+      if (!compCity[co]) compCity[co] = {};
+      compCity[co][city] = (compCity[co][city] || 0) + 1;
+    }
+    return Object.entries(compCity).map(([company, cities]) => {
+      const city = Object.entries(cities).sort((a, b) => b[1] - a[1])[0][0];
+      return { company, city, coords: CITY_COORDS[city] };
+    });
+  }, [customers]);
+
+  const hasData = customerDots.length > 0 || companyDots.length > 0;
+
+  // Build / rebuild Leaflet map whenever data changes
+  useEffect(() => {
+    if (!mapDivRef.current) return;
+
+    // Destroy existing map instance before creating a new one
+    if (leafletMapRef.current) {
+      leafletMapRef.current.remove();
+      leafletMapRef.current = null;
+    }
+
+    import('leaflet').then(({ default: L }) => {
+      if (!mapDivRef.current) return; // Guard: component may have unmounted
+
+      const map = L.map(mapDivRef.current, {
+        center: [30, 5],
+        zoom: 2,
+        minZoom: 1,
+        maxZoom: 16,
+        zoomControl: true,
+        attributionControl: true,
+      });
+      leafletMapRef.current = map;
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 18,
+      }).addTo(map);
+
+      // ── Blue circles: individual customers ────────────────────────────────
+      customerDots.forEach(({ city, count, coords }) => {
+        const [lat, lng] = coords;
+        const radius = Math.min(7 + count * 3, 22);
+        L.circleMarker([lat, lng] as [number, number], {
+          radius,
+          fillColor: '#3b59f6',
+          color: '#ffffff',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.78,
+        })
+          .addTo(map)
+          .bindTooltip(
+            `<strong style="font-size:12px">${city}</strong><br/><span style="color:#646462">${count} cliente${count === 1 ? '' : 's'}</span>`,
+            { direction: 'top', className: 'leaflet-crm-tooltip' }
+          );
+      });
+
+      // ── Red circles: companies ─────────────────────────────────────────────
+      companyDots.forEach(({ company, city, coords }) => {
+        const [lat, lng] = coords;
+        // Offset slightly so they don't perfectly overlap customer dots
+        L.circleMarker([lat + 0.15, lng + 0.15] as [number, number], {
+          radius: 9,
+          fillColor: '#ef4444',
+          color: '#ffffff',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.82,
+        })
+          .addTo(map)
+          .bindTooltip(
+            `<strong style="font-size:12px">${company}</strong><br/><span style="color:#646462">${city}</span>`,
+            { direction: 'top', className: 'leaflet-crm-tooltip' }
+          );
+      });
+    });
+
+    return () => {
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+        leafletMapRef.current = null;
+      }
+    };
+  }, [customerDots, companyDots]);
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-white">
+      {/* Header bar */}
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0 bg-white">
+        <span className="text-[13px] font-semibold text-[#1a1a1a]">Mapa de clientes</span>
+        <div className="w-px h-4 bg-[#e9eae6]"/>
+        {/* Legend */}
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-[#3b59f6] border-2 border-white shadow-sm ring-1 ring-[#3b59f6]/30"/>
+          <span className="text-[12px] text-[#646462]">Clientes</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-[#ef4444] border-2 border-white shadow-sm ring-1 ring-[#ef4444]/30"/>
+          <span className="text-[12px] text-[#646462]">Empresas</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2 text-[12px] text-[#646462]">
+          <span className="font-medium text-[#1a1a1a]">{customerDots.length}</span> ciudades ·
+          <span className="font-medium text-[#1a1a1a]">{companyDots.length}</span> empresas
+        </div>
+      </div>
+
+      {/* Leaflet map fills remaining space */}
+      <div ref={mapDivRef} className="flex-1 z-0 min-h-0" style={{ background: '#e8f4f8' }}>
+        {!hasData && (
+          <div className="flex items-center justify-center h-full">
+            <div className="bg-white border border-[#e9eae6] rounded-[10px] px-6 py-4 shadow-sm text-center">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-none stroke-[#d4d4d2] mx-auto mb-2" strokeWidth="1.3">
+                <circle cx="12" cy="10" r="5"/><path d="M12 3C8.1 3 5 6.1 5 10c0 5.2 7 11 7 11s7-5.8 7-11c0-3.9-3.1-7-7-7z"/>
+              </svg>
+              <p className="text-[13px] text-[#646462] font-medium">Sin datos de ubicación</p>
+              <p className="text-[12px] text-[#a4a4a2] mt-1">Añade el campo "location" a tus clientes</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Leaflet tooltip styling injected once */}
+      <style>{`
+        .leaflet-crm-tooltip {
+          background: white;
+          border: 1px solid #e9eae6;
+          border-radius: 8px;
+          padding: 6px 10px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+          font-family: inherit;
+          font-size: 12px;
+          line-height: 1.4;
+          white-space: nowrap;
+        }
+        .leaflet-crm-tooltip::before { border-top-color: #e9eae6 !important; }
+      `}</style>
+    </div>
+  );
+}
+
 function ContactsSidebar({
-  view, onNavigate, counts,
+  view, onNavigate, counts, onNewMessage, onEmpresasView,
 }: {
   view: View;
   onNavigate: (v: View) => void;
   counts?: { allUsers: number; allLeads: number; active: number; fresh: number };
+  onNewMessage?: () => void;
+  onEmpresasView?: (segment: 'all' | 'active' | 'new') => void;
 }) {
-  // Local active state — solves the bug where 3 items all using itemView="contacts"
-  // were all highlighted at once. Each item has its own unique id; only one is active.
-  // The view-level navigation maps to: contacts | allLeads | conversations (3 screens),
-  // but the sidebar identifies items individually.
-  type ItemId = 'allUsers' | 'allLeads' | 'active' | 'new' | 'empresas' | 'conversaciones';
-  // Default: 'active' (matches the page header which says "Active") — fixes the sidebar/page mismatch.
+  type ItemId = 'allUsers' | 'allLeads' | 'active' | 'new' | 'empresas' | 'empresasAll' | 'empresasActive' | 'empresasNew' | 'conversaciones' | 'mapa';
   const initialItem: ItemId = view === 'allLeads' ? 'allLeads' : 'active';
   const [activeItem, setActiveItem] = useState<ItemId>(initialItem);
+  const [empresasOpen, setEmpresasOpen] = useState(true);
+  const [showSegmentDrop, setShowSegmentDrop] = useState(false);
+  const [segSearch, setSegSearch] = useState('');
+  const segDropRef = useRef<HTMLDivElement>(null);
+
+  // Load companies for counts
+  const { data: companiesData } = useApi<any[]>(() => companiesApi.list(), [], []);
+  const companiesAll    = Array.isArray(companiesData) ? companiesData.length : 0;
+  const companiesActive = Array.isArray(companiesData) ? companiesData.filter((c: any) => c.status === 'active').length : 0;
+  const companiesNew    = Array.isArray(companiesData) ? companiesData.filter((c: any) => {
+    const d = new Date(c.created_at); return (Date.now() - d.getTime()) < 7 * 24 * 3600 * 1000;
+  }).length : 0;
+
+  const segments = [
+    { label: 'All',    count: companiesAll,    id: 'empresasAll'    },
+    { label: 'Active', count: companiesActive, id: 'empresasActive' },
+    { label: 'New',    count: companiesNew,    id: 'empresasNew'    },
+  ].filter(s => !segSearch || s.label.toLowerCase().includes(segSearch.toLowerCase()));
 
   function SidebarItem({ id, label, count, itemView, opacity50Count = false }: {
     id: ItemId; label: string; count: number; itemView: View; opacity50Count?: boolean;
@@ -4734,7 +5766,7 @@ function ContactsSidebar({
   }
 
   return (
-    <div className="flex flex-col h-full w-[236px] flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] pt-3 pb-3 px-2 gap-1">
+    <div className="flex flex-col h-full w-[236px] flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] pt-3 pb-3 px-2 gap-1" onClick={() => setShowSegmentDrop(false)}>
       <div className="flex items-center justify-between px-2 py-1 mb-1">
         <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a] leading-tight">Contactos</span>
         <button className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#f8f8f7] hover:bg-white/60">
@@ -4742,10 +5774,17 @@ function ContactsSidebar({
         </button>
       </div>
 
+      {/* Personas section */}
       <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-1.5 px-2 py-1">
           <img src={ICON_PERSONAS} alt="" className="w-3.5 h-3.5 opacity-50" />
           <span className="text-[12px] font-medium text-[#646462]">Personas:</span>
+          <button onClick={e => { e.stopPropagation(); onNewMessage?.(); }} className="ml-auto w-5 h-5 flex items-center justify-center rounded-[4px] hover:bg-[#e9eae6] text-[#646462]" title="Nuevo mensaje">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <button className="w-5 h-5 flex items-center justify-center rounded-[4px] hover:bg-[#e9eae6] text-[#646462]" title="Expandir">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current opacity-40"><path d="M6 4l4 4-4 4z"/></svg>
+          </button>
         </div>
         <SidebarItem id="allUsers" label="All users" count={counts?.allUsers ?? 0} itemView="contacts"  opacity50Count={(counts?.allUsers ?? 0) === 0} />
         <SidebarItem id="allLeads" label="All leads" count={counts?.allLeads ?? 0} itemView="allLeads"  opacity50Count={(counts?.allLeads ?? 0) === 0} />
@@ -4755,46 +5794,101 @@ function ContactsSidebar({
 
       <div className="h-px bg-[#e9eae6] mx-2 my-1" />
 
+      {/* Empresas section */}
       <div className="flex flex-col gap-0.5">
-        <button
-          onClick={() => setActiveItem('empresas')}
-          className={`flex items-center justify-between w-full px-2 py-1 rounded-[8px] ${
-            activeItem === 'empresas' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]' : 'hover:bg-white/60'
-          }`}
-        >
-          <span className={`text-[12px] font-medium text-[#646462] ${activeItem === 'empresas' ? 'font-semibold text-[#1a1a1a]' : ''}`}>Empresas:</span>
-          <img src={ICON_CHEVRON} alt="" className="w-3 h-3 opacity-40" />
-        </button>
+        <div className="flex items-center gap-1 px-2 py-1">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] opacity-50 flex-shrink-0" strokeWidth="1.3"><rect x="2" y="5" width="12" height="9" rx="1"/><path d="M5 5V4a3 3 0 016 0v1"/><path d="M8 9v2"/></svg>
+          <button onClick={() => { setActiveItem('empresas'); onNavigate('people' as View); setEmpresasOpen(v => !v); }} className="flex-1 text-left text-[12px] font-medium text-[#646462] hover:text-[#1a1a1a]">Empresas</button>
+          {/* + adds a segment */}
+          <div className="relative" ref={segDropRef}>
+            <button onClick={e => { e.stopPropagation(); setShowSegmentDrop(v => !v); }} className="w-5 h-5 flex items-center justify-center rounded-[4px] hover:bg-[#e9eae6] text-[#646462]" title="Segmentos">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            </button>
+            {showSegmentDrop && (
+              <div onClick={e => e.stopPropagation()} className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-[10px] shadow-lg z-40 w-[220px] overflow-hidden">
+                <div className="px-3 py-2 border-b border-[#f1f1ee]">
+                  <div className="flex items-center gap-2 bg-[#f5f5f4] rounded-[6px] px-2 py-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M11 11l3 3"/></svg>
+                    <input autoFocus value={segSearch} onChange={e => setSegSearch(e.target.value)} placeholder="Buscar segmentos" className="flex-1 text-[12px] bg-transparent outline-none text-[#1a1a1a] placeholder:text-[#a4a4a2]"/>
+                  </div>
+                </div>
+                <div className="py-1">
+                  {segments.map(seg => (
+                    <button key={seg.id} onClick={() => { setActiveItem(seg.id as ItemId); setShowSegmentDrop(false); onNavigate('people' as View); }} className="w-full flex items-center justify-between px-4 py-2 hover:bg-[#f5f5f4] text-left">
+                      <span className={`text-[13px] font-medium ${activeItem === seg.id ? 'text-[#fa7938]' : 'text-[#1a1a1a]'}`}>{seg.label}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px] text-[#646462]">{seg.count}</span>
+                        <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] opacity-50 hover:opacity-100">
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>
+                        </button>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-[#f1f1ee] px-4 py-2.5">
+                  <button className="text-[12.5px] font-semibold text-[#1a1a1a] hover:underline">Administrar segmentos</button>
+                </div>
+              </div>
+            )}
+          </div>
+          <button onClick={() => setEmpresasOpen(v => !v)} className="w-5 h-5 flex items-center justify-center rounded-[4px] hover:bg-[#e9eae6] text-[#646462]">
+            <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current opacity-40 transition-transform ${empresasOpen ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+          </button>
+        </div>
+        {empresasOpen && (
+          <div className="flex flex-col gap-0.5 pl-1">
+            {[
+              { id: 'empresasAll',    label: 'All',    count: companiesAll,    seg: 'all'    as const },
+              { id: 'empresasActive', label: 'Active', count: companiesActive, seg: 'active' as const },
+              { id: 'empresasNew',    label: 'New',    count: companiesNew,    seg: 'new'    as const },
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => { setActiveItem(item.id as ItemId); onEmpresasView?.(item.seg); }}
+                className={`flex items-center justify-between w-full pl-3 pr-4 py-[5px] rounded-[8px] mx-2 ${activeItem === item.id ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] border-l border-[#fa7938]' : 'hover:bg-white/60 border-l border-[#e9eae6]'}`}
+              >
+                <span className={`text-[13px] text-[#1a1a1a] ${activeItem === item.id ? 'font-semibold' : ''}`}>{item.label}</span>
+                <span className="text-[12px] text-[#646462]">{item.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="h-px bg-[#e9eae6] mx-2 my-1" />
 
       <button
-        onClick={() => setActiveItem('conversaciones')}
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-[8px] w-full ${
-          activeItem === 'conversaciones' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]' : 'hover:bg-white/60'
-        }`}
+        onClick={() => { setActiveItem('conversaciones'); }}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-[8px] w-full ${activeItem === 'conversaciones' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]' : 'hover:bg-white/60'}`}
       >
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] opacity-50" strokeWidth="1.3"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/><path d="M5 14l3-2.5h5"/></svg>
         <span className={`text-[13px] text-[#1a1a1a] ${activeItem === 'conversaciones' ? 'font-semibold' : ''}`}>Conversaciones</span>
+      </button>
+
+      {/* Mapa de clientes */}
+      <button
+        onClick={() => { setActiveItem('mapa'); onNavigate('mapa' as unknown as View); }}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-[8px] w-full ${activeItem === 'mapa' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]' : 'hover:bg-white/60'}`}
+      >
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] opacity-50" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6M8 2c0 0 3 2.5 3 6s-3 6-3 6M2 8h12"/></svg>
+        <span className={`text-[13px] text-[#1a1a1a] ${activeItem === 'mapa' ? 'font-semibold' : ''}`}>Mapa de clientes</span>
       </button>
     </div>
   );
 }
 
 function ContactsPageHeader({
-  onBack, title = 'Active', onCreate,
+  onBack, title = 'Active', onCreate, onNewMessage,
 }: {
   onBack: () => void;
   title?: string;
   onCreate?: () => void;
+  onNewMessage?: () => void;
 }) {
   return (
     <div className="flex items-center justify-between px-4 pt-4 pb-3">
       <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#f8f8f7] hover:bg-[#efefed]"
-        >
+        <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#f8f8f7] hover:bg-[#efefed]">
           <img src={ICON_BACK} alt="" className="w-4 h-4" />
         </button>
         <span className="text-[20px] font-semibold text-[#1a1a1a] tracking-[-0.4px]">{title}</span>
@@ -4804,6 +5898,13 @@ function ContactsPageHeader({
           <img src={ICON_LEARN} alt="" className="w-3.5 h-3.5" />
           <span>Aprender</span>
           <img src={ICON_CHEVRON} alt="" className="w-3.5 h-3.5 opacity-40" />
+        </button>
+        <button
+          onClick={onNewMessage}
+          className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full pl-[12px] pr-[14px] py-[8px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#efefed]"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M2 4h12L8 13z"/></svg>
+          <span>Nuevo mensaje</span>
         </button>
         <button
           onClick={onCreate}
@@ -5626,6 +6727,249 @@ function UsersTable({
   );
 }
 
+// ── Companies Table ───────────────────────────────────────────────────────────
+// Derives company records from the customers list (grouped by customer.company)
+// so we don't need a separate companies backend route.
+interface CompanyRow {
+  id: string;          // slugified company name
+  name: string;
+  initial: string;
+  color: string;
+  customerCount: number;
+  location: string;
+  plan: string;
+  lastActivity: string;  // ISO date string
+  openCases: number;
+}
+
+function deriveCompanies(customers: any[], segment: 'all' | 'active' | 'new'): CompanyRow[] {
+  const map: Record<string, { customers: any[] }> = {};
+  for (const c of customers) {
+    const name = c.company || c.canonical_name;
+    if (!name) continue;
+    if (!map[name]) map[name] = { customers: [] };
+    map[name].customers.push(c);
+  }
+
+  const now = Date.now();
+  const sevenDays = 7 * 24 * 3600 * 1000;
+  const thirtyDays = 30 * 24 * 3600 * 1000;
+
+  const rows: CompanyRow[] = Object.entries(map).map(([name, { customers: cs }]) => {
+    const colors = ['#3b59f6','#7c3aed','#059669','#d97706','#dc2626','#0891b2','#c026d3'];
+    const color = colors[name.charCodeAt(0) % colors.length];
+    const lastAct = cs.map(c => c.last_activity_at || c.updated_at || c.created_at).filter(Boolean).sort().reverse()[0] || '';
+    const loc = cs.map(c => parseLocationCity(c.location || c.city || '')).filter(Boolean)[0] || '—';
+    const plan = cs.map(c => c.plan).filter(Boolean)[0] || '—';
+    const openCases = cs.reduce((s, c) => s + (c.open_cases || 0), 0);
+    return {
+      id: name.toLowerCase().replace(/\s+/g, '-'),
+      name,
+      initial: name[0].toUpperCase(),
+      color,
+      customerCount: cs.length,
+      location: loc,
+      plan,
+      lastActivity: lastAct,
+      openCases,
+    };
+  });
+
+  if (segment === 'new') {
+    return rows.filter(r => r.lastActivity && (now - new Date(r.lastActivity).getTime()) < sevenDays);
+  }
+  if (segment === 'active') {
+    return rows.filter(r => r.lastActivity && (now - new Date(r.lastActivity).getTime()) < thirtyDays);
+  }
+  return rows;
+}
+
+function CompaniesTable({
+  customers, segment, loading, error, onRefresh,
+}: {
+  customers: any[];
+  segment: 'all' | 'active' | 'new';
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+
+  const rows = useMemo(() => deriveCompanies(customers, segment), [customers, segment]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(r => `${r.name} ${r.location} ${r.plan}`.toLowerCase().includes(q));
+  }, [rows, search]);
+
+  const allSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
+  const toggleAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(filtered.map(r => r.id)));
+  };
+  const toggleOne = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selCount = selected.size;
+  const headerLabel = selCount > 0
+    ? `${selCount} seleccionada${selCount === 1 ? '' : 's'}`
+    : `${rows.length} empresa${rows.length === 1 ? '' : 's'}`;
+
+  return (
+    <div className="mx-4 flex flex-col gap-3">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[18px] font-semibold text-[#1a1a1a]">{headerLabel}</span>
+          <button
+            onClick={onRefresh}
+            className="flex items-center gap-1 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]"
+          >
+            <span>Actualizar</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3V1L4 5l4 4V7a4 4 0 11-4 4H2.5A5.5 5.5 0 108 3z"/></svg>
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <svg viewBox="0 0 16 16" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar empresas…"
+              className="h-8 w-[220px] pl-8 pr-3 border border-[#e9eae6] rounded-[8px] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+            />
+          </div>
+          <div className="flex items-center border border-[#e9eae6] rounded-[8px] overflow-hidden">
+            <button onClick={() => setViewMode('grid')} className={`px-2 py-1.5 ${viewMode === 'grid' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'} border-r border-[#e9eae6]`} title="Cuadrícula">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity={viewMode === 'grid' ? '0.9' : '0.4'}/>
+                <rect x="9" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity={viewMode === 'grid' ? '0.9' : '0.4'}/>
+                <rect x="1" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity={viewMode === 'grid' ? '0.9' : '0.4'}/>
+                <rect x="9" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity={viewMode === 'grid' ? '0.9' : '0.4'}/>
+              </svg>
+            </button>
+            <button onClick={() => setViewMode('list')} className={`px-2 py-1.5 ${viewMode === 'list' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'}`} title="Lista">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="3" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
+                <rect x="1" y="7.25" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
+                <rect x="1" y="11.5" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* States */}
+      {loading && rows.length === 0 && (
+        <div className="py-12 text-center text-[13px] text-[#646462]">Cargando empresas…</div>
+      )}
+      {error && (
+        <div className="py-12 text-center text-[13px] text-[#b91c1c]">No se pudo cargar la lista.</div>
+      )}
+
+      {/* Grid view */}
+      {viewMode === 'grid' && !loading && !error && (
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+          {filtered.length === 0 ? (
+            <div className="col-span-3 py-12 text-center text-[13px] text-[#646462]">
+              {search ? 'Ninguna empresa coincide.' : 'No hay empresas en este segmento.'}
+            </div>
+          ) : filtered.map(row => (
+            <div key={row.id} className="bg-white border border-[#e9eae6] rounded-[12px] p-4 hover:shadow-md hover:border-[#d4d4d2] transition-all cursor-pointer">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-10 h-10 rounded-[10px] flex items-center justify-center text-[16px] font-bold text-white flex-shrink-0" style={{ backgroundColor: row.color }}>
+                  {row.initial}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[14px] font-semibold text-[#1a1a1a] truncate leading-tight">{row.name}</p>
+                  <p className="text-[12px] text-[#646462] mt-0.5">{row.location}</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-[12px]">
+                <span className="text-[#646462]">{row.customerCount} cliente{row.customerCount === 1 ? '' : 's'}</span>
+                <span className="px-2 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full text-[#1a1a1a]">{row.plan}</span>
+              </div>
+              {row.openCases > 0 && (
+                <div className="mt-2 pt-2 border-t border-[#f5f5f4] flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#ef4444]"/>
+                  <span className="text-[11px] text-[#646462]">{row.openCases} caso{row.openCases === 1 ? '' : 's'} abierto{row.openCases === 1 ? '' : 's'}</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* List view */}
+      {viewMode === 'list' && !loading && !error && (
+        <div className="w-full">
+          <div className="flex items-center border-b border-[#e9eae6] pb-2 text-[12px] font-medium text-[#646462]">
+            <div className="w-7 flex-shrink-0">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 rounded border-[#e9eae6]"/>
+            </div>
+            <div className="flex-1 min-w-[180px]">Empresa</div>
+            <div className="w-[110px] flex-shrink-0 flex items-center gap-1">
+              <span className="text-[#e35712]">Última actividad</span>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-60">
+                <path d="M5 2L7 5H3L5 2Z" fill="#e35712"/>
+                <path d="M5 8L3 5H7L5 8Z" fill="#e35712" opacity="0.4"/>
+              </svg>
+            </div>
+            <div className="w-[90px] flex-shrink-0">Clientes</div>
+            <div className="w-[110px] flex-shrink-0">Ubicación</div>
+            <div className="w-[110px] flex-shrink-0">Plan</div>
+            <div className="w-[90px] flex-shrink-0">Casos abiertos</div>
+          </div>
+          {filtered.length === 0 && (
+            <div className="py-12 text-center text-[13px] text-[#646462]">
+              {search ? 'Ninguna empresa coincide con la búsqueda.' : 'No hay empresas en este segmento.'}
+            </div>
+          )}
+          {filtered.map(row => (
+            <div
+              key={row.id}
+              className="flex items-center border-b border-[#e9eae6] py-[10px] hover:bg-[#f8f8f7] cursor-pointer"
+            >
+              <div className="w-7 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleOne(row.id)} className="w-3.5 h-3.5 rounded border-[#e9eae6]"/>
+              </div>
+              <div className="flex-1 min-w-[180px] flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-[6px] flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0" style={{ backgroundColor: row.color }}>
+                  {row.initial}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[13px] font-medium text-[#1a1a1a] truncate">{row.name}</span>
+                  <span className="text-[12px] text-[#646462]">{row.plan}</span>
+                </div>
+              </div>
+              <div className="w-[110px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{formatContactWhen(row.lastActivity)}</div>
+              <div className="w-[90px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{row.customerCount}</div>
+              <div className="w-[110px] flex-shrink-0 text-[13px] text-[#646462] truncate">{row.location}</div>
+              <div className="w-[110px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{row.plan}</div>
+              <div className="w-[90px] flex-shrink-0 text-[13px] text-[#1a1a1a]">
+                {row.openCases > 0 ? (
+                  <span className="inline-flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#ef4444]"/>
+                    {row.openCases}
+                  </span>
+                ) : '—'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Shared body for ContactsView / AllLeadsView. The user's spec: all 4 sidebar
 // tabs (All users / All leads / Active / New) show the same full list of
 // contacts; the only thing that changes is the title in the page header.
@@ -5642,6 +6986,9 @@ function ContactsCommon({
   const [bulkTagIds, setBulkTagIds] = useState<string[] | null>(null);
   const [bulkMsgIds, setBulkMsgIds] = useState<string[] | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [showNewMsgModal, setShowNewMsgModal] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [trialDismissed, setTrialDismissed] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -5656,16 +7003,34 @@ function ContactsCommon({
     fresh:    fresh.length,
   };
 
-  // Title reflects which sidebar tab the URL currently points at, but the
-  // dataset is always the full canonical list (`all`).
-  const title = view === 'allLeads' ? 'All leads' : 'Active';
+  // ── Companies mode state ──────────────────────────────────────────────────
+  const [contactMode, setContactMode] = useState<'personas' | 'empresas'>('personas');
+  const [empresaSegment, setEmpresaSegment] = useState<'all' | 'active' | 'new'>('all');
+
+  const title = view === 'allLeads' ? 'All leads' : contactMode === 'empresas' ? 'Empresas' : 'Active';
   const totalLabel = `${all.length} ${all.length === 1 ? 'contacto' : 'contactos'}`;
 
   return (
     <div className="relative flex flex-1 min-w-0 h-full overflow-hidden">
+      {showNewMsgModal && (
+        <NewMessageTemplateModal
+          onClose={() => setShowNewMsgModal(false)}
+          onSelect={(_ct, _tpl) => { setShowNewMsgModal(false); onNavigate('outbound'); }}
+        />
+      )}
+
       <div className="h-full flex-shrink-0 pt-3 pb-3 pl-1">
         <div className="h-full rounded-[12px] overflow-hidden w-[236px]">
-          <ContactsSidebar view={view} onNavigate={onNavigate} counts={counts} />
+          <ContactsSidebar
+            view={view}
+            onNavigate={(v) => {
+              if ((v as string) === 'mapa') { setShowMap(true); setContactMode('personas'); }
+              else { setShowMap(false); setContactMode('personas'); onNavigate(v); }
+            }}
+            counts={counts}
+            onNewMessage={() => setShowNewMsgModal(true)}
+            onEmpresasView={(seg) => { setContactMode('empresas'); setEmpresaSegment(seg); setShowMap(false); }}
+          />
         </div>
       </div>
 
@@ -5675,16 +7040,56 @@ function ContactsCommon({
           onBack={() => setOpenProfileId(null)}
           onUpdated={refetch}
         />
+      ) : showMap ? (
+        <ContactsMapView customers={all} />
+      ) : contactMode === 'empresas' ? (
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {/* Empresas header */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0 bg-white">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3"><rect x="2" y="5" width="12" height="9" rx="1"/><path d="M5 5V4a3 3 0 016 0v1"/><path d="M8 9v2"/></svg>
+              <h1 className="text-[18px] font-semibold text-[#1a1a1a] tracking-tight">Empresas</h1>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {(['all', 'active', 'new'] as const).map(seg => (
+                <button
+                  key={seg}
+                  onClick={() => setEmpresaSegment(seg)}
+                  className={`px-3 py-1 rounded-full text-[12.5px] font-medium border transition-colors ${empresaSegment === seg ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'border-[#e9eae6] text-[#646462] hover:bg-[#f5f5f4]'}`}
+                >
+                  {seg === 'all' ? 'Todas' : seg === 'active' ? 'Activas' : 'Nuevas'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 pt-4">
+            <CompaniesTable
+              customers={all}
+              segment={empresaSegment}
+              loading={loading}
+              error={error}
+              onRefresh={() => { refetch(); setToast({ msg: 'Lista actualizada', type: 'success' }); }}
+            />
+          </div>
+        </div>
       ) : (
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2 bg-[#e7e2fd] border border-[#b09efa] rounded-[10px] mx-4 mt-3 flex-shrink-0">
-            <span className="text-[13px] text-[#1a1a1a]">
-              Quedan <strong>14 días</strong> en tu prueba de Advanced.{" "}
-              <span className="underline cursor-pointer">Explorar planes</span>
-            </span>
-            <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">✕</button>
-          </div>
-          <ContactsPageHeader onBack={onBack} title={title} onCreate={() => setCreateOpen(true)} />
+          {!trialDismissed && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-[#e7e2fd] border border-[#b09efa] rounded-[10px] mx-4 mt-3 flex-shrink-0">
+              <span className="text-[13px] text-[#1a1a1a] flex-shrink-0">
+                Quedan <strong>8 días</strong> en tu <span className="underline cursor-pointer font-medium">prueba de Advanced</span>. Incluye uso ilimitado de Fin.
+              </span>
+              <button className="text-[12.5px] font-semibold text-[#1a1a1a] underline hover:no-underline whitespace-nowrap ml-auto">Obtenga un 93% de descuento con Early Stage</button>
+              <button className="px-3 py-1 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-full hover:bg-black whitespace-nowrap">Comprar Intercom</button>
+              <button onClick={() => setTrialDismissed(true)} className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex-shrink-0">✕</button>
+            </div>
+          )}
+          <ContactsPageHeader
+            onBack={onBack}
+            title={title}
+            onCreate={() => setCreateOpen(true)}
+            onNewMessage={() => setShowNewMsgModal(true)}
+          />
           <div className="flex-1 overflow-y-auto min-h-0">
             {!loading && all.length === 0 && <ImportHero />}
             <UsersTable
@@ -5921,11 +7326,11 @@ const PERSONAL_SUB: { label: string; nav: View | null }[] = [
 ];
 
 function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies' || view === 'customObjects' || view === 'topics';
-  const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'inboxTeam';
-  const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin';
-  const isIntegSection = view === 'appStore' || view === 'connectors' || view === 'auth' || view === 'developer';
-  const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands' || view === 'workspaceGeneral' || view === 'workspaceTeammates';
+  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies' || view === 'customObjects' || view === 'topics' || view === 'customFilters' || view === 'emailTemplates';
+  const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'inboxTeam' || view === 'cannedResponses' || view === 'callsLive';
+  const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin' || view === 'aiFeedback' || view === 'agentChat';
+  const isIntegSection = view === 'appStore' || view === 'connectors' || view === 'auth' || view === 'developer' || view === 'mcpServers';
+  const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands' || view === 'workspaceGeneral' || view === 'workspaceTeammates' || view === 'customRoles';
   const isSuscripcionSection = view === 'billing';
   const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels' || view === 'switchChannel' || view === 'slackChannel';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
@@ -6042,6 +7447,14 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   const IcoVisibleS    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2" fill="white"/></svg>;
   const IcoTokensS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V5a3 3 0 016 0v1" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="8" cy="10" r="1.3" fill="white"/></svg>;
   const IcoAccessS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="7" width="10" height="7" rx="1.5"/><path d="M4 7V5.5a4 4 0 018 0V7" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="7" cy="11" r="1.3" fill="white"/><path d="M14 8l1.5 1.5L14 11" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoCannedS     = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12a1 1 0 011 1v6a1 1 0 01-1 1H9l-2 2-2-2H2a1 1 0 01-1-1V4a1 1 0 011-1z" opacity="0.45"/><path d="M4 6.5h8M4 8.7h5" stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round"/></svg>;
+  const IcoFiltersS    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 4h12M4.5 8h7M7 12h2" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>;
+  const IcoEmailTplS   = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="10" rx="1.5" opacity="0.35"/><path d="M1 5l7 4 7-4" stroke="currentColor" strokeWidth="1.1" fill="none"/><path d="M10.5 10l1.5 1.5L14 9" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoRolesS      = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="5" r="2.3"/><path d="M1 13c0-2.6 2.2-4.7 5-4.7" opacity="0.5"/><rect x="8" y="9" width="7" height="5" rx="1.2"/><path d="M10.5 11.5h2M10.5 12.5h1.5" stroke="white" strokeWidth="1" fill="none" strokeLinecap="round"/></svg>;
+  const IcoAIFeedbackS = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z" opacity="0.45"/><path d="M6 9.5l1.5 1.5 3-3" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoCallsS      = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2h3l1.5 3.5L6 7a8 8 0 004 4l1.5-1.5L15 11v3a1 1 0 01-1 1A13 13 0 012 3a1 1 0 011-1z" opacity="0.8"/><path d="M10.5 2a4 4 0 010 5.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoMCPS        = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="3" width="14" height="10" rx="2" opacity="0.35"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><path d="M6.5 8h3" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>;
+  const IcoMaxS        = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6.5" opacity="0.2"/><path d="M5 11V5l3 3 3-3v6" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/><circle cx="8" cy="2.5" r="1" fill="currentColor" opacity="0.7"/></svg>;
 
   return (
     <div className="flex flex-col h-full w-[230px] flex-shrink-0 bg-[#fbfbf9] rounded-[16px] drop-shadow-[0px_1px_2px_rgba(20,20,20,0.15)] overflow-hidden">
@@ -6073,6 +7486,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoBrandsS}    label="Marcas"               nav={'workspaceBrands'} />
             <SubRow icon={IcoSecurityS}  label="Seguridad"            nav={'workspaceSecurity'} warn />
             <SubRow icon={IcoMultilingS} label="Multilingüe"          nav={'workspaceMultilingual'} />
+            <SubRow icon={IcoRolesS}     label="Roles personalizados"  nav={'customRoles'} />
           </div>
         )}
 
@@ -6110,6 +7524,8 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoMacrosS}  label="Macros"               nav={'macros'} />
             <SubRow icon={IcoTicketsS} label="Folios de atención"   nav={'tickets'} />
             <SubRow icon={IcoSLAS}     label="SLA"                  nav={'sla'} />
+            <SubRow icon={IcoCannedS}  label="Respuestas predefinidas" nav={'cannedResponses'} />
+            <SubRow icon={IcoCallsS}   label="Llamadas"              nav={'callsLive'} />
           </div>
         )}
 
@@ -6119,7 +7535,9 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
           <div className="flex flex-col gap-0.5 pl-2">
             <SubRow icon={IcoFinS}   label="Fin AI Agent"   nav={'fin'} />
             <SubRow icon={IcoBuzonS} label="Buzón de IA"    nav={'aiInbox'} />
-            <SubRow icon={IcoAutoS}  label="Automatización" nav={'automation'} />
+            <SubRow icon={IcoAutoS}      label="Automatización"  nav={'automation'} />
+            <SubRow icon={IcoAIFeedbackS} label="Feedback de IA" nav={'aiFeedback'} />
+            <SubRow icon={IcoMaxS} label="Asistente Max" nav={'agentChat'} />
           </div>
         )}
 
@@ -6131,6 +7549,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoConnS} label="Conectores de datos"       nav={'connectors'} />
             <SubRow icon={IcoAuthS} label="Autenticación"             nav={'auth'} />
             <SubRow icon={IcoDevS}  label="Centro para desarrolladores" nav={'developer'} />
+            <SubRow icon={IcoMCPS}  label="Servidores MCP"              nav={'mcpServers'} />
           </div>
         )}
 
@@ -6145,6 +7564,8 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoCustomS}    label="Objetos personalizados"        nav={'customObjects'} />
             <SubRow icon={IcoImportsS}   label="Importaciones y exportaciones" nav={'imports'} />
             <SubRow icon={IcoTopicsS}    label="Temas"                         nav={'topics'} />
+            <SubRow icon={IcoFiltersS}   label="Filtros personalizados"        nav={'customFilters'} />
+            <SubRow icon={IcoEmailTplS}  label="Plantillas de email"           nav={'emailTemplates'} />
           </div>
         )}
 
@@ -9575,9 +10996,33 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
 // ── WorkspaceMultilingualView (1-45264) ───────────────────────────────────────
 
 function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
   const [tab, setTab] = useState<'general' | 'glosario'>('general');
   const [aiTranslate, setAiTranslate] = useState(false);
   const [defaultLang, setDefaultLang] = useState('English');
+  const [supported, setSupported] = useState('Todo');
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!ws) return;
+    const s = (ws as any)?.settings || {};
+    if (s.aiTranslate !== undefined) setAiTranslate(!!s.aiTranslate);
+    if (s.defaultLang) setDefaultLang(s.defaultLang);
+  }, [ws]);
+
+  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const wsId = (ws as any)?.id ?? '';
+      await workspacesApi.updateSettings(wsId, { aiTranslate, defaultLang, supportedLangs: supported });
+      showToast('Configuración de idioma guardada.');
+    } catch {
+      showToast('Error al guardar.', false);
+    } finally { setSaving(false); }
+  }
 
   function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
     return (
@@ -9595,9 +11040,10 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
             <h1 className="text-[20px] font-bold text-[#1a1a1a]">Multilingüe</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
               <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Más información</button>
-              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Guardar</button>
+              <button onClick={handleSave} disabled={saving} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444] disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
             </div>
           </div>
           <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
@@ -9655,8 +11101,11 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
                   <a href="#" className="text-[13px] text-[#3b59f6] underline mt-2 inline-block">Consulta la lista completa de idiomas compatibles</a>
                 </div>
                 <div className="w-[380px] flex-shrink-0">
-                  <select className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white">
+                  <select value={supported} onChange={e => setSupported(e.target.value)} className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white focus:outline-none focus:border-[#1a1a1a]">
                     <option>Todo</option>
+                    <option>Solo idiomas del área de trabajo</option>
+                    <option>Idiomas europeos</option>
+                    <option>Idiomas asiáticos</option>
                   </select>
                 </div>
               </div>
@@ -11297,17 +12746,188 @@ function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View)
 
 // ── HorarioAtencionView (1-96065) ─────────────────────────────────────────────
 
+interface DaySchedule { enabled: boolean; start: string; end: string; }
+type WeekSchedule = Record<string, DaySchedule>;
+
+const DEFAULT_WEEK_SCHEDULE: WeekSchedule = {
+  lunes:     { enabled: true,  start: '09:00', end: '18:00' },
+  martes:    { enabled: true,  start: '09:00', end: '18:00' },
+  miércoles: { enabled: true,  start: '09:00', end: '18:00' },
+  jueves:    { enabled: true,  start: '09:00', end: '18:00' },
+  viernes:   { enabled: true,  start: '09:00', end: '18:00' },
+  sábado:    { enabled: false, start: '10:00', end: '14:00' },
+  domingo:   { enabled: false, start: '10:00', end: '14:00' },
+};
+
+interface HolidayEntry { id: string; name: string; date: string; }
+
+interface TeamSchedule {
+  id: string; teamName: string;
+  schedule: WeekSchedule;
+  responseTime: string;
+}
+
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
+  const h = Math.floor(i / 2).toString().padStart(2, '0');
+  const m = i % 2 === 0 ? '00' : '30';
+  return `${h}:${m}`;
+});
+
+const RESPONSE_TIME_OPTIONS = [
+  { value: 'asap',     label: 'Respondemos lo antes posible' },
+  { value: 'minutes',  label: 'En minutos' },
+  { value: 'hours',    label: 'En pocas horas' },
+  { value: 'day',      label: 'En el mismo día' },
+  { value: 'days',     label: 'En 2–3 días hábiles' },
+  { value: 'week',     label: 'En una semana' },
+];
+
+function WeekScheduleEditor({ schedule, onChange }: { schedule: WeekSchedule; onChange: (s: WeekSchedule) => void }) {
+  const days = Object.keys(schedule);
+  return (
+    <div className="flex flex-col gap-2 mt-3">
+      {days.map(day => {
+        const d = schedule[day];
+        return (
+          <div key={day} className="flex items-center gap-3">
+            <button
+              onClick={() => onChange({ ...schedule, [day]: { ...d, enabled: !d.enabled } })}
+              className={`w-[100px] text-left text-[13px] font-medium capitalize transition-colors ${d.enabled ? 'text-[#1a1a1a]' : 'text-[#bbb]'}`}
+            >
+              <span className={`inline-block w-3 h-3 rounded-full mr-2 border-2 transition-colors ${d.enabled ? 'bg-[#3b59f6] border-[#3b59f6]' : 'bg-white border-[#d1d1ce]'}`} />
+              {day.charAt(0).toUpperCase() + day.slice(1)}
+            </button>
+            {d.enabled ? (
+              <div className="flex items-center gap-2">
+                <select value={d.start} onChange={e => onChange({ ...schedule, [day]: { ...d, start: e.target.value } })}
+                  className="border border-[#e9eae6] rounded-[6px] px-2 py-1 text-[13px] bg-white w-[90px]">
+                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <span className="text-[13px] text-[#646462]">–</span>
+                <select value={d.end} onChange={e => onChange({ ...schedule, [day]: { ...d, end: e.target.value } })}
+                  className="border border-[#e9eae6] rounded-[6px] px-2 py-1 text-[13px] bg-white w-[90px]">
+                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            ) : (
+              <span className="text-[13px] text-[#bbb]">Cerrado</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
   const [tab, setTab] = useState<'general' | 'personalizado'>('general');
+  const [toast, setToast] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // General schedule state
+  const [showScheduleEditor, setShowScheduleEditor] = useState(false);
+  const [weekSchedule, setWeekSchedule] = useState<WeekSchedule>(DEFAULT_WEEK_SCHEDULE);
+  const [responseTime, setResponseTime] = useState('asap');
+  const [holidays, setHolidays] = useState<HolidayEntry[]>([]);
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
+  const [newHolidayName, setNewHolidayName] = useState('');
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+
+  // Personalizado tab state
+  const [teamSchedules, setTeamSchedules] = useState<TeamSchedule[]>([
+    { id: 'ts1', teamName: 'Soporte', schedule: { ...DEFAULT_WEEK_SCHEDULE }, responseTime: 'hours' },
+  ]);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<TeamSchedule | null>(null);
+  const [teamFormName, setTeamFormName] = useState('');
+  const [teamFormSchedule, setTeamFormSchedule] = useState<WeekSchedule>(DEFAULT_WEEK_SCHEDULE);
+  const [teamFormResponse, setTeamFormResponse] = useState('asap');
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3000);
+  }
+
+  async function handleSaveGeneral() {
+    setSaving(true);
+    try {
+      const wsId = (ws as any)?.id ?? '';
+      await workspacesApi.updateSettings(wsId, {
+        officeHours: weekSchedule,
+        responseTime,
+        holidays,
+      } as any);
+      showToast('Horario guardado correctamente.');
+    } catch {
+      showToast('Horario guardado (modo demo).');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addHoliday() {
+    if (!newHolidayName.trim() || !newHolidayDate) return;
+    setHolidays(prev => [...prev, { id: Date.now().toString(), name: newHolidayName.trim(), date: newHolidayDate }]);
+    setNewHolidayName(''); setNewHolidayDate(''); setShowHolidayModal(false);
+    showToast('Día festivo añadido.');
+  }
+
+  function removeHoliday(id: string) {
+    setHolidays(prev => prev.filter(h => h.id !== id));
+  }
+
+  function openNewTeam() {
+    setEditingTeam(null);
+    setTeamFormName('');
+    setTeamFormSchedule({ ...DEFAULT_WEEK_SCHEDULE });
+    setTeamFormResponse('asap');
+    setShowTeamModal(true);
+  }
+
+  function openEditTeam(ts: TeamSchedule) {
+    setEditingTeam(ts);
+    setTeamFormName(ts.teamName);
+    setTeamFormSchedule({ ...ts.schedule });
+    setTeamFormResponse(ts.responseTime);
+    setShowTeamModal(true);
+  }
+
+  function saveTeam() {
+    if (!teamFormName.trim()) return;
+    if (editingTeam) {
+      setTeamSchedules(prev => prev.map(t => t.id === editingTeam.id
+        ? { ...t, teamName: teamFormName.trim(), schedule: teamFormSchedule, responseTime: teamFormResponse }
+        : t));
+      showToast('Horario de equipo actualizado.');
+    } else {
+      setTeamSchedules(prev => [...prev, { id: Date.now().toString(), teamName: teamFormName.trim(), schedule: teamFormSchedule, responseTime: teamFormResponse }]);
+      showToast('Equipo añadido.');
+    }
+    setShowTeamModal(false);
+  }
+
+  function removeTeam(id: string) {
+    if (!window.confirm('¿Eliminar este horario de equipo?')) return;
+    setTeamSchedules(prev => prev.filter(t => t.id !== id));
+    showToast('Equipo eliminado.');
+  }
+
+  const enabledDays = (Object.entries(weekSchedule) as [string, DaySchedule][]).filter(([, d]) => d.enabled);
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#1a1a1a] text-white text-[13px] px-4 py-2.5 rounded-[10px] shadow-lg animate-fade-in">
+          {toast}
+        </div>
+      )}
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
             <h1 className="text-[20px] font-bold text-[#1a1a1a]">Horario de atención</h1>
-            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg></button>
           </div>
           <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
             {(['general', 'personalizado'] as const).map(id => (
@@ -11315,68 +12935,248 @@ function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v:
                 className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                   tab === id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
                 }`}>
-                {id === 'general' ? 'General' : 'Horario de atención personalizado'}
+                {id === 'general' ? 'General' : 'Horario personalizado por equipo'}
               </button>
             ))}
           </div>
+
           <div className="flex-1 overflow-y-auto min-h-0 p-6">
-            {tab === 'general' && <>
-              {/* Promo card */}
-              <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
-                <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
-                <div className="flex-1 max-w-[500px]">
-                  <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Establece siempre las expectativas correctas</h2>
-                  <p className="text-[13px] text-[#646462] mb-4">Los horarios de atención y los tiempos de respuesta permiten a los clientes saber cuándo están disponibles tus equipos y con qué rapidez suelen responder.</p>
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Horario de atención y tiempo de respuesta</button>
-                    <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Utiliza Fin AI Agent fuera del horario de oficina</button>
+            {tab === 'general' && (
+              <div className="max-w-[780px] flex flex-col gap-4">
+                {/* Promo card */}
+                <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-5 mb-2">
+                  <h2 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Establece las expectativas correctas</h2>
+                  <p className="text-[13px] text-[#646462]">Los horarios de atención y los tiempos de respuesta permiten a los clientes saber cuándo están disponibles tus equipos. Los horarios se basan en la zona horaria del espacio de trabajo.</p>
+                </div>
+
+                {/* Horario predeterminado */}
+                <div className="border border-[#e9eae6] rounded-[12px] p-5">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Horario de oficina predeterminado</h3>
+                    <button onClick={() => setShowScheduleEditor(v => !v)}
+                      className="text-[13px] text-[#fa7938] font-medium hover:underline">
+                      {showScheduleEditor ? 'Ocultar editor' : (enabledDays.length === 0 ? '+ Añadir horas' : 'Editar horario')}
+                    </button>
+                  </div>
+                  <p className="text-[13px] text-[#646462] mb-3">
+                    Se aplica a todas las conversaciones. Si no se especifica, la disponibilidad predeterminada es 24/7.
+                  </p>
+
+                  {/* Summary when collapsed */}
+                  {!showScheduleEditor && enabledDays.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      {enabledDays.map(([day, d]) => (
+                        <div key={day} className="flex items-center gap-3 text-[13px]">
+                          <span className="w-[90px] capitalize text-[#1a1a1a] font-medium">{day}</span>
+                          <span className="text-[#646462]">{d.start} – {d.end}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!showScheduleEditor && enabledDays.length === 0 && (
+                    <p className="text-[13px] text-[#bbb] italic">Sin horario definido — disponible 24/7</p>
+                  )}
+
+                  {showScheduleEditor && (
+                    <>
+                      <WeekScheduleEditor schedule={weekSchedule} onChange={setWeekSchedule} />
+                      <div className="flex justify-end mt-4 gap-2">
+                        <button onClick={() => setShowScheduleEditor(false)}
+                          className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">
+                          Cancelar
+                        </button>
+                        <button onClick={() => { setShowScheduleEditor(false); handleSaveGeneral(); }}
+                          disabled={saving}
+                          className="bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium disabled:opacity-50">
+                          {saving ? 'Guardando…' : 'Guardar horario'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Holidays */}
+                  <div className="mt-5 pt-4 border-t border-[#e9eae6]">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a]">Vacaciones y cierres</p>
+                      <button onClick={() => setShowHolidayModal(true)}
+                        className="text-[13px] text-[#fa7938] font-medium hover:underline">+ Agregar día festivo</button>
+                    </div>
+                    <p className="text-[13px] text-[#646462] mb-3">Fechas específicas en las que el equipo está cerrado o tiene horario diferente.</p>
+                    {holidays.length === 0 && <p className="text-[13px] text-[#bbb] italic">No hay días festivos configurados.</p>}
+                    <div className="flex flex-col gap-2">
+                      {holidays.map(h => (
+                        <div key={h.id} className="flex items-center justify-between bg-[#f8f8f7] rounded-[8px] px-3 py-2">
+                          <div>
+                            <span className="text-[13px] font-medium text-[#1a1a1a]">{h.name}</span>
+                            <span className="text-[13px] text-[#646462] ml-3">{new Date(h.date + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                          </div>
+                          <button onClick={() => removeHoliday(h.id)}
+                            className="text-[13px] text-[#ef4444] hover:underline">Eliminar</button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <img src={IMG_OFFICE_HOURS_BANNER} alt="Office hours preview" className="w-[442px] h-[206px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:95941" />
-              </div>
 
-              {/* horario predeterminado */}
-              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
-                <div className="flex-1">
-                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">horario de oficina predeterminado</h3>
-                  <p className="text-[13px] text-[#646462] mb-2">Esto se aplica a todas las conversaciones en tu espacio de trabajo. Si un cliente inicia una conversación fuera de este horario, verá cuándo volverás a tu zona horaria. También puedes establecer horarios de atención para equipos específicos.</p>
-                  <a href="#" className="text-[13px] text-[#3b59f6] underline">Ver el horario de atención personalizado</a>
-                </div>
-                <div className="w-[400px] flex-shrink-0">
-                  <p className="text-[13px] text-[#646462]">Los horarios se basan en la zona horaria de tu espacio de trabajo (<u>Madrid</u>). Si no se especifica, la disponibilidad predeterminada es 24 horas al día, los 7 días a la semana (siempre activo).</p>
-                  <button className="text-[13px] text-[#fa7938] font-medium mt-2">+ Añadir horas</button>
-                  <p className="text-[14px] font-semibold text-[#1a1a1a] mt-4">Vacaciones y cierres</p>
-                  <p className="text-[13px] text-[#646462] mb-2">Agregue fechas específicas en las que su equipo está cerrado o tiene un horario diferente al horario de atención.</p>
-                  <button className="text-[13px] text-[#fa7938] font-medium">+ Agregar día festivo o cierre</button>
-                </div>
-              </div>
-
-              {/* Tiempos de respuesta */}
-              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
-                <div className="flex-1">
+                {/* Tiempos de respuesta */}
+                <div className="border border-[#e9eae6] rounded-[12px] p-5">
                   <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Tiempos de respuesta</h3>
-                  <p className="text-[13px] text-[#646462] mb-2">Esto se aplica a todas las conversaciones en tu espacio de trabajo. Si un cliente inicia una conversación durante el horario de atención, verá tu tiempo de respuesta habitual. También puedes establecer tiempos de respuesta para equipos específicos.</p>
-                  <a href="#" className="text-[13px] text-[#3b59f6] underline">Consulta los ajustes del equipo.</a>
-                </div>
-                <div className="w-[400px] flex-shrink-0">
-                  <p className="text-[13px] text-[#1a1a1a] mb-2">El equipo suele responder:</p>
-                  <select className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white"><option>We'll reply as soon as we can</option></select>
+                  <p className="text-[13px] text-[#646462] mb-4">El cliente verá este tiempo al iniciar una conversación durante el horario de atención.</p>
+                  <div className="flex items-center gap-4">
+                    <span className="text-[13px] text-[#1a1a1a] whitespace-nowrap">El equipo suele responder:</span>
+                    <select value={responseTime} onChange={e => setResponseTime(e.target.value)}
+                      className="flex-1 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white max-w-[280px]">
+                      {RESPONSE_TIME_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <button onClick={handleSaveGeneral} disabled={saving}
+                      className="bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium disabled:opacity-50 whitespace-nowrap">
+                      {saving ? 'Guardando…' : 'Guardar'}
+                    </button>
+                  </div>
                 </div>
               </div>
+            )}
 
-              {/* Fin AI Agent */}
-              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
-                <div className="flex-1">
-                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Fin AI Agent</h3>
-                  <p className="text-[13px] text-[#646462]">Cuando tu personal está fuera de línea, Fin puede intervenir y encargarse de las conversaciones de modo que los clientes reciban ayuda oportuna las 24 horas. <a href="#" className="text-[#3b59f6] underline">Configúralo en los flujos de trabajo</a>.</p>
+            {tab === 'personalizado' && (
+              <div className="max-w-[780px] flex flex-col gap-4">
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <h2 className="text-[15px] font-semibold text-[#1a1a1a]">Horario por equipo</h2>
+                    <p className="text-[13px] text-[#646462]">Configura horarios y tiempos de respuesta específicos para cada equipo.</p>
+                  </div>
+                  <button onClick={openNewTeam}
+                    className="flex items-center gap-1.5 bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium">
+                    + Nuevo equipo
+                  </button>
                 </div>
-                <img src={IMG_OFFICE_HOURS_FIN_AI} alt="Fin AI workflow" className="w-[493px] h-[162px] flex-shrink-0 rounded-[8px] object-contain" data-node-id="1:96016" />
+
+                {teamSchedules.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 border border-dashed border-[#e9eae6] rounded-[12px]">
+                    <span className="text-[40px]">🗓️</span>
+                    <p className="text-[14px] font-medium text-[#1a1a1a]">Sin horarios de equipo</p>
+                    <p className="text-[13px] text-[#646462]">Crea un horario personalizado para tus equipos de soporte.</p>
+                    <button onClick={openNewTeam}
+                      className="mt-1 bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium">
+                      + Nuevo equipo
+                    </button>
+                  </div>
+                )}
+
+                {teamSchedules.map(ts => {
+                  const active = (Object.entries(ts.schedule) as [string, DaySchedule][]).filter(([, d]) => d.enabled);
+                  const rtLabel = RESPONSE_TIME_OPTIONS.find(o => o.value === ts.responseTime)?.label ?? ts.responseTime;
+                  return (
+                    <div key={ts.id} className="border border-[#e9eae6] rounded-[12px] p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-[14px] font-semibold text-[#1a1a1a]">{ts.teamName}</h3>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openEditTeam(ts)}
+                            className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">
+                            Editar
+                          </button>
+                          <button onClick={() => removeTeam(ts.id)}
+                            className="border border-[#ffd5d5] rounded-full px-3 py-[5px] text-[13px] font-medium text-[#ef4444] hover:bg-[#fff0f0]">
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1 mb-3">
+                        {active.length === 0
+                          ? <p className="text-[13px] text-[#bbb] italic">Sin horario — disponible 24/7</p>
+                          : active.map(([day, d]) => (
+                            <div key={day} className="flex items-center gap-3 text-[13px]">
+                              <span className="w-[90px] capitalize text-[#1a1a1a] font-medium">{day}</span>
+                              <span className="text-[#646462]">{d.start} – {d.end}</span>
+                            </div>
+                          ))
+                        }
+                      </div>
+                      <div className="flex items-center gap-2 text-[13px]">
+                        <span className="text-[#646462]">Tiempo de respuesta:</span>
+                        <span className="font-medium text-[#1a1a1a]">{rtLabel}</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </>}
-            {tab === 'personalizado' && <p className="text-[13px] text-[#646462]">Horario de atención personalizado por equipo (próximamente).</p>}
+            )}
           </div>
         </div>
       </div>
+
+      {/* Holiday modal */}
+      {showHolidayModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowHolidayModal(false)}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="relative bg-white rounded-[16px] shadow-xl p-6 w-[400px] flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Agregar día festivo o cierre</h2>
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-medium text-[#646462]">Nombre</label>
+              <input value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)}
+                placeholder="Ej: Navidad"
+                className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#fa7938]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-medium text-[#646462]">Fecha</label>
+              <input type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)}
+                className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#fa7938]" />
+            </div>
+            <div className="flex justify-end gap-2 mt-1">
+              <button onClick={() => setShowHolidayModal(false)}
+                className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">
+                Cancelar
+              </button>
+              <button onClick={addHoliday}
+                disabled={!newHolidayName.trim() || !newHolidayDate}
+                className="bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium disabled:opacity-40">
+                Añadir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Team schedule modal */}
+      {showTeamModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowTeamModal(false)}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="relative bg-white rounded-[16px] shadow-xl p-6 w-[520px] flex flex-col gap-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">{editingTeam ? 'Editar horario de equipo' : 'Nuevo horario de equipo'}</h2>
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-medium text-[#646462]">Nombre del equipo</label>
+              <input value={teamFormName} onChange={e => setTeamFormName(e.target.value)}
+                placeholder="Ej: Ventas, Soporte técnico…"
+                className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#fa7938]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-medium text-[#646462]">Horario semanal</label>
+              <WeekScheduleEditor schedule={teamFormSchedule} onChange={setTeamFormSchedule} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-medium text-[#646462]">Tiempo de respuesta habitual</label>
+              <select value={teamFormResponse} onChange={e => setTeamFormResponse(e.target.value)}
+                className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white">
+                {RESPONSE_TIME_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 mt-1">
+              <button onClick={() => setShowTeamModal(false)}
+                className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">
+                Cancelar
+              </button>
+              <button onClick={saveTeam}
+                disabled={!teamFormName.trim()}
+                className="bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium disabled:opacity-40">
+                {editingTeam ? 'Guardar cambios' : 'Crear equipo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -11640,191 +13440,2013 @@ function OutboundSidebar({ sub, onSelect }: { sub: OutboundSubView; onSelect: (s
   );
 }
 
+// ── Outbound types ─────────────────────────────────────────────────────────────
+type OutboundContentType = 'all' | 'chat' | 'email' | 'whatsapp' | 'sms' | 'push' | 'banner' | 'post';
+type OutboundMsgStatus = 'borrador' | 'activo' | 'pausado' | 'detenido';
+type OutboundTriggerType = 'visita' | 'accion' | 'manual' | 'evento';
+
+interface OutboundMsg {
+  id: string;
+  title: string;
+  status: OutboundMsgStatus;
+  senderName: string;
+  senderInitial: string;
+  contentType: OutboundContentType;
+  sent: number;
+  goalPct?: number;
+  triggerType: OutboundTriggerType;
+  audience?: string;
+  channel?: string;
+  frequency?: string;
+  goal?: string;
+  createdAt: string;
+}
+
+const OUTBOUND_MOCK_MSGS: OutboundMsg[] = [
+  { id: 'om1', title: 'Bienvenida a nuevos usuarios', status: 'activo', senderName: 'Hector Vidal Sanchez', senderInitial: 'H', contentType: 'chat', sent: 1423, goalPct: 34, triggerType: 'visita', audience: 'Nuevos usuarios (< 7 días)', channel: 'Chat', frequency: 'Una vez por usuario', goal: 'Activación', createdAt: '2025-04-10' },
+  { id: 'om2', title: 'Recupera usuarios inactivos', status: 'activo', senderName: 'Hector Vidal Sanchez', senderInitial: 'H', contentType: 'email', sent: 892, goalPct: 18, triggerType: 'accion', audience: 'Inactivos > 30 días', channel: 'Correo electrónico', frequency: 'Una vez por mes', goal: 'Retención', createdAt: '2025-04-02' },
+  { id: 'om3', title: 'Anuncio de nueva función: Informes AI', status: 'pausado', senderName: 'Hector Vidal Sanchez', senderInitial: 'H', contentType: 'banner', sent: 3100, goalPct: 62, triggerType: 'manual', audience: 'Todos los usuarios', channel: 'Banner', frequency: 'Una vez', goal: 'Adopción', createdAt: '2025-03-15' },
+  { id: 'om4', title: 'Oferta especial 30%', status: 'detenido', senderName: 'Hector Vidal Sanchez', senderInitial: 'H', contentType: 'whatsapp', sent: 540, goalPct: 9, triggerType: 'evento', audience: 'Clientes premium', channel: 'WhatsApp', frequency: 'Una vez', goal: 'Conversión', createdAt: '2025-02-28' },
+  { id: 'om5', title: 'Sin título', status: 'borrador', senderName: 'Hector Vidal Sanchez', senderInitial: 'H', contentType: 'chat', sent: 0, triggerType: 'visita', createdAt: '2025-05-01' },
+];
+
+const OUTBOUND_CONTENT_TYPE_LABELS: Record<OutboundContentType, string> = {
+  all: 'Todos los tipos de contenido',
+  chat: 'Chat', email: 'Correo electrónico', whatsapp: 'WhatsApp',
+  sms: 'SMS', push: 'Push', banner: 'Banner', post: 'Post',
+};
+
+function OutboundStatusBadge({ status }: { status: OutboundMsgStatus }) {
+  const cfg: Record<OutboundMsgStatus, { label: string; cls: string }> = {
+    activo:   { label: 'Activo',   cls: 'bg-[#dcfce7] text-[#16a34a]' },
+    pausado:  { label: 'Pausado',  cls: 'bg-[#fef9c3] text-[#a16207]' },
+    detenido: { label: 'Detenido', cls: 'bg-[#fee2e2] text-[#dc2626]' },
+    borrador: { label: 'Borrador', cls: 'bg-[#f1f1ee] text-[#646462]' },
+  };
+  const { label, cls } = cfg[status] ?? cfg.borrador;
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${cls}`}>{label}</span>;
+}
+
+function OutboundContentIcon({ type }: { type: OutboundContentType }) {
+  const icons: Record<OutboundContentType, React.ReactNode> = {
+    all:      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2 4h12L8 13z"/></svg>,
+    chat:     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 3h10a1 1 0 011 1v6a1 1 0 01-1 1H6l-3 2V4a1 1 0 011-1z"/></svg>,
+    email:    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M2 4l6 5 6-5"/></svg>,
+    whatsapp: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 1.5a6.5 6.5 0 015.5 9.9L15 14.5l-3.3-1A6.5 6.5 0 118 1.5zm-1.5 3.5c-.2 0-.6.1-.9.5-.3.3-1 1-1 2.4 0 1.4 1 2.8 1.2 3 .2.2 2 3 4.8 4.1.5.2.8.2 1 .1.3 0 1-.4 1.2-.8.2-.3.2-.6.1-.9-.1-.1-.3-.2-.7-.4-.3-.2-1.4-.7-1.6-.8-.2-.1-.4-.1-.5.1l-.7.9c-.1.1-.3.2-.5.1C8 12 6.3 10.3 6 9.7c-.1-.2 0-.4.2-.5l.4-.5c.1-.2.2-.4.3-.6v-.6c0-.2-1-1.6-1.4-2.5z"/></svg>,
+    sms:      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="3" y="2" width="10" height="14" rx="2"/><path d="M6 12h4M6 9h4M6 6h4"/></svg>,
+    push:     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 2v1M5 3.5l.7.7M11 3.5l-.7.7M3 8H2M14 8h-1M4.5 12l.7-.7M11.5 12l-.7-.7M8 5a3 3 0 000 6 3 3 0 000-6z"/><path d="M6 13h4"/></svg>,
+    banner:   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 7h14"/></svg>,
+    post:     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>,
+  };
+  return <>{icons[type] ?? icons.chat}</>;
+}
+
+// ── Template Picker Modal ─────────────────────────────────────────────────────
+type OutboundTemplateCategory = 'todo' | 'popular' | 'onboarding' | 'retencion' | 'adopcion' | 'ventas' | 'soporte' | 'chat' | 'email' | 'whatsapp' | 'sms' | 'push' | 'banner' | 'automatizado' | 'manual';
+
+interface OutboundTemplate {
+  id: string;
+  title: string;
+  description: string;
+  categories: OutboundTemplateCategory[];
+  contentType: OutboundContentType;
+  triggerType: OutboundTriggerType;
+  popular?: boolean;
+  previewColor: string;
+}
+
+const OUTBOUND_TEMPLATES: OutboundTemplate[] = [
+  { id: 't1', title: 'Da la bienvenida a nuevos usuarios', description: 'Saluda a los usuarios cuando inician sesión por primera vez y explícales cómo empezar.', categories: ['popular','onboarding','chat','automatizado'], contentType: 'chat', triggerType: 'visita', popular: true, previewColor: 'from-[#dbeafe] to-[#bfdbfe]' },
+  { id: 't2', title: 'Anuncia una nueva función', description: 'Informa a los usuarios sobre las nuevas funciones con un mensaje específico para tu público objetivo.', categories: ['popular','adopcion','banner','automatizado'], contentType: 'banner', triggerType: 'visita', popular: true, previewColor: 'from-[#d1fae5] to-[#a7f3d0]' },
+  { id: 't3', title: 'Vuelve a captar usuarios inactivos', description: 'Despierta el interés de los usuarios que llevan un tiempo sin conectarse.', categories: ['popular','retencion','email','automatizado'], contentType: 'email', triggerType: 'accion', popular: true, previewColor: 'from-[#fce7f3] to-[#fbcfe8]' },
+  { id: 't4', title: 'Onboarding en varios pasos', description: 'Guía a los usuarios a través de un recorrido de bienvenida estructurado.', categories: ['onboarding','chat','automatizado'], contentType: 'chat', triggerType: 'accion', previewColor: 'from-[#ede9fe] to-[#ddd6fe]' },
+  { id: 't5', title: 'Oferta por tiempo limitado', description: 'Envía una oferta especial a segmentos de clientes con alta conversión.', categories: ['ventas','email','automatizado'], contentType: 'email', triggerType: 'manual', previewColor: 'from-[#fef3c7] to-[#fde68a]' },
+  { id: 't6', title: 'Mensaje de soporte proactivo', description: 'Ofrece ayuda cuando detectas que un usuario está teniendo dificultades.', categories: ['soporte','chat','automatizado'], contentType: 'chat', triggerType: 'accion', previewColor: 'from-[#e0f2fe] to-[#bae6fd]' },
+  { id: 't7', title: 'Confirmación por WhatsApp', description: 'Envía confirmaciones de pedidos o citas automáticamente via WhatsApp.', categories: ['soporte','whatsapp','automatizado'], contentType: 'whatsapp', triggerType: 'evento', previewColor: 'from-[#dcfce7] to-[#bbf7d0]' },
+  { id: 't8', title: 'Notificación push de reactivación', description: 'Notificación push para recuperar usuarios que no abren la app.', categories: ['retencion','push','automatizado'], contentType: 'push', triggerType: 'accion', previewColor: 'from-[#f3e8ff] to-[#e9d5ff]' },
+  { id: 't9', title: 'Banner de upgrade / plan superior', description: 'Muestra un banner a usuarios en plan gratuito para que suban de plan.', categories: ['ventas','banner','automatizado'], contentType: 'banner', triggerType: 'visita', previewColor: 'from-[#fff7ed] to-[#fed7aa]' },
+  { id: 't10', title: 'SMS de recuperación de carrito', description: 'Recuerda a los clientes que tienen artículos en el carrito.', categories: ['ventas','sms','automatizado'], contentType: 'sms', triggerType: 'evento', previewColor: 'from-[#fce7f3] to-[#fbcfe8]' },
+  { id: 't11', title: 'Encuesta de satisfacción (NPS)', description: 'Recopila feedback de clientes en el momento de mayor valor.', categories: ['soporte','email','manual'], contentType: 'email', triggerType: 'manual', previewColor: 'from-[#ecfdf5] to-[#d1fae5]' },
+  { id: 't12', title: 'Recordatorio de renovación', description: 'Avisa a los suscriptores antes de que expire su plan.', categories: ['retencion','email','automatizado'], contentType: 'email', triggerType: 'accion', previewColor: 'from-[#fef2f2] to-[#fecaca]' },
+];
+
+const OUTBOUND_TEMPLATE_CAT_GROUPS: { label: string; items: { key: OutboundTemplateCategory; label: string }[] }[] = [
+  { label: '', items: [{ key: 'todo', label: 'Todo' }, { key: 'popular', label: 'Popular' }] },
+  { label: 'CASOS DE USO', items: [{ key: 'onboarding', label: 'Onboarding' }, { key: 'retencion', label: 'Retención' }, { key: 'adopcion', label: 'Adopción de funciones' }, { key: 'ventas', label: 'Ventas' }, { key: 'soporte', label: 'Soporte' }] },
+  { label: 'CANALES', items: [{ key: 'chat', label: 'Chat' }, { key: 'email', label: 'Correo electrónico' }, { key: 'whatsapp', label: 'WhatsApp' }, { key: 'sms', label: 'SMS' }, { key: 'push', label: 'Push' }, { key: 'banner', label: 'Banner' }] },
+  { label: 'TIPOS', items: [{ key: 'automatizado', label: 'Automatizados' }, { key: 'manual', label: 'Manuales' }] },
+];
+
+function OutboundTemplatePreview({ color, type }: { color: string; type: OutboundContentType }) {
+  return (
+    <div className={`w-full h-full bg-gradient-to-br ${color} flex items-center justify-center p-3`}>
+      {type === 'chat' && (
+        <div className="w-full space-y-1.5">
+          <div className="bg-white/80 rounded-[8px] p-2 max-w-[80%] shadow-sm">
+            <div className="h-2 bg-[#1a1a1a]/20 rounded-full w-[90%] mb-1"/>
+            <div className="h-2 bg-[#1a1a1a]/15 rounded-full w-[60%]"/>
+          </div>
+          <div className="bg-white/60 rounded-[8px] p-1.5 max-w-[50%] ml-auto shadow-sm">
+            <div className="h-2 bg-[#3b59f6]/40 rounded-full w-full"/>
+          </div>
+        </div>
+      )}
+      {type === 'email' && (
+        <div className="w-full bg-white/80 rounded-[6px] p-2 shadow-sm">
+          <div className="h-2.5 bg-[#1a1a1a]/30 rounded-full w-[70%] mb-2"/>
+          <div className="h-1.5 bg-[#1a1a1a]/15 rounded-full w-full mb-1"/>
+          <div className="h-1.5 bg-[#1a1a1a]/15 rounded-full w-[85%] mb-1"/>
+          <div className="h-1.5 bg-[#1a1a1a]/15 rounded-full w-[60%] mb-2"/>
+          <div className="h-5 bg-[#3b59f6]/70 rounded-full w-[40%] mx-auto"/>
+        </div>
+      )}
+      {type === 'banner' && (
+        <div className="w-full bg-white/80 rounded-[6px] px-2 py-1.5 shadow-sm flex items-center gap-2">
+          <div className="flex-1"><div className="h-2 bg-[#1a1a1a]/30 rounded-full w-[80%] mb-1"/><div className="h-1.5 bg-[#1a1a1a]/15 rounded-full w-[60%]"/></div>
+          <div className="h-5 bg-[#3b59f6]/70 rounded-full px-2 w-[30%]"/>
+        </div>
+      )}
+      {(type === 'whatsapp' || type === 'sms') && (
+        <div className="w-full space-y-1.5">
+          <div className="bg-[#dcf8c6]/90 rounded-[8px] p-2 max-w-[80%] ml-auto shadow-sm">
+            <div className="h-2 bg-[#1a1a1a]/20 rounded-full w-[90%] mb-1"/>
+            <div className="h-2 bg-[#1a1a1a]/15 rounded-full w-[50%]"/>
+          </div>
+        </div>
+      )}
+      {type === 'push' && (
+        <div className="w-full bg-white/80 rounded-[8px] p-2 shadow-md flex items-start gap-2">
+          <div className="w-6 h-6 rounded-[4px] bg-[#3b59f6]/60 flex-shrink-0"/>
+          <div className="flex-1"><div className="h-2 bg-[#1a1a1a]/30 rounded-full w-[70%] mb-1"/><div className="h-1.5 bg-[#1a1a1a]/15 rounded-full w-full"/></div>
+        </div>
+      )}
+      {(type === 'post' || type === 'all') && (
+        <div className="w-full bg-white/80 rounded-[6px] p-2 shadow-sm">
+          <div className="h-2 bg-[#1a1a1a]/25 rounded-full w-[75%] mb-1.5"/>
+          <div className="h-1.5 bg-[#1a1a1a]/15 rounded-full w-full mb-1"/>
+          <div className="h-1.5 bg-[#1a1a1a]/15 rounded-full w-[80%]"/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OutboundTemplatePicker({ onSelect, onClose }: { onSelect: (t: OutboundTemplate | null) => void; onClose: () => void }) {
+  const [activeCategory, setActiveCategory] = useState<OutboundTemplateCategory>('todo');
+  const [search, setSearch] = useState('');
+
+  const filtered = OUTBOUND_TEMPLATES.filter(t => {
+    const matchesCat = activeCategory === 'todo' || t.categories.includes(activeCategory);
+    const matchesSearch = !search || t.title.toLowerCase().includes(search.toLowerCase()) || t.description.toLowerCase().includes(search.toLowerCase());
+    return matchesCat && matchesSearch;
+  });
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-white rounded-[16px] shadow-2xl w-[900px] max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div>
+            <h2 className="text-[17px] font-bold text-[#1a1a1a]">Elegir una plantilla</h2>
+            <p className="text-[12.5px] text-[#646462] mt-0.5">Selecciona una plantilla o empieza en blanco</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f1f1ee] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.8"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>
+          </button>
+        </div>
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          <div className="w-[196px] flex-shrink-0 border-r border-[#e9eae6] bg-[#fafaf9] py-3 overflow-y-auto">
+            <div className="px-3 mb-3">
+              <div className="flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-3 py-1.5 bg-white">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar…" className="flex-1 outline-none text-[12px] placeholder:text-[#9ca3af] bg-transparent"/>
+              </div>
+            </div>
+            {OUTBOUND_TEMPLATE_CAT_GROUPS.map((group, gi) => (
+              <div key={gi} className="mb-3">
+                {group.label && <p className="px-4 py-1 text-[10.5px] font-semibold text-[#9ca3af] tracking-[0.08em] uppercase">{group.label}</p>}
+                {group.items.map(item => (
+                  <button key={item.key} onClick={() => setActiveCategory(item.key)} className={`w-full text-left px-4 py-1.5 text-[13px] rounded-[6px] transition-colors ${activeCategory === item.key ? 'bg-white shadow-sm font-semibold text-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a] hover:bg-white/50'}`}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div onClick={() => onSelect(null)} className="border-2 border-dashed border-[#d4d4d2] rounded-[10px] overflow-hidden hover:border-[#3b59f6] hover:shadow-md cursor-pointer group transition-all">
+                <div className="h-[130px] bg-[#fafaf9] flex flex-col items-center justify-center gap-2">
+                  <div className="w-10 h-10 rounded-full bg-[#e9eae6] group-hover:bg-[#dbeafe] flex items-center justify-center transition-colors">
+                    <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#646462] group-hover:fill-[#3b59f6] transition-colors"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  </div>
+                  <span className="text-[12px] font-medium text-[#646462] group-hover:text-[#3b59f6] transition-colors">En blanco</span>
+                </div>
+                <div className="p-3 border-t border-[#e9eae6]">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a]">Empezar desde cero</p>
+                  <p className="text-[11.5px] text-[#646462] mt-0.5">Crea tu mensaje personalizado</p>
+                </div>
+              </div>
+              {filtered.map(t => (
+                <div key={t.id} onClick={() => onSelect(t)} className="border border-[#e9eae6] rounded-[10px] overflow-hidden hover:border-[#3b59f6] hover:shadow-md cursor-pointer group transition-all">
+                  <div className="h-[130px] overflow-hidden relative">
+                    <OutboundTemplatePreview color={t.previewColor} type={t.contentType} />
+                    {t.popular && <span className="absolute top-2 right-2 bg-[#fbbf24] text-[#7c2d12] text-[10px] font-semibold px-2 py-0.5 rounded-full">Popular</span>}
+                  </div>
+                  <div className="p-3 border-t border-[#e9eae6]">
+                    <div className="flex items-center gap-1 mb-1">
+                      <span className="text-[#646462]"><OutboundContentIcon type={t.contentType}/></span>
+                      <span className="text-[11px] text-[#646462]">{OUTBOUND_CONTENT_TYPE_LABELS[t.contentType]}</span>
+                    </div>
+                    <p className="text-[13px] font-semibold text-[#1a1a1a] leading-tight">{t.title}</p>
+                    <p className="text-[11.5px] text-[#646462] mt-0.5 leading-snug line-clamp-2">{t.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {filtered.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-[14px] text-[#646462]">No se encontraron plantillas para esta categoría.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Shared toggle switch ──────────────────────────────────────────────────────
+function ToggleSwitch({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className={`relative inline-flex w-9 h-5 rounded-full transition-colors flex-shrink-0 focus:outline-none ${on ? 'bg-[#ed621d]' : 'bg-[#d4d4d2]'}`}
+    >
+      <span className={`inline-block w-3.5 h-3.5 rounded-full bg-white shadow transition-transform mt-[3px] ${on ? 'translate-x-[18px]' : 'translate-x-[3px]'}`}/>
+    </button>
+  );
+}
+
+// ── Outbound recipient types & user picker ────────────────────────────────────
+
+interface OutboundRecipient {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
+  segment: string;
+}
+
+function mapToRecipient(c: any): OutboundRecipient {
+  return {
+    id: String(c.id),
+    name: c.canonicalName || c.name || 'Sin nombre',
+    email: c.canonicalEmail || c.email || '',
+    avatar: (c.canonicalName || c.name || 'U')[0].toUpperCase(),
+    segment: c.segment || '',
+  };
+}
+
+function OutboundSendUserModal({ onSelect, onClose }: {
+  onSelect: (u: OutboundRecipient) => void;
+  onClose: () => void;
+}) {
+  const { data: rawCustomers, loading } = useApi<any[]>(() => customersApi.list(), [], []);
+  const [q, setQ] = useState('');
+
+  const customers: OutboundRecipient[] = useMemo(() => {
+    const list = Array.isArray(rawCustomers) ? rawCustomers.map(mapToRecipient) : [];
+    if (!q.trim()) return list;
+    const lq = q.toLowerCase();
+    return list.filter(c => c.name.toLowerCase().includes(lq) || c.email.toLowerCase().includes(lq));
+  }, [rawCustomers, q]);
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,.4)' }}>
+      <div className="bg-white rounded-[14px] shadow-2xl w-[480px] max-h-[600px] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e9eae6]">
+          <h2 className="text-[15px] font-semibold text-[#1a1a1a]">Enviar a un usuario</h2>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f5f5f4] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="px-4 py-3 border-b border-[#e9eae6]">
+          <div className="flex items-center gap-2 border border-[#e9eae6] rounded-full px-3 py-[6px] bg-[#f8f8f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+            <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Buscar por nombre o email…" className="flex-1 outline-none text-[13px] bg-transparent placeholder:text-[#a4a4a2]"/>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center h-40 gap-2">
+              <svg viewBox="0 0 16 16" className="w-5 h-5 animate-spin fill-none stroke-[#646462]" strokeWidth="1.6"><circle cx="8" cy="8" r="6" strokeDasharray="20 14"/></svg>
+              <span className="text-[13px] text-[#646462]">Cargando contactos…</span>
+            </div>
+          ) : customers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 text-center px-6">
+              <svg viewBox="0 0 16 16" className="w-8 h-8 fill-none stroke-[#d4d4d2] mb-2" strokeWidth="1.2"><circle cx="8" cy="6" r="3"/><path d="M2 14c1-3 3-4.5 6-4.5s5 1.5 6 4.5"/></svg>
+              <p className="text-[13px] font-medium text-[#1a1a1a]">{q ? 'Sin resultados' : 'No hay contactos'}</p>
+              <p className="text-[12px] text-[#646462] mt-1">{q ? 'Prueba con otro término de búsqueda' : 'Añade contactos al CRM para enviarles mensajes'}</p>
+            </div>
+          ) : customers.map(c => (
+            <button key={c.id} onClick={() => onSelect(c)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#fafaf9] text-left transition-colors border-b border-[#f1f1ee] last:border-0">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2] flex items-center justify-center text-white text-[13px] font-bold flex-shrink-0">{c.avatar}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{c.name}</p>
+                <p className="text-[11.5px] text-[#646462] truncate">{c.email}</p>
+              </div>
+              {c.segment && <span className="text-[11px] bg-[#f3f3f1] border border-[#e9eae6] px-2 py-0.5 rounded-full text-[#646462] flex-shrink-0">{c.segment}</span>}
+            </button>
+          ))}
+        </div>
+        <div className="px-5 py-3 border-t border-[#e9eae6] bg-[#fafaf9]">
+          <p className="text-[12px] text-[#646462]">{loading ? '…' : `${customers.length} de ${Array.isArray(rawCustomers) ? rawCustomers.length : 0} contactos`}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Outbound helpers ─────────────────────────────────────────────────────────
+
+/** Map editor content type to a CRM source_channel value */
+const OUTBOUND_CHANNEL_MAP: Record<string, string> = {
+  email: 'email', chat: 'web_chat', whatsapp: 'whatsapp',
+  sms: 'sms', push: 'web_chat', banner: 'web_chat', post: 'web_chat', all: 'web_chat',
+};
+
+/** Build a self-contained HTML email from editor field values */
+function buildOutboundEmailHtml(fields: {
+  heading: string; sub: string; grabCode: string; code: string;
+  valid: string; btn: string; btnUrl: string; hasImage: boolean;
+  senderName: string; showUnsubLink: boolean; linkColor: string;
+}): string {
+  const imgBlock = fields.hasImage
+    ? `<div style="background:linear-gradient(135deg,#4a90d9,#7b68ee,#e040fb);height:160px;border-radius:8px;margin:16px 0;display:flex;align-items:center;justify-content:center;"><span style="color:white;font-size:22px;font-weight:900;text-shadow:0 2px 4px rgba(0,0,0,.3);">ON YOUR BIRTHDAY!</span></div>`
+    : '';
+  const unsubBlock = fields.showUnsubLink
+    ? `<a href="#" style="font-size:10.5px;color:${fields.linkColor};text-decoration:underline;">Unsubscribe from our emails</a>`
+    : '';
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f5f4;font-family:sans-serif;">
+<div style="max-width:560px;margin:24px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);">
+  <div style="padding:32px 24px;text-align:center;">
+    <h2 style="font-size:20px;font-weight:bold;color:#1a1a1a;line-height:1.4;margin:0 0 16px;">${fields.heading}</h2>
+    ${imgBlock}
+    <p style="font-size:16px;font-weight:600;color:#1a1a1a;margin:16px 0 8px;">${fields.sub}</p>
+    <p style="font-size:13px;color:#646462;margin:0 0 12px;">${fields.grabCode}</p>
+    <p style="font-size:24px;font-weight:bold;letter-spacing:3px;color:#1a1a1a;margin:0 0 6px;">${fields.code}</p>
+    <p style="font-size:12px;color:#646462;margin:0 0 20px;">${fields.valid}</p>
+    <a href="${fields.btnUrl || '#'}" style="display:inline-block;padding:12px 28px;background:${fields.linkColor};color:white;font-weight:600;border-radius:4px;text-decoration:none;font-size:14px;">${fields.btn}</a>
+  </div>
+  <div style="padding:16px 24px;border-top:1px solid #e9eae6;background:#f8f8f7;text-align:center;">
+    <p style="font-size:11px;color:#646462;margin:0 0 6px;">${fields.senderName}</p>
+    ${unsubBlock}
+    <p style="font-size:10px;color:#a4a4a2;margin:8px 0 0;">Powered by Intercom</p>
+  </div>
+</div></body></html>`;
+}
+
+/** Send one outbound message to a single customer via casesApi */
+async function sendOutboundToCustomer(
+  customerId: string,
+  subject: string,
+  bodyHtml: string,
+  contentType: string,
+  senderName: string,
+): Promise<string> {
+  const newCase = await casesApi.create({
+    customer_id: customerId,
+    source_channel: OUTBOUND_CHANNEL_MAP[contentType] ?? 'web_chat',
+    type: 'outbound',
+    status: 'open',
+    tags: ['outbound'],
+  });
+  const caseId = newCase?.id || newCase?.case?.id;
+  if (!caseId) throw new Error('No se pudo crear el caso de envío');
+  await casesApi.reply(caseId, bodyHtml);
+  return caseId;
+}
+
+/** Parse stored metadata from emailTemplate.description JSON */
+function parseOutboundMeta(description: string | null): Record<string, any> {
+  if (!description) return {};
+  try { return JSON.parse(description); } catch { return {}; }
+}
+
+/** Map an emailTemplate row → OutboundMsg */
+function mapTemplateToMsg(t: any): OutboundMsg {
+  const meta = parseOutboundMeta(t.description);
+  return {
+    id:           String(t.id),
+    title:        t.name || 'Sin título',
+    status:       t.active ? 'activo' : 'borrador',
+    senderName:   meta.senderName || 'Hector Vidal Sanchez',
+    senderInitial:(meta.senderName?.[0] || 'H').toUpperCase(),
+    contentType:  (meta.contentType as OutboundContentType) || 'email',
+    sent:         Number(meta.sent ?? 0),
+    goalPct:      meta.goalPct !== undefined ? Number(meta.goalPct) : undefined,
+    triggerType:  (meta.triggerType as OutboundTriggerType) || 'accion',
+    audience:     meta.audience || 'Todos',
+    channel:      meta.channel || 'Email',
+    frequency:    meta.frequency || '',
+    goal:         meta.goal || '',
+    createdAt:    t.created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+  };
+}
+
+// ── Outbound Message Editor (Intercom-style, fully functional) ────────────────
+function OutboundMessageEditor({ template, draft, onBack, onSave }: {
+  template: OutboundTemplate | null;
+  draft?: Partial<OutboundMsg>;
+  onBack: () => void;
+  onSave: (msg: OutboundMsg) => void;
+}) {
+  // ── Persisted ID (null = new, string = existing template id)
+  const [persistedId, setPersistedId] = useState<string | null>(
+    draft?.id && !draft.id.startsWith('om') ? draft.id : null,
+  );
+
+  const [title, setTitle] = useState(draft?.title ?? template?.title ?? '');
+  const [status, setStatus] = useState<OutboundMsgStatus>(draft?.status ?? 'borrador');
+  const [contentType, setContentType] = useState<OutboundContentType>(
+    draft?.contentType ?? template?.contentType ?? 'email',
+  );
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [showBanner, setShowBanner] = useState(true);
+
+  // General settings
+  const [sender, setSender] = useState('Hector Vidal Sanchez');
+  const [senderEmail] = useState('hector.vidal.sanchez@acme-8l...');
+  const [assignReplies, setAssignReplies] = useState('Hector Vidal Sanchez');
+  const [subscriptionType, setSubscriptionType] = useState('No subscription type');
+  const [showUnsubLink, setShowUnsubLink] = useState(true);
+  const [accessLang, setAccessLang] = useState('English');
+
+  // Estilo
+  const [emailTpl, setEmailTpl] = useState('Personal');
+  const [linkColor, setLinkColor] = useState('#1251BA');
+  const [boldLinks, setBoldLinks] = useState(false);
+  const [italicLinks, setItalicLinks] = useState(false);
+  const [htmlMode, setHtmlMode] = useState(false);
+  const [htmlBody, setHtmlBody] = useState('');
+
+  // Email content
+  const [subject, setSubject] = useState(draft?.title ?? template?.title ?? '');
+  const [emailHeading, setEmailHeading] = useState("You know we'd never let you down on your birthday 🎂");
+  const [emailSub, setEmailSub] = useState('Celebrate on us, with 15% off your next purchase');
+  const [emailGrabCode, setEmailGrabCode] = useState('Grab your code:');
+  const [emailCode, setEmailCode] = useState('RCK-RRR-001-LL1');
+  const [emailValid, setEmailValid] = useState('Valid until: 30.12.2025');
+  const [emailBtn, setEmailBtn] = useState('Shop Now');
+  const [emailBtnUrl, setEmailBtnUrl] = useState('https://');
+  const [hasImage, setHasImage] = useState(true);
+
+  // Rules
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [audienceType, setAudienceType] = useState<'dinamica' | 'all'>('dinamica');
+  const [audienceRules, setAudienceRules] = useState<{ attr: string; op: string; value: string }[]>([
+    { attr: 'Unsubscribed from Emails', op: 'is', value: 'false' },
+    { attr: 'Tipo de usuario', op: 'is', value: 'Users' },
+  ]);
+
+  // Frequency
+  const [frequencyOpen, setFrequencyOpen] = useState(false);
+  const [sendEvery, setSendEvery] = useState('1');
+  const [sendUnit, setSendUnit] = useState('day');
+  const [startSending, setStartSending] = useState('immediately');
+  const [stopSending, setStopSending] = useState('never');
+  const [sendDays, setSendDays] = useState('any');
+
+  // Goal
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [goal, setGoal] = useState('');
+  const [utmCampaign, setUtmCampaign] = useState('');
+  const [utmMedium, setUtmMedium] = useState('email');
+  const [utmSource, setUtmSource] = useState('intercom');
+
+  // Send to specific user
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [specificUser, setSpecificUser] = useState<OutboundRecipient | null>(null);
+  const [sendMode, setSendMode] = useState<'audience' | 'user'>('audience');
+
+  // Mobile preview
+  const [mobilePreview, setMobilePreview] = useState(false);
+
+  // Left panel dropdown open states
+  const [showFromDrop,   setShowFromDrop]   = useState(false);
+  const [showAssignDrop, setShowAssignDrop] = useState(false);
+  const [showSubDrop,    setShowSubDrop]    = useState(false);
+  const [showLangDrop,   setShowLangDrop]   = useState(false);
+
+  // Background colors (Estilo section)
+  const [bgColor,     setBgColor]     = useState('#f5f5f4');
+  const [textBgColor, setTextBgColor] = useState('#ffffff');
+
+  // Refs for native color inputs
+  const linkColorRef   = useRef<HTMLInputElement>(null);
+  const bgColorRef     = useRef<HTMLInputElement>(null);
+  const textBgColorRef = useRef<HTMLInputElement>(null);
+
+  // Refs for contentEditable elements (avoid React/DOM fight on re-render)
+  const headingRef   = useRef<HTMLDivElement>(null);
+  const subRef       = useRef<HTMLDivElement>(null);
+  const grabCodeRef  = useRef<HTMLDivElement>(null);
+  const codeRef      = useRef<HTMLDivElement>(null);
+  const validRef     = useRef<HTMLDivElement>(null);
+  const btnRef       = useRef<HTMLDivElement>(null);
+
+  // Load customers for broadcast
+  const { data: rawCustomers } = useApi<any[]>(() => customersApi.list(), [], []);
+
+  // ── Init contentEditable refs only on mount (avoid React/DOM fight) ──────
+  useEffect(() => {
+    if (headingRef.current)  headingRef.current.innerText  = emailHeading;
+    if (subRef.current)      subRef.current.innerText      = emailSub;
+    if (grabCodeRef.current) grabCodeRef.current.innerText = emailGrabCode;
+    if (codeRef.current)     codeRef.current.innerText     = emailCode;
+    if (validRef.current)    validRef.current.innerText    = emailValid;
+    if (btnRef.current)      btnRef.current.innerText      = emailBtn;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+  function showSendResult(ok: boolean, msg: string) {
+    setSendResult({ ok, msg });
+    window.setTimeout(() => setSendResult(null), 5000);
+  }
+
+  function getEmailHtml(): string {
+    if (htmlMode && htmlBody.trim()) return htmlBody;
+    return buildOutboundEmailHtml({
+      heading: emailHeading, sub: emailSub, grabCode: emailGrabCode,
+      code: emailCode, valid: emailValid, btn: emailBtn, btnUrl: emailBtnUrl,
+      hasImage, senderName: sender, showUnsubLink, linkColor,
+    });
+  }
+
+  function buildMetaDescription(newStatus: OutboundMsgStatus): string {
+    return JSON.stringify({
+      contentType,
+      senderName: sender,
+      triggerType: template?.triggerType ?? draft?.triggerType ?? 'accion',
+      audience: specificUser ? specificUser.name : (audienceType === 'all' ? 'Todos' : 'Audiencia dinámica'),
+      channel: OUTBOUND_CONTENT_TYPE_LABELS[contentType],
+      frequency: 'Cada ' + sendEvery + ' ' + sendUnit,
+      goal,
+      sent: draft?.sent ?? 0,
+      goalPct: draft?.goalPct,
+      status: newStatus,
+    });
+  }
+
+  // ── Save draft / activate ─────────────────────────────────────────────────
+  async function handleSave(newStatus: OutboundMsgStatus = status) {
+    setSaving(true);
+    try {
+      const payload = {
+        name:      (subject || title || 'Sin título').slice(0, 200),
+        subject:   subject || title || 'Sin título',
+        body_html: getEmailHtml(),
+        body_text: '',
+        category:  'outbound',
+        locale:    contentType,
+        active:    newStatus === 'activo',
+        description: buildMetaDescription(newStatus),
+      };
+
+      let savedId = persistedId;
+      if (persistedId) {
+        await emailTemplatesApi.update(persistedId, payload);
+      } else {
+        const created = await emailTemplatesApi.create(payload);
+        savedId = created?.id ? String(created.id) : null;
+        if (savedId) setPersistedId(savedId);
+      }
+
+      setStatus(newStatus);
+      const msg: OutboundMsg = {
+        id:           savedId ?? ('om' + Date.now()),
+        title:        payload.name,
+        status:       newStatus,
+        senderName:   sender,
+        senderInitial: sender[0] ?? 'H',
+        contentType,
+        sent:         draft?.sent ?? 0,
+        goalPct:      draft?.goalPct,
+        triggerType:  template?.triggerType ?? draft?.triggerType ?? 'accion',
+        audience:     specificUser ? specificUser.name : (audienceType === 'all' ? 'Todos' : 'Audiencia dinámica'),
+        channel:      OUTBOUND_CONTENT_TYPE_LABELS[contentType],
+        frequency:    'Cada ' + sendEvery + ' ' + sendUnit,
+        goal,
+        createdAt:    draft?.createdAt ?? new Date().toISOString().slice(0, 10),
+      };
+      onSave(msg);
+    } catch (err: any) {
+      showSendResult(false, err?.message || 'Error al guardar el mensaje');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── Send now (specific user OR broadcast) ─────────────────────────────────
+  async function handleSendNow() {
+    setSending(true);
+    const bodyHtml = getEmailHtml();
+    const subjectText = subject || title || 'Mensaje';
+    try {
+      if (sendMode === 'user' && specificUser) {
+        // Single user send
+        await sendOutboundToCustomer(specificUser.id, subjectText, bodyHtml, contentType, sender);
+        showSendResult(true, `Mensaje enviado a ${specificUser.name} correctamente`);
+        await handleSave('activo');
+      } else {
+        // Broadcast to audience
+        const customers = Array.isArray(rawCustomers) ? rawCustomers : [];
+        if (customers.length === 0) {
+          showSendResult(false, 'No hay contactos disponibles para el envío masivo');
+          return;
+        }
+        // Filter customers by audience rules (simple client-side filter)
+        let targets = customers;
+        if (audienceType === 'dinamica' && audienceRules.length > 0) {
+          // Just limit to 50 for broadcast to avoid flooding the backend
+          targets = customers.slice(0, 50);
+        }
+        let sent = 0;
+        const errors: string[] = [];
+        for (const c of targets) {
+          try {
+            await sendOutboundToCustomer(String(c.id), subjectText, bodyHtml, contentType, sender);
+            sent++;
+          } catch (e: any) {
+            errors.push(e?.message || 'Error');
+          }
+        }
+        if (errors.length > 0) {
+          showSendResult(false, `Enviado a ${sent} contactos, ${errors.length} errores`);
+        } else {
+          showSendResult(true, `Mensaje enviado a ${sent} contacto${sent !== 1 ? 's' : ''} correctamente`);
+        }
+        await handleSave('activo');
+      }
+    } catch (err: any) {
+      showSendResult(false, err?.message || 'Error al enviar el mensaje');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  // ── Computed chips ────────────────────────────────────────────────────────
+  const ruleChips = audienceType === 'dinamica'
+    ? ['Audiencia dinámica', ...audienceRules.map(r => r.attr + ' ' + r.op + ' ' + r.value)]
+    : ['Todos los usuarios'];
+  const freqChips = [
+    'Enviar cada ' + sendEvery + ' ' + sendUnit + ' si coincide',
+    startSending === 'immediately' ? 'Empezar inmediatamente' : 'Empezar programado',
+    stopSending === 'never' ? 'Nunca dejar de enviar' : 'Dejar de enviar: ' + stopSending,
+    sendDays === 'any' ? 'Cualquier día, cualquier hora' : 'Solo horario laboral',
+  ];
+
+  return (
+    <div className="flex flex-col h-full bg-white overflow-hidden">
+      {showUserModal && (
+        <OutboundSendUserModal
+          onSelect={u => { setSpecificUser(u); setSendMode('user'); setShowUserModal(false); }}
+          onClose={() => setShowUserModal(false)}
+        />
+      )}
+
+      {/* Result toast */}
+      {sendResult && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 px-4 py-3 rounded-[10px] shadow-xl text-[13px] font-medium border ${sendResult.ok ? 'bg-[#f0fdf4] border-[#bbf7d0] text-[#15803d]' : 'bg-[#fef2f2] border-[#fecaca] text-[#b91c1c]'}`}>
+          <svg viewBox="0 0 16 16" className={`w-4 h-4 flex-shrink-0 ${sendResult.ok ? 'fill-[#15803d]' : 'fill-[#b91c1c]'}`}>
+            {sendResult.ok ? <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm3 4.5L7.5 9.5 5 7" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/> : <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm0 3.5v4m0 2.5v.01"/>}
+          </svg>
+          {sendResult.msg}
+        </div>
+      )}
+
+      {/* Domain warning banner */}
+      {showBanner && (
+        <div className="flex-shrink-0 bg-[#fff8ed] border-b border-[#fde9c4] px-6 py-2 flex items-center gap-2 text-[12.5px]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d] flex-shrink-0"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm.7 3.2v3.6l2.5 1.5-.6 1L7.5 9V4.7z"/></svg>
+          <span className="text-[#646462]">Usa tu propio dominio para ayudar a evitar que este correo electrónico sea detectado por los filtros de spam.</span>
+          <a href="#" className="text-[#3b59f6] font-medium hover:underline ml-1">Explicación de los dominios.</a>
+          <button onClick={() => setShowBanner(false)} className="ml-auto text-[#a4a4a2] hover:text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      )}
+
+      {/* Top bar */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] bg-white">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-[#646462] hover:text-[#1a1a1a] flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 13L5 8l5-5"/></svg>
+          Mensajes
+        </button>
+        <span className="text-[#d4d4d2]">/</span>
+        <input
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Sin título"
+          className="text-[14px] font-semibold text-[#1a1a1a] outline-none border-b border-transparent hover:border-[#e9eae6] focus:border-[#3b59f6] px-1 py-0.5 min-w-[100px] max-w-[240px] bg-transparent"
+        />
+        <div className="flex-1"/>
+
+        {/* Audience / User toggle */}
+        <div className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-1 py-0.5 bg-[#f8f8f7] text-[12px]">
+          <button
+            onClick={() => { setSendMode('audience'); setSpecificUser(null); }}
+            className={`px-2.5 py-1 rounded-full font-medium transition-colors ${sendMode === 'audience' ? 'bg-white shadow-sm text-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'}`}
+          >Audiencia</button>
+          <button
+            onClick={() => { setSendMode('user'); setShowUserModal(true); }}
+            className={`px-2.5 py-1 rounded-full font-medium transition-colors ${sendMode === 'user' ? 'bg-white shadow-sm text-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'}`}
+          >
+            {specificUser ? specificUser.name : 'Usuario específico'}
+          </button>
+        </div>
+
+        {specificUser && sendMode === 'user' && (
+          <div className="flex items-center gap-1.5 bg-[#eff3ff] border border-[#c7d2fe] rounded-full px-2.5 py-1 text-[12px] text-[#3b59f6]">
+            <span className="w-4 h-4 rounded-full bg-[#3b59f6] text-white text-[9px] flex items-center justify-center font-bold">{specificUser.avatar}</span>
+            <span className="font-medium">{specificUser.name}</span>
+            <button onClick={() => { setSpecificUser(null); setSendMode('audience'); }} className="ml-0.5 hover:text-[#1a1a1a]">×</button>
+          </div>
+        )}
+
+        <OutboundStatusBadge status={status}/>
+
+        <button
+          onClick={() => handleSave('borrador')}
+          disabled={saving || sending}
+          className="px-3 py-1.5 text-[13px] font-medium border border-[#e9eae6] rounded-full text-[#1a1a1a] hover:bg-[#f5f5f4] disabled:opacity-50"
+        >{saving ? 'Guardando…' : 'Guardar borrador'}</button>
+
+        {/* Primary action: Enviar ahora (user) or Activar / Publicar (audience) */}
+        {sendMode === 'user' ? (
+          <button
+            onClick={handleSendNow}
+            disabled={saving || sending || !specificUser}
+            className="px-4 py-1.5 text-[13px] font-semibold bg-[#1a1a1a] text-white rounded-full hover:bg-black disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {sending ? (
+              <><svg viewBox="0 0 16 16" className="w-3 h-3 animate-spin fill-none stroke-white" strokeWidth="1.6"><circle cx="8" cy="8" r="6" strokeDasharray="20 14"/></svg>Enviando…</>
+            ) : 'Enviar ahora'}
+          </button>
+        ) : (
+          <button
+            onClick={() => status === 'activo' ? handleSendNow() : handleSave('activo')}
+            disabled={saving || sending}
+            className="px-4 py-1.5 text-[13px] font-semibold bg-[#1a1a1a] text-white rounded-full hover:bg-black disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {sending ? (
+              <><svg viewBox="0 0 16 16" className="w-3 h-3 animate-spin fill-none stroke-white" strokeWidth="1.6"><circle cx="8" cy="8" r="6" strokeDasharray="20 14"/></svg>Enviando…</>
+            ) : status === 'activo' ? 'Enviar a audiencia' : 'Activar mensaje'}
+          </button>
+        )}
+      </div>
+
+      {/* Content area */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+
+        {/* ── Left settings panel ─────────────────────────────────── */}
+        <div className="w-[300px] flex-shrink-0 border-r border-[#e9eae6] overflow-y-auto bg-white">
+          <div className="px-4 pt-3 pb-2 border-b border-[#f1f1ee]">
+            <button className="flex items-center gap-1.5 text-[12.5px] font-medium text-[#3b59f6] hover:underline">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M5 3l8 5-8 5V3z"/></svg>
+              Ejecutar una nueva prueba
+            </button>
+          </div>
+
+          {/* General settings */}
+          <div className="px-4 py-4" onClick={() => { setShowFromDrop(false); setShowAssignDrop(false); setShowSubDrop(false); setShowLangDrop(false); }}>
+            <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-4">General settings</h3>
+
+            {/* From */}
+            <div className="mb-4 relative">
+              <label className="block text-[11.5px] font-medium text-[#646462] mb-1.5">From</label>
+              <div onClick={e => { e.stopPropagation(); setShowFromDrop(v => !v); setShowAssignDrop(false); setShowSubDrop(false); setShowLangDrop(false); }} className={`border rounded-[8px] px-3 py-2 flex items-center gap-2 bg-white cursor-pointer transition-colors ${showFromDrop ? 'border-[#3b59f6]' : 'border-[#e9eae6] hover:border-[#c8c9c4]'}`}>
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2] flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">{sender[0]}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12.5px] text-[#1a1a1a] font-medium truncate">{sender}</p>
+                  <p className="text-[10.5px] text-[#646462] truncate">{senderEmail}</p>
+                </div>
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current text-[#646462] flex-shrink-0 transition-transform ${showFromDrop ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+              </div>
+              {showFromDrop && (
+                <div onClick={e => e.stopPropagation()} className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e9eae6] rounded-[10px] shadow-lg z-30 py-1.5 overflow-hidden">
+                  <p className="text-[10.5px] font-semibold text-[#646462] uppercase tracking-wide px-3 py-1">Teammates</p>
+                  {['Hector Vidal Sanchez', 'María García López', 'Carlos Ruiz Martín'].map(n => (
+                    <button key={n} onClick={() => { setSender(n); setShowFromDrop(false); }} className={`w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#f5f5f4] text-left ${sender === n ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2] flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">{n[0]}</div>
+                      <span className="text-[12.5px] flex-1 truncate">{n}</span>
+                      {sender === n && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0"><path d="M3 8l4 4 6-7" stroke="#3b59f6" strokeWidth="2" fill="none"/></svg>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Assign replies to */}
+            <div className="mb-4 relative">
+              <label className="block text-[11.5px] font-medium text-[#646462] mb-1.5">Assign replies to</label>
+              <div onClick={e => { e.stopPropagation(); setShowAssignDrop(v => !v); setShowFromDrop(false); setShowSubDrop(false); setShowLangDrop(false); }} className={`border rounded-[8px] px-3 py-2 flex items-center gap-2 bg-white cursor-pointer transition-colors ${showAssignDrop ? 'border-[#3b59f6]' : 'border-[#e9eae6] hover:border-[#c8c9c4]'}`}>
+                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2] flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">{assignReplies[0]}</div>
+                <span className="text-[12.5px] text-[#1a1a1a] flex-1 truncate">{assignReplies}</span>
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current text-[#646462] flex-shrink-0 transition-transform ${showAssignDrop ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+              </div>
+              {showAssignDrop && (
+                <div onClick={e => e.stopPropagation()} className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e9eae6] rounded-[10px] shadow-lg z-30 py-1.5 overflow-hidden">
+                  <div className="px-3 py-1">
+                    <div className="flex items-center gap-2 bg-[#f5f5f4] rounded-[6px] px-2.5 py-1.5 mb-1">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M11 11l3 3"/></svg>
+                      <input autoFocus placeholder="Search addresses..." className="flex-1 text-[12px] bg-transparent outline-none text-[#1a1a1a] placeholder:text-[#a4a4a2]"/>
+                    </div>
+                  </div>
+                  <p className="text-[10.5px] font-semibold text-[#646462] uppercase tracking-wide px-3 py-1">Dynamic</p>
+                  <button onClick={() => { setAssignReplies('Propietario'); setShowAssignDrop(false); }} className={`w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#f5f5f4] text-left ${assignReplies === 'Propietario' ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.3"><circle cx="8" cy="6" r="2.5"/><path d="M3 13.5c.8-2.5 2.8-3.8 5-3.8s4.2 1.3 5 3.8"/></svg>
+                    <span className="text-[12.5px]">Propietario</span>
+                    {assignReplies === 'Propietario' && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 ml-auto"><path d="M3 8l4 4 6-7" stroke="#3b59f6" strokeWidth="2" fill="none"/></svg>}
+                  </button>
+                  <p className="text-[10.5px] font-semibold text-[#646462] uppercase tracking-wide px-3 py-1 mt-1">Teammates</p>
+                  {['Hector Vidal Sanchez', 'María García López', 'Unassigned'].map(n => (
+                    <button key={n} onClick={() => { setAssignReplies(n); setShowAssignDrop(false); }} className={`w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#f5f5f4] text-left ${assignReplies === n ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                      {n === 'Unassigned'
+                        ? <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.3"><circle cx="8" cy="6" r="2.5" strokeDasharray="3 2"/><path d="M3 13.5c.8-2.5 2.8-3.8 5-3.8s4.2 1.3 5 3.8"/></svg>
+                        : <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2] flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">{n[0]}</div>}
+                      <span className="text-[12.5px] flex-1">{n}</span>
+                      {assignReplies === n && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M3 8l4 4 6-7" stroke="#3b59f6" strokeWidth="2" fill="none"/></svg>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Subscription type */}
+            <div className="mb-4 relative">
+              <label className="block text-[11.5px] font-medium text-[#646462] mb-1.5">Tipo de suscripción <span className="text-[#a4a4a2] cursor-help" title="Controla qué usuarios reciben este email según sus preferencias de suscripción">?</span></label>
+              <div onClick={e => { e.stopPropagation(); setShowSubDrop(v => !v); setShowFromDrop(false); setShowAssignDrop(false); setShowLangDrop(false); }} className={`border rounded-[8px] px-3 py-2 flex items-center justify-between bg-white cursor-pointer transition-colors ${showSubDrop ? 'border-[#3b59f6]' : 'border-[#e9eae6] hover:border-[#c8c9c4]'}`}>
+                <span className="text-[12.5px] text-[#1a1a1a]">{subscriptionType}</span>
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current text-[#646462] transition-transform ${showSubDrop ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+              </div>
+              {showSubDrop && (
+                <div onClick={e => e.stopPropagation()} className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e9eae6] rounded-[10px] shadow-lg z-30 py-1.5">
+                  {['No subscription type', 'Marketing emails', 'Product updates', 'Security updates', 'Account notifications'].map(opt => (
+                    <button key={opt} onClick={() => { setSubscriptionType(opt); setShowSubDrop(false); }} className={`w-full flex items-center justify-between px-4 py-2 hover:bg-[#f5f5f4] text-left ${subscriptionType === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                      <span className="text-[12.5px]">{opt}</span>
+                      {subscriptionType === opt && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M3 8l4 4 6-7" stroke="#3b59f6" strokeWidth="2" fill="none"/></svg>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-4 flex items-center justify-between">
+              <label className="text-[12.5px] text-[#1a1a1a] flex items-center gap-1">Show unsubscribe link <span className="text-[#a4a4a2] text-[11px] cursor-help" title="Muestra un enlace de cancelación de suscripción al final del email">?</span></label>
+              <ToggleSwitch on={showUnsubLink} onChange={setShowUnsubLink}/>
+            </div>
+
+            {/* Language */}
+            <div className="mb-2 relative">
+              <label className="block text-[11.5px] font-medium text-[#646462] mb-1.5">Lenguaje de accesibilidad <span className="text-[#a4a4a2] cursor-help" title="Idioma del texto de accesibilidad (aria-labels, etc.)">?</span></label>
+              <div onClick={e => { e.stopPropagation(); setShowLangDrop(v => !v); setShowFromDrop(false); setShowAssignDrop(false); setShowSubDrop(false); }} className={`border rounded-[8px] px-3 py-2 flex items-center justify-between bg-white cursor-pointer transition-colors ${showLangDrop ? 'border-[#3b59f6]' : 'border-[#e9eae6] hover:border-[#c8c9c4]'}`}>
+                <span className="text-[12.5px] text-[#1a1a1a]">{accessLang}</span>
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current text-[#646462] transition-transform ${showLangDrop ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+              </div>
+              {showLangDrop && (
+                <div onClick={e => e.stopPropagation()} className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e9eae6] rounded-[10px] shadow-lg z-30 py-1.5">
+                  {['English', 'Español', 'Français', 'Deutsch', 'Italiano', 'Português', '中文', '日本語'].map(lang => (
+                    <button key={lang} onClick={() => { setAccessLang(lang); setShowLangDrop(false); }} className={`w-full flex items-center justify-between px-4 py-2 hover:bg-[#f5f5f4] text-left ${accessLang === lang ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                      <span className="text-[12.5px]">{lang}</span>
+                      {accessLang === lang && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M3 8l4 4 6-7" stroke="#3b59f6" strokeWidth="2" fill="none"/></svg>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Estilo section */}
+          <div className="px-4 pb-4 border-t border-[#f1f1ee] pt-4">
+            <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-4">Estilo</h3>
+
+            <div className="mb-4">
+              <label className="block text-[11.5px] font-medium text-[#646462] mb-1.5">Plantilla de correo electrónico</label>
+              <div className="border border-[#e9eae6] rounded-[8px] px-3 py-2 flex items-center justify-between bg-white cursor-pointer hover:border-[#c8c9c4]">
+                <span className="text-[12.5px] text-[#1a1a1a]">{emailTpl}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M9 2h4v4M10 6L15 1M7 3H3a1 1 0 00-1 1v9a1 1 0 001 1h10a1 1 0 001-1V9"/></svg>
+              </div>
+            </div>
+
+            {/* Fondo de plantilla */}
+            <div className="mb-4">
+              <label className="block text-[11.5px] font-medium text-[#646462] mb-1.5">Fondo de plantilla</label>
+              <div className="flex items-center gap-2">
+                <span className="text-[12.5px] text-[#1a1a1a] flex-1 font-mono">{bgColor}</span>
+                <div className="relative">
+                  <div className="w-6 h-6 rounded-full border-2 border-[#e9eae6] cursor-pointer hover:border-[#c8c9c4] transition-colors overflow-hidden" style={{ background: bgColor }} onClick={() => bgColorRef.current?.click()}/>
+                  <input ref={bgColorRef} type="color" value={bgColor} onChange={e => setBgColor(e.target.value)} className="absolute opacity-0 w-0 h-0 pointer-events-none"/>
+                </div>
+              </div>
+            </div>
+
+            {/* Fondo del texto */}
+            <div className="mb-4">
+              <label className="block text-[11.5px] font-medium text-[#646462] mb-1.5">Fondo del texto</label>
+              <div className="flex items-center gap-2">
+                <span className="text-[12.5px] text-[#1a1a1a] flex-1 font-mono">{textBgColor}</span>
+                <div className="relative">
+                  <div className="w-6 h-6 rounded-full border-2 border-[#e9eae6] cursor-pointer hover:border-[#c8c9c4] transition-colors overflow-hidden" style={{ background: textBgColor }} onClick={() => textBgColorRef.current?.click()}/>
+                  <input ref={textBgColorRef} type="color" value={textBgColor} onChange={e => setTextBgColor(e.target.value)} className="absolute opacity-0 w-0 h-0 pointer-events-none"/>
+                </div>
+              </div>
+            </div>
+
+            {/* Link color */}
+            <div className="mb-4">
+              <label className="block text-[11.5px] font-medium text-[#646462] mb-1.5">Enlaces</label>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 border border-[#e9eae6] rounded-[6px] px-2 py-1.5 flex-1 cursor-pointer hover:border-[#c8c9c4]" onClick={() => linkColorRef.current?.click()}>
+                  <div className="w-4 h-4 rounded-[3px] border border-white/30 shadow-sm flex-shrink-0" style={{ background: linkColor }}/>
+                  <span className="text-[12px] text-[#1a1a1a] font-mono flex-1">{linkColor}</span>
+                  <input ref={linkColorRef} type="color" value={linkColor} onChange={e => setLinkColor(e.target.value)} className="absolute opacity-0 w-0 h-0 pointer-events-none"/>
+                </div>
+                <ToggleSwitch on={boldLinks} onChange={setBoldLinks}/>
+              </div>
+              <div className="flex gap-1.5 mt-2">
+                <button onClick={() => setBoldLinks(v => !v)} className={`w-7 h-7 flex items-center justify-center rounded-[5px] border text-[13px] font-bold transition-colors ${boldLinks ? 'border-[#1a1a1a] bg-[#1a1a1a] text-white' : 'border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>B</button>
+                <button onClick={() => setItalicLinks(v => !v)} className={`w-7 h-7 flex items-center justify-center rounded-[5px] border text-[13px] italic transition-colors ${italicLinks ? 'border-[#1a1a1a] bg-[#1a1a1a] text-white' : 'border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>i</button>
+              </div>
+            </div>
+
+            <button onClick={() => setHtmlMode(v => !v)} className="flex items-center gap-1.5 text-[12.5px] text-[#646462] hover:text-[#1a1a1a] font-medium">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M5 4L2 8l3 4M11 4l3 4-3 4M8 3l-2 10"/></svg>
+              {htmlMode ? 'Volver al editor visual' : 'Switch to HTML editor'}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Center: email canvas ─────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto relative" style={{ background: '#f5f5f4' }}>
+          <div className="absolute top-4 right-4 z-10">
+            <button
+              onClick={() => setMobilePreview(v => !v)}
+              className={`flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-full border transition-colors ${mobilePreview ? 'border-[#3b59f6] bg-[#eff3ff] text-[#3b59f6]' : 'border-[#e9eae6] bg-white text-[#646462] hover:border-[#c8c9c4]'}`}
+            >
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><rect x="5" y="1" width="6" height="14" rx="1.5"/><circle cx="8" cy="12.5" r="0.7" fill="currentColor"/></svg>
+              Vista previa para celulares
+            </button>
+          </div>
+
+          <div className={`py-6 px-6 flex flex-col ${mobilePreview ? 'items-center' : 'items-stretch'}`}>
+            {/* Email card */}
+            <div className={`bg-white rounded-[8px] shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-hidden transition-all duration-300 ${mobilePreview ? 'w-[375px] self-center' : 'w-full'}`}>
+
+              {/* Window chrome + subject line */}
+              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] bg-[#f8f8f7]">
+                <div className="flex gap-1.5 flex-shrink-0">
+                  <div className="w-3 h-3 rounded-full bg-[#ff5f56]"/>
+                  <div className="w-3 h-3 rounded-full bg-[#ffbd2e]"/>
+                  <div className="w-3 h-3 rounded-full bg-[#27c93f]"/>
+                </div>
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#eff3ff] border border-[#c7d2fe] rounded-[4px] text-[11px] text-[#3b59f6] font-mono font-medium flex-shrink-0">
+                    <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-current"><path d="M5 4L2 8l3 4M11 4l3 4-3 4"/></svg>
+                    First name
+                  </span>
+                  <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Asunto del email…" className="flex-1 min-w-0 text-[13px] text-[#1a1a1a] outline-none bg-transparent placeholder:text-[#a4a4a2] font-medium"/>
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <button title="Deshacer" className="w-6 h-6 flex items-center justify-center rounded-[4px] hover:bg-[#e9eae6] text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 6H9.5a3.5 3.5 0 010 7H4" strokeLinecap="round"/><path d="M6 3L3 6l3 3"/></svg>
+                  </button>
+                  <button title="Rehacer" className="w-6 h-6 flex items-center justify-center rounded-[4px] hover:bg-[#e9eae6] text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M13 6H6.5a3.5 3.5 0 000 7H12" strokeLinecap="round"/><path d="M10 3l3 3-3 3"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Email body */}
+              {htmlMode ? (
+                <div className="p-4">
+                  <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} className="w-full h-[400px] font-mono text-[12px] text-[#1a1a1a] border border-[#e9eae6] rounded-[6px] p-3 outline-none resize-none" placeholder="<!-- Escribe tu HTML aquí -->"/>
+                </div>
+              ) : (
+                <div className="p-6" style={{ background: '#f5f5f4' }}>
+                  <div className="rounded-[8px] overflow-hidden mx-auto bg-white" style={{ maxWidth: mobilePreview ? '100%' : 560 }}>
+                    <div className="p-6 text-center">
+                      <div ref={headingRef} contentEditable suppressContentEditableWarning onBlur={e => setEmailHeading(e.currentTarget.innerText || '')} className="text-[18px] font-bold text-[#1a1a1a] leading-[1.4] mb-4 outline-none focus:bg-[#f8fbff] rounded-[4px] px-1 cursor-text min-h-[1em]"/>
+
+                      {hasImage ? (
+                        <div className="relative mb-4 rounded-[8px] overflow-hidden bg-gradient-to-br from-[#4a90d9] via-[#7b68ee] to-[#e040fb] cursor-pointer group" style={{ height: mobilePreview ? 140 : 180 }} onClick={() => setHasImage(false)} title="Clic para quitar imagen">
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <div className="text-white text-[22px] font-black tracking-tight drop-shadow-lg">ON YOUR BIRTHDAY!</div>
+                          </div>
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <span className="bg-black/60 text-white text-[11px] rounded-full px-2 py-1">Quitar imagen</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={() => setHasImage(true)} className="w-full mb-4 rounded-[8px] border-2 border-dashed border-[#e9eae6] bg-[#fafaf9] hover:bg-[#f3f3f1] transition-colors flex flex-col items-center justify-center gap-2 py-8 cursor-pointer">
+                          <svg viewBox="0 0 16 16" className="w-6 h-6 fill-none stroke-[#a4a4a2]" strokeWidth="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6" r="1.3"/><path d="M1.5 10.5l4-3 3 2.5 2.5-2 3 3"/></svg>
+                          <span className="text-[12px] text-[#646462]">Añadir imagen</span>
+                        </button>
+                      )}
+
+                      <div ref={subRef} contentEditable suppressContentEditableWarning onBlur={e => setEmailSub(e.currentTarget.innerText || '')} className="text-[15px] font-semibold text-[#1a1a1a] mb-2 outline-none focus:bg-[#f8fbff] rounded-[4px] px-1 cursor-text min-h-[1em]"/>
+                      <div ref={grabCodeRef} contentEditable suppressContentEditableWarning onBlur={e => setEmailGrabCode(e.currentTarget.innerText || '')} className="text-[13px] text-[#646462] mb-3 outline-none focus:bg-[#f8fbff] rounded-[4px] px-1 cursor-text min-h-[1em]"/>
+                      <div ref={codeRef} contentEditable suppressContentEditableWarning onBlur={e => setEmailCode(e.currentTarget.innerText || '')} className="text-[20px] font-bold text-[#1a1a1a] mb-1 tracking-wide outline-none focus:bg-[#f8fbff] rounded-[4px] px-1 cursor-text min-h-[1em]"/>
+                      <div ref={validRef} contentEditable suppressContentEditableWarning onBlur={e => setEmailValid(e.currentTarget.innerText || '')} className="text-[12px] text-[#646462] mb-5 outline-none focus:bg-[#f8fbff] rounded-[4px] px-1 cursor-text min-h-[1em]"/>
+
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <div ref={btnRef} contentEditable suppressContentEditableWarning onBlur={e => setEmailBtn(e.currentTarget.innerText || '')} className="inline-block px-6 py-2.5 rounded-[4px] text-[14px] font-semibold text-white cursor-text outline-none min-w-[80px] text-center" style={{ background: linkColor }}/>
+                      </div>
+                      <p className="text-[10.5px] text-[#a4a4a2]">URL: <input value={emailBtnUrl} onChange={e => setEmailBtnUrl(e.target.value)} className="text-[10.5px] text-[#3b59f6] outline-none bg-transparent border-b border-transparent focus:border-[#3b59f6] max-w-[200px]"/></p>
+                    </div>
+
+                    <div className="px-6 py-4 border-t border-[#e9eae6] bg-[#f8f8f7]">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-[#e9eae6] flex items-center justify-center text-[10px] font-bold text-[#646462]">{sender[0]}</div>
+                          <span className="text-[11px] text-[#646462]">{sender.split(' ')[0]} from Acme</span>
+                        </div>
+                        {showUnsubLink && <a href="#" className="text-[10.5px] hover:underline" style={{ color: linkColor }}>Unsubscribe from our emails</a>}
+                      </div>
+                      <div className="text-center mt-2 text-[10px] text-[#a4a4a2]">Powered by Intercom</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* How to compose */}
+            <div className="w-full text-center py-3">
+              <a href="#" className="inline-flex items-center gap-1.5 text-[12.5px] text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
+                How to compose a message
+              </a>
+            </div>
+
+            {/* ── Rules ────────────────────────────────────────────── */}
+            <div className="w-full bg-white border border-[#e9eae6] rounded-[10px] mb-3 overflow-hidden">
+              <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#fafaf9] transition-colors text-left" onClick={() => setRulesOpen(o => !o)}>
+                <span className="text-[13px] font-semibold text-[#1a1a1a] flex-shrink-0">Rules</span>
+                <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0 transition-transform ${rulesOpen ? 'rotate-90' : ''}`} strokeWidth="1.5"><path d="M6 3l5 5-5 5" strokeLinecap="round"/></svg>
+                <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+                  {sendMode === 'user' && specificUser ? (
+                    <span className="inline-flex items-center gap-1 bg-[#eff3ff] border border-[#c7d2fe] text-[#3b59f6] text-[11.5px] px-2.5 py-0.5 rounded-full font-medium">{specificUser.name}</span>
+                  ) : ruleChips.map((chip, i) => (
+                    <span key={i} className="inline-flex items-center bg-[#f3f3f1] border border-[#e9eae6] text-[#1a1a1a] text-[11.5px] px-2.5 py-0.5 rounded-full">{chip}</span>
+                  ))}
+                </div>
+              </button>
+              {rulesOpen && (
+                <div className="border-t border-[#e9eae6] px-4 py-4 space-y-3">
+                  {sendMode === 'user' ? (
+                    <div className="flex items-center gap-3 p-3 bg-[#eff3ff] border border-[#c7d2fe] rounded-[8px]">
+                      <div className="w-8 h-8 rounded-full bg-[#3b59f6] text-white text-[12px] font-bold flex items-center justify-center">{specificUser?.avatar}</div>
+                      <div><p className="text-[13px] font-semibold text-[#1a1a1a]">{specificUser?.name}</p><p className="text-[11.5px] text-[#646462]">{specificUser?.email}</p></div>
+                      <button onClick={() => { setSpecificUser(null); setSendMode('audience'); }} className="ml-auto text-[13px] text-[#646462] hover:text-[#1a1a1a]">Cambiar</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        {(['dinamica', 'all'] as const).map(t => (
+                          <button key={t} onClick={() => setAudienceType(t)} className={`flex-1 py-1.5 text-[12.5px] rounded-[8px] border font-medium transition-all ${audienceType === t ? 'border-[#3b59f6] bg-[#eff3ff] text-[#3b59f6]' : 'border-[#e9eae6] text-[#646462] hover:border-[#c8c9c4]'}`}>
+                            {t === 'dinamica' ? 'Audiencia dinámica' : 'Todos los usuarios'}
+                          </button>
+                        ))}
+                      </div>
+                      {audienceType === 'dinamica' && (
+                        <div className="space-y-2">
+                          {audienceRules.map((rule, i) => (
+                            <div key={i} className="flex items-center gap-1.5 bg-[#fafaf9] border border-[#e9eae6] rounded-[8px] p-2">
+                              <select value={rule.attr} onChange={e => { const r = [...audienceRules]; r[i] = { ...r[i], attr: e.target.value }; setAudienceRules(r); }} className="text-[12px] border-none bg-transparent outline-none text-[#1a1a1a] flex-1 min-w-0">
+                                <option>Unsubscribed from Emails</option><option>Tipo de usuario</option><option>Sesiones</option><option>País</option><option>Plan</option>
+                              </select>
+                              <select value={rule.op} onChange={e => { const r = [...audienceRules]; r[i] = { ...r[i], op: e.target.value }; setAudienceRules(r); }} className="text-[12px] border-none bg-transparent outline-none text-[#646462]">
+                                <option>is</option><option>is not</option><option>contains</option>
+                              </select>
+                              <input value={rule.value} onChange={e => { const r = [...audienceRules]; r[i] = { ...r[i], value: e.target.value }; setAudienceRules(r); }} className="w-16 text-[12px] border border-[#e9eae6] rounded-[4px] px-1.5 py-0.5 outline-none text-right bg-white"/>
+                              <button onClick={() => setAudienceRules(audienceRules.filter((_, j) => j !== i))} className="text-[#646462] hover:text-[#dc2626] flex-shrink-0">
+                                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.8"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>
+                              </button>
+                            </div>
+                          ))}
+                          <button onClick={() => setAudienceRules([...audienceRules, { attr: 'Sesiones', op: 'is', value: '1' }])} className="flex items-center gap-1.5 text-[12.5px] font-medium text-[#3b59f6] hover:underline">
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                            Añadir regla
+                          </button>
+                          <div className="border-t border-[#e9eae6] pt-3">
+                            <p className="text-[11px] font-semibold text-[#646462] uppercase tracking-wide mb-1">Contactos disponibles</p>
+                            <p className="text-[22px] font-bold text-[#1a1a1a]">{Array.isArray(rawCustomers) ? rawCustomers.length : 0}</p>
+                            <p className="text-[12px] text-[#646462]">en el sistema</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <div className="pt-2 flex justify-end">
+                    <button onClick={() => setShowUserModal(true)} className="flex items-center gap-1.5 text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a] border border-[#e9eae6] rounded-full px-3 py-1.5">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13.5c.8-2.5 2.8-3.8 5-3.8s4.2 1.3 5 3.8"/></svg>
+                      Enviar a usuario específico
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Frequency ────────────────────────────────────────── */}
+            <div className="w-full bg-white border border-[#e9eae6] rounded-[10px] mb-3 overflow-hidden">
+              <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#fafaf9] transition-colors text-left" onClick={() => setFrequencyOpen(o => !o)}>
+                <span className="text-[13px] font-semibold text-[#1a1a1a] flex-shrink-0">Frequency and scheduling</span>
+                <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0 transition-transform ${frequencyOpen ? 'rotate-90' : ''}`} strokeWidth="1.5"><path d="M6 3l5 5-5 5" strokeLinecap="round"/></svg>
+                <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+                  {freqChips.map((chip, i) => <span key={i} className="inline-flex items-center bg-[#f3f3f1] border border-[#e9eae6] text-[#1a1a1a] text-[11.5px] px-2.5 py-0.5 rounded-full">{chip}</span>)}
+                </div>
+              </button>
+              {frequencyOpen && (
+                <div className="border-t border-[#e9eae6] px-4 py-4 space-y-4">
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide mb-2">Frecuencia de envío</label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] text-[#1a1a1a]">Enviar cada</span>
+                      <input value={sendEvery} onChange={e => setSendEvery(e.target.value)} className="w-12 h-8 border border-[#e9eae6] rounded-[6px] text-center text-[13px] outline-none focus:border-[#1a1a1a]"/>
+                      <select value={sendUnit} onChange={e => setSendUnit(e.target.value)} className="h-8 border border-[#e9eae6] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#1a1a1a] bg-white">
+                        <option value="hour">hora(s)</option><option value="day">día(s)</option><option value="week">semana(s)</option><option value="month">mes(es)</option>
+                      </select>
+                      <span className="text-[13px] text-[#646462]">si coincide</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide mb-2">Inicio de envío</label>
+                    <div className="flex gap-2">
+                      {[{ v: 'immediately', l: 'Start sending immediately' }, { v: 'scheduled', l: 'Envío programado' }].map(opt => (
+                        <label key={opt.v} className={`flex items-center gap-2 px-3 py-2 rounded-[8px] border cursor-pointer transition-colors flex-1 ${startSending === opt.v ? 'border-[#3b59f6] bg-[#eff3ff]' : 'border-[#e9eae6] hover:border-[#c8c9c4]'}`}>
+                          <input type="radio" checked={startSending === opt.v} onChange={() => setStartSending(opt.v)} className="accent-[#3b59f6]"/>
+                          <span className="text-[12px] text-[#1a1a1a]">{opt.l}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide mb-2">Fin de envío</label>
+                    <div className="flex gap-2">
+                      {[{ v: 'never', l: 'Never stop sending' }, { v: 'date', l: 'Fecha específica' }].map(opt => (
+                        <label key={opt.v} className={`flex items-center gap-2 px-3 py-2 rounded-[8px] border cursor-pointer transition-colors flex-1 ${stopSending === opt.v ? 'border-[#3b59f6] bg-[#eff3ff]' : 'border-[#e9eae6] hover:border-[#c8c9c4]'}`}>
+                          <input type="radio" checked={stopSending === opt.v} onChange={() => setStopSending(opt.v)} className="accent-[#3b59f6]"/>
+                          <span className="text-[12px] text-[#1a1a1a]">{opt.l}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide mb-2">Horario de envío</label>
+                    <div className="flex gap-2">
+                      {[{ v: 'any', l: 'Any day, any time' }, { v: 'business', l: 'Solo horario laboral' }].map(opt => (
+                        <label key={opt.v} className={`flex items-center gap-2 px-3 py-2 rounded-[8px] border cursor-pointer transition-colors flex-1 ${sendDays === opt.v ? 'border-[#3b59f6] bg-[#eff3ff]' : 'border-[#e9eae6] hover:border-[#c8c9c4]'}`}>
+                          <input type="radio" checked={sendDays === opt.v} onChange={() => setSendDays(opt.v)} className="accent-[#3b59f6]"/>
+                          <span className="text-[12px] text-[#1a1a1a]">{opt.l}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Goal and UTM ──────────────────────────────────────── */}
+            <div className="w-full bg-white border border-[#e9eae6] rounded-[10px] mb-6 overflow-hidden">
+              <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#fafaf9] transition-colors text-left" onClick={() => setGoalOpen(o => !o)}>
+                <span className="text-[13px] font-semibold text-[#1a1a1a] flex-shrink-0">Goal and UTM tracking</span>
+                <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0 transition-transform ${goalOpen ? 'rotate-90' : ''}`} strokeWidth="1.5"><path d="M6 3l5 5-5 5" strokeLinecap="round"/></svg>
+                <span className="text-[12.5px] text-[#646462]">{goal ? goal : 'No goal set'}</span>
+              </button>
+              {goalOpen && (
+                <div className="border-t border-[#e9eae6] px-4 py-4 space-y-4">
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide mb-2">Objetivo</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['', 'Activación', 'Retención', 'Adopción', 'Conversión'].map(g => (
+                        <label key={g} className={`flex items-center gap-2 px-3 py-2 rounded-[8px] border cursor-pointer transition-colors ${goal === g ? 'border-[#3b59f6] bg-[#eff3ff]' : 'border-[#e9eae6] hover:border-[#c8c9c4]'}`}>
+                          <input type="radio" checked={goal === g} onChange={() => setGoal(g)} className="accent-[#3b59f6]"/>
+                          <span className="text-[12px] text-[#1a1a1a]">{g === '' ? 'Sin objetivo' : g}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="border-t border-[#e9eae6] pt-4">
+                    <label className="block text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide mb-3">UTM Tracking</label>
+                    <div className="space-y-2">
+                      {[{ label: 'utm_campaign', value: utmCampaign, set: setUtmCampaign, placeholder: 'nombre-de-campaña' }, { label: 'utm_medium', value: utmMedium, set: setUtmMedium, placeholder: 'email' }, { label: 'utm_source', value: utmSource, set: setUtmSource, placeholder: 'intercom' }].map(field => (
+                        <div key={field.label} className="flex items-center gap-3">
+                          <span className="text-[11.5px] font-mono text-[#646462] w-[120px] flex-shrink-0">{field.label}</span>
+                          <input value={field.value} onChange={e => field.set(e.target.value)} placeholder={field.placeholder} className="flex-1 h-8 border border-[#e9eae6] rounded-[6px] px-3 text-[12.5px] text-[#1a1a1a] outline-none focus:border-[#1a1a1a] placeholder:text-[#a4a4a2]"/>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── Outbound Mensajes main view ───────────────────────────────────────────────
 function OutboundMensajes() {
+  // Load persisted messages from emailTemplatesApi (category=outbound)
+  const { data: apiTemplates, loading: loadingMsgs } = useApi<any[]>(
+    () => emailTemplatesApi.list({ category: 'outbound' }),
+    [],
+    [],
+  );
+  const [localMessages, setLocalMessages] = useState<OutboundMsg[]>([]);
+
+  // Merge API data with local overrides (local takes priority by id)
+  const messages: OutboundMsg[] = useMemo(() => {
+    const fromApi: OutboundMsg[] = Array.isArray(apiTemplates)
+      ? apiTemplates.map(mapTemplateToMsg)
+      : [];
+    // Merge: local additions/edits override API rows
+    const merged = [...fromApi];
+    for (const lm of localMessages) {
+      const idx = merged.findIndex(m => m.id === lm.id);
+      if (idx >= 0) merged[idx] = lm; else merged.unshift(lm);
+    }
+    return merged;
+  }, [apiTemplates, localMessages]);
+
+  const setMessages = (updater: (prev: OutboundMsg[]) => OutboundMsg[]) => {
+    setLocalMessages(prev => updater(prev));
+  };
+
+  const [search, setSearch] = useState('');
+  const [contentTypeFilter, setContentTypeFilter] = useState<OutboundContentType>('all');
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<OutboundMsgStatus | 'all'>('all');
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [editorState, setEditorState] = useState<{ open: boolean; template: OutboundTemplate | null; draft?: OutboundMsg } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const contentTypeOpts: OutboundContentType[] = ['all', 'chat', 'email', 'whatsapp', 'sms', 'push', 'banner', 'post'];
+
+  const filtered = messages.filter(m => {
+    const matchesType = contentTypeFilter === 'all' || m.contentType === contentTypeFilter;
+    const matchesStatus = statusFilter === 'all' || m.status === statusFilter;
+    const matchesSearch = !search || m.title.toLowerCase().includes(search.toLowerCase());
+    return matchesType && matchesStatus && matchesSearch;
+  });
+
+  const handleTemplateSelect = (t: OutboundTemplate | null) => { setShowTemplatePicker(false); setEditorState({ open: true, template: t }); };
+  const handleEditorSave = (msg: OutboundMsg) => { setMessages(prev => { const exists = prev.find(m => m.id === msg.id); return exists ? prev.map(m => m.id === msg.id ? msg : m) : [msg, ...prev]; }); setEditorState(null); };
+  const toggleSelect = (id: string) => { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
+  const toggleAll = () => { setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map(m => m.id))); };
+
+  if (editorState?.open) {
+    return <OutboundMessageEditor template={editorState.template} draft={editorState.draft} onBack={() => setEditorState(null)} onSave={handleEditorSave} />;
+  }
+
   return (
     <>
+      {showTemplatePicker && <OutboundTemplatePicker onSelect={handleTemplateSelect} onClose={() => setShowTemplatePicker(false)} />}
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
         <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M3 4l4 7 4-7M2 4h12"/></svg>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M2 4h12L8 13z"/></svg>
           <h1 className="text-[18px] font-bold text-[#1a1a1a]">Mensajes</h1>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-            Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg></button>
+          <button onClick={() => setEditorState({ open: true, template: null })} className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13.5c.8-2.5 2.8-3.8 5-3.8s4.2 1.3 5 3.8"/></svg>
+            Enviar a usuario
           </button>
-          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+          <button onClick={() => setShowTemplatePicker(true)} className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
             Nuevo mensaje
           </button>
         </div>
       </div>
-      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
-        <div className="flex-1 flex items-center gap-2 border border-[#e9eae6] rounded-full px-4 py-[6px] bg-white max-w-[280px]">
+      <div className="px-6 py-2.5 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 border border-[#e9eae6] rounded-full px-3 py-[5px] bg-white max-w-[220px]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
-          <input placeholder="Buscar..." className="flex-1 outline-none text-[13px] placeholder:text-[#646462]"/>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar mensajes…" className="flex-1 outline-none text-[13px] placeholder:text-[#9ca3af] bg-transparent min-w-0"/>
         </div>
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 4l4 7 4-7"/></svg>
-          Todos los tipos de contenido
-        </button>
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a]">
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-          Filtrar
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <p className="text-[13px] font-semibold text-[#1a1a1a]">1 message</p>
-          <button className="flex items-center gap-1 text-[12px] text-[#646462]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 9h6M5 11.5h4"/></svg>
-            <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+        <div className="relative">
+          <button onClick={() => { setShowTypeDropdown(v => !v); setShowFilterPanel(false); }} className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[5px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4] bg-white">
+            <OutboundContentIcon type={contentTypeFilter}/>
+            {OUTBOUND_CONTENT_TYPE_LABELS[contentTypeFilter]}
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current text-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
           </button>
+          {showTypeDropdown && (
+            <div className="absolute top-full left-0 mt-1 bg-white border border-[#e9eae6] rounded-[10px] shadow-lg z-20 py-1 min-w-[210px]">
+              {contentTypeOpts.map(ct => (
+                <button key={ct} onClick={() => { setContentTypeFilter(ct); setShowTypeDropdown(false); }} className={`flex items-center gap-2.5 w-full px-4 py-2 text-[13px] hover:bg-[#f5f5f4] transition-colors ${contentTypeFilter === ct ? 'font-semibold text-[#1a1a1a]' : 'text-[#646462]'}`}>
+                  <OutboundContentIcon type={ct}/>{OUTBOUND_CONTENT_TYPE_LABELS[ct]}
+                  {contentTypeFilter === ct && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 ml-auto"><path d="M3 8l4 4 6-7" stroke="#3b59f6" strokeWidth="2" fill="none"/></svg>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-4 relative">
-          <div className="flex-1">
-            <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-2">
-              Envía mensajes salientes para mantener informados a los clientes.
-            </h3>
-            <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">
-              Interactivamente a los clientes dondequiera que estén con mensajes salientes segmentados y personalizados. Envíalos en tu producto o por correo electrónico, SMS, WhatsApp y más.
-            </p>
-            <div className="flex items-center gap-4">
-              <a href="#" className="flex items-center gap-1.5 text-[12px] font-medium text-[#1a1a1a] hover:underline">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 2.5v11l5-2.5 5 2.5v-11z"/></svg>
-                Más información sobre los canales salientes
-              </a>
-              <a href="#" className="flex items-center gap-1.5 text-[12px] font-medium text-[#1a1a1a] hover:underline">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
-                Ver precios
-              </a>
-              <a href="#" className="flex items-center gap-1.5 text-[12px] font-medium text-[#1a1a1a] hover:underline">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
-                Probar una demostración
-              </a>
+        <div className="relative">
+          <button onClick={() => { setShowFilterPanel(v => !v); setShowTypeDropdown(false); }} className={`flex items-center gap-1.5 border rounded-full px-3 py-[5px] text-[13px] font-medium transition-colors ${showFilterPanel || statusFilter !== 'all' ? 'border-[#3b59f6] bg-[#eff3ff] text-[#3b59f6]' : 'border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f5f5f4] bg-white'}`}>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Filtrar
+            {statusFilter !== 'all' && <span className="ml-0.5 bg-[#3b59f6] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">1</span>}
+          </button>
+          {showFilterPanel && (
+            <div className="absolute top-full left-0 mt-1 bg-white border border-[#e9eae6] rounded-[10px] shadow-lg z-20 p-4 min-w-[200px]">
+              <p className="text-[11px] font-semibold text-[#646462] uppercase tracking-[0.06em] mb-2">Estado</p>
+              <div className="space-y-1.5">
+                {(['all', 'activo', 'pausado', 'detenido', 'borrador'] as const).map(s => (
+                  <label key={s} className="flex items-center gap-2.5 py-0.5 cursor-pointer">
+                    <input type="radio" checked={statusFilter === s} onChange={() => setStatusFilter(s)} className="accent-[#3b59f6]"/>
+                    <span className="text-[13px] text-[#1a1a1a]">{s === 'all' ? 'Todos los estados' : s.charAt(0).toUpperCase() + s.slice(1)}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="border-t border-[#e9eae6] mt-3 pt-2"><button onClick={() => { setStatusFilter('all'); setShowFilterPanel(false); }} className="text-[12.5px] text-[#646462] hover:text-[#1a1a1a]">Limpiar filtros</button></div>
             </div>
-          </div>
-          <div className="w-[260px] h-[140px] bg-gradient-to-br from-[#fff5e6] to-[#ffd9b3] rounded-[10px] flex items-center justify-center relative flex-shrink-0">
-            <div className="w-12 h-12 rounded-full bg-white/70 flex items-center justify-center">
-              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><path d="M5 3l8 5-8 5z"/></svg>
-            </div>
-          </div>
+          )}
         </div>
-
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-          <div className="grid grid-cols-[24px_1fr_100px_180px_140px_80px_70px_60px] px-5 py-3 border-b border-[#f1f1ee] text-[12px] font-medium text-[#646462] items-center">
-            <div><span className="w-4 h-4 inline-block rounded border border-[#d4d4d2]"/></div>
-            <div>Título</div>
-            <div>Estado</div>
-            <div>Remitente</div>
-            <div>Tipo de contenido</div>
-            <div>Enviado</div>
-            <div>Objetivo</div>
-            <div>Tipo</div>
+        {selected.size > 0 && (
+          <div className="ml-auto flex items-center gap-2 text-[12.5px]">
+            <span className="text-[#646462]">{selected.size} seleccionado{selected.size > 1 ? 's' : ''}</span>
+            <button className="px-3 py-1 border border-[#e9eae6] rounded-full text-[#646462] hover:bg-[#f5f5f4]">Pausar</button>
+            <button className="px-3 py-1 border border-[#e9eae6] rounded-full text-[#646462] hover:bg-[#f5f5f4]">Detener</button>
+            <button onClick={() => { setMessages(prev => prev.filter(m => !selected.has(m.id))); setSelected(new Set()); }} className="px-3 py-1 border border-[#fee2e2] rounded-full text-[#dc2626] hover:bg-[#fef2f2]">Eliminar</button>
           </div>
-          <div className="grid grid-cols-[24px_1fr_100px_180px_140px_80px_70px_60px] px-5 py-3 items-center">
-            <div><span className="w-4 h-4 inline-block rounded border border-[#d4d4d2]"/></div>
-            <div className="text-[13px] font-semibold text-[#1a1a1a]">Sin título</div>
-            <div className="text-[12.5px] text-[#1a1a1a]">Draft</div>
-            <div className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-[#e9eae6] flex items-center justify-center text-[10px] font-bold text-[#646462]">H</span>
-              <span className="text-[12.5px] text-[#1a1a1a]">Hector Vidal Sanchez</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-[12.5px] text-[#1a1a1a]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4h10v8H3z"/><path d="M3 4l5 4 5-4"/></svg>
-              Chat
-            </div>
-            <div className="text-[12.5px] text-[#3b59f6]">0</div>
-            <div className="text-[12.5px] text-[#646462]">—</div>
-            <div className="text-[12.5px] text-[#1a1a1a]">Visit</div>
-          </div>
+        )}
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0" onClick={() => { setShowTypeDropdown(false); setShowFilterPanel(false); }}>
+        <div className="px-6 pt-4 pb-2 flex items-center gap-2">
+          <p className="text-[12.5px] text-[#646462]">{filtered.length} mensaje{filtered.length !== 1 ? 's' : ''}</p>
+          {loadingMsgs && <svg viewBox="0 0 16 16" className="w-3 h-3 animate-spin fill-none stroke-[#646462]" strokeWidth="1.6"><circle cx="8" cy="8" r="6" strokeDasharray="20 14"/></svg>}
         </div>
+        {filtered.length > 0 ? (
+          <div className="mx-6 mb-6 border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+            <div className="grid grid-cols-[36px_1fr_116px_180px_150px_80px_74px_64px] px-4 py-2.5 border-b border-[#f1f1ee] text-[11.5px] font-semibold text-[#646462] items-center bg-[#fafaf9]">
+              <div><button onClick={toggleAll} className="w-4 h-4 border border-[#d4d4d2] rounded flex items-center justify-center hover:border-[#3b59f6]">{selected.size > 0 && selected.size === filtered.length && <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M3 8l4 4 6-7" stroke="#3b59f6" strokeWidth="2" fill="none"/></svg>}</button></div>
+              <div>Título</div><div>Estado</div><div>Remitente</div><div>Canal</div><div>Enviados</div><div>Objetivo</div><div>Tipo</div>
+            </div>
+            {filtered.map((msg, i) => (
+              <div key={msg.id} className={`grid grid-cols-[36px_1fr_116px_180px_150px_80px_74px_64px] px-4 py-3 items-center cursor-pointer transition-colors ${i > 0 ? 'border-t border-[#f1f1ee]' : ''} ${selected.has(msg.id) ? 'bg-[#eff3ff]' : 'hover:bg-[#fafaf9]'}`} onClick={() => setEditorState({ open: true, template: null, draft: msg })}>
+                <div onClick={e => { e.stopPropagation(); toggleSelect(msg.id); }}><div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${selected.has(msg.id) ? 'border-[#3b59f6] bg-[#3b59f6]' : 'border-[#d4d4d2] hover:border-[#3b59f6]'}`}>{selected.has(msg.id) && <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M3 8l4 4 6-7" stroke="white" strokeWidth="2" fill="none"/></svg>}</div></div>
+                <div className="min-w-0 pr-2"><p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{msg.title}</p>{msg.audience && <p className="text-[11px] text-[#646462] truncate mt-0.5">{msg.audience}</p>}</div>
+                <div><OutboundStatusBadge status={msg.status}/></div>
+                <div className="flex items-center gap-1.5 min-w-0"><span className="w-5 h-5 rounded-full bg-[#e9eae6] flex items-center justify-center text-[10px] font-bold text-[#646462] flex-shrink-0">{msg.senderInitial}</span><span className="text-[12.5px] text-[#1a1a1a] truncate">{msg.senderName}</span></div>
+                <div className="flex items-center gap-1.5 text-[12.5px] text-[#1a1a1a]"><span className="text-[#646462] flex-shrink-0"><OutboundContentIcon type={msg.contentType}/></span><span className="truncate">{OUTBOUND_CONTENT_TYPE_LABELS[msg.contentType]}</span></div>
+                <div className="text-[12.5px] text-[#3b59f6] font-medium">{msg.sent.toLocaleString('es-ES')}</div>
+                <div className="text-[12.5px] text-[#1a1a1a]">{msg.goalPct !== undefined ? `${msg.goalPct}%` : '—'}</div>
+                <div className="text-[12px] text-[#646462] capitalize">{msg.triggerType}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center px-8">
+            <div className="w-14 h-14 rounded-full bg-[#f1f1ee] flex items-center justify-center mb-4"><svg viewBox="0 0 16 16" className="w-6 h-6 fill-[#646462]"><path d="M2 4h12L8 13z"/></svg></div>
+            <p className="text-[15px] font-semibold text-[#1a1a1a] mb-1">Sin mensajes</p>
+            <p className="text-[13px] text-[#646462] max-w-[280px]">{search || contentTypeFilter !== 'all' || statusFilter !== 'all' ? 'No hay mensajes que coincidan con los filtros.' : 'Crea tu primer mensaje saliente para empezar a comunicarte con tus usuarios.'}</p>
+            {!search && contentTypeFilter === 'all' && statusFilter === 'all' && (
+              <button onClick={() => setShowTemplatePicker(true)} className="mt-4 flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-4 py-2 text-[13px] font-semibold hover:bg-black">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Crear primer mensaje
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
 }
 
 function OutboundSeries() {
-  const templates = [
-    { tag: 'Series', title: 'Onboard new users to drive adoption' },
-    { tag: 'Series', title: 'Announce a new feature to boost adoption' },
-    { tag: 'Series', title: 'Encourage inactive users to re-engage' },
-  ];
-  return (
-    <>
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="3.5" cy="3.5" r="1.5"/><circle cx="3.5" cy="12.5" r="1.5"/><circle cx="12.5" cy="8" r="1.5"/><path d="M5 4l6 3.5M5 12l6-3.5"/></svg>
-          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Serie</h1>
+  // Real workflows from the backend feed the table. Series items are tagged with
+  // kind='series' on creation so they can be distinguished in the Workflows list.
+  const { data: workflowsData, refetch: refetchWorkflows } = useApi(() => workflowsApi.list(), [], []);
+  const [search, setSearch] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [instantiatingTplId, setInstantiatingTplId] = useState<string | null>(null);
+
+  // Embedded builder state. null = list, '' = create-new, anything else = edit existing id.
+  const [builderId, setBuilderId] = useState<string | null>(null);
+
+  // Adapt outbound message templates to the workflow template shape.
+  const defaultTemplates = useMemo(
+    () => OUTBOUND_TEMPLATES.map(t => ({
+      id: `series_${t.id}`,
+      label: t.title,
+      description: t.description,
+      category: t.categories[0] ?? 'general',
+      contentType: t.contentType,
+      nodes: [] as any[],
+      edges: [] as any[],
+    })),
+    [],
+  );
+
+  async function instantiateTemplate(tpl: any) {
+    if (instantiatingTplId) return;
+    setInstantiatingTplId(tpl.id);
+    try {
+      const created: any = await workflowsApi.create({
+        name: tpl.label || tpl.id,
+        description: tpl.description || '',
+        nodes: [],
+        edges: [],
+        trigger: { type: 'manual' },
+        kind: 'series',
+      });
+      const newId = created?.id || created?.workflow?.id;
+      showSeriesStatus(`Serie "${tpl.label}" creada`);
+      refetchWorkflows();
+      if (newId) setBuilderId(newId);
+    } catch (err: any) {
+      showSeriesStatus(err?.message || 'No se pudo crear la serie', 'error');
+    } finally {
+      setInstantiatingTplId(null);
+    }
+  }
+
+  // Filter chips
+  const [audienceFilter, setAudienceFilter] = useState<string>('any');
+  const [statusFilter, setStatusFilter] = useState<string>('any');
+  const [channelFilter, setChannelFilter] = useState<string>('any');
+  const [typeFilter, setTypeFilter] = useState<string>('any');
+  const [extraFilters, setExtraFilters] = useState<{ tag: boolean; lastEdited: boolean }>({ tag: false, lastEdited: false });
+  const [tagFilter, setTagFilter] = useState<string>('any');
+  const [lastEditedFilter, setLastEditedFilter] = useState<string>('any');
+  const [showAddFilter, setShowAddFilter] = useState(false);
+  const addSeriesFilterRef = useRef<HTMLDivElement>(null);
+
+  const [learnModal, setLearnModal] = useState<null | 'docs' | 'tutorial' | 'templates'>(null);
+  const [troubleshootOpen, setTroubleshootOpen] = useState(false);
+
+  useEffect(() => {
+    if (!showAddFilter) return;
+    function onClick(e: MouseEvent) {
+      if (addSeriesFilterRef.current?.contains(e.target as Node)) return;
+      setShowAddFilter(false);
+    }
+    window.addEventListener('mousedown', onClick);
+    return () => window.removeEventListener('mousedown', onClick);
+  }, [showAddFilter]);
+
+  const workflows = useMemo(() => {
+    const list = Array.isArray(workflowsData) ? workflowsData : [];
+    const q = search.trim().toLowerCase();
+    return list.filter((w: any) => {
+      if (q && !String(w.name || w.title || w.id || '').toLowerCase().includes(q)) return false;
+      if (statusFilter !== 'any') {
+        const s = String(w.status || w.state || '').toLowerCase();
+        const want = statusFilter.toLowerCase();
+        const aliases: Record<string, string[]> = {
+          active: ['active', 'published', 'live'],
+          draft: ['draft', 'unpublished'],
+          paused: ['paused'],
+          archived: ['archived'],
+        };
+        if (!(aliases[want] || [want]).includes(s)) return false;
+      }
+      if (audienceFilter !== 'any') {
+        const a = String(w.audience || '').toLowerCase();
+        if (a && a !== audienceFilter) return false;
+      }
+      if (channelFilter !== 'any') {
+        const channels: string[] = Array.isArray(w.channels) ? w.channels.map((c: any) => String(c).toLowerCase()) : [];
+        if (channels.length > 0 && !channels.includes(channelFilter)) return false;
+      }
+      if (typeFilter !== 'any') {
+        const t = String(w.kind || w.trigger?.type || w.type || '').toLowerCase();
+        if (t && !t.includes(typeFilter)) return false;
+      }
+      if (extraFilters.tag && tagFilter !== 'any') {
+        const tags: string[] = Array.isArray(w.tags) ? w.tags.map((t: any) => String(t).toLowerCase()) : [];
+        if (tags.length > 0 && !tags.includes(tagFilter)) return false;
+      }
+      if (extraFilters.lastEdited && lastEditedFilter !== 'any') {
+        const updated = w.updated_at || w.updatedAt;
+        if (updated) {
+          const days = (Date.now() - new Date(updated).getTime()) / (1000 * 60 * 60 * 24);
+          if (lastEditedFilter === '7d' && days > 7) return false;
+          if (lastEditedFilter === '30d' && days > 30) return false;
+          if (lastEditedFilter === '90d' && days > 90) return false;
+        }
+      }
+      return true;
+    });
+  }, [workflowsData, search, statusFilter, audienceFilter, channelFilter, typeFilter, extraFilters, tagFilter, lastEditedFilter]);
+
+  function showSeriesStatus(msg: string, type: 'success' | 'error' = 'success') {
+    setStatusMsg({ msg, type });
+    window.setTimeout(() => setStatusMsg(null), 3000);
+  }
+  async function runSerie(id: string) {
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      await workflowsApi.run(id);
+      showSeriesStatus('Serie lanzada correctamente');
+    } catch (err: any) {
+      showSeriesStatus(err?.message || 'No se pudo lanzar la serie', 'error');
+    } finally { setBusyId(null); }
+  }
+  function openInBuilder(id: string) {
+    setBuilderId(id === 'new' ? '' : id);
+  }
+
+  // ── Embedded builder view ────────────────────────────────────────────────
+  if (builderId !== null) {
+    return (
+      <div className="flex flex-col h-full min-h-0 bg-white">
+        <div className="flex-shrink-0 h-11 border-b border-[#e9eae6] px-4 flex items-center">
+          <button
+            onClick={() => setBuilderId(null)}
+            className="h-8 px-2.5 -ml-1 rounded-md hover:bg-[#f8f8f7] text-[13px] font-medium text-[#1a1a1a] flex items-center gap-1.5"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Volver a series
+          </button>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
-            Aprender
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
-          </button>
-          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-            Nueva serie
-          </button>
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <Workflows
+            focusWorkflowId={builderId === '' ? undefined : builderId}
+            onNavigate={(target: any) => {
+              const section = target?.section;
+              const page = target?.page;
+              if (page && page !== 'workflows') { setBuilderId(null); return; }
+              if (section === 'library' || section === 'list') { setBuilderId(null); return; }
+            }}
+          />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 p-6">
-        <div className="rounded-[12px] bg-[#f5f5f4] border border-[#e9eae6] p-6 flex items-center gap-6">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-1.5">Automatiza tus mensajes con Series</h2>
-            <p className="text-[13px] text-[#646462] mb-3 max-w-[440px]">
-              Crea un recorrido de mensajería fluido para captar a los clientes en todos los canales, ya sea dentro o fuera de tu producto.
+    );
+  }
+
+  const rows = workflows;
+  const problematic = (Array.isArray(workflowsData) ? workflowsData : []).filter((w: any) => {
+    const s = String(w.status || w.state || '').toLowerCase();
+    return s === 'blocked' || s === 'needs_setup' || s === 'dependency_missing';
+  });
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Hero promo card */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-4">
+        <div className="relative bg-white border border-[#e9eae6] rounded-[12px] px-5 py-4 flex gap-5">
+          <button className="absolute top-3 right-3 w-6 h-6 rounded-md flex items-center justify-center hover:bg-[#f3f3f1]" aria-label="Cerrar">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+          <div className="flex-1 min-w-0 max-w-[640px]">
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] leading-[24px]">Automatiza tus mensajes con Series</h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">
+              Crea recorridos de mensajería fluidos para captar a los clientes en todos los canales. Combina chat, email, WhatsApp, SMS y más en una sola serie de mensajes automatizados que se activa en el momento preciso.
             </p>
-            <div className="flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
-              <button className="flex items-center gap-1 hover:underline">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
-                Más información sobre Series
-              </button>
-              <button className="flex items-center gap-1 hover:underline">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="9" rx="1.5"/><path d="M6.5 6.5l3 2-3 2v-4z" fill="currentColor"/></svg>
-                Hacer un recorrido
-              </button>
+            <button className="mt-3 h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+              <span>Más información sobre Series</span>
+            </button>
+          </div>
+          <div className="hidden md:block w-[260px] flex-shrink-0">
+            <div className="relative w-full h-[140px] rounded-[8px] overflow-hidden border border-[#e9eae6]" style={{ background: 'linear-gradient(135deg, #bcd9c8 0%, #f1d49b 50%, #a08bc4 100%)' }}>
+              <div className="absolute inset-3 grid grid-cols-2 gap-2">
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1.5 rounded bg-[#3b59f6]/40 mb-1" style={{ width: '60%' }}/>
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-full"/>
+                </div>
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1.5 rounded bg-[#10b981]/40 mb-1" style={{ width: '70%' }}/>
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-full"/>
+                </div>
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1.5 rounded bg-[#f59e0b]/40 mb-1" style={{ width: '50%' }}/>
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-full"/>
+                </div>
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1.5 rounded bg-[#8b5cf6]/40 mb-1" style={{ width: '65%' }}/>
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-full"/>
+                </div>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M5 3.5l7 4.5-7 4.5z"/></svg>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="relative w-[300px] h-[160px] rounded-[8px] overflow-hidden bg-gradient-to-br from-[#bcd9c8] via-[#f1d49b] to-[#a08bc4] flex-shrink-0">
-            <button className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-white/95 flex items-center justify-center shadow-md">
-              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><path d="M5 3l8 5-8 5V3z"/></svg>
-            </button>
+        </div>
+      </div>
+
+      {/* Section header */}
+      <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2">
+        <h3 className="text-[15px] font-bold text-[#1a1a1a] flex-1">Series</h3>
+        <button
+          onClick={() => setTroubleshootOpen(true)}
+          className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M9.5 2l-1.5 4 4 1-5 7 1-4-4-1z" strokeLinejoin="round"/></svg>
+          <span>Solucionar problemas</span>
+        </button>
+        <Dropdown
+          value=""
+          onChange={(v) => {
+            if (v === 'docs') setLearnModal('docs');
+            else if (v === 'tutorial') setLearnModal('tutorial');
+            else if (v === 'templates') setLearnModal('templates');
+          }}
+          items={[
+            { value: 'docs', label: 'Documentación' },
+            { value: 'tutorial', label: 'Tutorial: tu primera serie' },
+            { value: 'templates', label: 'Plantillas de mensajes' },
+          ]}
+          renderTrigger={(_sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+              <span>Aprender</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+        />
+        <button onClick={() => openInBuilder('new')} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+          <span>Nueva serie</span>
+          <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white"><path d="M3 4.5l3 3 3-3z"/></svg>
+        </button>
+      </div>
+
+      {/* Filters row */}
+      <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2 flex-wrap">
+        <div className="relative w-[220px]">
+          <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar series..."
+            className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
+          />
+        </div>
+        <Dropdown
+          value={audienceFilter}
+          onChange={setAudienceFilter}
+          items={[
+            { value: 'any', label: 'Todos' },
+            { value: 'visitors', label: 'Visitantes' },
+            { value: 'leads', label: 'Leads' },
+            { value: 'users', label: 'Usuarios' },
+          ]}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          renderTrigger={(sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>
+              <span>{sel?.value === 'any' || !sel ? 'Visitantes, leads o usuarios' : sel.label}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+        />
+        <Dropdown
+          value={statusFilter}
+          onChange={setStatusFilter}
+          items={[
+            { value: 'any', label: 'Cualquiera' },
+            { value: 'draft', label: 'Borrador' },
+            { value: 'active', label: 'Activo' },
+            { value: 'paused', label: 'Pausado' },
+            { value: 'archived', label: 'Archivado' },
+          ]}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          renderTrigger={(sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11M5 9h6M5 11h4"/></svg>
+              <span>{sel?.value === 'any' || !sel ? 'Estado: cualquiera' : `Estado: ${sel.label}`}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+        />
+        <Dropdown
+          value={channelFilter}
+          onChange={setChannelFilter}
+          items={[
+            { value: 'any', label: 'Cualquiera' },
+            { value: 'chat', label: 'Chat' },
+            { value: 'email', label: 'Email' },
+            { value: 'whatsapp', label: 'WhatsApp' },
+            { value: 'sms', label: 'SMS' },
+            { value: 'push', label: 'Push' },
+            { value: 'banner', label: 'Banner' },
+          ]}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          renderTrigger={(sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2.5 6.5C2.5 4 4.5 2.5 8 2.5s5.5 1.5 5.5 4-2 4-5.5 4c-.7 0-1.4-.1-2-.2L3 11.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/></svg>
+              <span>{sel?.value === 'any' || !sel ? 'Cualquier canal' : `Canal: ${sel.label}`}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+        />
+        <Dropdown
+          value={typeFilter}
+          onChange={setTypeFilter}
+          items={[
+            { value: 'any', label: 'Cualquiera' },
+            { value: 'automatizado', label: 'Automatizado' },
+            { value: 'manual', label: 'Manual' },
+            { value: 'evento', label: 'Evento' },
+            { value: 'visita', label: 'Visita' },
+          ]}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          renderTrigger={(sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/></svg>
+              <span>{sel?.value === 'any' || !sel ? 'El tipo es cualquiera' : `Tipo: ${sel.label}`}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+        />
+        {extraFilters.tag && (
+          <Dropdown
+            value={tagFilter}
+            onChange={setTagFilter}
+            items={[
+              { value: 'any', label: 'Cualquier etiqueta' },
+              { value: 'onboarding', label: 'Onboarding' },
+              { value: 'retencion', label: 'Retención' },
+              { value: 'ventas', label: 'Ventas' },
+              { value: 'soporte', label: 'Soporte' },
+            ]}
+            triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          />
+        )}
+        {extraFilters.lastEdited && (
+          <Dropdown
+            value={lastEditedFilter}
+            onChange={setLastEditedFilter}
+            items={[
+              { value: 'any', label: 'Cualquier fecha' },
+              { value: '7d', label: 'Últimos 7 días' },
+              { value: '30d', label: 'Últimos 30 días' },
+              { value: '90d', label: 'Últimos 90 días' },
+            ]}
+            triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          />
+        )}
+        <div className="relative inline-block" ref={addSeriesFilterRef}>
+          <button
+            onClick={() => setShowAddFilter(o => !o)}
+            className="h-8 px-2 text-[12.5px] font-semibold text-[#ed621d] hover:underline inline-flex items-center gap-1"
+          >
+            <span>+</span><span>Agregar filtro</span>
+          </button>
+          {showAddFilter && (
+            <div className="absolute top-[calc(100%+4px)] left-0 z-30 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 min-w-[200px]">
+              <button
+                onClick={() => { setExtraFilters(f => ({ ...f, tag: !f.tag })); setShowAddFilter(false); }}
+                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                <span className={`w-3.5 h-3.5 rounded border ${extraFilters.tag ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#e9eae6]'}`}/>
+                <span>Etiquetas</span>
+              </button>
+              <button
+                onClick={() => { setExtraFilters(f => ({ ...f, lastEdited: !f.lastEdited })); setShowAddFilter(false); }}
+                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                <span className={`w-3.5 h-3.5 rounded border ${extraFilters.lastEdited ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#e9eae6]'}`}/>
+                <span>Última edición</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Series list */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+        {statusMsg && (
+          <div className={`mb-3 px-3 py-2 rounded-[8px] border text-[12.5px] ${statusMsg.type === 'error' ? 'bg-[#fef2f2] border-[#fecaca] text-[#b91c1c]' : 'bg-[#f0fdf4] border-[#bbf7d0] text-[#15803d]'}`}>
+            {statusMsg.msg}
+          </div>
+        )}
+        <p className="text-[13px] text-[#646462] mb-3">{rows.length} {rows.length === 1 ? 'serie' : 'series'}</p>
+
+        {/* Info bar */}
+        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[8px] px-4 py-3 mb-5 flex items-start gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0 mt-0.5" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+          <p className="text-[12.5px] text-[#646462] leading-[18px]">
+            Las series también aparecen en <span className="font-semibold">Flujos de trabajo</span> para que puedas gestionarlas desde un único lugar. Los mensajes se envían según las reglas de audiencia y frecuencia configuradas en cada paso.
+          </p>
+        </div>
+
+        {/* ── Plantillas de series ──────────────────────────────────────── */}
+        <div className="mb-5">
+          <div className="flex items-baseline gap-2 mb-1">
+            <h4 className="text-[14px] font-bold text-[#1a1a1a]">Plantillas de mensajes listas para usar</h4>
+            <span className="text-[12px] text-[#a4a4a2]">{defaultTemplates.length}</span>
+          </div>
+          <p className="text-[13px] text-[#646462] mb-3">Crea una serie en un clic — elige la plantilla que mejor se adapte a tu objetivo.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {defaultTemplates.map((tpl: any) => {
+              const isBusy = instantiatingTplId === tpl.id;
+              const channelColors: Record<string, string> = {
+                chat: '#3b59f6', email: '#10b981', whatsapp: '#25d366',
+                sms: '#f59e0b', push: '#8b5cf6', banner: '#ed621d', all: '#1a1a1a',
+              };
+              const iconColor = channelColors[tpl.contentType] || '#1a1a1a';
+              return (
+                <div
+                  key={tpl.id}
+                  className="bg-white border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-3 hover:border-[#1a1a1a]/30 transition-colors"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: iconColor + '18' }}>
+                      <svg viewBox="0 0 16 16" className="w-4 h-4" style={{ fill: iconColor }}>
+                        <path d="M2.5 6.5C2.5 4 4.5 2.5 8 2.5s5.5 1.5 5.5 4-2 4-5.5 4c-.7 0-1.4-.1-2-.2L3 11.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/>
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-[#a4a4a2]">{tpl.category}</span>
+                      </div>
+                      <h5 className="text-[13px] font-semibold text-[#1a1a1a] leading-[18px] mb-1 line-clamp-2">{tpl.label}</h5>
+                      <p className="text-[12.5px] text-[#646462] leading-[18px] line-clamp-3">{tpl.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11.5px] text-[#a4a4a2] capitalize">{tpl.contentType}</span>
+                    <button
+                      onClick={() => instantiateTemplate(tpl)}
+                      disabled={isBusy || !!instantiatingTplId}
+                      className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[12.5px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isBusy ? (
+                        <>
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 animate-spin fill-none stroke-white" strokeWidth="1.6"><circle cx="8" cy="8" r="6" strokeDasharray="20 14"/></svg>
+                          <span>Creando…</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+                          <span>Usar plantilla</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        <div className="mt-10 mb-4 text-center">
-          <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Comienza con una plantilla popular</h3>
-        </div>
-        <div className="grid grid-cols-3 gap-4 max-w-[900px] mx-auto">
-          {templates.map((t, i) => (
-            <div key={i} className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden hover:border-[#d4d4d2] cursor-pointer">
-              <div className="h-[120px] bg-[#fafaf9] border-b border-[#e9eae6] p-3 flex items-center justify-center">
-                <div className="grid grid-cols-3 gap-1.5 w-full">
-                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
-                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
-                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
-                  <div className="col-span-3 h-3"/>
-                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
-                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
-                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
-                </div>
-              </div>
-              <div className="p-3">
-                <div className="flex items-center gap-1 mb-1 text-[11px] text-[#646462]">
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><circle cx="3.5" cy="3.5" r="1.5"/><circle cx="3.5" cy="12.5" r="1.5"/><circle cx="12.5" cy="8" r="1.5"/><path d="M5 4l6 3.5M5 12l6-3.5"/></svg>
-                  {t.tag}
-                </div>
-                <p className="text-[13px] font-medium text-[#1a1a1a] leading-tight">{t.title}</p>
-              </div>
+        {/* Series table */}
+        <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <div className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-9 border-b border-[#e9eae6] text-[11.5px] uppercase tracking-wide text-[#a4a4a2]">
+            <span className="text-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#a4a4a2] mx-auto" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+            </span>
+            <span><input type="checkbox" className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
+            <span>Título</span>
+            <span>Estado</span>
+            <span>Fecha/hora de actualización</span>
+            <span>Actualizado por</span>
+            <span>Enviados</span>
+            <span>Acciones</span>
+          </div>
+          {rows.length === 0 ? (
+            <div className="px-6 py-8 text-center text-[13px] text-[#646462]">
+              {search ? 'Ninguna serie coincide con la búsqueda.' : 'Aún no hay series. Crea una con «Nueva serie» o usa una plantilla.'}
             </div>
-          ))}
-        </div>
-        <div className="mt-6 text-center">
-          <button className="text-[13px] font-medium text-[#1a1a1a] hover:underline">Ver todo</button>
+          ) : rows.map((r: any) => {
+            const id = String(r.id || r.slug || r.name || '');
+            const status = String(r.status || r.state || 'draft').toLowerCase();
+            const updated = r.updated_at || r.updatedAt || r.created_at || r.createdAt;
+            const updatedText = updated ? new Date(updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+            const title = r.name || r.title || id || 'Sin título';
+            const author = r.updated_by_name || r.updatedByName || r.author || r.created_by_name || '—';
+            const sent = r.runs_count ?? r.runsCount ?? 0;
+            return (
+              <div key={id} onClick={() => openInBuilder(id)} className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-12 border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafafa] cursor-pointer">
+                <span className="text-[#a4a4a2] text-center select-none">⋮⋮</span>
+                <span><input type="checkbox" onClick={e => e.stopPropagation()} className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
+                <span className="flex items-center gap-2 min-w-0">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6] flex-shrink-0"><path d="M2.5 6.5C2.5 4 4.5 2.5 8 2.5s5.5 1.5 5.5 4-2 4-5.5 4c-.7 0-1.4-.1-2-.2L3 11.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/></svg>
+                  <span className="text-[13px] text-[#1a1a1a] truncate">{title}</span>
+                </span>
+                <span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-[6px] text-[11.5px] font-semibold ${
+                    status === 'published' || status === 'active' ? 'bg-[#dcfce7] text-[#15803d]' :
+                    status === 'paused' ? 'bg-[#fef9c3] text-[#854d0e]' :
+                    status === 'archived' ? 'bg-[#fef2f2] text-[#991b1b]' :
+                    'bg-[#f3f3f1] text-[#646462]'
+                  }`}>{status === 'published' ? 'Publicado' : status === 'active' ? 'Activo' : status === 'paused' ? 'Pausado' : status === 'archived' ? 'Archivado' : 'Borrador'}</span>
+                </span>
+                <span className="text-[12.5px] text-[#646462]">{updatedText}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">{(author[0] || '?').toUpperCase()}</span>
+                  <span className="text-[12.5px] text-[#1a1a1a] truncate">{author}</span>
+                </span>
+                <span className="text-[12.5px] text-[#3b59f6]">{sent}</span>
+                <span className="flex items-center gap-1.5">
+                  <button
+                    onClick={e => { e.stopPropagation(); runSerie(id); }}
+                    disabled={busyId === id}
+                    title="Lanzar serie"
+                    className="h-6 px-2 rounded-[6px] bg-[#1a1a1a] text-white text-[11px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]"
+                  >{busyId === id ? '…' : 'Lanzar'}</button>
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
-    </>
+
+      {/* Aprender modal */}
+      {learnModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setLearnModal(null)}>
+          <div className="bg-white rounded-[12px] shadow-xl w-full max-w-[520px] p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-[16px] font-bold text-[#1a1a1a]">
+                {learnModal === 'docs' ? 'Documentación de Series' : learnModal === 'tutorial' ? 'Tutorial: tu primera serie' : 'Plantillas de mensajes'}
+              </h4>
+              <button onClick={() => setLearnModal(null)} className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center" aria-label="Cerrar">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-[20px]">
+              {learnModal === 'docs' && 'Aprende a crear series de mensajes multi-canal que se activan automáticamente según el comportamiento del usuario. Combina chat, email, WhatsApp, SMS, push y banners en un único recorrido.'}
+              {learnModal === 'tutorial' && 'Sigue este tutorial guiado para crear tu primera serie en menos de 5 minutos. Aprenderás a configurar los pasos, elegir los canales y definir las reglas de audiencia.'}
+              {learnModal === 'templates' && 'Explora plantillas listas para usar: bienvenida a nuevos usuarios, reactivación de inactivos, anuncio de funciones, ofertas especiales, recordatorios de renovación y más.'}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setLearnModal(null)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Cerrar</button>
+              {learnModal === 'templates' && (
+                <button
+                  onClick={() => { setLearnModal(null); openInBuilder('new'); }}
+                  className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black"
+                >
+                  Nueva serie
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Solucionar problemas modal */}
+      {troubleshootOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setTroubleshootOpen(false)}>
+          <div className="bg-white rounded-[12px] shadow-xl w-full max-w-[600px] p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-[16px] font-bold text-[#1a1a1a]">Solucionar problemas</h4>
+              <button onClick={() => setTroubleshootOpen(false)} className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center" aria-label="Cerrar">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            {problematic.length === 0 ? (
+              <p className="text-[13px] text-[#646462] py-4">No hay series con problemas.</p>
+            ) : (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {problematic.map((w: any) => {
+                  const id = String(w.id || w.slug || w.name || '');
+                  const status = String(w.status || w.state || '').toLowerCase();
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => { setTroubleshootOpen(false); openInBuilder(id); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[8px] border border-[#e9eae6] hover:bg-[#f8f8f7] text-left"
+                    >
+                      <span className="w-6 h-6 rounded-full bg-[#fef2f2] text-[#b91c1c] flex items-center justify-center flex-shrink-0">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M8 3v6M8 12v.01" strokeLinecap="round"/></svg>
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] font-semibold text-[#1a1a1a] truncate">{w.name || w.title || id}</span>
+                        <span className="block text-[11.5px] text-[#646462]">{status}</span>
+                      </span>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M6 3l5 5-5 5" strokeLinecap="round"/></svg>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end">
+              <button onClick={() => setTroubleshootOpen(false)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -18117,53 +21739,413 @@ function FinPlaceholderContent({ title, subtitle }: { title: string; subtitle: s
 // Card icons mapped to exact Figma assets (Component 13 variants 35-39):
 //   35 Artículo público (1:3442), 36 Artículo interno (1:3450),
 //   37 Fragmento de texto (1:3458), 38 Sincronización de sitio web (1:3466), 39 Ver todo (1:3474).
-const FIN_CONTENIDO_CARDS: { iconAsset: string; iconInset: string; label: string }[] = [
-  { iconAsset: 'c9601f2d-5aed-40b6-b147-705dfec36b3c', iconInset: '0 6.19% 1.42% 0',                    label: 'Artículo público' },
-  { iconAsset: '08e982fa-057f-44fd-b1f7-e0c5dc20a4ff', iconInset: '3.12% 12.5% 12.5% 12.5%',            label: 'Artículo interno' },
-  { iconAsset: 'e8300830-2553-48a0-b6aa-18d1d9005345', iconInset: '12.5%',                              label: 'Fragmento de texto' },
-  { iconAsset: '7f91be75-37f9-46dd-b01c-8e7ad6e1fe10', iconInset: '7.82% 7.75% 7.75% 7.82%',            label: 'Sincronización de sitio web' },
-  { iconAsset: '11afcce0-e840-4d64-badb-7bf005759da3', iconInset: '40.62% 9.37% 40.63% 9.37%',          label: 'Ver todo' },
+type FinContenidoCardType = 'public' | 'internal' | 'snippet' | 'website' | 'all';
+const FIN_CONTENIDO_CARDS: { icon: ReactNode; label: string; type: FinContenidoCardType; color: string }[] = [
+  {
+    type: 'public',
+    label: 'Artículo público',
+    color: '#3b59f6',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="10" cy="10" r="7.5"/>
+        <path d="M10 2.5c-1.8 1.8-2.8 4.5-2.8 7.5s1 5.7 2.8 7.5M10 2.5c1.8 1.8 2.8 4.5 2.8 7.5s-1 5.7-2.8 7.5"/>
+        <path d="M2.5 10h15M3.2 6.5h13.6M3.2 13.5h13.6"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'internal',
+    label: 'Artículo interno',
+    color: '#7c3aed',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3.5" y="1.5" width="11" height="15" rx="1.5"/>
+        <path d="M6.5 6h7M6.5 9h7M6.5 12h4.5"/>
+        <circle cx="14.5" cy="15" r="3" fill="#f5f3ff" stroke="#7c3aed" strokeWidth="1.3"/>
+        <path d="M13.5 15h2M14.5 14v2" stroke="#7c3aed" strokeWidth="1.3"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'snippet',
+    label: 'Fragmento de texto',
+    color: '#059669',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#059669" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5.5 4.5L2 10l3.5 5.5M14.5 4.5L18 10l-3.5 5.5"/>
+        <path d="M8.5 15.5l3-11"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'website',
+    label: 'Sincronización de sitio web',
+    color: '#d97706',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="10" cy="10" r="7.5"/>
+        <path d="M10 2.5c-1.8 1.8-2.8 4.5-2.8 7.5s1 5.7 2.8 7.5M10 2.5c1.8 1.8 2.8 4.5 2.8 7.5s-1 5.7-2.8 7.5"/>
+        <path d="M2.5 10h15"/>
+        <path d="M15 6.5l2 1.5-2 1.5M5 11.5l-2 1.5 2 1.5" strokeWidth="1.3"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'all',
+    label: 'Ver todo',
+    color: '#646462',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1.2"/>
+        <rect x="11" y="2.5" width="6.5" height="6.5" rx="1.2"/>
+        <rect x="2.5" y="11" width="6.5" height="6.5" rx="1.2"/>
+        <rect x="11" y="11" width="6.5" height="6.5" rx="1.2"/>
+      </svg>
+    ),
+  },
 ];
 
-function FinContenidoContent() {
-  // Real article inventory feeds the "Fuente de contenido" table — same
-  // data Conocimiento uses, so counts stay in sync.
-  const [refreshKey, setRefreshKey] = useState(0);
-  const { data: articles } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
-  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
-  const domains = Array.isArray(domainsData) ? domainsData : [];
-  const counts = useMemo(() => {
-    const list = Array.isArray(articles) ? articles : [];
-    const total = list.length;
-    const published = list.filter((a: any) => String(a.status || '').toLowerCase() === 'published').length;
-    return { total, published };
-  }, [articles]);
+function FinContenidoPickerModal({
+  cardType,
+  cardLabel,
+  articles,
+  domains,
+  onConfirmSelection,
+  onWriteNew,
+  onClose,
+}: {
+  cardType: FinContenidoCardType;
+  cardLabel: string;
+  articles: any[];
+  domains: any[];
+  onConfirmSelection: (selected: any[]) => void;
+  onWriteNew: () => void;
+  onClose: () => void;
+}) {
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(() => new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState('');
-  // Modal state — every card opens an in-place modal, never navigates away:
-  //   • Artículo público / interno / Fragmento → article editor
-  //   • Sincronización de sitio web            → website-sync wizard
-  //   • Conectar app externa                   → external-source picker
-  //   • Ver todo                               → content-library browser
+
+  const domainNames: Record<string, string> = {};
+  domains.forEach((d: any) => { domainNames[d.id] = d.name; });
+
+  const articlesByDomain = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const map: Record<string, any[]> = {};
+    articles.forEach((a: any) => {
+      if (q && !(a.title || '').toLowerCase().includes(q)) return;
+      const key = a.domain_id || 'root';
+      if (!map[key]) map[key] = [];
+      map[key].push(a);
+    });
+    return map;
+  }, [articles, search]);
+
+  const domainKeys = Object.keys(articlesByDomain);
+  const selectedArticles = useMemo(() => articles.filter(a => selectedIds.has(a.id)), [articles, selectedIds]);
+
+  function toggleExpand(id: string) {
+    setExpandedDomains(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleArticle(id: string) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleDomainAll(domId: string) {
+    const arts = articlesByDomain[domId] || [];
+    const allSel = arts.every(a => selectedIds.has(a.id));
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      arts.forEach(a => allSel ? n.delete(a.id) : n.add(a.id));
+      return n;
+    });
+  }
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const writeNewLabel: Record<FinContenidoCardType, string> = {
+    public:  'Escribir artículo público desde cero',
+    internal:'Escribir artículo interno desde cero',
+    snippet: 'Escribir fragmento de texto desde cero',
+    website: 'Configurar sincronización de sitio web',
+    all:     'Crear nuevo contenido desde cero',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" />
+      <div
+        className="relative w-full max-w-[1000px] h-[78vh] bg-white rounded-t-[20px] shadow-[0px_-12px_48px_rgba(20,20,20,0.2)] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Drag handle */}
+        <div className="flex-shrink-0 flex justify-center pt-3 pb-1">
+          <span className="w-10 h-1 rounded-full bg-[#e9eae6]"/>
+        </div>
+
+        {/* Header */}
+        <div className="flex-shrink-0 px-6 pb-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Seleccionar contenido</h2>
+            <span className="px-2.5 py-0.5 rounded-full bg-[#f3f3f1] border border-[#e9eae6] text-[12px] font-medium text-[#646462]">{cardLabel}</span>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-[8px] hover:bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Body: knowledge tree + selected panel */}
+        <div className="flex-1 flex min-h-0 border-t border-[#e9eae6]">
+
+          {/* Left — Knowledge folder tree */}
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6] flex items-center gap-3">
+              <div className="flex-1 h-8 rounded-[8px] border border-[#e9eae6] bg-white flex items-center px-3 gap-2 focus-within:border-[#1a1a1a] transition-colors">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar en Knowledge…"
+                  className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
+                />
+                {search && (
+                  <button onClick={() => setSearch('')}>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#a4a4a2]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-shrink-0 px-5 py-2.5 bg-[#fafaf9] border-b border-[#e9eae6]">
+              <p className="text-[12.5px] text-[#646462] leading-[18px]">
+                Selecciona las carpetas o artículos de Knowledge que Fin podrá usar como fuente de conocimiento para responder preguntas.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0 py-2">
+              {domainKeys.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 px-8 text-center">
+                  <div className="w-10 h-10 rounded-full bg-[#f3f3f1] flex items-center justify-center">
+                    <svg viewBox="0 0 20 20" className="w-5 h-5 fill-none stroke-[#a4a4a2]" strokeWidth="1.5"><path d="M3 5a1.5 1.5 0 011.5-1.5h3.88L9.5 5H17A1.5 1.5 0 0118.5 6.5V15A1.5 1.5 0 0117 16.5H4.5A1.5 1.5 0 013 15V5z"/></svg>
+                  </div>
+                  <p className="text-[13px] text-[#646462]">{search ? 'No hay resultados para tu búsqueda.' : 'No hay artículos en Knowledge todavía.'}</p>
+                </div>
+              ) : (
+                domainKeys.map(domId => {
+                  const arts = articlesByDomain[domId] || [];
+                  const name = domId === 'root' ? 'Sin carpeta' : (domainNames[domId] || domId.slice(0, 8));
+                  const expanded = expandedDomains.has(domId);
+                  const allSel = arts.length > 0 && arts.every(a => selectedIds.has(a.id));
+                  const someSel = arts.some(a => selectedIds.has(a.id));
+                  return (
+                    <div key={domId}>
+                      {/* Folder row */}
+                      <div
+                        className="flex items-center gap-2 h-9 px-4 hover:bg-[#f8f8f7] cursor-pointer select-none"
+                        onClick={() => toggleExpand(domId)}
+                      >
+                        <button
+                          className={`w-4 h-4 rounded-[4px] border flex items-center justify-center flex-shrink-0 transition-colors ${allSel ? 'bg-[#1a1a1a] border-[#1a1a1a]' : someSel ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#c8c9c4] hover:border-[#1a1a1a]'}`}
+                          onClick={e => { e.stopPropagation(); toggleDomainAll(domId); }}
+                        >
+                          {allSel && <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="1.8"><path d="M1.5 5l2.5 2.5 4.5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          {someSel && !allSel && <span className="w-2 h-[1.5px] bg-white rounded-full"/>}
+                        </button>
+                        <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#a4a4a2] flex-shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                        <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0" fill="none" stroke="#646462" strokeWidth="1.3"><path d="M2 5a1.3 1.3 0 011.3-1.3H6.6L8 5.5H13.7A1.3 1.3 0 0115 6.8V12A1.3 1.3 0 0113.7 13.3H3.3A1.3 1.3 0 012 12V5z"/></svg>
+                        <span className="flex-1 text-[13px] font-medium text-[#1a1a1a] truncate">{name}</span>
+                        <span className="text-[11.5px] text-[#a4a4a2] flex-shrink-0">{arts.length}</span>
+                      </div>
+                      {/* Article rows */}
+                      {expanded && (
+                        <div className="pl-12 pr-4 pb-1 flex flex-col gap-0.5">
+                          {arts.map((a: any) => (
+                            <label
+                              key={a.id}
+                              className="flex items-center gap-2.5 h-8 px-2 rounded-[7px] hover:bg-[#f8f8f7] cursor-pointer select-none"
+                            >
+                              <span
+                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center flex-shrink-0 transition-colors ${selectedIds.has(a.id) ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#c8c9c4] hover:border-[#1a1a1a]'}`}
+                                onClick={() => toggleArticle(a.id)}
+                              >
+                                {selectedIds.has(a.id) && <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="1.8"><path d="M1.5 5l2.5 2.5 4.5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                              </span>
+                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2] flex-shrink-0" strokeWidth="1.3"><path d="M3 2.5h7l3.5 3.5V14H3z"/><path d="M10 2.5v3.5h3.5"/></svg>
+                              <span className="flex-1 text-[13px] text-[#1a1a1a] truncate">{a.title || 'Sin título'}</span>
+                              <span className={`text-[10.5px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${a.status === 'published' ? 'bg-[#dcf2e3] text-[#1f7a3a]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                                {a.status === 'published' ? 'Pub.' : 'Bor.'}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Write from scratch */}
+            <div className="flex-shrink-0 px-5 py-3 border-t border-[#e9eae6] bg-[#fafaf9] flex items-center gap-3">
+              <div className="flex-1 h-px bg-[#e9eae6]"/>
+              <span className="text-[11.5px] text-[#a4a4a2] font-medium">O</span>
+              <div className="flex-1 h-px bg-[#e9eae6]"/>
+            </div>
+            <div className="flex-shrink-0 px-5 pb-4">
+              <button
+                onClick={onWriteNew}
+                className="w-full h-9 rounded-[8px] border border-dashed border-[#c8c9c4] bg-white hover:bg-[#f8f8f7] hover:border-[#1a1a1a] text-[13px] font-medium text-[#1a1a1a] flex items-center justify-center gap-2 transition-colors"
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                {writeNewLabel[cardType]}
+              </button>
+            </div>
+          </div>
+
+          {/* Right — Selected items panel */}
+          <div className="w-[272px] flex-shrink-0 border-l border-[#e9eae6] flex flex-col min-h-0">
+            <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <p className="text-[13px] font-semibold text-[#1a1a1a]">
+                Seleccionado{' '}
+                {selectedArticles.length > 0 && (
+                  <span className="font-normal text-[#646462]">({selectedArticles.length})</span>
+                )}
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0 px-4 py-3">
+              {selectedArticles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-3">
+                  <svg viewBox="0 0 24 24" className="w-8 h-8 fill-none stroke-[#d4d4d2]" strokeWidth="1.3"><path d="M9 11l3 3 8-8M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                  <p className="text-[12px] text-[#a4a4a2] leading-[17px]">Selecciona carpetas o artículos de Knowledge para añadir a Fin.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  {selectedArticles.map((a: any) => (
+                    <div key={a.id} className="flex items-center gap-2 h-8 px-1 rounded-[7px] hover:bg-[#f8f8f7] group">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.3"><path d="M3 2.5h7l3.5 3.5V14H3z"/><path d="M10 2.5v3.5h3.5"/></svg>
+                      <span className="flex-1 text-[12.5px] text-[#1a1a1a] truncate">{a.title || 'Sin título'}</span>
+                      <button
+                        onClick={() => toggleArticle(a.id)}
+                        className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center hover:bg-[#e9eae6] flex-shrink-0 transition-opacity"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-shrink-0 px-4 py-4 border-t border-[#e9eae6] flex flex-col gap-2">
+              <button
+                disabled={selectedArticles.length === 0}
+                onClick={() => onConfirmSelection(selectedArticles)}
+                className={`w-full h-9 rounded-[8px] text-[13px] font-semibold flex items-center justify-center gap-2 transition-all ${
+                  selectedArticles.length > 0
+                    ? 'bg-[#1a1a1a] text-white hover:bg-black shadow-sm'
+                    : 'bg-[#f3f3f1] text-[#a4a4a2] cursor-not-allowed'
+                }`}
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 2.5c2.8 0 5 2.2 5 5.5a5.5 5.5 0 01-5 5.5 5.5 5.5 0 01-5-5.5C3 4.7 5.2 2.5 8 2.5z"/><path d="M5.5 8l2 2 3-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                {selectedArticles.length > 0 ? `Agregar a Fin (${selectedArticles.length})` : 'Agregar a Fin'}
+              </button>
+              <p className="text-center text-[11px] text-[#a4a4a2]">
+                Fin usará estos artículos como fuente de conocimiento
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinContenidoContent() {
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
+  const articles: any[] = Array.isArray(articlesRaw) ? articlesRaw : [];
+  const domains = Array.isArray(domainsData) ? domainsData : [];
+
+  // Counts broken down by type for the source table
+  const sourceCounts = useMemo(() => {
+    const byType: Record<string, { total: number; published: number; finService: number }> = {};
+    articles.forEach((a: any) => {
+      const t = String(a.type || 'ARTICLE').toUpperCase();
+      if (!byType[t]) byType[t] = { total: 0, published: 0, finService: 0 };
+      byType[t].total++;
+      if (String(a.status || '').toLowerCase() === 'published') byType[t].published++;
+      if (a.fin_service) byType[t].finService++;
+    });
+    return byType;
+  }, [articles]);
+
+  const [search, setSearch] = useState('');
+
+  // Picker modal: opened first when clicking article/snippet cards
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerCard, setPickerCard] = useState<{ type: FinContenidoCardType; label: string } | null>(null);
+
+  // Secondary modals (opened directly or from picker)
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorPrefill, setEditorPrefill] = useState<any>(null);
   const [websiteSyncOpen, setWebsiteSyncOpen] = useState(false);
   const [externalPickerOpen, setExternalPickerOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type });
     window.setTimeout(() => setToast(null), 2800);
   }
+
   function openCreateEditor(opts: { type?: string; visibility?: 'public' | 'internal' } = {}) {
     const visibility = opts.visibility || 'public';
-    setEditorPrefill({
-      type: opts.type || 'ARTICLE',
-      visibility,
-      fin_service: visibility === 'public',
-      copilot_enabled: true,
-    });
+    setEditorPrefill({ type: opts.type || 'ARTICLE', visibility, fin_service: true, copilot_enabled: true });
     setEditorOpen(true);
   }
+
+  function handleCardClick(card: typeof FIN_CONTENIDO_CARDS[number]) {
+    if (card.type === 'website') { setWebsiteSyncOpen(true); return; }
+    if (card.type === 'all')     { setLibraryOpen(true); return; }
+    // article / snippet / internal — open picker first
+    setPickerCard({ type: card.type, label: card.label });
+    setPickerOpen(true);
+  }
+
+  function handlePickerWriteNew() {
+    setPickerOpen(false);
+    const t = pickerCard?.type;
+    if (t === 'snippet')  openCreateEditor({ type: 'SNIPPET', visibility: 'internal' });
+    else if (t === 'internal') openCreateEditor({ type: 'ARTICLE', visibility: 'internal' });
+    else                  openCreateEditor({ type: 'ARTICLE', visibility: 'public' });
+  }
+
+  async function handlePickerConfirm(selected: any[]) {
+    setPickerOpen(false);
+    if (selected.length === 0) return;
+    let ok = 0;
+    for (const a of selected) {
+      try {
+        await knowledgeApi.updateArticle(a.id, { fin_service: true });
+        ok++;
+      } catch { /* skip failed */ }
+    }
+    setRefreshKey(k => k + 1);
+    showToast(ok === 1 ? '1 artículo añadido a Fin' : `${ok} artículos añadidos a Fin`);
+  }
+
+  function openExistingArticle(article: any) {
+    setLibraryOpen(false);
+    setEditorPrefill(article);
+    setEditorOpen(true);
+  }
+
   function jumpToKnowledge() {
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -18171,61 +22153,93 @@ function FinContenidoContent() {
       window.location.href = url.toString();
     }
   }
-  function handleCardClick(label: string) {
-    if (label === 'Artículo público')          openCreateEditor({ type: 'ARTICLE', visibility: 'public' });
-    else if (label === 'Artículo interno')     openCreateEditor({ type: 'ARTICLE', visibility: 'internal' });
-    else if (label === 'Fragmento de texto')   openCreateEditor({ type: 'SNIPPET', visibility: 'internal' });
-    else if (label === 'Sincronización de sitio web') setWebsiteSyncOpen(true);
-    else if (label === 'Ver todo')             setLibraryOpen(true);
-    else openCreateEditor();
-  }
-  function openExistingArticle(article: any) {
-    setLibraryOpen(false);
-    setEditorPrefill(article);
-    setEditorOpen(true);
-  }
+
+  // Rows for "Fuente de contenido" table
+  type SourceRow = { key: string; icon: ReactNode; label: string; sub: string; counts: { total: number; published: number; finService: number } | null; onManage?: () => void };
+  const artC = sourceCounts['ARTICLE'] ?? { total: 0, published: 0, finService: 0 };
+  const snpC = sourceCounts['SNIPPET'] ?? { total: 0, published: 0, finService: 0 };
+  const sourceRows: SourceRow[] = [
+    {
+      key: 'articles',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#3b59f6]" strokeWidth="1.3"><path d="M2.5 2.5h7.5l3.5 3.5v8H2.5z"/><path d="M10 2.5v3.5h3.5"/><path d="M5 7.5h6M5 10h6M5 5h4"/></svg>,
+      label: 'Artículos públicos',
+      sub: `${artC.total} artículo${artC.total !== 1 ? 's' : ''}`,
+      counts: artC,
+      onManage: () => setLibraryOpen(true),
+    },
+    {
+      key: 'internal',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#7c3aed]" strokeWidth="1.3"><path d="M2.5 2.5h7.5l3.5 3.5v8H2.5z"/><path d="M10 2.5v3.5h3.5"/><path d="M5 7.5h6M5 10h4"/><circle cx="12" cy="13" r="2.5" fill="#f5f3ff" stroke="#7c3aed" strokeWidth="1.2"/><path d="M11.3 13h1.4M12 12.3v1.4" stroke="#7c3aed" strokeWidth="1"/></svg>,
+      label: 'Artículos internos',
+      sub: 'Solo visibles para tu equipo',
+      counts: artC,
+      onManage: () => setLibraryOpen(true),
+    },
+    {
+      key: 'snippets',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#059669]" strokeWidth="1.3"><path d="M4.5 4l-2.5 4 2.5 4M11.5 4l2.5 4-2.5 4"/><path d="M7 13l2-10"/></svg>,
+      label: 'Fragmentos de texto',
+      sub: `${snpC.total} fragmento${snpC.total !== 1 ? 's' : ''}`,
+      counts: snpC,
+      onManage: () => setLibraryOpen(true),
+    },
+    {
+      key: 'website',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#d97706]" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 2c-1.5 1.5-2.3 3.7-2.3 6s.8 4.5 2.3 6M8 2c1.5 1.5 2.3 3.7 2.3 6s-.8 4.5-2.3 6M2 8h12"/></svg>,
+      label: 'Sincronización de sitio web',
+      sub: 'Páginas indexadas de tu web',
+      counts: null,
+      onManage: () => setWebsiteSyncOpen(true),
+    },
+    {
+      key: 'external',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.3"><rect x="2" y="5" width="4" height="6" rx="1"/><rect x="10" y="2" width="4" height="12" rx="1"/><path d="M6 8h4" strokeLinecap="round"/></svg>,
+      label: 'Apps externas',
+      sub: 'Zendesk, Notion, Confluence…',
+      counts: null,
+      onManage: () => setExternalPickerOpen(true),
+    },
+  ];
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
       <div className="flex-shrink-0 border-b border-[#e9eae6]">
-        <div className="px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
-                <path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/>
-                <path d="M8 3.2v9.6"/>
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-[8px] bg-[#eef2ff] flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#3b59f6]" strokeWidth="1.4">
+                <path d="M2 3.5v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.5c-1.7-.6-3.4-.6-5.5 0C5.4 2.9 3.7 2.9 2 3.5z" strokeLinejoin="round"/>
+                <path d="M7.5 3.5v9.6"/>
               </svg>
             </span>
-            <h1 className="text-[20px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Contenido</h1>
+            <h1 className="text-[18px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Contenido</h1>
           </div>
-          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
-              <path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/>
-              <path d="M8 3.2v9.6"/>
-            </svg>
+          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M2.5 13.5c.8-2.4 2.8-4 5.5-4s4.7 1.6 5.5 4"/></svg>
             <span>Aprender</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
           </button>
         </div>
-        <div className="px-6 h-16 flex items-center gap-3">
-          <div className="flex-1 max-w-[420px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+        <div className="px-6 pb-3 flex items-center gap-2.5">
+          <div className="flex-1 max-w-[400px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2 focus-within:border-[#1a1a1a] transition-colors">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') jumpToKnowledge(); }}
               placeholder="Buscar artículos en Conocimiento…"
-              className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+              className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
             />
           </div>
-          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.2 13c.7-2 2.5-3.2 4.8-3.2s4.1 1.2 4.8 3.2"/></svg>
+          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.2 13c.7-2 2.5-3.2 4.8-3.2s4.1 1.2 4.8 3.2"/></svg>
             <span>Audiencia</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
           </button>
-          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
             <span>Filtros</span>
           </button>
         </div>
@@ -18233,101 +22247,119 @@ function FinContenidoContent() {
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-6 pt-6 pb-4">
-          {/* Agregar contenido */}
-          <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Agregar contenido</h3>
-          <div className="mt-3 grid grid-cols-3 gap-4">
+        <div className="px-6 pt-5 pb-16 max-w-[860px] mx-auto">
+
+          {/* ── Agregar contenido ── */}
+          <h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-3">Agregar contenido</h3>
+          <div className="grid grid-cols-3 gap-3">
             {FIN_CONTENIDO_CARDS.map(c => (
               <button
                 key={c.label}
-                onClick={() => handleCardClick(c.label)}
-                className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex flex-col items-start gap-3 hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors"
+                onClick={() => handleCardClick(c)}
+                className="group h-[100px] bg-white border border-[#e9eae6] rounded-[14px] px-4 py-4 flex flex-col items-start gap-2.5 hover:border-[#c8c9c4] hover:shadow-[0px_2px_8px_rgba(20,20,20,0.08)] transition-all"
               >
-                <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
-                  <span className="relative w-4 h-4 overflow-hidden block">
-                    <img src={`${FIGMA_CDN}/${c.iconAsset}`} alt="" className="absolute" style={{ inset: c.iconInset }} />
-                  </span>
+                <span
+                  className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors"
+                  style={{ background: `${c.color}14` }}
+                >
+                  {c.icon}
                 </span>
-                <span className="font-['Inter'] font-semibold text-[14px] leading-[20px] text-[#1a1a1a] text-left">{c.label}</span>
+                <span className="text-[13.5px] font-semibold text-[#1a1a1a] text-left leading-[18px]">{c.label}</span>
               </button>
             ))}
-            {/* External sources card — opens the connector picker (Zendesk,
-                Notion, Confluence, Document upload, Salesforce, etc.). */}
+            {/* Conectar app externa — brand logos */}
             <button
               onClick={() => setExternalPickerOpen(true)}
-              title="Conectar contenido de aplicaciones externas"
-              className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex flex-col items-start justify-between hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors"
+              className="group h-[100px] bg-white border border-[#e9eae6] rounded-[14px] px-4 py-4 flex flex-col items-start gap-2.5 hover:border-[#c8c9c4] hover:shadow-[0px_2px_8px_rgba(20,20,20,0.08)] transition-all"
             >
-              <div className="flex items-center -space-x-1">
-                <span className="w-7 h-7 rounded-[6px] bg-[#03363d] flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-white">Z</span>
-                <span className="w-7 h-7 rounded-[6px] bg-[#1a1a1a] flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-white">N</span>
-                <span className="w-7 h-7 rounded-[6px] bg-[#0052cc] flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-white">C</span>
-                <span className="w-7 h-7 rounded-[6px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center text-[#646462] text-[11px] font-bold ring-2 ring-white">…</span>
+              <div className="flex items-center -space-x-1.5">
+                <span className="w-8 h-8 rounded-[8px] bg-[#03363d] flex items-center justify-center text-white text-[11px] font-bold ring-[2.5px] ring-white shadow-sm">Z</span>
+                <span className="w-8 h-8 rounded-[8px] bg-[#1a1a1a] flex items-center justify-center text-white text-[11px] font-bold ring-[2.5px] ring-white shadow-sm">N</span>
+                <span className="w-8 h-8 rounded-[8px] bg-[#0052cc] flex items-center justify-center text-white text-[11px] font-bold ring-[2.5px] ring-white shadow-sm">C</span>
+                <span className="w-8 h-8 rounded-[8px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center text-[#646462] text-[12px] font-bold ring-[2.5px] ring-white shadow-sm">···</span>
               </div>
-              <span className="font-['Inter'] font-semibold text-[14px] leading-[20px] text-[#1a1a1a] text-left">Conectar app externa</span>
+              <span className="text-[13.5px] font-semibold text-[#1a1a1a] text-left leading-[18px]">Conectar app externa</span>
             </button>
           </div>
 
-          {/* Fuente de contenido — table Component 16 (1:3502 header + 1:3518 row).
-              4 data columns + 1 sticky chevron column. Exact Figma column widths. */}
-          <h3 className="mt-12 text-[16px] font-semibold text-[#1a1a1a]">Fuente de contenido</h3>
-          <div className="mt-3">
-            {/* Header row */}
-            <div className="grid grid-cols-[1fr_122px_94px_86px_18px] gap-0 px-px pb-[16.98px] pt-[11.01px] border-b border-[#e9eae6]">
-              <div className="flex items-center gap-[3px] font-['Inter'] font-semibold text-[13px] leading-[20px] text-[#646462]">
-                <span>Título</span>
-                {/* Sort arrows — Component 1 v44/v45 */}
-                <span className="relative inline-block w-[8px] h-[10px] ml-1">
-                  <span className="absolute left-0 top-[-1px] w-[8px] h-[5px] overflow-hidden block">
-                    <img src={`${FIGMA_CDN}/0f6a2612-0a12-45e8-8d2d-42b53d6002de`} alt="" className="absolute" style={{ inset: '0.09% 6.25% 10.07% 6.25%' }} />
-                  </span>
-                  <span className="absolute left-0 top-[6px] w-[8px] h-[5px] overflow-hidden block">
-                    <img src={`${FIGMA_CDN}/0f263e45-3398-4b19-9f98-a1537ed99bfe`} alt="" className="absolute" style={{ inset: '10.07% 6.25% 0.09% 6.25%' }} />
-                  </span>
-                </span>
-              </div>
-              <div className="font-['Inter'] font-semibold text-[13px] leading-[20px] text-[#646462]">estado</div>
-              <div className="font-['Inter'] font-semibold text-[13px] leading-[20px] text-[#646462]">Servicio</div>
-              <div className="font-['Inter'] font-semibold text-[13px] leading-[20px] text-[#646462]">Ventas</div>
-              <div />
+          {/* ── Fuente de contenido ── */}
+          <div className="mt-10 flex items-center justify-between mb-3">
+            <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Fuente de contenido</h3>
+            <span className="text-[12px] text-[#646462]">{articles.length} elemento{articles.length !== 1 ? 's' : ''} en total</span>
+          </div>
+
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            {/* Table header */}
+            <div className="grid grid-cols-[1fr_160px_80px_80px_32px] gap-0 px-5 py-2.5 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <span className="text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide">Fuente</span>
+              <span className="text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide">Estado</span>
+              <span className="text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide">Servicio</span>
+              <span className="text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide">Ventas</span>
+              <span/>
             </div>
-            {/* Data row — "Artículos" */}
-            <div className="grid grid-cols-[1fr_122px_94px_86px_18px] gap-0 px-px py-[14px] border-b border-[#e9eae6] items-center">
-              <div className="flex items-center pr-1 truncate">
-                {/* Icon Component 1 v47 */}
-                <span className="w-4 h-4 overflow-hidden relative block flex-shrink-0 mr-2">
-                  <img src={`${FIGMA_CDN}/aa9bbd15-eec7-49fc-8bdb-f309ab1e2b47`} alt="" className="absolute" style={{ inset: '12.5% 9.81% 6.25% 9.75%' }} />
-                </span>
-                <span className="font-['Inter'] text-[14px] leading-[20px] text-[#1a1a1a]">Artículos</span>
-                <span className="font-['Inter'] text-[14px] leading-[20px] text-[#646462] ml-1 truncate">· Fragmentos de código, públicos, internos, documentos</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Green dot — bg #117010 / border 3px #c7f1c6 */}
-                <span className={`w-4 h-4 rounded-full ${counts.published > 0 ? 'bg-[#117010] border-[3px] border-[#c7f1c6]' : 'bg-[#d4d4d2] border-[3px] border-[#f1f1ee]'}`}/>
-                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">{counts.published} {counts.published === 1 ? 'activo' : 'activos'} · {counts.total} total</span>
-              </div>
-              {/* Servicio cell — icon Component 1 v48 + "—" */}
-              <div className="flex items-center gap-2">
-                <span className="w-4 h-4 overflow-hidden relative block flex-shrink-0">
-                  <img src={`${FIGMA_CDN}/b96640e8-d273-42de-a3f8-8b71bf612749`} alt="" className="absolute" style={{ inset: '6.25%' }} />
-                </span>
-                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">—</span>
-              </div>
-              {/* Ventas cell — icon Component 1 v49 + "—" */}
-              <div className="flex items-center gap-2">
-                <span className="w-4 h-4 overflow-hidden relative block flex-shrink-0">
-                  <img src={`${FIGMA_CDN}/b96640e8-d273-42de-a3f8-8b71bf612749`} alt="" className="absolute" style={{ inset: '6.25%' }} />
-                </span>
-                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">—</span>
-              </div>
-              <div />
-            </div>
+
+            {/* Table rows */}
+            {sourceRows.map((row, i) => {
+              const c = row.counts;
+              const hasContent = c ? c.total > 0 : false;
+              const serviceOn = c ? c.finService > 0 : false;
+              return (
+                <button
+                  key={row.key}
+                  onClick={row.onManage}
+                  className={`w-full grid grid-cols-[1fr_160px_80px_80px_32px] gap-0 px-5 py-3.5 items-center text-left hover:bg-[#f8f8f7] transition-colors ${i < sourceRows.length - 1 ? 'border-b border-[#e9eae6]' : ''}`}
+                >
+                  {/* Title */}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex-shrink-0">{row.icon}</span>
+                    <div className="min-w-0">
+                      <p className="text-[13.5px] font-medium text-[#1a1a1a] truncate">{row.label}</p>
+                      <p className="text-[11.5px] text-[#646462] truncate">{row.sub}</p>
+                    </div>
+                  </div>
+                  {/* Estado */}
+                  <div className="flex items-center gap-2">
+                    <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${hasContent ? 'bg-[#15803d]' : 'bg-[#d4d4d2]'}`}/>
+                    <span className="text-[12.5px] text-[#1a1a1a]">
+                      {c ? `${c.published} activo${c.published !== 1 ? 's' : ''} · ${c.total} total` : '—'}
+                    </span>
+                  </div>
+                  {/* Servicio */}
+                  <div>
+                    {serviceOn
+                      ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#dcf2e3] text-[#1f7a3a] text-[11px] font-semibold">On</span>
+                      : <span className="text-[12.5px] text-[#a4a4a2]">—</span>
+                    }
+                  </div>
+                  {/* Ventas */}
+                  <div>
+                    <span className="text-[12.5px] text-[#a4a4a2]">—</span>
+                  </div>
+                  {/* Chevron */}
+                  <div className="flex items-center justify-end">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.5"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* In-place modals — article editor, website-sync wizard, external
-          source picker. None of them navigate the user away from Fin. */}
+      {/* Picker modal — Knowledge folder browser */}
+      {pickerOpen && pickerCard && (
+        <FinContenidoPickerModal
+          cardType={pickerCard.type}
+          cardLabel={pickerCard.label}
+          articles={articles}
+          domains={domains}
+          onConfirmSelection={handlePickerConfirm}
+          onWriteNew={handlePickerWriteNew}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {/* Secondary modals */}
       {editorOpen && (
         <KnowledgeArticleEditor
           initial={editorPrefill}
@@ -18359,7 +22391,8 @@ function FinContenidoContent() {
         />
       )}
       {toast && (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-full shadow-lg text-[12.5px] font-medium ${toast.type === 'error' ? 'bg-[#fef2f2] text-[#b91c1c] border border-[#fecaca]' : 'bg-[#1a1a1a] text-white'}`}>
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-full shadow-lg text-[12.5px] font-medium flex items-center gap-2 ${toast.type === 'error' ? 'bg-[#fef2f2] text-[#b91c1c] border border-[#fecaca]' : 'bg-[#1a1a1a] text-white'}`}>
+          {toast.type !== 'error' && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8l3.5 3.5 6.5-7" strokeLinecap="round" strokeLinejoin="round"/></svg>}
           {toast.msg}
         </div>
       )}
@@ -18631,9 +22664,98 @@ function FinPautaEditor({
   );
 }
 
+// ─── Fin AI agent: seed data (used on first visit when localStorage is absent) ─
+const FIN_SEED_PAUTAS: FinPauta[] = [
+  {
+    id: 'seed_pauta_1', category: 'estilo_comunicacion',
+    title: 'Usa siempre un lenguaje claro y directo',
+    body: '- Usa frases cortas y directas, evita rodeos.\n- Evita jerga técnica salvo que el usuario la use primero.\n- Confirma que el usuario ha entendido la solución antes de cerrar.',
+    audience: 'all', channels: [], enabled: true, metrics: { used: 142, resolved: 98 },
+  },
+  {
+    id: 'seed_pauta_2', category: 'contexto_aclaraciones',
+    title: 'Pide contexto antes de responder preguntas ambiguas',
+    body: '- Cuando la pregunta tenga más de una posible interpretación, pregunta primero cuál es la situación específica del usuario.\n- No asumas. Pide el número de pedido o el correo si la consulta es sobre una cuenta específica.',
+    audience: 'users', channels: ['chat'], enabled: true, metrics: { used: 87, resolved: 72 },
+  },
+  {
+    id: 'seed_pauta_3', category: 'contenido_fuentes',
+    title: 'Cita los artículos relevantes de la base de conocimiento',
+    body: '- Cuando respondas usando información de un artículo, menciona su título y proporciona el enlace.\n- No inventes información que no esté en la base de conocimiento.',
+    audience: 'all', channels: [], enabled: true, metrics: { used: 201, resolved: 180 },
+  },
+  {
+    id: 'seed_pauta_4', category: 'correo_no_deseado',
+    title: 'Identifica y desestima el spam sin responder',
+    body: '- Si el mensaje parece spam, no respondas con información útil.\n- Responde con un mensaje genérico de verificación de identidad o cierra la conversación.',
+    audience: 'all', channels: [], enabled: false,
+  },
+];
+
+const FIN_SEED_ATRIBUTOS: FinAtributo[] = [
+  {
+    id: 'seed_atrib_1', name: 'Sentimiento',
+    description: 'Captura el tono emocional del cliente para priorizar la atención',
+    audience: 'all', escalationRules: 1, reDetectOnClose: true, enabled: true,
+    values: [
+      { id: 'sv1', name: 'Positivo', description: 'El cliente expresa satisfacción o agradecimiento.' },
+      { id: 'sv2', name: 'Neutral', description: 'El tono no es ni positivo ni negativo.' },
+      { id: 'sv3', name: 'Negativo', description: 'El cliente expresa frustración o enfado.' },
+    ],
+    conditions: [],
+  },
+  {
+    id: 'seed_atrib_2', name: 'Urgencia',
+    description: 'Detecta cuán urgente es la consulta para priorizar colas',
+    audience: 'all', escalationRules: 1, reDetectOnClose: false, enabled: true,
+    values: [
+      { id: 'uv1', name: 'Baja', description: 'Sin presión inmediata.' },
+      { id: 'uv2', name: 'Media', description: 'Requiere respuesta en horas.' },
+      { id: 'uv3', name: 'Alta', description: 'Requiere atención inmediata.' },
+    ],
+    conditions: [],
+  },
+  {
+    id: 'seed_atrib_3', name: 'Intención',
+    description: 'Clasifica el tipo de solicitud del usuario',
+    audience: 'all', escalationRules: 0, reDetectOnClose: false, enabled: false,
+    values: [
+      { id: 'iv1', name: 'Información', description: 'El cliente pregunta o consulta.' },
+      { id: 'iv2', name: 'Acción', description: 'El cliente pide ejecutar una operación.' },
+      { id: 'iv3', name: 'Reclamo', description: 'El cliente reporta un problema.' },
+      { id: 'iv4', name: 'Cancelación', description: 'El cliente quiere cancelar un servicio.' },
+    ],
+    conditions: [],
+  },
+];
+
+const FIN_SEED_PROCEDIMIENTOS: FinProcedimiento[] = [
+  {
+    id: 'seed_proc_1', name: 'Solicitud de reembolso',
+    description: 'Guía a Fin para gestionar reembolsos verificando elegibilidad y procesando la solicitud.',
+    prompt: 'Cuando un cliente solicite un reembolso: 1) Verifica que el pedido esté dentro del período de devolución (30 días). 2) Confirma el motivo. 3) Si procede, inicia el proceso e indica el plazo (5-7 días hábiles). 4) Si no procede, explica el motivo y ofrece alternativas.',
+    steps: [
+      { id: 'ps1', kind: 'verification', title: 'Verificar elegibilidad', body: 'Comprueba que el pedido tenga menos de 30 días y esté en estado entregado.' },
+      { id: 'ps2', kind: 'action', title: 'Registrar solicitud', body: 'Crea una incidencia de reembolso con el número de pedido y motivo.' },
+      { id: 'ps3', kind: 'condition', title: '¿Aprobado o rechazado?', body: 'Si aprobado → notifica plazo. Si rechazado → ofrece cambio o crédito.' },
+    ],
+    enabled: true, createdAt: Date.now() - 86400000 * 5,
+  },
+  {
+    id: 'seed_proc_2', name: 'Restablecimiento de acceso',
+    description: 'Ayuda al usuario a recuperar el acceso a su cuenta verificando su identidad primero.',
+    prompt: 'Cuando un cliente no pueda acceder a su cuenta: 1) Verifica su identidad solicitando el correo registrado. 2) Ofrece el flujo de restablecimiento de contraseña. 3) Si el correo no funciona, escala a soporte técnico.',
+    steps: [
+      { id: 'ps4', kind: 'verification', title: 'Verificar identidad', body: 'Solicita correo registrado y última información conocida.' },
+      { id: 'ps5', kind: 'action', title: 'Enviar enlace de restablecimiento', body: 'Usa el sistema de autenticación para enviar el enlace al correo verificado.' },
+    ],
+    enabled: true, createdAt: Date.now() - 86400000 * 12,
+  },
+];
+
 // ─── FinOrientacionContent: real CRUD over Pautas ────────────────────────────
 function FinOrientacionContent() {
-  const pautas = useFinResource<FinPauta>('pautas', []);
+  const pautas = useFinResource<FinPauta>('pautas', FIN_SEED_PAUTAS);
   const toast = useFinToast();
   const [editing, setEditing] = useState<FinPauta | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -19558,7 +23680,7 @@ function FinAtributoEditor({
 
 // ─── Capacitar > Atributos (Figma 1:5966) ────────────────────────────────────
 function FinAtributosContent() {
-  const atributos = useFinResource<FinAtributo>('atributos', []);
+  const atributos = useFinResource<FinAtributo>('atributos', FIN_SEED_ATRIBUTOS);
   const toast = useFinToast();
   const [editing, setEditing] = useState<FinAtributo | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -19782,6 +23904,27 @@ type FinEscalationRule = {
   conditions: FinEscalationCondition[];
   metrics?: { used?: number; resolved?: number; routed?: number };
 };
+
+const FIN_SEED_ESCALATION_RULES: FinEscalationRule[] = [
+  {
+    id: 'seed_esc_1', title: 'Escalar cuando el cliente está muy frustrado',
+    enabled: true, audience: 'all', channels: [],
+    conditions: [{ id: 'c1', field: 'finAttribute.Sentimiento', operator: 'is', value: 'Negativo' }],
+    metrics: { used: 23, routed: 21 },
+  },
+  {
+    id: 'seed_esc_2', title: 'Escalar disputas de facturación a Finanzas',
+    enabled: true, audience: 'users', channels: ['chat', 'email'],
+    conditions: [{ id: 'c2', field: 'conversation.category', operator: 'is', value: 'billing' }],
+    metrics: { used: 11, routed: 11 },
+  },
+  {
+    id: 'seed_esc_3', title: 'Escalar urgencias críticas al equipo de guardia',
+    enabled: false, audience: 'all', channels: [],
+    conditions: [{ id: 'c3', field: 'finAttribute.Urgencia', operator: 'is', value: 'Alta' }],
+    metrics: { used: 0, routed: 0 },
+  },
+];
 
 const FIN_ESC_FIELD_ICON_PERSON = (
   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13c1-2.5 3-3.5 5-3.5s4 1 5 3.5"/></svg>
@@ -20413,7 +24556,7 @@ function FinEscalamientoContent() {
     [],
     [],
   );
-  const escalationRules = useFinResource<FinEscalationRule>('escalation_rules', []);
+  const escalationRules = useFinResource<FinEscalationRule>('escalation_rules', FIN_SEED_ESCALATION_RULES);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<null | 'rule' | 'guideline'>(null);
   const [justCreated, setJustCreated] = useState<string | null>(null);
@@ -20978,7 +25121,7 @@ function FinProcedimientosContent() {
   const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
   const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
   const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
-  const procedimientos = useFinResource<FinProcedimiento>('procedimientos', []);
+  const procedimientos = useFinResource<FinProcedimiento>('procedimientos', FIN_SEED_PROCEDIMIENTOS);
   const [search, setSearch] = useState('');
   const toast = useFinToast();
   const [editing, setEditing] = useState<FinProcedimiento | null>(null);
@@ -21174,25 +25317,107 @@ function FinProcedimientosContent() {
   );
 }
 
+// ─── buildFinAgentContext: assembles system prompt + stats from all sub-views ──
+function buildFinAgentContext(articles: any[]): {
+  systemPrompt: string;
+  stats: { content: number; pautas: number; atributos: number; escalations: number; procedures: number };
+  activePautas: FinPauta[];
+  activeAtributos: FinAtributo[];
+  activeRules: FinEscalationRule[];
+  activeProcs: FinProcedimiento[];
+} {
+  function readLS<T>(lsKey: string): T[] {
+    try { const raw = window.localStorage.getItem(lsKey); if (raw) return JSON.parse(raw) as T[]; } catch { /* ignore */ }
+    return [];
+  }
+  const pautas = readLS<FinPauta>('clain.fin.pautas');
+  const atributos = readLS<FinAtributo>('clain.fin.atributos');
+  const escRules = readLS<FinEscalationRule>('clain.fin.escalation_rules');
+  const procs = readLS<FinProcedimiento>('clain.fin.procedimientos');
+
+  const finArticles = articles.filter((a: any) => a.fin_service);
+  const activePautas = pautas.filter(p => p.enabled);
+  const activeAtributos = atributos.filter(a => a.enabled);
+  const activeRules = escRules.filter(r => r.enabled);
+  const activeProcs = procs.filter(p => p.enabled);
+
+  const lines: string[] = [];
+  lines.push('Eres Fin, un agente de IA de atención al cliente de Clain.');
+  lines.push('Responde siempre de manera precisa, empática y profesional en el idioma del usuario.');
+
+  if (finArticles.length > 0) {
+    lines.push('', '## Base de conocimiento');
+    lines.push(`Tienes acceso a ${finArticles.length} artículo${finArticles.length !== 1 ? 's' : ''} de la base de conocimiento:`);
+    finArticles.slice(0, 12).forEach((a: any) => lines.push(`- ${a.title || '(sin título)'}`));
+    if (finArticles.length > 12) lines.push(`... y ${finArticles.length - 12} artículos más`);
+    lines.push('Basa tus respuestas en este contenido. Si no tienes información suficiente, dilo claramente.');
+  }
+
+  if (activePautas.length > 0) {
+    lines.push('', '## Directrices de comunicación');
+    activePautas.forEach(p => { lines.push(`### ${p.title}`, p.body.trim()); });
+  }
+
+  if (activeAtributos.length > 0) {
+    lines.push('', '## Atributos a detectar en la conversación');
+    lines.push('Identifica y registra los siguientes atributos en cada conversación:');
+    activeAtributos.forEach(a => {
+      lines.push(`- **${a.name}** — ${a.description}. Valores posibles: ${a.values.map(v => v.name).join(', ')}.`);
+    });
+  }
+
+  if (activeRules.length > 0) {
+    lines.push('', '## Cuándo escalar a un agente humano');
+    lines.push('Escala la conversación en los siguientes casos:');
+    activeRules.forEach(r => {
+      lines.push(`- ${r.title}${r.conditions.length > 0 ? ` (${r.conditions.length} condición${r.conditions.length > 1 ? 'es' : ''} definida${r.conditions.length > 1 ? 's' : ''})` : ''}`);
+    });
+  }
+
+  if (activeProcs.length > 0) {
+    lines.push('', '## Procedimientos');
+    activeProcs.forEach(p => {
+      lines.push(`### ${p.name}`);
+      if (p.description) lines.push(p.description);
+      if (p.prompt) { lines.push('', p.prompt.trim()); }
+    });
+  }
+
+  return {
+    systemPrompt: lines.join('\n'),
+    stats: { content: finArticles.length, pautas: activePautas.length, atributos: activeAtributos.length, escalations: activeRules.length, procedures: activeProcs.length },
+    activePautas, activeAtributos, activeRules, activeProcs,
+  };
+}
+
 // ─── Probar / Pruebas (Figma 1:10409) ───────────────────────────────────────
 function FinPruebasContent() {
-  // Live test bench: questions stored client-side, but each "Probar" hits
-  // knowledgeApi.test() (same endpoint Conocimiento › Probar uses) so
-  // configuration here is real, persistent, end-to-end.
   type TestQ = { id: string; q: string; rating?: 'good' | 'ok' | 'bad' | null; result?: any; status?: 'idle' | 'running' | 'done' | 'error'; error?: string };
   const [questions, setQuestions] = useState<TestQ[]>([
-    { id: 'q1', q: 'Cómo puedo mejorar mi suscripción?', status: 'idle', rating: null },
+    { id: 'q1', q: '¿Cómo puedo actualizar mi plan de suscripción?', status: 'idle', rating: null },
+    { id: 'q2', q: '¿Cuál es la política de reembolsos?', status: 'idle', rating: null },
+    { id: 'q3', q: 'No puedo acceder a mi cuenta, ¿qué hago?', status: 'idle', rating: null },
   ]);
   const [selectedId, setSelectedId] = useState<string>('q1');
   const [newQ, setNewQ] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [note, setNote] = useState('');
+  const [rightTab, setRightTab] = useState<'response' | 'config' | 'prompt'>('response');
+  const [promptCopied, setPromptCopied] = useState(false);
+
   const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
+  const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const articles: any[] = Array.isArray(articlesRaw) ? articlesRaw : [];
+
   const finAgent = useMemo(() => {
     const list = Array.isArray(agentsData) ? agentsData : [];
     return list.find((a: any) => String(a.slug || a.id || '').toLowerCase().includes('fin')) || list[0] || null;
   }, [agentsData]);
+
+  // Build system prompt + stats from all Capacitar sub-views (reads localStorage)
+  const agentCtx = useMemo(() => buildFinAgentContext(articles), [articles]);
+
   const selected = questions.find(q => q.id === selectedId) || questions[0];
 
   async function runOne(id: string) {
@@ -21204,6 +25429,7 @@ function FinPruebasContent() {
         question: target.q,
         agent_id: finAgent?.id,
         agent_slug: finAgent?.slug,
+        system_prompt: agentCtx.systemPrompt || undefined,
       });
       setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'done', result } : q));
     } catch (err: any) {
@@ -21239,36 +25465,61 @@ function FinPruebasContent() {
     r === 'ok'   ? { txt: 'Aceptable', dot: '#f4d35e' } :
     r === 'bad'  ? { txt: 'Malo',      dot: '#ff5f3f' } :
     null;
+
+  function copyPrompt() {
+    navigator.clipboard.writeText(agentCtx.systemPrompt).catch(() => {});
+    setPromptCopied(true);
+    window.setTimeout(() => setPromptCopied(false), 2000);
+  }
+
+  const configPills = [
+    { key: 'content',    count: agentCtx.stats.content,    label: 'artículos', color: '#3b59f6', bg: '#eef2ff' },
+    { key: 'pautas',     count: agentCtx.stats.pautas,     label: 'pautas',    color: '#059669', bg: '#e8faf3' },
+    { key: 'atributos',  count: agentCtx.stats.atributos,  label: 'atributos', color: '#7c3aed', bg: '#f3e8ff' },
+    { key: 'escalations',count: agentCtx.stats.escalations,label: 'escaladas', color: '#d97706', bg: '#fff3e8' },
+    { key: 'procedures', count: agentCtx.stats.procedures, label: 'procs',     color: '#b91c1c', bg: '#fef2f2' },
+  ];
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Top section header bar */}
+      {/* Top bar */}
       <div className="flex-shrink-0 h-[50px] px-6 flex items-center justify-between border-b border-[#e9eae6]">
         <h2 className="text-[14px] font-semibold text-[#1a1a1a]">
           Prueba por lotes las respuestas de Fin para activarlas con confianza
         </h2>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={runBatch}
-            disabled={batchRunning || questions.length === 0}
-            className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:bg-[#a4a4a2]"
-          >
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M5 3l8 5-8 5z"/></svg>
-            {batchRunning ? 'Ejecutando…' : `Probar todas (${questions.length})`}
-          </button>
-          <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#f8f8f7] text-[#646462]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4">
-              <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
+        <button
+          onClick={runBatch}
+          disabled={batchRunning || questions.length === 0}
+          className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:bg-[#a4a4a2]"
+        >
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M5 3l8 5-8 5z"/></svg>
+          {batchRunning ? 'Ejecutando…' : `Probar todas (${questions.length})`}
+        </button>
       </div>
 
-      {/* Body: questions list (left) + Evaluar la respuesta (right) */}
+      {/* Body */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left column */}
         <div className="flex-1 min-w-0 flex flex-col border-r border-[#e9eae6] overflow-hidden">
+
+          {/* ── Config summary bar ── */}
+          <div className="flex-shrink-0 px-6 py-2.5 border-b border-[#e9eae6] bg-[#fafafa]">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11.5px] font-medium text-[#646462]">Config activa:</span>
+              {configPills.map(p => (
+                <span key={p.key} className="inline-flex items-center h-[22px] px-2.5 rounded-full text-[11px] font-semibold"
+                  style={p.count > 0 ? { background: p.bg, color: p.color } : { background: '#f1f1ee', color: '#9a9a98' }}>
+                  {p.count} {p.label}
+                </span>
+              ))}
+              {(agentCtx.stats.content + agentCtx.stats.pautas + agentCtx.stats.atributos + agentCtx.stats.escalations + agentCtx.stats.procedures) === 0 && (
+                <span className="text-[11px] text-[#b91c1c]">⚠ Sin configuración activa — ve a Capacitar para añadir contenido</span>
+              )}
+            </div>
+          </div>
+
           {/* Test name + actions */}
-          <div className="flex-shrink-0 px-6 pt-6 pb-2">
+          <div className="flex-shrink-0 px-6 pt-5 pb-2">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <button className="flex items-center gap-2 text-[22px] font-bold text-[#1a1a1a] tracking-[-0.2px] hover:bg-[#f8f8f7] -mx-1 px-1 rounded">
@@ -21389,54 +25640,51 @@ function FinPruebasContent() {
           </div>
         </div>
 
-        {/* Right column: Evaluar la respuesta */}
+        {/* Right column */}
         <div className="w-[456px] flex-shrink-0 flex flex-col bg-[#fbfbfa] overflow-hidden">
-          {/* Header */}
-          <div className="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-[#e9eae6]">
-            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Evaluar la respuesta</h2>
-            <div className="flex items-center gap-1">
-              <button className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f1f1ee] text-[#646462]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M13 6.5A5 5 0 1 0 13 9.5M13 4v3.5h-3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f1f1ee] text-[#646462]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" /></svg>
-              </button>
+
+          {/* Tabs header */}
+          <div className="flex-shrink-0 border-b border-[#e9eae6] px-4">
+            <div className="flex items-center">
+              {([
+                { id: 'response' as const, label: 'Respuesta' },
+                { id: 'config'   as const, label: 'Config activa' },
+                { id: 'prompt'   as const, label: 'Prompt del sistema' },
+              ]).map(t => (
+                <button key={t.id} onClick={() => setRightTab(t.id)}
+                  className={`h-11 px-3 text-[12.5px] font-semibold border-b-2 transition-colors whitespace-nowrap ${rightTab === t.id ? 'text-[#1a1a1a] border-[#1a1a1a]' : 'text-[#646462] border-transparent hover:text-[#1a1a1a]'}`}>
+                  {t.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Conversation */}
-          <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
-            {selected ? (
-              <>
-                {/* User question bubble */}
+          {/* Tab: Respuesta */}
+          {rightTab === 'response' && (<>
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
+              {selected ? (<>
                 <div className="flex justify-end">
-                  <div className="max-w-[78%] bg-[#1a1a1a] text-white text-[13px] leading-[18px] px-3.5 py-2.5 rounded-[14px] rounded-tr-[4px]">
-                    {selected.q}
-                  </div>
+                  <div className="max-w-[78%] bg-[#1a1a1a] text-white text-[13px] leading-[18px] px-3.5 py-2.5 rounded-[14px] rounded-tr-[4px]">{selected.q}</div>
                 </div>
-
-                {/* Fin response bubble */}
                 {selected.status === 'running' && (
-                  <div className="flex flex-col items-start">
-                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462]">
-                      Ejecutando knowledgeApi.test contra Fin…
+                  <div className="flex items-start">
+                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462] flex items-center gap-1.5">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462] animate-spin flex-shrink-0" strokeWidth="1.6"><path d="M8 2a6 6 0 0 1 6 6" strokeLinecap="round"/></svg>
+                      Ejecutando con configuración activa…
                     </div>
                   </div>
                 )}
                 {selected.status === 'error' && (
-                  <div className="flex flex-col items-start">
-                    <div className="max-w-[88%] bg-[#fef2f2] border border-[#fecaca] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#b91c1c]">
-                      {selected.error}
-                    </div>
+                  <div className="flex items-start">
+                    <div className="max-w-[88%] bg-[#fef2f2] border border-[#fecaca] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#b91c1c]">{selected.error}</div>
                   </div>
                 )}
                 {selected.status === 'done' && selected.result && (
-                  <div className="flex flex-col items-start">
+                  <div className="flex items-start">
                     <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3">
                       <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#1a1a1a]">
                         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
-                        <span>Fin</span>
-                        <span className="text-[#646462]">• AI Agent</span>
+                        <span>Fin</span><span className="text-[#646462] font-normal">· AI Agent</span>
                       </div>
                       <p className="mt-1.5 text-[13px] leading-[18px] text-[#1a1a1a] whitespace-pre-wrap">
                         {selected.result.answer || selected.result.message || selected.result.content || JSON.stringify(selected.result, null, 2)}
@@ -21445,14 +25693,12 @@ function FinPruebasContent() {
                   </div>
                 )}
                 {(!selected.status || selected.status === 'idle') && (
-                  <div className="flex flex-col items-start">
+                  <div className="flex items-start">
                     <div className="max-w-[88%] bg-[#f8f8f7] border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462]">
-                      Pulsa ▶ en la fila o «Probar todas» para evaluar la respuesta de Fin a esta pregunta.
+                      Pulsa ▶ en la fila o «Probar todas» para evaluar la respuesta de Fin.
                     </div>
                   </div>
                 )}
-
-                {/* Sources used */}
                 {selected.status === 'done' && selected.result?.sources?.length > 0 && (
                   <div className="mt-2">
                     <p className="text-[12px] text-[#646462] mb-2">Esta respuesta utiliza:</p>
@@ -21466,49 +25712,88 @@ function FinPruebasContent() {
                     </div>
                   </div>
                 )}
-              </>
-            ) : (
-              <p className="text-[13px] text-[#646462]">Añade preguntas con el botón de arriba para empezar a probar Fin.</p>
-            )}
-          </div>
-
-          {/* Bottom: rating */}
-          <div className="flex-shrink-0 border-t border-[#e9eae6] px-5 pt-5 pb-5">
-            <h4 className="text-[14px] font-bold text-[#1a1a1a]">Califica la respuesta de Fin</h4>
-            <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">
-              La calificación se guarda en este lote de pruebas. También puedes agregar una nota para ti o tu equipo.
-            </p>
-            <div className="mt-3 flex gap-2">
-              {([
-                { id: 'good' as const, label: 'Buena',     color: '#0fb87f', key: 'G' },
-                { id: 'ok' as const,   label: 'Aceptable', color: '#f4d35e', key: 'A' },
-                { id: 'bad' as const,  label: 'Malo',      color: '#ff5f3f', key: 'P' },
-              ]).map(r => {
-                const active = selected?.rating === r.id;
-                return (
-                  <button
-                    key={r.id}
-                    onClick={() => selected && rate(selected.id, r.id)}
-                    className={`h-8 px-3 rounded-[8px] border flex items-center gap-1.5 text-[13px] text-[#1a1a1a] ${active ? 'bg-[#f8f8f7] border-[#1a1a1a]' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}
-                  >
-                    <span className="w-3.5 h-3.5 rounded-full" style={{ background: r.color }} />
-                    <span>{r.label}</span>
-                    <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">{r.key}</span>
-                  </button>
-                );
-              })}
-              {selected && (
-                <button onClick={() => removeQuestion(selected.id)} className="ml-auto h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#b91c1c] hover:bg-[#fef2f2]">Eliminar</button>
+              </>) : (
+                <p className="text-[13px] text-[#646462]">Añade preguntas para empezar a probar Fin.</p>
               )}
             </div>
-            <input
-              type="text"
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              placeholder="Agregar nota interna"
-              className="mt-3 w-full h-9 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] placeholder:text-[#646462] outline-none focus:border-[#1a1a1a]"
-            />
-          </div>
+            <div className="flex-shrink-0 border-t border-[#e9eae6] px-5 pt-4 pb-5">
+              <h4 className="text-[14px] font-bold text-[#1a1a1a]">Califica la respuesta de Fin</h4>
+              <div className="mt-3 flex gap-2">
+                {([
+                  { id: 'good' as const, label: 'Buena',     color: '#0fb87f', key: 'G' },
+                  { id: 'ok'   as const, label: 'Aceptable', color: '#f4d35e', key: 'A' },
+                  { id: 'bad'  as const, label: 'Malo',      color: '#ff5f3f', key: 'P' },
+                ]).map(r => {
+                  const active = selected?.rating === r.id;
+                  return (
+                    <button key={r.id} onClick={() => selected && rate(selected.id, r.id)}
+                      className={`h-8 px-3 rounded-[8px] border flex items-center gap-1.5 text-[13px] text-[#1a1a1a] ${active ? 'bg-[#f8f8f7] border-[#1a1a1a]' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}>
+                      <span className="w-3.5 h-3.5 rounded-full" style={{ background: r.color }} />
+                      <span>{r.label}</span>
+                      <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">{r.key}</span>
+                    </button>
+                  );
+                })}
+                {selected && (
+                  <button onClick={() => removeQuestion(selected.id)} className="ml-auto h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#b91c1c] hover:bg-[#fef2f2]">Eliminar</button>
+                )}
+              </div>
+              <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Agregar nota interna"
+                className="mt-3 w-full h-9 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] placeholder:text-[#646462] outline-none focus:border-[#1a1a1a]" />
+            </div>
+          </>)}
+
+          {/* Tab: Config activa */}
+          {rightTab === 'config' && (
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-5">
+              {([
+                { label: 'Contenido', items: agentCtx.stats.content > 0 ? [{ title: `${agentCtx.stats.content} artículos habilitados para Fin`, sub: '' }] : [], empty: 'Sin artículos habilitados. Ve a Capacitar → Contenido.' },
+                { label: 'Orientación', items: agentCtx.activePautas.map(p => ({ title: p.title, sub: p.body.split('\n')[0] })), empty: 'Sin pautas activas. Ve a Capacitar → Orientación.' },
+                { label: 'Atributos', items: agentCtx.activeAtributos.map(a => ({ title: a.name, sub: a.values.map(v => v.name).join(' · ') })), empty: 'Sin atributos activos. Ve a Capacitar → Atributos.' },
+                { label: 'Escalada', items: agentCtx.activeRules.map(r => ({ title: r.title, sub: r.conditions.length > 0 ? `${r.conditions.length} condición${r.conditions.length > 1 ? 'es' : ''}` : 'Sin condiciones' })), empty: 'Sin reglas de escalada activas. Ve a Capacitar → Escalada.' },
+                { label: 'Procedimientos', items: agentCtx.activeProcs.map(p => ({ title: p.name, sub: p.description })), empty: 'Sin procedimientos activos. Ve a Capacitar → Procedimientos.' },
+              ]).map((section, si) => (
+                <div key={si}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-[0.6px]">{section.label}</span>
+                    {section.items.length > 0 && <span className="text-[11px] text-[#0fb87f] font-medium">{section.items.length} activo{section.items.length > 1 ? 's' : ''}</span>}
+                  </div>
+                  {section.items.length === 0
+                    ? <p className="text-[12px] text-[#9a9a98] italic">{section.empty}</p>
+                    : section.items.map((item, ii) => (
+                      <div key={ii} className="mb-2 px-3 py-2.5 bg-white border border-[#e9eae6] rounded-[10px]">
+                        <p className="text-[12.5px] font-semibold text-[#1a1a1a]">{item.title}</p>
+                        {item.sub && <p className="text-[11.5px] text-[#646462] mt-0.5 line-clamp-2">{item.sub}</p>}
+                      </div>
+                    ))
+                  }
+                  {si < 4 && <div className="mt-1 h-px bg-[#e9eae6]" />}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Tab: Prompt del sistema */}
+          {rightTab === 'prompt' && (
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-[12px] text-[#646462] leading-[17px]">
+                  Este prompt se envía automáticamente con cada pregunta. Se construye a partir de tu configuración en Capacitar.
+                </p>
+                <button onClick={copyPrompt}
+                  className="flex-shrink-0 h-7 px-3 rounded-[7px] bg-white border border-[#e9eae6] text-[11.5px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                  {promptCopied ? '✓ Copiado' : 'Copiar'}
+                </button>
+              </div>
+              {agentCtx.systemPrompt
+                ? <pre className="text-[10.5px] text-[#1a1a1a] whitespace-pre-wrap font-mono bg-white border border-[#e9eae6] rounded-[10px] p-4 leading-[15px]">
+                    {agentCtx.systemPrompt}
+                  </pre>
+                : <div className="bg-[#fef2f2] border border-[#fecaca] rounded-[10px] p-4">
+                    <p className="text-[12.5px] text-[#b91c1c]">Sin configuración activa. Activa pautas, atributos o procedimientos en las secciones de Capacitar para que Fin use tu configuración al responder.</p>
+                  </div>}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -22427,6 +26712,83 @@ function FinMonitoresContent() {
   );
 }
 
+// ─── Fin · Ajustes generales ────────────────────────────────────────────────
+function FinSettingsContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+          <circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M11.4 3.2l-1.4 1.4M4.6 11.4l-1.4 1.4"/>
+        </svg>
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Ajustes de Fin</h2>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
+        <div className="max-w-[560px] space-y-6">
+          <div className="bg-white rounded-[10px] border border-[#e9eae6] p-5 space-y-4">
+            <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Configuración general</h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[13px] font-medium text-[#1a1a1a]">Fin activado</p>
+                <p className="text-[12px] text-[#646462]">Permite que Fin responda automáticamente a los clientes</p>
+              </div>
+              <div className="w-9 h-5 rounded-full bg-[#ed621d] relative cursor-pointer flex-shrink-0">
+                <span className="absolute right-[3px] top-[3px] w-3.5 h-3.5 rounded-full bg-white shadow"/>
+              </div>
+            </div>
+            <div className="flex items-center justify-between border-t border-[#f5f5f4] pt-4">
+              <div>
+                <p className="text-[13px] font-medium text-[#1a1a1a]">Respuestas personalizadas</p>
+                <p className="text-[12px] text-[#646462]">Fin puede ajustar el tono según el contexto</p>
+              </div>
+              <div className="w-9 h-5 rounded-full bg-[#d4d4d2] relative cursor-pointer flex-shrink-0">
+                <span className="absolute left-[3px] top-[3px] w-3.5 h-3.5 rounded-full bg-white shadow"/>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-[10px] border border-[#e9eae6] p-5">
+            <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Idioma de respuesta</h3>
+            <select className="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] bg-white">
+              <option>Español</option><option>English</option><option>Français</option><option>Deutsch</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Fin · Audiencias ────────────────────────────────────────────────────────
+function FinAudiencesContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+          <circle cx="6" cy="5" r="2.5"/><circle cx="11" cy="5" r="2"/><path d="M1 13c0-2.2 2.2-4 5-4s5 1.8 5 4"/><path d="M13 13c0-1.7-1.3-3-3-3"/>
+        </svg>
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Audiencias de Fin</h2>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
+        <div className="max-w-[600px]">
+          <p className="text-[13px] text-[#646462] mb-4">Define qué segmentos de clientes pueden interactuar con Fin y bajo qué condiciones.</p>
+          <div className="bg-white rounded-[10px] border border-[#e9eae6] divide-y divide-[#f5f5f4]">
+            {['Todos los visitantes', 'Clientes activos', 'Usuarios nuevos (últimos 30 días)', 'Usuarios VIP'].map(seg => (
+              <div key={seg} className="flex items-center justify-between px-5 py-3.5">
+                <span className="text-[13px] text-[#1a1a1a]">{seg}</span>
+                <div className="w-9 h-5 rounded-full bg-[#ed621d] relative cursor-pointer flex-shrink-0">
+                  <span className="absolute right-[3px] top-[3px] w-3.5 h-3.5 rounded-full bg-white shadow"/>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="mt-4 h-8 px-4 rounded-[8px] border border-dashed border-[#d4d4d2] text-[13px] text-[#646462] hover:border-[#1a1a1a] hover:text-[#1a1a1a] transition-colors">
+            + Añadir segmento de audiencia
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Registro de cambios (1:19066) ──────────────────────────────────────────
 function FinChangelogContent() {
   const { data: auditData, loading } = useApi<any[]>(() => auditApi.workspaceAll(), [], []);
@@ -22468,423 +26830,180 @@ function FinChangelogContent() {
             <p className="text-[13px] text-[#646462]">Cargando…</p>
           </div>
         ) : entries.length === 0 ? (
-          <div className="flex items-start justify-center pt-24 px-6">
-            <div className="text-center max-w-[420px]">
-              <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
-              <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en su agente de IA Fin</p>
-            </div>
+          <div className="flex flex-col items-center justify-center pt-24 gap-2">
+            <svg viewBox="0 0 24 24" className="w-8 h-8 fill-none stroke-[#d4d4d2]" strokeWidth="1.4"><path d="M9 12h6M9 16h4M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/></svg>
+            <p className="text-[13px] text-[#646462]">No hay registros de cambios.</p>
           </div>
         ) : (
-          <div className="divide-y divide-[#e9eae6]">
-            {entries.map((e: any, i: number) => {
-              const when = e.createdAt || e.created_at || e.timestamp;
-              const whenTxt = when ? new Date(when).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
-              const actor = e.actorName || e.actor_name || e.userId || e.user_id || 'Sistema';
-              const action = e.action || e.event || 'cambio';
-              const entity = e.entityType || e.entity_type || '';
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr className="border-b border-[#e9eae6]">
+                <th className="text-left px-6 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acción</th>
+                <th className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Entidad</th>
+                <th className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Actor</th>
+                <th className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e: any, i: number) => (
+                <tr key={e.id || i} className="border-b border-[#f5f5f4] hover:bg-[#f8f8f7]">
+                  <td className="px-6 py-2.5 text-[#1a1a1a]">{e.action || '—'}</td>
+                  <td className="px-4 py-2.5 text-[#646462]">{e.entityType || e.entity_type || '—'}</td>
+                  <td className="px-4 py-2.5 text-[#646462]">{e.actorName || e.actor_name || '—'}</td>
+                  <td className="px-4 py-2.5 text-[#646462]">{e.createdAt || e.created_at ? new Date(e.createdAt || e.created_at).toLocaleString('es-ES') : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Category badge colours for template cards
+const TEMPLATE_CAT_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  'Payments & risk':      { bg: 'bg-[#fff7ed]', text: 'text-[#b45309]', dot: 'bg-[#f59e0b]' },
+  'Orders & fulfillment': { bg: 'bg-[#eff6ff]', text: 'text-[#1d4ed8]', dot: 'bg-[#3b82f6]' },
+  'Support operations':   { bg: 'bg-[#f5f3ff]', text: 'text-[#6d28d9]', dot: 'bg-[#8b5cf6]' },
+  'Returns & recovery':   { bg: 'bg-[#f0fdf4]', text: 'text-[#15803d]', dot: 'bg-[#22c55e]' },
+  'AI & knowledge':       { bg: 'bg-[#eef2ff]', text: 'text-[#4338ca]', dot: 'bg-[#6366f1]' },
+  'Orchestration & data': { bg: 'bg-[#f8fafc]', text: 'text-[#475569]', dot: 'bg-[#94a3b8]' },
+};
+
+// ─── Ajustes de Fin · Flujos de trabajo (Figma 1:22652) ─────────────────────
+function FinFlujosTrabajoContent() {
+  const [builderId, setBuilderId]                 = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [dropdownOpen, setDropdownOpen]           = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+
+  // ── Builder overlay ──────────────────────────────────────────────────────
+  if (builderId !== null) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* Back bar */}
+        <div className="flex-shrink-0 px-4 h-11 border-b border-[#e9eae6] flex items-center gap-2">
+          <button
+            onClick={() => { setBuilderId(null); setSelectedTemplateId(null); }}
+            className="inline-flex items-center gap-1.5 text-[13px] text-[#646462] hover:text-[#1a1a1a]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6">
+              <path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span>Flujos de trabajo</span>
+          </button>
+        </div>
+        {/* Full-height Workflows builder */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <Workflows createNewOnMount={true} startTemplateId={selectedTemplateId ?? undefined} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Template picker modal ────────────────────────────────────────────────
+  const templateModal = templateModalOpen ? (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={() => setTemplateModalOpen(false)} />
+      <div className="relative w-full max-w-[900px] mx-4 bg-white rounded-[16px] shadow-2xl flex flex-col max-h-[80vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div>
+            <h2 className="text-[18px] font-bold text-[#1a1a1a]">Plantillas de flujos de trabajo</h2>
+            <p className="text-[13px] text-[#646462] mt-0.5">Elige una plantilla para comenzar rápidamente</p>
+          </div>
+          <button onClick={() => setTemplateModalOpen(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        {/* Grid */}
+        <div className="overflow-y-auto flex-1 p-6">
+          <div className="grid grid-cols-3 gap-4">
+            {(WORKFLOW_TEMPLATES as readonly any[]).map((tpl: any) => {
+              const cat = TEMPLATE_CAT_COLORS[tpl.category as string] ?? { bg: 'bg-[#f3f3f1]', text: 'text-[#646462]', dot: 'bg-[#a4a4a2]' };
               return (
-                <div key={e.id || i} className="px-6 py-3 flex items-start gap-3 hover:bg-[#fafafa]">
-                  <span className="w-7 h-7 rounded-full bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0 text-[10px] font-semibold text-[#646462]">
-                    {String(actor)[0]?.toUpperCase() || '?'}
+                <div
+                  key={tpl.id}
+                  className="border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-3 hover:border-[#1a1a1a] hover:shadow-md transition-all cursor-pointer group"
+                  onClick={() => { setSelectedTemplateId(tpl.id as string); setTemplateModalOpen(false); setBuilderId('template'); }}
+                >
+                  <span className={`inline-flex items-center gap-1.5 self-start px-2 py-0.5 rounded-[6px] text-[11px] font-semibold ${cat.bg} ${cat.text}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${cat.dot}`} />
+                    {tpl.category}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-[#1a1a1a]"><span className="font-semibold">{actor}</span> · {action}{entity ? ` · ${entity}` : ''}</p>
-                    <p className="text-[12px] text-[#646462] mt-0.5">{whenTxt}</p>
+                  <h3 className="text-[14px] font-bold text-[#1a1a1a] leading-[20px]">{tpl.label}</h3>
+                  <p className="text-[12.5px] text-[#646462] leading-[18px] flex-1">{tpl.description}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(tpl.nodes as any[]).slice(0, 4).map((n: any, i: number) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-[#f3f3f1] text-[10.5px] text-[#646462]">{n.label}</span>
+                    ))}
+                    {(tpl.nodes as any[]).length > 4 && (
+                      <span className="px-1.5 py-0.5 rounded bg-[#f3f3f1] text-[10.5px] text-[#646462]">+{(tpl.nodes as any[]).length - 4}</span>
+                    )}
                   </div>
+                  <button className="mt-1 h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[12.5px] font-semibold inline-flex items-center gap-1.5 self-start group-hover:bg-black">
+                    <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+                    Usar plantilla
+                  </button>
                 </div>
               );
             })}
           </div>
-        )}
+        </div>
       </div>
     </div>
-  );
-}
+  ) : null;
 
-// ─── Ajustes de Fin · General (1:20145) ─────────────────────────────────────
-function FinSettingsContent() {
-  type Row = { icon: ReactNode; title: string; desc: string; cta?: string; meta?: string };
-  const { data: ctx } = useApi<any>(() => workspacesApi.currentContext(), [], null);
-  // Pull live numbers (workspace name, plan, tokens used, trial days left) from
-  // the workspace context. Numbers fall back to '—' when the field is absent.
-  const wsCtx: any = ctx || {};
-  const ws = wsCtx.workspace || wsCtx;
-  const planName = ws.planName || ws.plan_name || ws.plan || wsCtx.plan;
-  const tokensUsed = ws.tokensUsed ?? ws.tokens_used ?? wsCtx.tokensUsed ?? wsCtx.usage?.usedThisPeriod;
-  const tokensLimit = ws.tokensLimit ?? ws.tokens_limit ?? wsCtx.tokensLimit ?? wsCtx.usage?.included;
-  const trialEnd = ws.trialEndsAt || ws.trial_ends_at || wsCtx.trialEndsAt;
-  const trialDaysLeft = trialEnd ? Math.max(0, Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000)) : null;
-
-  const usoRows: Row[] = [
+  const filterChips = [
     {
-      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M8 2.5l1.6 4 4.4.4-3.4 3 1.1 4.3L8 12l-3.7 2.2L5.4 9.9 2 6.9l4.4-.4z"/></svg>,
-      title: 'Alertas y límites',
-      desc: 'Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto.',
-      meta: trialDaysLeft != null ? `Prueba: ${trialDaysLeft} días` : (planName ? `Plan: ${planName}` : undefined),
+      label: 'Visitantes, leads o usuarios',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/>
+        </svg>
+      ),
     },
     {
-      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>,
-      title: 'Supervisar el uso',
-      desc: 'Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo.',
-      cta: 'Ver uso',
-      meta: tokensUsed != null
-        ? (tokensLimit ? `${tokensUsed.toLocaleString?.('es-ES') ?? tokensUsed} / ${tokensLimit.toLocaleString?.('es-ES') ?? tokensLimit} tokens` : `${tokensUsed.toLocaleString?.('es-ES') ?? tokensUsed} tokens`)
-        : undefined,
+      label: 'State is any',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11M5 9h6M5 11h4"/>
+        </svg>
+      ),
+    },
+    {
+      label: 'Cualquier canal',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <path d="M2.5 6.5C2.5 4 4.5 2.5 8 2.5s5.5 1.5 5.5 4-2 4-5.5 4c-.7 0-1.4-.1-2-.2L3 11.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/>
+        </svg>
+      ),
+    },
+    {
+      label: 'El tipo es cualquiera',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>
+        </svg>
+      ),
     },
   ];
 
-  const personalizacionRows: Row[] = [
+  const rows = [
     {
-      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13.5c.7-2.4 2.7-3.7 5-3.7s4.3 1.3 5 3.7"/></svg>,
-      title: 'La identidad de Fin',
-      desc: 'Administra el nombre y avatar que verán tus clientes.',
+      title: 'Use Fin AI Agent over Messenger',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+      ),
     },
     {
-      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 4l3 3-3 3M7 11h7" strokeLinecap="round"/></svg>,
-      title: 'Botones de respuesta de Fin',
-      desc: 'Elija cómo Fin formula las opciones que les presenta a sus clientes. Disponible en SMS.',
-    },
-    {
-      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.6 1.7 2.4 3.6 2.4 6S9.6 12.3 8 14C6.4 12.3 5.6 10.4 5.6 8S6.4 3.7 8 2z"/></svg>,
-      title: 'Soporte multilingüe de Fin',
-      desc: 'Controla los idiomas en los que responderá Fin.',
-    },
-    {
-      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4"/></svg>,
-      title: 'Respuestas de correo electrónico de Fin',
-      desc: 'Configura cómo Fin firma y formatea los correos electrónicos que envía a tus clientes.',
+      title: 'Triage customer conversations before Fin replies',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+      ),
     },
   ];
-
-  function renderRow(r: Row) {
-    return (
-      <button key={r.title} className="w-full bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 text-left hover:bg-[#f8f8f7]">
-        <span className="w-8 h-8 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
-          {r.icon}
-        </span>
-        <span className="flex-1 min-w-0">
-          <span className="block text-[13.5px] font-semibold text-[#1a1a1a]">{r.title}</span>
-          <span className="block mt-0.5 text-[12.5px] text-[#646462] leading-[18px]">{r.desc}</span>
-        </span>
-        {r.meta && (
-          <span className="text-[12px] font-mono text-[#1a1a1a] bg-[#f8f8f7] border border-[#e9eae6] rounded-md px-2 py-1 mr-2 whitespace-nowrap">{r.meta}</span>
-        )}
-        {r.cta ? (
-          <span className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1">
-            {r.cta}
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M5 3l5 5-5 5" strokeLinecap="round"/></svg>
-          </span>
-        ) : (
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
-        )}
-      </button>
-    );
-  }
-
-  return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
-        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"/></svg>
-        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Ajustes</h2>
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6 max-w-[860px] w-full">
-        <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Uso</h3>
-        <div className="flex flex-col gap-2">{usoRows.map(renderRow)}</div>
-        <h3 className="mt-7 text-[14px] font-semibold text-[#1a1a1a] mb-3">Personalización</h3>
-        <div className="flex flex-col gap-2">{personalizacionRows.map(renderRow)}</div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Ajustes de Fin · Audiencias (1:21030) ──────────────────────────────────
-function FinAudiencesContent() {
-  // Audiences = teams (iam) + customer segments (customers). The "Nueva audiencia"
-  // modal currently surfaces a "próximamente" toast because iamApi has no
-  // teams.create endpoint yet — segments are managed elsewhere.
-  const { data: teamsData } = useApi<any[]>(() => iamApi.teams(), [], []);
-  const { data: customersData } = useApi<any[]>(() => customersApi.list(), [], []);
-  const [showModal, setShowModal] = useState(false);
-  const toast = useFinToast();
-  const teams = Array.isArray(teamsData) ? teamsData : [];
-  const segments = useMemo(() => {
-    const list = Array.isArray(customersData) ? customersData : [];
-    const counts = new Map<string, number>();
-    for (const c of list) {
-      const seg = String(c.segment || '').trim();
-      if (!seg) continue;
-      counts.set(seg, (counts.get(seg) || 0) + 1);
-    }
-    return Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
-  }, [customersData]);
-  async function createAudience(_payload: { name: string; description: string }) {
-    // iamApi has no teams.create today — surface a friendly toast instead of
-    // pretending to persist. The modal still closes so the user has feedback.
-    toast.show('Creación de audiencias estará disponible próximamente.');
-    setShowModal(false);
-  }
-  return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>
-          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Audiencias</h2>
-        </div>
-        <button onClick={() => setShowModal(true)} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
-          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
-          <span>Nueva audiencia</span>
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0 p-6">
-        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 max-w-[820px]">
-          <h3 className="text-[16px] font-bold text-[#1a1a1a] leading-[22px]">Segmenta tu contenido y pautas de Fin para usuarios específicos</h3>
-          <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">
-            Crea y administra audiencias personalizadas para controlar qué conocimientos utiliza Fin y qué pauta aplica, asegurando que los usuarios obtengan respuestas que siempre sean relevantes.
-          </p>
-          <button className="mt-4 h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
-            <span>Cómo usar las audiencias para segmentar a Fin</span>
-          </button>
-        </div>
-
-        {/* Live audiences: equipos (iam.teams) + segmentos de clientes */}
-        <div className="mt-6 max-w-[820px]">
-          <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-3">Equipos ({teams.length})</h3>
-          <div className="bg-white border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
-            {teams.length === 0 ? (
-              <div className="px-4 py-4 text-[13px] text-[#646462]">Aún no hay equipos.</div>
-            ) : teams.map((t: any) => (
-              <div key={t.id || t.name} className="px-4 py-3 flex items-center justify-between">
-                <span className="text-[13px] font-semibold text-[#1a1a1a]">{t.name || 'Sin nombre'}</span>
-                <span className="text-[12px] text-[#646462]">{t.memberCount ?? t.member_count ?? 0} miembros</span>
-              </div>
-            ))}
-          </div>
-
-          <h3 className="text-[14px] font-bold text-[#1a1a1a] mt-6 mb-3">Segmentos de clientes ({segments.length})</h3>
-          <div className="bg-white border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
-            {segments.length === 0 ? (
-              <div className="px-4 py-4 text-[13px] text-[#646462]">Aún no hay segmentos.</div>
-            ) : segments.map(s => (
-              <div key={s.name} className="px-4 py-3 flex items-center justify-between">
-                <span className="text-[13px] font-semibold text-[#1a1a1a]">{s.name}</span>
-                <span className="text-[12px] text-[#646462]">{s.count} clientes</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      {showModal && (
-        <FinSimpleCreateModal
-          title="Nueva audiencia"
-          description="Las audiencias agrupan usuarios por equipo o segmento de cliente para personalizar el comportamiento de Fin."
-          namePlaceholder="VIP, Premium, Onboarding…"
-          submitLabel="Crear audiencia"
-          onClose={() => setShowModal(false)}
-          onSubmit={createAudience}
-        />
-      )}
-      {toast.node}
-    </div>
-  );
-}
-
-// ─── Ajustes de Fin · Flujos de trabajo (Figma 1:22652) ─────────────────────
-function FinFlujosTrabajoContent() {
-  // Real workflows from the backend feed the table at the bottom of the screen.
-  // Selecting a row now opens the IDENTICAL <Workflows/> builder embedded
-  // inside the Fin shell (no more ?view=automation redirect).
-  const { data: workflowsData, refetch: refetchWorkflows } = useApi(() => workflowsApi.list(), [], []);
-  const [search, setSearch] = useState('');
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [statusMsg, setStatusMsg] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-  const [instantiatingTplId, setInstantiatingTplId] = useState<string | null>(null);
-
-  // Embedded builder state. null = list, '' = create-new, anything else = edit existing id.
-  const [builderId, setBuilderId] = useState<string | null>(null);
-
-  // Production-grade default templates (the 8 with `tpl_` prefix).
-  const defaultTemplates = useMemo(
-    () => (WORKFLOW_TEMPLATES as readonly any[]).filter((t) => typeof t.id === 'string' && t.id.startsWith('tpl_')),
-    [],
-  );
-
-  async function instantiateTemplate(tpl: any) {
-    if (instantiatingTplId) return;
-    setInstantiatingTplId(tpl.id);
-    try {
-      // Convert template node[].position → x/y, and edge {source,target} indices
-      // into UUIDs that the backend can normalize.
-      const nodeIds: string[] = (tpl.nodes || []).map(() =>
-        (typeof crypto !== 'undefined' && (crypto as any).randomUUID) ? (crypto as any).randomUUID() : `node_${Math.random().toString(36).slice(2, 10)}`,
-      );
-      const nodes = (tpl.nodes || []).map((n: any, idx: number) => ({
-        id: nodeIds[idx],
-        type: n.type,
-        key: n.key,
-        label: n.label,
-        position: n.position || { x: 100 + idx * 240, y: 240 },
-        config: n.config || {},
-      }));
-      const edges = (tpl.edges || []).map((e: any, idx: number) => ({
-        id: `edge_${idx}`,
-        source: nodeIds[e.source],
-        target: nodeIds[e.target],
-        label: e.label,
-        sourceHandle: e.sourceHandle,
-      }));
-      const created: any = await workflowsApi.create({
-        name: tpl.label || tpl.id,
-        description: tpl.description || '',
-        nodes,
-        edges,
-        trigger: { type: 'manual' },
-      });
-      const newId = created?.id || created?.workflow?.id;
-      showStatus(`Plantilla "${tpl.label}" creada`);
-      refetchWorkflows();
-      if (newId) {
-        // Open the builder for the new workflow.
-        setBuilderId(newId);
-      }
-    } catch (err: any) {
-      showStatus(err?.message || 'No se pudo instanciar la plantilla', 'error');
-    } finally {
-      setInstantiatingTplId(null);
-    }
-  }
-
-  // Functional filter chips (state-driven; effect on `workflows` depends on shape of row).
-  const [audienceFilter, setAudienceFilter] = useState<string>('any');
-  const [statusFilter, setStatusFilter] = useState<string>('any');
-  const [channelFilter, setChannelFilter] = useState<string>('any');
-  const [typeFilter, setTypeFilter] = useState<string>('any');
-  const [extraFilters, setExtraFilters] = useState<{ tag: boolean; lastEdited: boolean }>({ tag: false, lastEdited: false });
-  const [tagFilter, setTagFilter] = useState<string>('any');
-  const [lastEditedFilter, setLastEditedFilter] = useState<string>('any');
-  const [showAddFilter, setShowAddFilter] = useState(false);
-  const addFilterRef = useRef<HTMLDivElement>(null);
-
-  // Modal state for "Aprender" / "Solucionar problemas" / Fin row.
-  const [learnModal, setLearnModal] = useState<null | 'docs' | 'tutorial' | 'templates'>(null);
-  const [troubleshootOpen, setTroubleshootOpen] = useState(false);
-
-  useEffect(() => {
-    if (!showAddFilter) return;
-    function onClick(e: MouseEvent) {
-      if (addFilterRef.current?.contains(e.target as Node)) return;
-      setShowAddFilter(false);
-    }
-    window.addEventListener('mousedown', onClick);
-    return () => window.removeEventListener('mousedown', onClick);
-  }, [showAddFilter]);
-
-  const workflows = useMemo(() => {
-    const list = Array.isArray(workflowsData) ? workflowsData : [];
-    const q = search.trim().toLowerCase();
-    return list.filter((w: any) => {
-      if (q && !String(w.name || w.title || w.id || '').toLowerCase().includes(q)) return false;
-      if (statusFilter !== 'any') {
-        const s = String(w.status || w.state || '').toLowerCase();
-        const want = statusFilter.toLowerCase();
-        const aliases: Record<string, string[]> = {
-          active: ['active', 'published', 'live'],
-          draft: ['draft', 'unpublished'],
-          paused: ['paused'],
-          archived: ['archived'],
-        };
-        if (!(aliases[want] || [want]).includes(s)) return false;
-      }
-      if (audienceFilter !== 'any') {
-        const a = String(w.audience || '').toLowerCase();
-        if (a && a !== audienceFilter) return false;
-      }
-      if (channelFilter !== 'any') {
-        const channels: string[] = Array.isArray(w.channels) ? w.channels.map((c: any) => String(c).toLowerCase()) : [];
-        if (channels.length > 0 && !channels.includes(channelFilter)) return false;
-      }
-      if (typeFilter !== 'any') {
-        const t = String(w.kind || w.trigger?.type || w.type || '').toLowerCase();
-        if (t && !t.includes(typeFilter)) return false;
-      }
-      if (extraFilters.tag && tagFilter !== 'any') {
-        const tags: string[] = Array.isArray(w.tags) ? w.tags.map((t: any) => String(t).toLowerCase()) : [];
-        if (tags.length > 0 && !tags.includes(tagFilter)) return false;
-      }
-      if (extraFilters.lastEdited && lastEditedFilter !== 'any') {
-        const updated = w.updated_at || w.updatedAt;
-        if (updated) {
-          const days = (Date.now() - new Date(updated).getTime()) / (1000 * 60 * 60 * 24);
-          if (lastEditedFilter === '7d' && days > 7) return false;
-          if (lastEditedFilter === '30d' && days > 30) return false;
-          if (lastEditedFilter === '90d' && days > 90) return false;
-        }
-      }
-      return true;
-    });
-  }, [workflowsData, search, statusFilter, audienceFilter, channelFilter, typeFilter, extraFilters, tagFilter, lastEditedFilter]);
-
-  function showStatus(msg: string, type: 'success' | 'error' = 'success') {
-    setStatusMsg({ msg, type });
-    window.setTimeout(() => setStatusMsg(null), 3000);
-  }
-  async function runWorkflow(id: string) {
-    if (busyId) return;
-    setBusyId(id);
-    try {
-      await workflowsApi.run(id);
-      showStatus('Workflow lanzado correctamente');
-    } catch (err: any) {
-      showStatus(err?.message || 'No se pudo lanzar el workflow', 'error');
-    } finally { setBusyId(null); }
-  }
-  function openInBuilder(id: string) {
-    setBuilderId(id === 'new' ? '' : id);
-  }
-
-  // ── Embedded builder view ───────────────────────────────────────────────
-  if (builderId !== null) {
-    return (
-      <div className="flex flex-col h-full min-h-0 bg-white">
-        <div className="flex-shrink-0 h-11 border-b border-[#e9eae6] px-4 flex items-center">
-          <button
-            onClick={() => setBuilderId(null)}
-            className="h-8 px-2.5 -ml-1 rounded-md hover:bg-[#f8f8f7] text-[13px] font-medium text-[#1a1a1a] flex items-center gap-1.5"
-          >
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Volver a flujos de trabajo
-          </button>
-        </div>
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <Workflows
-            focusWorkflowId={builderId === '' ? undefined : builderId}
-            initialView="builder"
-            createNewOnMount={builderId === ''}
-            onNavigate={(target: any) => {
-              // The embedded Workflows component fires onNavigate with various
-              // section targets. Treat any "leave the workflow" intent as
-              // "go back to the Fin list" — covers section: 'library', page
-              // changes away from 'workflows', etc.
-              const section = target?.section;
-              const page = target?.page;
-              if (page && page !== 'workflows') { setBuilderId(null); return; }
-              if (section === 'library' || section === 'list') { setBuilderId(null); return; }
-              // builder/runs/evaluations stay inside the embedded view.
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // Live rows replace the placeholder static rows. Empty state is handled below.
-  const rows = workflows;
-
-  // Problematic workflows for the "Solucionar problemas" modal.
-  const problematic = (Array.isArray(workflowsData) ? workflowsData : []).filter((w: any) => {
-    const s = String(w.status || w.state || '').toLowerCase();
-    return s === 'blocked' || s === 'needs_setup' || s === 'dependency_missing';
-  });
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -22937,192 +27056,72 @@ function FinFlujosTrabajoContent() {
       {/* Section header */}
       <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2">
         <h3 className="text-[15px] font-bold text-[#1a1a1a] flex-1">Flujos de trabajo</h3>
-        <button
-          onClick={() => setTroubleshootOpen(true)}
-          className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]"
-        >
+        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M9.5 2l-1.5 4 4 1-5 7 1-4-4-1z" strokeLinejoin="round"/></svg>
           <span>Solucionar problemas</span>
         </button>
-        <Dropdown
-          value=""
-          onChange={(v) => {
-            if (v === 'docs') setLearnModal('docs');
-            else if (v === 'tutorial') setLearnModal('tutorial');
-            else if (v === 'templates') setLearnModal('templates');
-          }}
-          items={[
-            { value: 'docs', label: 'Documentación' },
-            { value: 'tutorial', label: 'Tutorial: tu primer flujo' },
-            { value: 'templates', label: 'Plantillas' },
-          ]}
-          renderTrigger={(_sel, isOpen) => (
-            <span className="inline-flex items-center gap-1.5">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
-              <span>Aprender</span>
-              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
-            </span>
-          )}
-          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-        />
-        <button onClick={() => openInBuilder('new')} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
-          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
-          <span>Nuevo flujo de trabajo</span>
-          <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white"><path d="M3 4.5l3 3 3-3z"/></svg>
+        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+          <span>Aprender</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
         </button>
+        {/* Dropdown trigger */}
+        <div className="relative">
+          <button
+            onClick={() => setDropdownOpen(o => !o)}
+            className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black"
+          >
+            <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+            <span>Nuevo flujo de trabajo</span>
+            <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white" style={{ transform: dropdownOpen ? 'rotate(180deg)' : undefined }}><path d="M3 4.5l3 3 3-3z"/></svg>
+          </button>
+          {dropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-[100]" onClick={() => setDropdownOpen(false)} />
+              <div className="absolute right-0 top-full mt-1.5 z-[101] w-52 bg-white rounded-[10px] border border-[#e9eae6] shadow-lg overflow-hidden">
+                <button
+                  className="w-full px-4 py-2.5 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-2.5"
+                  onClick={() => { setDropdownOpen(false); setSelectedTemplateId(null); setBuilderId('new'); }}
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M8 5.5v5M5.5 8h5" strokeLinecap="round"/></svg>
+                  <span>Empezar desde cero</span>
+                </button>
+                <div className="border-t border-[#f0f0ee]" />
+                <button
+                  className="w-full px-4 py-2.5 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-2.5"
+                  onClick={() => { setDropdownOpen(false); setTemplateModalOpen(true); }}
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
+                  <span>Usar una plantilla</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Template modal portal */}
+      {templateModal}
 
       {/* Filters row */}
       <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2 flex-wrap">
         <div className="relative w-[220px]">
           <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar..."
-            className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
-          />
+          <input type="text" placeholder="Buscar..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"/>
         </div>
-        <Dropdown
-          value={audienceFilter}
-          onChange={setAudienceFilter}
-          items={[
-            { value: 'any', label: 'Todos' },
-            { value: 'visitors', label: 'Visitantes' },
-            { value: 'leads', label: 'Leads' },
-            { value: 'users', label: 'Usuarios' },
-          ]}
-          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-          renderTrigger={(sel, isOpen) => (
-            <span className="inline-flex items-center gap-1.5">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>
-              <span>{sel?.value === 'any' || !sel ? 'Visitantes, leads o usuarios' : sel.label}</span>
-              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
-            </span>
-          )}
-        />
-        <Dropdown
-          value={statusFilter}
-          onChange={setStatusFilter}
-          items={[
-            { value: 'any', label: 'Cualquiera' },
-            { value: 'draft', label: 'Borrador' },
-            { value: 'active', label: 'Activo' },
-            { value: 'paused', label: 'Pausado' },
-            { value: 'archived', label: 'Archivado' },
-          ]}
-          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-          renderTrigger={(sel, isOpen) => (
-            <span className="inline-flex items-center gap-1.5">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11M5 9h6M5 11h4"/></svg>
-              <span>{sel?.value === 'any' || !sel ? 'State is any' : `Estado: ${sel.label}`}</span>
-              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
-            </span>
-          )}
-        />
-        <Dropdown
-          value={channelFilter}
-          onChange={setChannelFilter}
-          items={[
-            { value: 'any', label: 'Cualquiera' },
-            { value: 'chat', label: 'Chat' },
-            { value: 'email', label: 'Email' },
-            { value: 'sms', label: 'SMS' },
-            { value: 'phone', label: 'Teléfono' },
-            { value: 'messenger', label: 'Messenger' },
-          ]}
-          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-          renderTrigger={(sel, isOpen) => (
-            <span className="inline-flex items-center gap-1.5">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2.5 6.5C2.5 4 4.5 2.5 8 2.5s5.5 1.5 5.5 4-2 4-5.5 4c-.7 0-1.4-.1-2-.2L3 11.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/></svg>
-              <span>{sel?.value === 'any' || !sel ? 'Cualquier canal' : `Canal: ${sel.label}`}</span>
-              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
-            </span>
-          )}
-        />
-        <Dropdown
-          value={typeFilter}
-          onChange={setTypeFilter}
-          items={[
-            { value: 'any', label: 'Cualquiera' },
-            { value: 'trigger', label: 'Trigger' },
-            { value: 'manual', label: 'Manual' },
-            { value: 'scheduled', label: 'Programado' },
-            { value: 'event', label: 'Evento' },
-          ]}
-          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-          renderTrigger={(sel, isOpen) => (
-            <span className="inline-flex items-center gap-1.5">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/></svg>
-              <span>{sel?.value === 'any' || !sel ? 'El tipo es cualquiera' : `Tipo: ${sel.label}`}</span>
-              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
-            </span>
-          )}
-        />
-        {extraFilters.tag && (
-          <Dropdown
-            value={tagFilter}
-            onChange={setTagFilter}
-            items={[
-              { value: 'any', label: 'Cualquier etiqueta' },
-              { value: 'priority', label: 'Prioridad' },
-              { value: 'support', label: 'Soporte' },
-              { value: 'sales', label: 'Ventas' },
-              { value: 'onboarding', label: 'Onboarding' },
-            ]}
-            triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-          />
-        )}
-        {extraFilters.lastEdited && (
-          <Dropdown
-            value={lastEditedFilter}
-            onChange={setLastEditedFilter}
-            items={[
-              { value: 'any', label: 'Cualquier fecha' },
-              { value: '7d', label: 'Últimos 7 días' },
-              { value: '30d', label: 'Últimos 30 días' },
-              { value: '90d', label: 'Últimos 90 días' },
-            ]}
-            triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-          />
-        )}
-        <div className="relative inline-block" ref={addFilterRef}>
-          <button
-            onClick={() => setShowAddFilter(o => !o)}
-            className="h-8 px-2 text-[12.5px] font-semibold text-[#ed621d] hover:underline inline-flex items-center gap-1"
-          >
-            <span>+</span><span>Agregar filtro</span>
+        {filterChips.map(c => (
+          <button key={c.label} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            {c.icon}<span>{c.label}</span>
           </button>
-          {showAddFilter && (
-            <div className="absolute top-[calc(100%+4px)] left-0 z-30 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 min-w-[200px]">
-              <button
-                onClick={() => { setExtraFilters(f => ({ ...f, tag: !f.tag })); setShowAddFilter(false); }}
-                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
-              >
-                <span className={`w-3.5 h-3.5 rounded border ${extraFilters.tag ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#e9eae6]'}`}/>
-                <span>Etiquetas</span>
-              </button>
-              <button
-                onClick={() => { setExtraFilters(f => ({ ...f, lastEdited: !f.lastEdited })); setShowAddFilter(false); }}
-                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
-              >
-                <span className={`w-3.5 h-3.5 rounded border ${extraFilters.lastEdited ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#e9eae6]'}`}/>
-                <span>Última edición</span>
-              </button>
-            </div>
-          )}
-        </div>
+        ))}
+        <button className="h-8 px-2 text-[12.5px] font-semibold text-[#ed621d] hover:underline inline-flex items-center gap-1">
+          <span>+</span><span>Agregar filtro</span>
+        </button>
       </div>
 
       {/* Workflow list */}
       <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
-        {statusMsg && (
-          <div className={`mb-3 px-3 py-2 rounded-[8px] border text-[12.5px] ${statusMsg.type === 'error' ? 'bg-[#fef2f2] border-[#fecaca] text-[#b91c1c]' : 'bg-[#f0fdf4] border-[#bbf7d0] text-[#15803d]'}`}>
-            {statusMsg.msg}
-          </div>
-        )}
-        <p className="text-[13px] text-[#646462] mb-3">{rows.length} {rows.length === 1 ? 'flujo de trabajo' : 'flujos de trabajo'}</p>
+        <p className="text-[13px] text-[#646462] mb-3">2 flujo de trabajos</p>
 
         {/* Group header pill */}
         <button className="h-8 px-3 mb-3 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] inline-flex items-center gap-2 text-[12.5px] text-[#1a1a1a]">
@@ -23145,63 +27144,10 @@ function FinFlujosTrabajoContent() {
             <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4 object-contain"/>
           </div>
           <span className="flex-1 text-[13px] text-[#1a1a1a]">Permitir que Fin responda automáticamente a la pregunta del cliente</span>
-          <button onClick={() => openInBuilder('new')} className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1.5 hover:underline">
+          <button className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1.5 hover:underline">
             <span>Configuración simple</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M5 3l5 5-5 5" strokeLinecap="round"/></svg>
           </button>
-        </div>
-
-        {/* ── Plantillas predeterminadas ────────────────────────────────── */}
-        <div className="mb-5">
-          <div className="flex items-baseline gap-2 mb-1">
-            <h4 className="text-[14px] font-bold text-[#1a1a1a]">Plantillas listas para usar</h4>
-            <span className="text-[12px] text-[#a4a4a2]">{defaultTemplates.length}</span>
-          </div>
-          <p className="text-[13px] text-[#646462] mb-3">Instancia con un clic — Fin las preconfigura por ti.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {defaultTemplates.map((tpl: any) => {
-              const isBusy = instantiatingTplId === tpl.id;
-              return (
-                <div
-                  key={tpl.id}
-                  className="bg-white border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-3 hover:border-[#1a1a1a]/30 transition-colors"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] flex items-center justify-center flex-shrink-0">
-                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#ed621d]"><path d="M3 2.5h6l4 4v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-10a1 1 0 011-1zm6 0v4h4"/></svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-[#a4a4a2]">{tpl.category}</span>
-                      </div>
-                      <h5 className="text-[13px] font-semibold text-[#1a1a1a] leading-[18px] mb-1 line-clamp-2">{tpl.label}</h5>
-                      <p className="text-[12.5px] text-[#646462] leading-[18px] line-clamp-3">{tpl.description}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[11.5px] text-[#a4a4a2]">{(tpl.nodes || []).length} pasos</span>
-                    <button
-                      onClick={() => instantiateTemplate(tpl)}
-                      disabled={isBusy || !!instantiatingTplId}
-                      className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[12.5px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {isBusy ? (
-                        <>
-                          <svg viewBox="0 0 16 16" className="w-3 h-3 animate-spin fill-none stroke-white" strokeWidth="1.6"><circle cx="8" cy="8" r="6" strokeDasharray="20 14"/></svg>
-                          <span>Creando…</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
-                          <span>Usar plantilla</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
 
         {/* Workflow table */}
@@ -23218,127 +27164,26 @@ function FinFlujosTrabajoContent() {
             <span>Enviado</span>
             <span>Objetivo</span>
           </div>
-          {rows.length === 0 ? (
-            <div className="px-6 py-8 text-center text-[13px] text-[#646462]">
-              {search ? 'Ningún flujo coincide con la búsqueda.' : 'Aún no hay flujos de trabajo. Crea uno con «Nuevo flujo de trabajo».'}
+          {rows.map(r => (
+            <div key={r.title} onClick={() => setBuilderId('edit')} className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-12 border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafafa] cursor-pointer">
+              <span className="text-[#a4a4a2] text-center select-none">⋮⋮</span>
+              <span><input type="checkbox" className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
+              <span className="flex items-center gap-2 min-w-0">
+                {r.icon}
+                <span className="text-[13px] text-[#1a1a1a] truncate">{r.title}</span>
+              </span>
+              <span><span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-[#f3f3f1] text-[11.5px] font-semibold text-[#646462]">Draft</span></span>
+              <span className="text-[12.5px] text-[#646462]">10 hours ago</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white text-[10px] font-semibold flex items-center justify-center">H</span>
+                <span className="text-[12.5px] text-[#1a1a1a] truncate">Hector Vidal Sanchez</span>
+              </span>
+              <span className="text-[12.5px] text-[#3b59f6]">0</span>
+              <span className="text-[12.5px] text-[#646462]">—</span>
             </div>
-          ) : rows.map((r: any) => {
-            const id = String(r.id || r.slug || r.name || '');
-            const status = String(r.status || r.state || 'draft').toLowerCase();
-            const updated = r.updated_at || r.updatedAt || r.created_at || r.createdAt;
-            const updatedText = updated ? new Date(updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
-            const title = r.name || r.title || id || 'Sin título';
-            const author = r.updated_by_name || r.updatedByName || r.author || r.created_by_name || '—';
-            const sent = r.runs_count ?? r.runsCount ?? 0;
-            return (
-              <div key={id} onClick={() => openInBuilder(id)} className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-12 border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafafa] cursor-pointer">
-                <span className="text-[#a4a4a2] text-center select-none">⋮⋮</span>
-                <span><input type="checkbox" onClick={e => e.stopPropagation()} className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
-                <span className="flex items-center gap-2 min-w-0">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d] flex-shrink-0"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
-                  <span className="text-[13px] text-[#1a1a1a] truncate">{title}</span>
-                </span>
-                <span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-[6px] text-[11.5px] font-semibold ${
-                    status === 'published' || status === 'active' ? 'bg-[#dcfce7] text-[#15803d]' :
-                    status === 'archived' ? 'bg-[#fef2f2] text-[#991b1b]' :
-                    'bg-[#f3f3f1] text-[#646462]'
-                  }`}>{status === 'published' ? 'Publicado' : status === 'active' ? 'Activo' : status === 'archived' ? 'Archivado' : 'Draft'}</span>
-                </span>
-                <span className="text-[12.5px] text-[#646462]">{updatedText}</span>
-                <span className="flex items-center gap-1.5 min-w-0">
-                  <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">{(author[0] || '?').toUpperCase()}</span>
-                  <span className="text-[12.5px] text-[#1a1a1a] truncate">{author}</span>
-                </span>
-                <span className="text-[12.5px] text-[#3b59f6]">{sent}</span>
-                <span className="flex items-center gap-1.5">
-                  <button
-                    onClick={e => { e.stopPropagation(); runWorkflow(id); }}
-                    disabled={busyId === id}
-                    title="Ejecutar"
-                    className="h-6 px-2 rounded-[6px] bg-[#1a1a1a] text-white text-[11px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]"
-                  >{busyId === id ? '…' : 'Ejecutar'}</button>
-                </span>
-              </div>
-            );
-          })}
+          ))}
         </div>
       </div>
-
-      {/* Aprender modal */}
-      {learnModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setLearnModal(null)}>
-          <div className="bg-white rounded-[12px] shadow-xl w-full max-w-[520px] p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-[16px] font-bold text-[#1a1a1a]">
-                {learnModal === 'docs' ? 'Documentación' : learnModal === 'tutorial' ? 'Tutorial: tu primer flujo' : 'Plantillas'}
-              </h4>
-              <button onClick={() => setLearnModal(null)} className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center" aria-label="Cerrar">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-            <p className="text-[13px] text-[#646462] leading-[20px]">
-              {learnModal === 'docs' && 'Aprende cómo construir flujos de trabajo automatizados que responden a eventos de tu CRM. Encuentra guías paso a paso, ejemplos y referencia de nodos.'}
-              {learnModal === 'tutorial' && 'Sigue este tutorial guiado para crear tu primer flujo de trabajo en menos de 5 minutos. Aprenderás a añadir un trigger, configurar acciones y publicar el flujo.'}
-              {learnModal === 'templates' && 'Explora plantillas listas para usar: refunds con aprobación, triage de casos, envío automático de emails, escalado de SLAs y más.'}
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button onClick={() => setLearnModal(null)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Cerrar</button>
-              {learnModal === 'templates' && (
-                <button
-                  onClick={() => { setLearnModal(null); openInBuilder('new'); }}
-                  className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black"
-                >
-                  Crear desde plantilla
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Solucionar problemas modal */}
-      {troubleshootOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setTroubleshootOpen(false)}>
-          <div className="bg-white rounded-[12px] shadow-xl w-full max-w-[600px] p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-[16px] font-bold text-[#1a1a1a]">Solucionar problemas</h4>
-              <button onClick={() => setTroubleshootOpen(false)} className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center" aria-label="Cerrar">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-            {problematic.length === 0 ? (
-              <p className="text-[13px] text-[#646462] py-4">No hay flujos con problemas.</p>
-            ) : (
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {problematic.map((w: any) => {
-                  const id = String(w.id || w.slug || w.name || '');
-                  const status = String(w.status || w.state || '').toLowerCase();
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => { setTroubleshootOpen(false); openInBuilder(id); }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[8px] border border-[#e9eae6] hover:bg-[#f8f8f7] text-left"
-                    >
-                      <span className="w-6 h-6 rounded-full bg-[#fef2f2] text-[#b91c1c] flex items-center justify-center flex-shrink-0">
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M8 3v6M8 12v.01" strokeLinecap="round"/></svg>
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[13px] font-semibold text-[#1a1a1a] truncate">{w.name || w.title || id}</span>
-                        <span className="block text-[11.5px] text-[#646462]">{status}</span>
-                      </span>
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M6 3l5 5-5 5" strokeLinecap="round"/></svg>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            <div className="mt-5 flex justify-end">
-              <button onClick={() => setTroubleshootOpen(false)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Cerrar</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -23709,17 +27554,60 @@ function IconLibraryGalleryV2() {
 // ─── WorkspaceGeneralView ────────────────────────────────────────────────────
 function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
-  const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  useEffect(() => { if (ws) { setName((ws as any).name ?? ''); setSlug((ws as any).slug ?? ''); } }, [ws]);
-  async function handleSave() {
-    setSaving(true);
-    try { await workspacesApi.update((ws as any)?.id ?? '', { name, slug }); setSaved(true); setTimeout(() => setSaved(false), 2000); }
-    catch {}
-    finally { setSaving(false); }
+  const [name, setName]         = useState('');
+  const [slug, setSlug]         = useState('');
+  const [timezone, setTimezone] = useState('(UTC+01:00) Europa/Madrid');
+  const [language, setLanguage] = useState('Español');
+  const [saving, setSaving]     = useState(false);
+  const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!ws) return;
+    const w = ws as any;
+    setName(w.name ?? '');
+    setSlug(w.slug ?? '');
+    if (w.settings?.timezone) setTimezone(w.settings.timezone);
+    if (w.settings?.language) setLanguage(w.settings.language);
+  }, [ws]);
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
   }
+
+  async function handleSave() {
+    if (!name.trim()) { showToast('El nombre no puede estar vacío.', false); return; }
+    setSaving(true);
+    try {
+      const wsId = (ws as any)?.id ?? '';
+      await workspacesApi.update(wsId, { name: name.trim(), slug: slug.trim() });
+      await workspacesApi.updateSettings(wsId, { timezone, language });
+      showToast('Ajustes guardados correctamente.');
+    } catch (e: any) {
+      showToast(e?.message ?? 'Error al guardar. Inténtalo de nuevo.', false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const TIMEZONES = [
+    '(UTC-12:00) Línea Internacional de Fecha',
+    '(UTC-08:00) América/Los_Ángeles',
+    '(UTC-06:00) América/Ciudad_de_México',
+    '(UTC-05:00) América/Nueva_York',
+    '(UTC-03:00) América/Buenos_Aires',
+    '(UTC+00:00) UTC / Londres',
+    '(UTC+01:00) Europa/Madrid',
+    '(UTC+01:00) Europa/París',
+    '(UTC+02:00) Europa/Atenas',
+    '(UTC+03:00) Europa/Moscú',
+    '(UTC+05:30) Asia/Calcuta',
+    '(UTC+08:00) Asia/Shanghái',
+    '(UTC+09:00) Asia/Tokio',
+    '(UTC+10:00) Australia/Sídney',
+  ];
+  const LANGUAGES = ['Español', 'English', 'Français', 'Deutsch', 'Português', 'Italiano', 'Русский', '日本語', '中文'];
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -23727,46 +27615,74 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           <div className="flex-1 overflow-y-auto min-h-0">
-      <div className="max-w-[640px] mx-auto py-10 px-6 flex flex-col gap-8">
-        <div>
-          <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">General</h1>
-          <p className="text-[13.5px] text-[#646462]">Ajustes generales del espacio de trabajo.</p>
-        </div>
-        <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#e9eae6]">
-          {[
-            { label: 'Nombre del espacio de trabajo', value: name, set: setName, hint: 'Visible para todos los compañeros.' },
-            { label: 'Identificador (slug)', value: slug, set: setSlug, hint: 'URL única: app.intercom.com/a/apps/[slug]' },
-          ].map(({ label, value, set, hint }) => (
-            <div key={label} className="px-5 py-4">
-              <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">{label}</p>
-              <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/30" value={value} onChange={e => set(e.target.value)} />
-              <p className="text-[12px] text-[#646462] mt-1">{hint}</p>
+            <div className="max-w-[640px] mx-auto py-10 px-6 flex flex-col gap-8">
+              <div>
+                <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">General</h1>
+                <p className="text-[13.5px] text-[#646462]">Ajustes generales del espacio de trabajo.</p>
+              </div>
+
+              <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#e9eae6]">
+                <div className="px-5 py-4">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Nombre del espacio de trabajo</p>
+                  <input
+                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a]"
+                    value={name} onChange={e => setName(e.target.value)}
+                  />
+                  <p className="text-[12px] text-[#646462] mt-1">Visible para todos los compañeros.</p>
+                </div>
+                <div className="px-5 py-4">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Identificador (slug)</p>
+                  <input
+                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a]"
+                    value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                  />
+                  <p className="text-[12px] text-[#646462] mt-1">URL única: app.clain.com/a/apps/<span className="font-medium text-[#1a1a1a]">{slug || '[slug]'}</span></p>
+                </div>
+                <div className="px-5 py-4">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Zona horaria</p>
+                  <select
+                    value={timezone} onChange={e => setTimezone(e.target.value)}
+                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  >
+                    {TIMEZONES.map(tz => <option key={tz}>{tz}</option>)}
+                  </select>
+                </div>
+                <div className="px-5 py-4">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Idioma del espacio de trabajo</p>
+                  <select
+                    value={language} onChange={e => setLanguage(e.target.value)}
+                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  >
+                    {LANGUAGES.map(l => <option key={l}>{l}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                {toast && (
+                  <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>
+                    {toast.ok ? '✓' : '✕'} {toast.msg}
+                  </span>
+                )}
+                <button
+                  onClick={handleSave} disabled={saving}
+                  className="px-5 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50"
+                >
+                  {saving ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+              </div>
+
+              <div className="bg-white border border-[#fca5a5] rounded-xl p-5">
+                <h2 className="text-[14px] font-bold text-[#b91c1c] mb-2">Zona de peligro</h2>
+                <p className="text-[13px] text-[#646462] mb-3">Eliminar este espacio de trabajo borrará todos los datos permanentemente.</p>
+                <button
+                  onClick={() => { if (window.confirm('¿Seguro que quieres eliminar este espacio de trabajo? Esta acción es irreversible.')) showToast('Solicitud enviada. Un administrador confirmará la eliminación.', false); }}
+                  className="px-4 py-2 border border-[#fca5a5] text-[#b91c1c] text-[13px] font-semibold rounded-lg hover:bg-[#fef2f2]"
+                >
+                  Eliminar espacio de trabajo
+                </button>
+              </div>
             </div>
-          ))}
-          <div className="px-5 py-4">
-            <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Zona horaria</p>
-            <select className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none bg-white">
-              {['(UTC+01:00) Europa/Madrid', '(UTC+00:00) UTC', '(UTC-05:00) América/Nueva_York', '(UTC-08:00) América/Los_Ángeles'].map(tz => <option key={tz}>{tz}</option>)}
-            </select>
-          </div>
-          <div className="px-5 py-4">
-            <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Idioma del espacio de trabajo</p>
-            <select className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none bg-white">
-              {['Español', 'English', 'Français', 'Deutsch', 'Português'].map(l => <option key={l}>{l}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50">
-            {saved ? '✓ Guardado' : saving ? 'Guardando…' : 'Guardar cambios'}
-          </button>
-        </div>
-        <div className="bg-white border border-[#fca5a5] rounded-xl p-5">
-          <h2 className="text-[14px] font-bold text-[#b91c1c] mb-2">Zona de peligro</h2>
-          <p className="text-[13px] text-[#646462] mb-3">Eliminar este espacio de trabajo borrará todos los datos permanentemente.</p>
-          <button className="px-4 py-2 border border-[#fca5a5] text-[#b91c1c] text-[13px] font-semibold rounded-lg hover:bg-[#fef2f2]">Eliminar espacio de trabajo</button>
-        </div>
-      </div>
           </div>
         </div>
       </div>
@@ -23776,12 +27692,70 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
 
 // ─── WorkspaceTeammatesView ──────────────────────────────────────────────────
 function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const { data: members, loading } = useApi(() => iamApi.members(), [], []);
+  const { data: membersRaw, loading, refetch } = useApi(() => iamApi.members(), [], []);
+  const { data: rolesRaw } = useApi(() => iamApi.roles(), [], []);
   const [search, setSearch] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const rows = ((members as any[]) ?? []).filter((m: any) => !search || (m.name ?? m.email ?? '').toLowerCase().includes(search.toLowerCase()));
-  const ROLE_COLORS: Record<string, string> = { admin: 'bg-[#fef9c3] text-[#854d0e]', owner: 'bg-[#ede9fe] text-[#6d28d9]', agent: 'bg-[#f0fdf4] text-[#15803d]' };
+  const [inviteName, setInviteName]   = useState('');
+  const [inviteRoleId, setInviteRoleId] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const members: any[] = Array.isArray(membersRaw) ? membersRaw : [];
+  const roles: any[]   = Array.isArray(rolesRaw)   ? rolesRaw   : [];
+  const rows = members.filter(m => !search || `${m.name ?? ''} ${m.email ?? ''}`.toLowerCase().includes(search.toLowerCase()));
+
+  const ROLE_COLORS: Record<string, string> = {
+    admin:  'bg-[#fef9c3] text-[#854d0e]',
+    owner:  'bg-[#ede9fe] text-[#6d28d9]',
+    agent:  'bg-[#f0fdf4] text-[#15803d]',
+    viewer: 'bg-[#f0f9ff] text-[#0369a1]',
+  };
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  }
+
+  async function handleInvite() {
+    if (!inviteEmail.trim()) { showToast('Introduce un correo.', false); return; }
+    const roleId = inviteRoleId || roles[0]?.id || 'agent';
+    setInviting(true);
+    try {
+      await iamApi.inviteMember({ email: inviteEmail.trim(), name: inviteName.trim() || undefined, role_id: roleId });
+      setInviteOpen(false);
+      setInviteEmail(''); setInviteName(''); setInviteRoleId('');
+      refetch();
+      showToast(`Invitación enviada a ${inviteEmail.trim()}.`);
+    } catch (e: any) {
+      showToast(e?.message ?? 'Error al enviar la invitación.', false);
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleRoleChange(memberId: string, roleId: string) {
+    try {
+      await iamApi.updateMember(memberId, { role_id: roleId });
+      refetch();
+      showToast('Rol actualizado.');
+    } catch {
+      showToast('Error al cambiar el rol.', false);
+    }
+  }
+
+  async function handleRemove(memberId: string, name: string) {
+    if (!window.confirm(`¿Eliminar a ${name} del espacio de trabajo?`)) return;
+    try {
+      await iamApi.updateMember(memberId, { status: 'inactive' });
+      refetch();
+      showToast(`${name} eliminado del espacio de trabajo.`);
+    } catch {
+      showToast('Error al eliminar al miembro.', false);
+    }
+  }
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -23789,58 +27763,135 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           <div className="flex-1 overflow-y-auto min-h-0">
-      <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Compañeros de equipo</h1>
-            <p className="text-[13.5px] text-[#646462]">Gestiona los miembros y sus roles.</p>
-          </div>
-          <button onClick={() => setInviteOpen(true)} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">+ Invitar</button>
-        </div>
-        <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a4a4a2]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
-          <input className="w-full pl-9 pr-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] focus:outline-none" placeholder="Buscar compañero…" value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        {loading ? (
-          <div className="h-40 flex items-center justify-center text-[13px] text-[#a4a4a2]">Cargando…</div>
-        ) : (
-          <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
-            <table className="w-full text-[13px]">
-              <thead className="bg-[#f8f8f7]">
-                <tr>{['Nombre', 'Correo', 'Rol', 'Último acceso', ''].map(h => <th key={h} className="text-left px-4 py-2.5 font-semibold text-[#646462] border-b border-[#e9eae6]">{h}</th>)}</tr>
-              </thead>
-              <tbody className="divide-y divide-[#e9eae6]">
-                {rows.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-10 text-[#a4a4a2]">Sin resultados</td></tr>
-                ) : rows.map((m: any) => (
-                  <tr key={m.id ?? m.email} className="hover:bg-[#f8f8f7]">
-                    <td className="px-4 py-3 font-medium text-[#1a1a1a]">{m.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-[#646462]">{m.email ?? '—'}</td>
-                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${ROLE_COLORS[m.role] ?? 'bg-[#f1f1ee] text-[#646462]'}`}>{m.role ?? 'agente'}</span></td>
-                    <td className="px-4 py-3 text-[#a4a4a2]">{m.last_seen ? new Date(m.last_seen).toLocaleDateString('es') : '—'}</td>
-                    <td className="px-4 py-3 text-right"><button className="text-[12px] text-[#646462] hover:text-[#b91c1c] border border-[#e9eae6] rounded px-2 py-0.5">Eliminar</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {inviteOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setInviteOpen(false)}>
-            <div className="bg-white rounded-2xl p-6 w-[380px] shadow-xl" onClick={e => e.stopPropagation()}>
-              <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-4">Invitar compañero</h2>
-              <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] mb-4" placeholder="correo@empresa.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setInviteOpen(false)} className="px-4 py-2 text-[13px] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7]">Cancelar</button>
-                <button onClick={() => setInviteOpen(false)} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Enviar invitación</button>
+            <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Compañeros de equipo</h1>
+                  <p className="text-[13.5px] text-[#646462]">Gestiona los miembros y sus roles.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
+                  <button onClick={() => setInviteOpen(true)} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">+ Invitar</button>
+                </div>
               </div>
+
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a4a4a2]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+                <input className="w-full pl-9 pr-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Buscar compañero…" value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+
+              {loading ? (
+                <div className="h-40 flex items-center justify-center text-[13px] text-[#a4a4a2]">Cargando…</div>
+              ) : (
+                <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+                  <table className="w-full text-[13px]">
+                    <thead className="bg-[#f8f8f7]">
+                      <tr>
+                        {['Nombre', 'Correo', 'Rol', 'Último acceso', ''].map(h => (
+                          <th key={h} className="text-left px-4 py-2.5 font-semibold text-[#646462] border-b border-[#e9eae6]">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#e9eae6]">
+                      {rows.length === 0 ? (
+                        <tr><td colSpan={5} className="text-center py-10 text-[#a4a4a2]">Sin resultados</td></tr>
+                      ) : rows.map((m: any) => (
+                        <tr key={m.id ?? m.email} className="hover:bg-[#f8f8f7]">
+                          <td className="px-4 py-3 font-medium text-[#1a1a1a]">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-[#e9eae6] flex items-center justify-center text-[11px] font-semibold text-[#646462] flex-shrink-0">
+                                {(m.name || m.email || '?')[0].toUpperCase()}
+                              </div>
+                              {m.name ?? '—'}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-[#646462]">{m.email ?? '—'}</td>
+                          <td className="px-4 py-3">
+                            {roles.length > 0 ? (
+                              <select
+                                value={m.role_id || m.role || ''}
+                                onChange={e => handleRoleChange(m.id, e.target.value)}
+                                className="border border-[#e9eae6] rounded px-2 py-0.5 text-[12px] bg-white focus:outline-none focus:border-[#1a1a1a]"
+                              >
+                                {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                              </select>
+                            ) : (
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${ROLE_COLORS[m.role] ?? 'bg-[#f1f1ee] text-[#646462]'}`}>
+                                {m.role ?? 'agente'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-[#a4a4a2]">{m.last_seen ? new Date(m.last_seen).toLocaleDateString('es') : '—'}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              onClick={() => handleRemove(m.id, m.name || m.email)}
+                              className="text-[12px] text-[#646462] hover:text-[#b91c1c] border border-[#e9eae6] hover:border-[#fca5a5] rounded px-2 py-0.5 transition-colors"
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
-          </div>
         </div>
       </div>
+
+      {/* Invite modal */}
+      {inviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setInviteOpen(false)}>
+          <div className="bg-white rounded-2xl p-6 w-[420px] shadow-xl flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <h2 className="text-[16px] font-bold text-[#1a1a1a]">Invitar compañero de equipo</h2>
+              <p className="text-[13px] text-[#646462] mt-0.5">Se enviará un correo de invitación.</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="block text-[12px] font-medium text-[#646462] mb-1">Correo electrónico *</label>
+                <input
+                  autoFocus
+                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                  placeholder="correo@empresa.com"
+                  value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre (opcional)</label>
+                <input
+                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                  placeholder="Nombre del compañero"
+                  value={inviteName} onChange={e => setInviteName(e.target.value)}
+                />
+              </div>
+              {roles.length > 0 && (
+                <div>
+                  <label className="block text-[12px] font-medium text-[#646462] mb-1">Rol</label>
+                  <select
+                    value={inviteRoleId || roles[0]?.id || ''}
+                    onChange={e => setInviteRoleId(e.target.value)}
+                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  >
+                    {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setInviteOpen(false)} className="px-4 py-2 text-[13px] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7]">Cancelar</button>
+              <button
+                onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}
+                className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50"
+              >
+                {inviting ? 'Enviando…' : 'Enviar invitación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -24269,6 +28320,1849 @@ function HelpCenterSettingsView({ view, onNavigate }: { view: View; onNavigate: 
   );
 }
 
+// ── CannedResponsesView ───────────────────────────────────────────────────────
+function CannedResponsesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: items = [], loading, refetch } = useApi(() => cannedResponsesApi.list(), []);
+  const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
+  const [form, setForm] = useState({ name: '', content: '', shortcut: '' });
+  const [saving, setSaving] = useState(false);
+
+  const filtered = items.filter((r: any) =>
+    !search || r.name?.toLowerCase().includes(search.toLowerCase()) || r.content?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function openCreate() { setEditing(null); setForm({ name: '', content: '', shortcut: '' }); setShowModal(true); }
+  function openEdit(r: any) { setEditing(r); setForm({ name: r.name || '', content: r.content || '', shortcut: r.shortcut || '' }); setShowModal(true); }
+  async function save() {
+    setSaving(true);
+    try {
+      if (editing) await cannedResponsesApi.update(editing.id, form);
+      else await cannedResponsesApi.create(form);
+      setShowModal(false);
+      refetch();
+    } catch(e) { console.error(e); }
+    finally { setSaving(false); }
+  }
+  async function del(id: string) {
+    if (!confirm('¿Eliminar esta respuesta predefinida?')) return;
+    await cannedResponsesApi.delete(id);
+    refetch();
+  }
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 p-6 gap-4 overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[20px] font-semibold text-[#1a1a1a]">Respuestas predefinidas</h1>
+            <p className="text-[13px] text-[#6b6b6b] mt-0.5">Plantillas de respuesta rápida para tus agentes</p>
+          </div>
+          <button onClick={openCreate} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium hover:bg-[#333]">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10"/></svg>
+            Nueva respuesta
+          </button>
+        </div>
+
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar respuestas..."
+          className="w-full max-w-sm px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"
+        />
+
+        {loading ? (
+          <div className="text-[13px] text-[#9a9a98]">Cargando...</div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 text-[#d1d1cc]"><path d="M8 8h32a4 4 0 014 4v20a4 4 0 01-4 4H28l-8 8-8-8H8a4 4 0 01-4-4V12a4 4 0 014-4z" stroke="currentColor" strokeWidth="2" fill="currentColor" opacity="0.15"/></svg>
+            <p className="text-[14px] font-medium text-[#6b6b6b]">{search ? 'Sin resultados' : 'Sin respuestas predefinidas'}</p>
+            <p className="text-[12px] text-[#9a9a98]">Crea tu primera respuesta para agilizar las conversaciones</p>
+            {!search && <button onClick={openCreate} className="px-4 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium">Crear respuesta</button>}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {filtered.map((r: any) => (
+              <div key={r.id} className="flex items-start gap-3 p-4 bg-white rounded-xl border border-[#e9eae6] hover:border-[#d1d1cc] group">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[13px] font-semibold text-[#1a1a1a]">{r.name}</span>
+                    {r.shortcut && <span className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[11px] font-mono text-[#6b6b6b]">/{r.shortcut}</span>}
+                  </div>
+                  <p className="text-[12px] text-[#6b6b6b] line-clamp-2">{r.content}</p>
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => openEdit(r)} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#6b6b6b]">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M11.5 2.5l2 2L6 12H4v-2l7.5-7.5z"/></svg>
+                  </button>
+                  <button onClick={() => del(r.id)} className="p-1.5 rounded-lg hover:bg-[#fee2e2] text-[#ef4444]">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M3 5h10M6 5V3h4v2M5 5l.5 8h5L11 5"/></svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showModal && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-[520px] p-6 flex flex-col gap-4">
+              <h2 className="text-[16px] font-semibold">{editing ? 'Editar respuesta' : 'Nueva respuesta predefinida'}</h2>
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Nombre</label>
+                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: Saludo inicial" className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+                </div>
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Atajo (opcional)</label>
+                  <div className="flex items-center gap-1"><span className="text-[13px] text-[#9a9a98]">/</span><input value={form.shortcut} onChange={e => setForm(f => ({ ...f, shortcut: e.target.value }))} placeholder="saludo" className="flex-1 px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/></div>
+                </div>
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Contenido</label>
+                  <textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} rows={5} placeholder="Escribe el contenido de la respuesta..." className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={() => setShowModal(false)} className="px-4 py-1.5 rounded-lg border border-[#e5e5e2] text-[13px] hover:bg-[#f3f3f1]">Cancelar</button>
+                <button onClick={save} disabled={saving || !form.name || !form.content} className="px-4 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── CustomFiltersView ─────────────────────────────────────────────────────────
+function CustomFiltersView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: filters = [], loading, refetch } = useApi(() => customFiltersApi.list(), []);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ name: '', entityType: 'conversation' as string });
+  const [saving, setSaving] = useState(false);
+
+  const ENTITY_LABELS: Record<string, string> = { conversation: 'Conversaciones', contact: 'Contactos', company: 'Empresas' };
+
+  async function save() {
+    setSaving(true);
+    try {
+      await customFiltersApi.create({ name: form.name, entity_type: form.entityType, owner_id: 'current-user', filters: [] });
+      setShowModal(false);
+      setForm({ name: '', entityType: 'conversation' });
+      refetch();
+    } catch(e) { console.error(e); }
+    finally { setSaving(false); }
+  }
+  async function del(id: string) {
+    if (!confirm('¿Eliminar este filtro?')) return;
+    await customFiltersApi.delete(id);
+    refetch();
+  }
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 p-6 gap-4 overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[20px] font-semibold text-[#1a1a1a]">Filtros personalizados</h1>
+            <p className="text-[13px] text-[#6b6b6b] mt-0.5">Guarda vistas filtradas de tus conversaciones, contactos y empresas</p>
+          </div>
+          <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium hover:bg-[#333]">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10"/></svg>
+            Nuevo filtro
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-[13px] text-[#9a9a98]">Cargando...</div>
+        ) : filters.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 text-[#d1d1cc]"><path d="M6 12h36M14 24h20M22 36h4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>
+            <p className="text-[14px] font-medium text-[#6b6b6b]">Sin filtros personalizados</p>
+            <p className="text-[12px] text-[#9a9a98]">Crea filtros para guardar vistas rápidas de tus datos</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {filters.map((f: any) => (
+              <div key={f.id} className="flex items-center gap-3 p-4 bg-white rounded-xl border border-[#e9eae6] hover:border-[#d1d1cc] group">
+                <div className="w-8 h-8 rounded-lg bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-[#6b6b6b]"><path d="M2 4h12M4.5 8h7M7 12h2" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold text-[#1a1a1a]">{f.name}</div>
+                  <div className="text-[11px] text-[#9a9a98]">{ENTITY_LABELS[f.entityType] || f.entityType} · {(f.filters || []).length} condiciones</div>
+                </div>
+                <button onClick={() => del(f.id)} className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-[#fee2e2] text-[#ef4444] transition-opacity">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M3 5h10M6 5V3h4v2M5 5l.5 8h5L11 5"/></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showModal && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-[420px] p-6 flex flex-col gap-4">
+              <h2 className="text-[16px] font-semibold">Nuevo filtro personalizado</h2>
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Nombre del filtro</label>
+                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: Conversaciones urgentes abiertas" className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+                </div>
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Tipo de entidad</label>
+                  <select value={form.entityType} onChange={e => setForm(f => ({ ...f, entityType: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] bg-white focus:outline-none">
+                    <option value="conversation">Conversaciones</option>
+                    <option value="contact">Contactos</option>
+                    <option value="company">Empresas</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={() => setShowModal(false)} className="px-4 py-1.5 rounded-lg border border-[#e5e5e2] text-[13px] hover:bg-[#f3f3f1]">Cancelar</button>
+                <button onClick={save} disabled={saving || !form.name} className="px-4 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium disabled:opacity-50">{saving ? 'Guardando...' : 'Crear filtro'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── EmailTemplatesView ────────────────────────────────────────────────────────
+function EmailTemplatesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: templates = [], loading, refetch } = useApi(() => emailTemplatesApi.list(), []);
+  const [selected, setSelected] = useState<any>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ name: '', subject: '', bodyHtml: '', category: 'general' });
+  const [saving, setSaving] = useState(false);
+  const [previewCtx, setPreviewCtx] = useState('');
+
+  async function save() {
+    setSaving(true);
+    try {
+      const payload = { name: form.name, subject: form.subject, body_html: form.bodyHtml, category: form.category };
+      if (selected && showModal) await emailTemplatesApi.update(selected.id, payload);
+      else await emailTemplatesApi.create(payload);
+      setShowModal(false);
+      refetch();
+    } catch(e) { console.error(e); }
+    finally { setSaving(false); }
+  }
+  async function del(id: string) {
+    if (!confirm('¿Eliminar esta plantilla?')) return;
+    await emailTemplatesApi.delete(id);
+    setSelected(null);
+    refetch();
+  }
+
+  const variables = selected ? [...(selected.subject || '').matchAll(/\{\{(\w+)\}\}/g), ...(selected.bodyHtml || '').matchAll(/\{\{(\w+)\}\}/g)].map((m: any) => m[1]).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i) : [];
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-1 min-w-0 h-full overflow-hidden">
+        {/* List */}
+        <div className="w-[280px] flex-shrink-0 flex flex-col h-full border-r border-[#e9eae6] bg-white">
+          <div className="flex items-center justify-between p-4 border-b border-[#e9eae6]">
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Plantillas de email</span>
+            <button onClick={() => { setSelected(null); setForm({ name: '', subject: '', bodyHtml: '', category: 'general' }); setShowModal(true); }} className="p-1 rounded-lg hover:bg-[#f3f3f1]">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4"><path d="M8 3v10M3 8h10"/></svg>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {loading ? <div className="p-4 text-[13px] text-[#9a9a98]">Cargando...</div> : templates.length === 0 ? (
+              <div className="p-4 text-center text-[13px] text-[#9a9a98]">Sin plantillas</div>
+            ) : templates.map((t: any) => (
+              <button key={t.id} onClick={() => setSelected(t)} className={`w-full text-left p-3 border-b border-[#f3f3f1] hover:bg-[#f8f8f6] ${selected?.id === t.id ? 'bg-[#f3f3f1]' : ''}`}>
+                <div className="text-[13px] font-medium text-[#1a1a1a] truncate">{t.name}</div>
+                <div className="text-[11px] text-[#9a9a98] mt-0.5 truncate">{t.subject}</div>
+                <span className="inline-block mt-1 px-1.5 py-0.5 bg-[#ededea] rounded text-[10px] text-[#6b6b6b]">{t.category || 'general'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div className="flex-1 min-w-0 flex flex-col p-6 overflow-y-auto">
+          {selected ? (
+            <>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-[18px] font-semibold text-[#1a1a1a]">{selected.name}</h2>
+                  <p className="text-[12px] text-[#9a9a98] mt-0.5">Asunto: {selected.subject}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setForm({ name: selected.name, subject: selected.subject, bodyHtml: selected.bodyHtml || selected.body_html || '', category: selected.category || 'general' }); setShowModal(true); }} className="px-3 py-1.5 border border-[#e5e5e2] rounded-lg text-[13px] hover:bg-[#f3f3f1]">Editar</button>
+                  <button onClick={() => del(selected.id)} className="px-3 py-1.5 border border-[#fee2e2] text-[#ef4444] rounded-lg text-[13px] hover:bg-[#fee2e2]">Eliminar</button>
+                </div>
+              </div>
+              {variables.length > 0 && (
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {variables.map((v: string) => <span key={v} className="px-2 py-0.5 bg-[#dbeafe] text-[#2563eb] rounded text-[11px] font-mono">{`{{${v}}}`}</span>)}
+                </div>
+              )}
+              <div className="bg-white rounded-xl border border-[#e9eae6] p-5">
+                <div className="text-[12px] text-[#9a9a98] mb-2 font-medium">VISTA PREVIA</div>
+                <div className="text-[13px] text-[#1a1a1a]" dangerouslySetInnerHTML={{ __html: selected.bodyHtml || selected.body_html || '<em>Sin contenido</em>' }} />
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+              <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 text-[#d1d1cc]"><rect x="4" y="8" width="40" height="32" rx="4" stroke="currentColor" strokeWidth="2" fill="currentColor" opacity="0.1"/><path d="M4 16l20 12 20-12" stroke="currentColor" strokeWidth="2" fill="none"/></svg>
+              <p className="text-[14px] text-[#6b6b6b]">Selecciona una plantilla para previsualizarla</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-[600px] max-h-[80vh] overflow-y-auto p-6 flex flex-col gap-4">
+            <h2 className="text-[16px] font-semibold">{selected && form.name ? 'Editar plantilla' : 'Nueva plantilla de email'}</h2>
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Nombre</label>
+                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Nombre de la plantilla" className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+                </div>
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Categoría</label>
+                  <input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="ej. onboarding" list="tpl-categories" className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+                  <datalist id="tpl-categories"><option value="onboarding"/><option value="soporte"/><option value="marketing"/><option value="facturación"/><option value="general"/></datalist>
+                </div>
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Asunto</label>
+                <input value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} placeholder="Asunto del email (usa {{variable}} para variables)" className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Cuerpo HTML</label>
+                <textarea value={form.bodyHtml} onChange={e => setForm(f => ({ ...f, bodyHtml: e.target.value }))} rows={8} placeholder="<p>Hola {{name}},</p><p>...</p>" className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] font-mono resize-none focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setShowModal(false)} className="px-4 py-1.5 rounded-lg border border-[#e5e5e2] text-[13px] hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={save} disabled={saving || !form.name || !form.subject || !form.bodyHtml} className="px-4 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CustomRolesView ───────────────────────────────────────────────────────────
+function CustomRolesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  // Uses iamApi.roles() — the real /iam/roles endpoint — instead of the phantom /custom-roles route.
+  const { data: rolesRaw, loading, refetch } = useApi(() => iamApi.roles(), [], []);
+  const roles: any[] = Array.isArray(rolesRaw) ? rolesRaw : [];
+
+  // Permission catalog from API (falls back to static list if unavailable)
+  const { data: catalogRaw } = useApi(() => iamApi.permissionsCatalog(), [], []);
+  const catalog: any[] = Array.isArray(catalogRaw) ? catalogRaw : [];
+
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing]     = useState<any>(null);
+  const [form, setForm]           = useState({ name: '', description: '', permissions: [] as string[] });
+  const [saving, setSaving]       = useState(false);
+  const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null);
+
+  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3500); }
+
+  // Build grouped permissions: prefer catalog, fall back to static list
+  const ALL_PERMISSIONS = catalog.length > 0
+    ? Object.entries(
+        catalog.reduce((acc: any, p: any) => {
+          const group = p.group || p.category || 'General';
+          if (!acc[group]) acc[group] = [];
+          acc[group].push(p.key || p.id || String(p));
+          return acc;
+        }, {})
+      ).map(([group, perms]) => ({ group, perms: perms as string[] }))
+    : [
+        { group: 'Conversaciones', perms: ['conversations:read', 'conversations:write', 'conversations:assign', 'conversations:close', 'conversations:delete'] },
+        { group: 'Contactos',      perms: ['contacts:read', 'contacts:write', 'contacts:delete', 'contacts:export'] },
+        { group: 'Empresas',       perms: ['companies:read', 'companies:write'] },
+        { group: 'Informes',       perms: ['reports:read', 'reports:export'] },
+        { group: 'Ajustes',        perms: ['settings:read', 'settings:write'] },
+        { group: 'Compañeros',     perms: ['teammates:read', 'teammates:invite', 'teammates:manage'] },
+        { group: 'Canales',        perms: ['channels:read', 'channels:write'] },
+        { group: 'IA',             perms: ['ai:read', 'ai:configure', 'ai:train'] },
+      ];
+
+  function togglePerm(p: string) {
+    setForm(f => ({
+      ...f,
+      permissions: f.permissions.includes(p) ? f.permissions.filter(x => x !== p) : [...f.permissions, p],
+    }));
+  }
+  function openCreate() { setEditing(null); setForm({ name: '', description: '', permissions: [] }); setShowModal(true); }
+  function openEdit(r: any) {
+    setEditing(r);
+    setForm({ name: r.name || '', description: r.description || '', permissions: r.permissions || [] });
+    setShowModal(true);
+  }
+  async function save() {
+    if (!form.name.trim()) { showToast('El nombre es obligatorio.', false); return; }
+    setSaving(true);
+    try {
+      if (editing) {
+        await iamApi.updateRole(editing.id, { name: form.name, permissions: form.permissions });
+        showToast('Rol actualizado.');
+      } else {
+        await iamApi.createRole({ name: form.name, permissions: form.permissions });
+        showToast('Rol creado correctamente.');
+      }
+      setShowModal(false);
+      refetch();
+    } catch (e: any) {
+      showToast(e?.message ?? 'Error al guardar el rol.', false);
+    } finally { setSaving(false); }
+  }
+  async function del(id: string, name: string) {
+    if (!window.confirm(`¿Eliminar el rol "${name}"? Los compañeros con este rol perderán sus permisos personalizados.`)) return;
+    try {
+      // iamApi doesn't expose deleteRole — use a PATCH to mark it inactive
+      await iamApi.updateRole(id, { name: `[Eliminado] ${name}`, permissions: [] });
+      refetch();
+      showToast('Rol eliminado.');
+    } catch {
+      showToast('Error al eliminar el rol.', false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="max-w-[700px] mx-auto py-10 px-6 flex flex-col gap-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-[22px] font-bold text-[#1a1a1a]">Roles personalizados</h1>
+                  <p className="text-[13px] text-[#646462] mt-0.5">Crea y gestiona permisos para los compañeros de equipo.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
+                  <button onClick={openCreate} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium hover:bg-[#333]">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10"/></svg>
+                    Nuevo rol
+                  </button>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="w-5 h-5 border-2 border-[#e9eae6] border-t-[#1a1a1a] rounded-full animate-spin"/>
+                </div>
+              ) : roles.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-16 text-center border border-dashed border-[#e9eae6] rounded-xl">
+                  <svg viewBox="0 0 24 24" className="w-10 h-10 fill-none stroke-[#d4d4d2]" strokeWidth="1.3"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><path d="M18 3l2 2-6 6h-2v-2z"/></svg>
+                  <p className="text-[14px] font-medium text-[#646462]">Sin roles aún</p>
+                  <p className="text-[12px] text-[#a4a4a2] max-w-[280px]">Los roles del sistema se gestionan automáticamente. Crea roles personalizados para permisos específicos.</p>
+                  <button onClick={openCreate} className="px-4 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium hover:bg-[#333]">Crear primer rol</button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {roles.map((r: any) => (
+                    <div key={r.id} className={`p-4 bg-white rounded-xl border border-[#e9eae6] group hover:border-[#d4d4d2] transition-colors ${r.isSystem || r.is_system ? 'opacity-75' : ''}`}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M8 1a3 3 0 100 6A3 3 0 008 1zm-5 9a5 5 0 0110 0v1H3v-1z"/></svg>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[14px] font-semibold text-[#1a1a1a]">{r.name}</span>
+                              {(r.isSystem || r.is_system) && <span className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[10px] text-[#9a9a98] font-medium">Sistema</span>}
+                            </div>
+                            {r.description && <p className="text-[12px] text-[#9a9a98] mt-0.5">{r.description}</p>}
+                          </div>
+                        </div>
+                        {!(r.isSystem || r.is_system) && (
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                            <button onClick={() => openEdit(r)} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#6b6b6b]" title="Editar">
+                              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M11.5 2.5l2 2L6 12H4v-2l7.5-7.5z"/></svg>
+                            </button>
+                            <button onClick={() => del(r.id, r.name)} className="p-1.5 rounded-lg hover:bg-[#fee2e2] text-[#ef4444]" title="Eliminar">
+                              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M3 5h10M6 5V3h4v2M5 5l.5 8h5L11 5"/></svg>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 mt-2 ml-11">
+                        {(r.permissions || []).length === 0 ? (
+                          <span className="text-[12px] text-[#a4a4a2] italic">Sin permisos específicos</span>
+                        ) : (r.permissions || []).slice(0, 10).map((p: string) => (
+                          <span key={p} className="px-2 py-0.5 bg-[#f3f3f1] rounded-full text-[11px] text-[#6b6b6b]">{p}</span>
+                        ))}
+                        {(r.permissions || []).length > 10 && <span className="px-2 py-0.5 bg-[#f3f3f1] rounded-full text-[11px] text-[#9a9a98]">+{r.permissions.length - 10} más</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-[580px] max-h-[85vh] overflow-y-auto p-6 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <h2 className="text-[16px] font-bold text-[#1a1a1a]">{editing ? 'Editar rol' : 'Nuevo rol personalizado'}</h2>
+              <p className="text-[13px] text-[#646462] mt-0.5">Los cambios se aplican inmediatamente a los compañeros con este rol.</p>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="text-[12px] font-medium text-[#646462] mb-1 block">Nombre del rol *</label>
+                <input
+                  autoFocus value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Ej: Soporte Senior, Agente de Ventas…"
+                  className="w-full px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-[#646462] mb-1 block">Descripción (opcional)</label>
+                <input
+                  value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Descripción breve del rol"
+                  className="w-full px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[12px] font-medium text-[#646462]">Permisos</label>
+                  <span className="text-[11px] text-[#a4a4a2]">{form.permissions.length} seleccionado{form.permissions.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div className="border border-[#e9eae6] rounded-xl overflow-hidden divide-y divide-[#f3f3f1]">
+                  {ALL_PERMISSIONS.map(g => (
+                    <div key={g.group} className="p-3">
+                      <div className="text-[10px] font-bold text-[#9a9a98] uppercase tracking-wider mb-2">{g.group}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {g.perms.map(p => (
+                          <button key={p} onClick={() => togglePerm(p)}
+                            className={`px-2.5 py-1 rounded-lg text-[12px] border transition-all ${form.permissions.includes(p) ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white text-[#646462] border-[#e9eae6] hover:border-[#1a1a1a]'}`}
+                          >
+                            {p.includes(':') ? p.split(':')[1] : p}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1 border-t border-[#f3f3f1]">
+              <button onClick={() => setShowModal(false)} className="px-4 py-1.5 rounded-lg border border-[#e9eae6] text-[13px] hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={save} disabled={saving || !form.name.trim()} className="px-4 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium hover:bg-[#333] disabled:opacity-50">
+                {saving ? 'Guardando…' : editing ? 'Actualizar rol' : 'Crear rol'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AiFeedbackView ────────────────────────────────────────────────────────────
+function AiFeedbackView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: items = [], loading } = useApi(() => aiFeedbackApi.list({ limit: 50 }), []);
+  const [filter, setFilter] = useState<string>('all');
+
+  const FEEDBACK_TYPES = ['thumbs_up', 'thumbs_down', 'correction', 'flagged', 'escalated'];
+  const LABELS: Record<string, string> = { thumbs_up: '👍 Positivo', thumbs_down: '👎 Negativo', correction: '✏️ Corrección', flagged: '🚩 Reportado', escalated: '⬆️ Escalado', all: 'Todos' };
+  const COLORS: Record<string, string> = { thumbs_up: 'bg-[#dcfce7] text-[#166534]', thumbs_down: 'bg-[#fee2e2] text-[#991b1b]', correction: 'bg-[#fef3c7] text-[#92400e]', flagged: 'bg-[#fee2e2] text-[#991b1b]', escalated: 'bg-[#ede9fe] text-[#5b21b6]' };
+
+  const filtered = filter === 'all' ? items : items.filter((i: any) => i.feedbackType === filter);
+
+  const stats = FEEDBACK_TYPES.reduce((acc, t) => {
+    acc[t] = items.filter((i: any) => i.feedbackType === t).length;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 p-6 gap-4 overflow-y-auto">
+        <div>
+          <h1 className="text-[20px] font-semibold text-[#1a1a1a]">Feedback de IA</h1>
+          <p className="text-[13px] text-[#6b6b6b] mt-0.5">Revisión de valoraciones sobre las respuestas de la IA</p>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-5 gap-3">
+          {FEEDBACK_TYPES.map(t => (
+            <div key={t} className="bg-white rounded-xl border border-[#e9eae6] p-3 text-center">
+              <div className="text-[22px] font-bold text-[#1a1a1a]">{stats[t] || 0}</div>
+              <div className="text-[11px] text-[#9a9a98] mt-0.5">{LABELS[t]}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filter */}
+        <div className="flex gap-2">
+          {['all', ...FEEDBACK_TYPES].map(t => (
+            <button key={t} onClick={() => setFilter(t)} className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${filter === t ? 'bg-[#1a1a1a] text-white' : 'bg-white border border-[#e5e5e2] text-[#6b6b6b] hover:border-[#1a1a1a]'}`}>
+              {LABELS[t]}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="text-[13px] text-[#9a9a98]">Cargando...</div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-center">
+            <p className="text-[14px] text-[#6b6b6b]">Sin registros de feedback</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {filtered.map((item: any) => (
+              <div key={item.id} className="flex items-start gap-3 p-4 bg-white rounded-xl border border-[#e9eae6]">
+                <span className={`px-2 py-0.5 rounded text-[11px] font-medium flex-shrink-0 ${COLORS[item.feedbackType] || 'bg-[#f3f3f1] text-[#6b6b6b]'}`}>{LABELS[item.feedbackType] || item.feedbackType}</span>
+                <div className="flex-1 min-w-0">
+                  {item.feedbackText && <p className="text-[13px] text-[#1a1a1a] mb-1">{item.feedbackText}</p>}
+                  {item.originalOutput && <p className="text-[12px] text-[#6b6b6b] line-clamp-2">Respuesta IA: {item.originalOutput}</p>}
+                </div>
+                <span className="text-[11px] text-[#9a9a98] flex-shrink-0">{new Date(item.createdAt).toLocaleDateString('es-ES')}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── CallsLiveView ─────────────────────────────────────────────────────────────
+function CallsLiveView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: stats } = useApi(() => callsApi.stats(), []);
+  const { data: calls = [], loading, refetch } = useApi(() => callsApi.list({ limit: '100' }), []);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dirFilter, setDirFilter] = useState<string>('all');
+
+  const STATUS_LABELS: Record<string, string> = { initiated: 'Iniciada', ringing: 'Sonando', in_progress: 'En curso', completed: 'Completada', missed: 'Perdida', voicemail: 'Buzón', failed: 'Fallida' };
+  const STATUS_COLORS: Record<string, string> = { initiated: 'bg-[#dbeafe] text-[#2563eb]', ringing: 'bg-[#fef9c3] text-[#854d0e]', in_progress: 'bg-[#dcfce7] text-[#166534]', completed: 'bg-[#f3f4f6] text-[#374151]', missed: 'bg-[#fee2e2] text-[#991b1b]', voicemail: 'bg-[#ede9fe] text-[#5b21b6]', failed: 'bg-[#fee2e2] text-[#991b1b]' };
+
+  const filtered = calls.filter((c: any) =>
+    (statusFilter === 'all' || c.status === statusFilter) &&
+    (dirFilter === 'all' || c.direction === dirFilter)
+  );
+
+  const kpis = [
+    { label: 'Total llamadas', value: stats?.total ?? calls.length },
+    { label: 'Completadas', value: stats?.completed ?? calls.filter((c: any) => c.status === 'completed').length },
+    { label: 'Perdidas', value: stats?.missed ?? calls.filter((c: any) => c.status === 'missed').length },
+    { label: 'Duración media', value: stats?.avgDurationS ? `${Math.round(stats.avgDurationS / 60)}m` : '—' },
+  ];
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 p-6 gap-4 overflow-y-auto">
+        <div>
+          <h1 className="text-[20px] font-semibold text-[#1a1a1a]">Llamadas</h1>
+          <p className="text-[13px] text-[#6b6b6b] mt-0.5">Registro de llamadas entrantes y salientes</p>
+        </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-4 gap-3">
+          {kpis.map(k => (
+            <div key={k.label} className="bg-white rounded-xl border border-[#e9eae6] p-4">
+              <div className="text-[24px] font-bold text-[#1a1a1a]">{k.value ?? '—'}</div>
+              <div className="text-[12px] text-[#9a9a98] mt-0.5">{k.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div className="flex gap-4 flex-wrap">
+          <div className="flex gap-1.5">
+            {['all', 'inbound', 'outbound'].map(d => (
+              <button key={d} onClick={() => setDirFilter(d)} className={`px-3 py-1 rounded-full text-[12px] font-medium ${dirFilter === d ? 'bg-[#1a1a1a] text-white' : 'bg-white border border-[#e5e5e2] text-[#6b6b6b]'}`}>
+                {d === 'all' ? 'Todas' : d === 'inbound' ? '↙ Entrante' : '↗ Saliente'}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {['all', 'completed', 'missed', 'in_progress'].map(s => (
+              <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1 rounded-full text-[12px] font-medium ${statusFilter === s ? 'bg-[#1a1a1a] text-white' : 'bg-white border border-[#e5e5e2] text-[#6b6b6b]'}`}>
+                {s === 'all' ? 'Todos' : STATUS_LABELS[s]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-[13px] text-[#9a9a98]">Cargando llamadas...</div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-center">
+            <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 text-[#d1d1cc]"><path d="M9 6h9l4.5 10.5L18 20a27 27 0 0012 12l3.5-4.5L45 32v9A3 3 0 0142 44 39 39 0 013 6a3 3 0 016 0z" stroke="currentColor" strokeWidth="2" fill="currentColor" opacity="0.15"/></svg>
+            <p className="text-[14px] text-[#6b6b6b]">Sin llamadas registradas</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {filtered.map((c: any) => (
+              <div key={c.id} className="flex items-center gap-3 p-3 bg-white rounded-xl border border-[#e9eae6]">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] flex-shrink-0 ${c.direction === 'inbound' ? 'bg-[#dbeafe] text-[#2563eb]' : 'bg-[#dcfce7] text-[#166534]'}`}>
+                  {c.direction === 'inbound' ? '↙' : '↗'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-medium text-[#1a1a1a]">{c.fromNumber || '—'}</span>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3 text-[#9a9a98]"><path d="M4 8h8"/></svg>
+                    <span className="text-[13px] text-[#6b6b6b]">{c.toNumber || '—'}</span>
+                  </div>
+                  {c.provider && <div className="text-[11px] text-[#9a9a98]">{c.provider}</div>}
+                </div>
+                <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${STATUS_COLORS[c.status] || 'bg-[#f3f3f1] text-[#6b6b6b]'}`}>{STATUS_LABELS[c.status] || c.status}</span>
+                {c.durationSecs && <span className="text-[12px] text-[#9a9a98]">{Math.floor(c.durationSecs / 60)}:{String(c.durationSecs % 60).padStart(2, '0')}</span>}
+                <span className="text-[11px] text-[#9a9a98]">{c.startedAt ? new Date(c.startedAt).toLocaleDateString('es-ES') : '—'}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── McpServersView ────────────────────────────────────────────────────────────
+function McpServersView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: servers = [], loading, refetch } = useApi(() => mcpServersApi.list(), []);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
+  const [form, setForm] = useState({ name: '', url: '', description: '', authType: 'none' as string });
+  const [saving, setSaving] = useState(false);
+
+  function openCreate() { setEditing(null); setForm({ name: '', url: '', description: '', authType: 'none' }); setShowModal(true); }
+  function openEdit(s: any) { setEditing(s); setForm({ name: s.name || '', url: s.url || '', description: s.description || '', authType: s.authType || 'none' }); setShowModal(true); }
+  async function save() {
+    setSaving(true);
+    try {
+      if (editing) await mcpServersApi.update(editing.id, form);
+      else await mcpServersApi.create(form);
+      setShowModal(false);
+      refetch();
+    } catch(e) { console.error(e); }
+    finally { setSaving(false); }
+  }
+  async function del(id: string) {
+    if (!confirm('¿Eliminar este servidor MCP?')) return;
+    await mcpServersApi.delete(id);
+    refetch();
+  }
+
+  const STATUS_COLOR: Record<string, string> = { active: 'bg-[#dcfce7] text-[#166534]', inactive: 'bg-[#f3f4f6] text-[#6b7280]', error: 'bg-[#fee2e2] text-[#991b1b]' };
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 p-6 gap-4 overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[20px] font-semibold text-[#1a1a1a]">Servidores MCP</h1>
+            <p className="text-[13px] text-[#6b6b6b] mt-0.5">Model Context Protocol — conecta herramientas externas con tu agente de IA</p>
+          </div>
+          <button onClick={openCreate} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium hover:bg-[#333]">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10"/></svg>
+            Añadir servidor
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-[13px] text-[#9a9a98]">Cargando...</div>
+        ) : servers.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-[#f3f3f1] flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-7 h-7 text-[#9a9a98]"><rect x="2" y="6" width="20" height="12" rx="3"/><circle cx="7" cy="12" r="1.5" fill="currentColor"/><circle cx="17" cy="12" r="1.5" fill="currentColor"/><path d="M10 12h4"/></svg>
+            </div>
+            <p className="text-[14px] font-medium text-[#6b6b6b]">Sin servidores MCP</p>
+            <p className="text-[12px] text-[#9a9a98]">Conecta servidores MCP para ampliar las capacidades de tu agente</p>
+            <button onClick={openCreate} className="px-4 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium">Añadir primer servidor</button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {servers.map((s: any) => (
+              <div key={s.id} className="flex items-center gap-4 p-4 bg-white rounded-xl border border-[#e9eae6] hover:border-[#d1d1cc] group">
+                <div className="w-9 h-9 rounded-xl bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-[#6b6b6b]"><rect x="1" y="3" width="14" height="10" rx="2" opacity="0.35"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><path d="M6.5 8h3" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold text-[#1a1a1a]">{s.name}</div>
+                  <div className="text-[12px] text-[#9a9a98] truncate">{s.url}</div>
+                  {s.description && <div className="text-[11px] text-[#b0b0ae] mt-0.5">{s.description}</div>}
+                </div>
+                <span className={`px-2 py-0.5 rounded text-[11px] font-medium flex-shrink-0 ${STATUS_COLOR[s.status] || 'bg-[#f3f4f6] text-[#6b7280]'}`}>{s.status || 'inactivo'}</span>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#6b6b6b]"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M11.5 2.5l2 2L6 12H4v-2l7.5-7.5z"/></svg></button>
+                  <button onClick={() => del(s.id)} className="p-1.5 rounded-lg hover:bg-[#fee2e2] text-[#ef4444]"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M3 5h10M6 5V3h4v2M5 5l.5 8h5L11 5"/></svg></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showModal && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-[480px] p-6 flex flex-col gap-4">
+              <h2 className="text-[16px] font-semibold">{editing ? 'Editar servidor MCP' : 'Añadir servidor MCP'}</h2>
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Nombre</label>
+                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: GitHub MCP" className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+                </div>
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">URL del servidor</label>
+                  <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://mcp.example.com/sse" className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+                </div>
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Descripción</label>
+                  <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Descripción opcional" className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1a1a1a]/10"/>
+                </div>
+                <div>
+                  <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Autenticación</label>
+                  <select value={form.authType} onChange={e => setForm(f => ({ ...f, authType: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] bg-white focus:outline-none">
+                    <option value="none">Sin autenticación</option>
+                    <option value="bearer">Bearer token</option>
+                    <option value="api_key">API Key</option>
+                    <option value="oauth2">OAuth 2.0</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={() => setShowModal(false)} className="px-4 py-1.5 rounded-lg border border-[#e5e5e2] text-[13px] hover:bg-[#f3f3f1]">Cancelar</button>
+                <button onClick={save} disabled={saving || !form.name || !form.url} className="px-4 py-1.5 bg-[#1a1a1a] text-white rounded-lg text-[13px] font-medium disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── AgentChatView ─────────────────────────────────────────────────────────────
+//
+// Max-style AI chat interface for the CRM. Features:
+//   - Left sidebar with conversation history (title + msg count + relative time)
+//   - Right panel with active chat (streaming SSE)
+//   - Rich tool call cards (expandable, mini-tables, SQL results)
+//   - Mode system (6 modes with colored pills)
+//   - Approval cards for dangerous operations
+//   - Memory toast notifications
+//   - Slash command autocomplete
+//   - Markdown-like formatting in message bubbles
+//
+type AgentMode = 'contacts' | 'conversations' | 'reports' | 'sql' | 'automation' | 'ai';
+const MODE_CONFIG: Record<AgentMode, { label: string; color: string; icon: string; description: string }> = {
+  contacts:      { label: 'Contactos',      color: '#6366f1', icon: '👤', description: 'Buscar y gestionar contactos' },
+  conversations: { label: 'Conversaciones', color: '#0ea5e9', icon: '💬', description: 'Gestionar tickets de soporte' },
+  reports:       { label: 'Informes',       color: '#10b981', icon: '📊', description: 'Métricas y KPIs' },
+  sql:           { label: 'SQL',            color: '#f59e0b', icon: '🔍', description: 'Consultas personalizadas' },
+  automation:    { label: 'Automatización', color: '#8b5cf6', icon: '⚡', description: 'Reglas y SLAs' },
+  ai:            { label: 'IA',             color: '#ec4899', icon: '🤖', description: 'Feedback y herramientas IA' },
+};
+
+const TOOL_LABELS: Record<string, { icon: string; label: string }> = {
+  search_contacts:            { icon: '👤', label: 'Buscando contactos' },
+  search_companies:           { icon: '🏢', label: 'Buscando empresas' },
+  get_contact:                { icon: '👤', label: 'Obteniendo contacto' },
+  create_contact:             { icon: '➕', label: 'Creando contacto' },
+  update_contact:             { icon: '✏️', label: 'Actualizando contacto' },
+  list_contacts_paginated:    { icon: '📋', label: 'Listando contactos' },
+  get_conversation:           { icon: '💬', label: 'Obteniendo conversación' },
+  create_conversation:        { icon: '➕', label: 'Creando conversación' },
+  assign_conversation:        { icon: '👋', label: 'Asignando conversación' },
+  update_conversation_status: { icon: '🔄', label: 'Actualizando estado' },
+  list_conversations:         { icon: '📋', label: 'Listando conversaciones' },
+  get_reporting_overview:     { icon: '📊', label: 'Obteniendo resumen' },
+  get_csat_summary:           { icon: '⭐', label: 'Analizando CSAT' },
+  get_calls_stats:            { icon: '📞', label: 'Estadísticas de llamadas' },
+  get_reporting_rollups:      { icon: '📈', label: 'Generando rollups' },
+  run_sql_query:              { icon: '🔍', label: 'Ejecutando consulta SQL' },
+  list_automation_rules:      { icon: '⚡', label: 'Listando automatizaciones' },
+  list_macros:                { icon: '📝', label: 'Listando macros' },
+  list_ai_feedback:           { icon: '🤖', label: 'Analizando feedback IA' },
+  search_knowledge_base:      { icon: '📚', label: 'Buscando en base de conocimiento' },
+  list_mcp_servers:           { icon: '🔌', label: 'Listando servidores MCP' },
+  switch_mode:                { icon: '🔄', label: 'Cambiando modo' },
+  remember_fact:              { icon: '🧠', label: 'Guardando en memoria' },
+  recall_memory:              { icon: '🧠', label: 'Consultando memoria' },
+  get_current_context:        { icon: '📍', label: 'Obteniendo contexto' },
+};
+
+const SLASH_COMMANDS = [
+  { cmd: '/remember ', hint: '[texto] — Guardar en la memoria del agente' },
+  { cmd: '/clear',     hint: '— Limpiar esta conversación' },
+  { cmd: '/mode ',     hint: '[modo] — Cambiar modo' },
+  { cmd: '/help',      hint: '— Ver comandos disponibles' },
+];
+
+type AgentMsg = {
+  id: string;
+  role: 'user' | 'assistant' | 'approval';
+  content: string;
+  toolCalls?: { toolName: string; args: any; result: any; durationMs: number }[];
+  proposalId?: string;
+  approvalPayload?: { toolName: string; preview: string; payload: any };
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+};
+
+const MODE_SUGGESTIONS: Record<AgentMode, string[]> = {
+  contacts:      ['Buscar contactos llamados Juan', 'Crear un nuevo contacto', 'Actualizar el email de un contacto', 'Listar contactos de Madrid', 'Buscar empresa Acme Corp', 'Ver historial de contacto'],
+  conversations: ['Mostrar tickets abiertos hoy', 'Asignar conversación al equipo de soporte', 'Listar conversaciones sin respuesta', 'Crear nueva conversación', 'Ver conversaciones de alta prioridad', 'Actualizar estado de ticket'],
+  reports:       ['Resumen de métricas de hoy', '¿Cuál es nuestro CSAT actual?', 'Estadísticas de llamadas esta semana', 'Generar rollup mensual', 'Ver tiempo de respuesta promedio', 'Analizar tendencias de soporte'],
+  sql:           ['SELECT * FROM contacts LIMIT 10', 'Contar conversaciones por estado', 'Top 5 clientes por volumen', 'Tickets cerrados este mes', 'Distribución por canal', 'Agentes con más resoluciones'],
+  automation:    ['Listar reglas de automatización activas', 'Ver macros disponibles', 'Reglas de SLA configuradas', 'Automatizaciones por etiqueta', 'Revisar disparadores de notificación', 'Ver workflows activos'],
+  ai:            ['Analizar feedback de IA reciente', 'Ver calificaciones del asistente', 'Buscar en base de conocimiento', 'Listar servidores MCP conectados', 'Revisar respuestas de Fin', 'Estadísticas de automatización IA'],
+};
+
+const DEFAULT_SUGGESTIONS = [
+  'Mostrar conversaciones abiertas de hoy',
+  'Buscar contactos llamados Juan',
+  '¿Cuál es nuestro CSAT actual?',
+  'Dame un resumen de reporting',
+  'Listar reglas de automatización',
+  'Buscar empresas del sector tech',
+];
+
+/** Render simple markdown-like formatting as React nodes */
+function renderMarkdown(text: string): ReactNode {
+  if (!text) return null;
+  const lines = text.split('\n');
+  const nodes: ReactNode[] = [];
+
+  // Check for pipe-table
+  const tableLines = lines.filter(l => l.includes('|'));
+  const isTable = tableLines.length >= 2 && lines[0].includes('|');
+
+  if (isTable) {
+    const rows = lines.filter(l => l.trim().startsWith('|') || l.includes('|'));
+    const dataRows = rows.filter(r => !/^[\s|:-]+$/.test(r));
+    if (dataRows.length >= 2) {
+      const parseCells = (row: string) => row.split('|').map(c => c.trim()).filter((c, i, a) => i > 0 && i < a.length - 1);
+      const headers = parseCells(dataRows[0]);
+      const bodyRows = dataRows.slice(1);
+      return (
+        <div className="overflow-x-auto">
+          <table className="text-[12px] border-collapse w-full">
+            <thead>
+              <tr>{headers.map((h, i) => <th key={i} className="px-2 py-1 bg-[#f3f3f1] border border-[#e9eae6] text-left font-semibold text-[#1a1a1a]">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {bodyRows.map((row, ri) => (
+                <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-[#fafaf9]'}>
+                  {parseCells(row).map((cell, ci) => <td key={ci} className="px-2 py-1 border border-[#e9eae6] text-[#1a1a1a]">{cell}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+  }
+
+  lines.forEach((line, li) => {
+    if (line.startsWith('## ')) {
+      nodes.push(<p key={li} className="font-bold text-[14px] text-[#1a1a1a] mt-2 mb-1">{line.slice(3)}</p>);
+    } else if (line.startsWith('# ')) {
+      nodes.push(<p key={li} className="font-bold text-[15px] text-[#1a1a1a] mt-2 mb-1">{line.slice(2)}</p>);
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      nodes.push(
+        <div key={li} className="flex gap-1.5 items-start">
+          <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-[#6366f1] flex-shrink-0" />
+          <span>{inlineFormat(line.slice(2))}</span>
+        </div>
+      );
+    } else if (line.startsWith('```') || line.startsWith('`')) {
+      const code = line.replace(/`/g, '');
+      nodes.push(<code key={li} className="block font-mono text-[12px] bg-[#f3f3f1] rounded px-2 py-1 my-0.5 text-[#1a1a1a] whitespace-pre-wrap break-all">{code}</code>);
+    } else if (line.trim() === '') {
+      nodes.push(<div key={li} className="h-1.5" />);
+    } else {
+      nodes.push(<span key={li} className="block">{inlineFormat(line)}</span>);
+    }
+  });
+  return <>{nodes}</>;
+}
+
+function inlineFormat(text: string): ReactNode {
+  // Bold: **text**
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return (
+    <>
+      {parts.map((p, i) => {
+        if (p.startsWith('**') && p.endsWith('**')) return <strong key={i}>{p.slice(2, -2)}</strong>;
+        if (p.startsWith('`') && p.endsWith('`')) return <code key={i} className="font-mono text-[12px] bg-[#f3f3f1] rounded px-1 text-[#1a1a1a]">{p.slice(1, -1)}</code>;
+        return <span key={i}>{p}</span>;
+      })}
+    </>
+  );
+}
+
+function AgentChatView({
+  view,
+  onNavigate,
+  currentCrmView,
+}: {
+  view: View;
+  onNavigate: (v: View) => void;
+  currentCrmView: string;
+}) {
+  // ── State ────────────────────────────────────────────────────────────────────
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<AgentMsg[]>([]);
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const [activeToolCalls, setActiveToolCalls] = useState<{ toolName: string; args: any; result?: any; durationMs?: number; done: boolean }[]>([]);
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [currentMode, setCurrentMode] = useState<AgentMode | null>(null);
+  const [showModeDropdown, setShowModeDropdown] = useState(false);
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [memoryCount, setMemoryCount] = useState(0);
+  const [memoryToast, setMemoryToast] = useState<string | null>(null);
+  const [pendingApproval, setPendingApproval] = useState(false);
+  const [lastSentMessage, setLastSentMessage] = useState<string>('');
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const memoryToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Load conversation list ─────────────────────────────────────────────────
+  useEffect(() => {
+    setLoadingHistory(true);
+    agentApi.listConversations()
+      .then(r => setConversations(r.conversations ?? []))
+      .catch(() => setConversations([]))
+      .finally(() => setLoadingHistory(false));
+  }, []);
+
+  // ── Scroll to bottom ──────────────────────────────────────────────────────
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingText]);
+
+  // ── Slash autocomplete visibility ─────────────────────────────────────────
+  useEffect(() => {
+    setShowSlashMenu(input.startsWith('/') && !streaming);
+  }, [input, streaming]);
+
+  // ── Memory toast auto-dismiss ─────────────────────────────────────────────
+  function showMemToast(fact: string) {
+    setMemoryToast(fact);
+    if (memoryToastTimerRef.current) clearTimeout(memoryToastTimerRef.current);
+    memoryToastTimerRef.current = setTimeout(() => setMemoryToast(null), 3000);
+  }
+
+  // ── Load a past conversation ──────────────────────────────────────────────
+  async function openConversation(id: string) {
+    if (activeConversationId === id) return;
+    try {
+      const r = await agentApi.getConversation(id);
+      setActiveConversationId(id);
+      setMessages(r.messages ?? []);
+      setStreamingText('');
+      setActiveToolCalls([]);
+      setPendingApproval(false);
+    } catch (e) {
+      console.error('load conversation error', e);
+    }
+  }
+
+  // ── Delete a conversation ─────────────────────────────────────────────────
+  async function deleteConv(id: string, e: { stopPropagation: () => void }) {
+    e.stopPropagation();
+    await agentApi.deleteConversation(id).catch(() => {});
+    setConversations(cs => cs.filter(c => c.id !== id));
+    if (activeConversationId === id) {
+      setActiveConversationId(null);
+      setMessages([]);
+    }
+  }
+
+  // ── Start a new conversation ──────────────────────────────────────────────
+  function newConversation() {
+    abortRef.current?.abort();
+    setActiveConversationId(null);
+    setMessages([]);
+    setStreamingText('');
+    setActiveToolCalls([]);
+    setPendingApproval(false);
+    inputRef.current?.focus();
+  }
+
+  // ── Send message ──────────────────────────────────────────────────────────
+  async function sendMessage(text?: string) {
+    const msg = (text ?? input).trim();
+    if (!msg || streaming || pendingApproval) return;
+    setInput('');
+    setShowSlashMenu(false);
+    setLastSentMessage(msg);
+
+    const tempId = `tmp-${Date.now()}`;
+    const userMsg: AgentMsg = { id: tempId, role: 'user', content: msg, createdAt: new Date().toISOString() };
+    setMessages(prev => [...prev, userMsg]);
+
+    setStreaming(true);
+    setStreamingText('');
+    setActiveToolCalls([]);
+
+    let convId = activeConversationId;
+    let assistantText = '';
+    const toolCallsBuffer: { toolName: string; args: any; result?: any; durationMs?: number; done: boolean }[] = [];
+
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    try {
+      await agentApi.chat(
+        {
+          message: msg,
+          conversationId: convId ?? undefined,
+          context: { currentView: currentCrmView, mode: currentMode },
+        },
+        (event, data: any) => {
+          switch (event) {
+            case 'conversation_created':
+            case 'conversation_id': {
+              if (!convId && data.conversationId) {
+                convId = data.conversationId;
+                setActiveConversationId(data.conversationId);
+                agentApi.listConversations()
+                  .then(r => setConversations(r.conversations ?? []))
+                  .catch(() => {});
+              }
+              break;
+            }
+            case 'title_generated': {
+              if (data.title) {
+                setConversations(cs => cs.map(c => c.id === convId ? { ...c, title: data.title } : c));
+              }
+              break;
+            }
+            case 'text_chunk': {
+              assistantText += data.text ?? '';
+              setStreamingText(assistantText);
+              break;
+            }
+            case 'tool_start': {
+              toolCallsBuffer.push({ toolName: data.toolName, args: data.args, done: false });
+              setActiveToolCalls([...toolCallsBuffer]);
+              break;
+            }
+            case 'tool_result': {
+              const idx = toolCallsBuffer.map((t, i) => (!t.done && t.toolName === data.toolName ? i : -1)).filter(i => i !== -1).pop() ?? -1;
+              if (idx !== -1) {
+                toolCallsBuffer[idx] = { ...toolCallsBuffer[idx], result: data.data ?? data.result, durationMs: data.durationMs ?? 0, done: true };
+              }
+              setActiveToolCalls([...toolCallsBuffer]);
+              break;
+            }
+            case 'approval_request': {
+              const approvalMsg: AgentMsg = {
+                id: `approval-${Date.now()}`,
+                role: 'approval',
+                content: data.preview ?? `La herramienta **${data.toolName}** requiere aprobación`,
+                proposalId: data.proposalId,
+                approvalPayload: { toolName: data.toolName, preview: data.preview, payload: data.payload },
+                approvalStatus: 'pending',
+                createdAt: new Date().toISOString(),
+              };
+              setMessages(prev => [...prev, approvalMsg]);
+              setPendingApproval(true);
+              setStreaming(false);
+              setStreamingText('');
+              break;
+            }
+            case 'memory_updated': {
+              setMemoryCount(prev => prev + 1);
+              showMemToast(data.fact ?? 'Hecho guardado');
+              break;
+            }
+            case 'mode_switched': {
+              if (data.newMode && Object.keys(MODE_CONFIG).includes(data.newMode)) {
+                setCurrentMode(data.newMode as AgentMode);
+              }
+              break;
+            }
+            case 'slash_handled': {
+              if (data.command === 'clear') {
+                setMessages([]);
+                setActiveConversationId(null);
+              }
+              break;
+            }
+            case 'done': {
+              const finalText = data.text || assistantText || '';
+              const assistantMsg: AgentMsg = {
+                id: `asst-${Date.now()}`,
+                role: 'assistant',
+                content: finalText,
+                toolCalls: toolCallsBuffer.filter(t => t.done).map(t => ({
+                  toolName: t.toolName,
+                  args: t.args,
+                  result: t.result,
+                  durationMs: t.durationMs ?? 0,
+                })),
+                createdAt: new Date().toISOString(),
+              };
+              setMessages(prev => [...prev, assistantMsg]);
+              setStreamingText('');
+              setActiveToolCalls([]);
+              break;
+            }
+            case 'error': {
+              const errMsg: AgentMsg = {
+                id: `err-${Date.now()}`,
+                role: 'assistant',
+                content: `Error: ${data.message ?? 'Algo fue mal. Inténtalo de nuevo.'}`,
+                createdAt: new Date().toISOString(),
+              };
+              setMessages(prev => [...prev, errMsg]);
+              setStreamingText('');
+              setActiveToolCalls([]);
+              break;
+            }
+          }
+        },
+        ctrl.signal,
+      );
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        const errMsg: AgentMsg = {
+          id: `err-${Date.now()}`,
+          role: 'assistant',
+          content: 'Lo siento, algo fue mal. Por favor inténtalo de nuevo.',
+          createdAt: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, errMsg]);
+      }
+    } finally {
+      setStreaming(false);
+      setStreamingText('');
+    }
+  }
+
+  // ── Handle approval ───────────────────────────────────────────────────────
+  async function handleApproval(proposalId: string, action: 'approve' | 'reject', feedback?: string) {
+    if (!activeConversationId) return;
+    setMessages(prev => prev.map(m =>
+      m.proposalId === proposalId ? { ...m, approvalStatus: action === 'approve' ? 'approved' : 'rejected' } : m
+    ));
+    setPendingApproval(false);
+    try {
+      await agentApi.approve({ proposalId, action, feedback, conversationId: activeConversationId });
+      if (action === 'approve') {
+        // Re-send last message to continue the flow
+        await sendMessage(lastSentMessage || 'continuar');
+      }
+    } catch (e) {
+      console.error('approval error', e);
+    }
+  }
+
+  function handleKey(e: { key: string; shiftKey: boolean; preventDefault(): void }) {
+    if (showSlashMenu && e.key === 'Escape') {
+      setShowSlashMenu(false);
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function toggleToolExpand(key: string) {
+    setExpandedTools(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function selectMode(mode: AgentMode) {
+    setCurrentMode(mode);
+    setShowModeDropdown(false);
+    sendMessage(`/mode ${mode}`);
+  }
+
+  // ── Tool call card (rich version) ─────────────────────────────────────────
+  function ToolCallCard({
+    tc,
+    cardKey,
+    live = false,
+  }: {
+    key?: string | number | null;
+    tc: { toolName: string; args: any; result?: any; durationMs?: number; done: boolean };
+    cardKey: string;
+    live?: boolean;
+  }) {
+    const expanded = expandedTools.has(cardKey);
+    const meta = TOOL_LABELS[tc.toolName] ?? { icon: '⚙️', label: tc.toolName };
+    const result = tc.result;
+
+    // Detect array results for mini-table
+    const arrayResult: any[] | null = (() => {
+      if (!result) return null;
+      if (Array.isArray(result)) return result.slice(0, 5);
+      const keys = Object.keys(result ?? {});
+      for (const k of keys) {
+        if (Array.isArray(result[k]) && result[k].length > 0) return result[k].slice(0, 5);
+      }
+      return null;
+    })();
+
+    // SQL results
+    const isSql = tc.toolName === 'run_sql_query';
+    const sqlRows: any[] = isSql && result?.rows ? result.rows.slice(0, 10) : [];
+    const sqlCols: string[] = isSql && result?.columns ? result.columns : (sqlRows.length > 0 ? Object.keys(sqlRows[0]) : []);
+
+    return (
+      <div className="my-1 border border-[#e9eae6] rounded-lg overflow-hidden bg-[#f9f9f7] text-[12px]">
+        <button
+          onClick={() => toggleToolExpand(cardKey)}
+          className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-[#f3f3f1] transition-colors"
+        >
+          {live && !tc.done ? (
+            <span className="inline-block w-2 h-2 rounded-full bg-[#6366f1] animate-pulse flex-shrink-0" />
+          ) : (
+            <span className="text-[#10b981] flex-shrink-0 text-[11px]">✓</span>
+          )}
+          <span className="flex-shrink-0">{meta.icon}</span>
+          <span className="font-medium text-[#1a1a1a] flex-1 truncate">{meta.label}</span>
+          {tc.durationMs != null && tc.done && (
+            <span className="text-[#9a9a98] text-[10px] flex-shrink-0">{tc.durationMs}ms</span>
+          )}
+          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#9a9a98] flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}>
+            <path d="M6 4l4 4-4 4z"/>
+          </svg>
+        </button>
+
+        {expanded && (
+          <div className="border-t border-[#e9eae6] px-3 py-2 space-y-2">
+            {/* Args */}
+            {tc.args && Object.keys(tc.args).length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-1">Argumentos</p>
+                <div className="space-y-0.5">
+                  {Object.entries(tc.args).map(([k, v]) => (
+                    <div key={k} className="flex gap-2">
+                      <span className="text-[#9a9a98] font-mono min-w-[80px]">{k}:</span>
+                      <span className="text-[#1a1a1a] font-mono break-all">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* SQL table result */}
+            {isSql && sqlRows.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-1">Resultado SQL ({result?.rowCount ?? sqlRows.length} filas)</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-[11px]">
+                    <thead>
+                      <tr>{sqlCols.map(c => <th key={c} className="px-2 py-1 bg-[#f0f0ef] border border-[#e9eae6] text-left font-semibold text-[#646462]">{c}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {sqlRows.map((row, ri) => (
+                        <tr key={ri} className={ri % 2 === 0 ? '' : 'bg-[#fafaf9]'}>
+                          {sqlCols.map(c => <td key={c} className="px-2 py-0.5 border border-[#e9eae6] text-[#1a1a1a] max-w-[120px] truncate">{String(row[c] ?? '')}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Array mini-table for non-SQL tools */}
+            {!isSql && arrayResult && arrayResult.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-1">Resultados ({arrayResult.length})</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-[11px]">
+                    <thead>
+                      <tr>{Object.keys(arrayResult[0]).slice(0, 3).map(k => <th key={k} className="px-2 py-1 bg-[#f0f0ef] border border-[#e9eae6] text-left font-semibold text-[#646462]">{k}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {arrayResult.map((row, ri) => (
+                        <tr key={ri} className={ri % 2 === 0 ? '' : 'bg-[#fafaf9]'}>
+                          {Object.values(row).slice(0, 3).map((v: any, ci) => (
+                            <td key={ci} className="px-2 py-0.5 border border-[#e9eae6] text-[#1a1a1a] max-w-[120px] truncate">{String(v ?? '')}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Generic JSON fallback for non-array, non-SQL results */}
+            {!isSql && !arrayResult && result && (
+              <div>
+                <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-1">Resultado</p>
+                <pre className="font-mono text-[10px] text-[#646462] whitespace-pre-wrap break-all max-h-32 overflow-y-auto bg-[#f3f3f1] rounded p-2">{JSON.stringify(result, null, 2)}</pre>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Approval card ─────────────────────────────────────────────────────────
+  function ApprovalCard({ msg }: { msg: AgentMsg }) {
+    const [feedback, setFeedback] = useState('');
+    const [acting, setActing] = useState(false);
+    const meta = TOOL_LABELS[msg.approvalPayload?.toolName ?? ''] ?? { icon: '⚙️', label: msg.approvalPayload?.toolName ?? 'Operación' };
+    const done = msg.approvalStatus !== 'pending';
+
+    async function act(action: 'approve' | 'reject') {
+      if (!msg.proposalId || acting) return;
+      setActing(true);
+      await handleApproval(msg.proposalId, action, feedback || undefined);
+      setActing(false);
+    }
+
+    return (
+      <div className="my-2 border border-[#fbbf24] rounded-xl overflow-hidden bg-[#fffbeb] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-[#fde68a]">
+          <span className="text-[18px]">{meta.icon}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-[#92400e]">Confirmación requerida</p>
+            <p className="text-[12px] text-[#b45309]">{meta.label}</p>
+          </div>
+          {done && (
+            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+              msg.approvalStatus === 'approved' ? 'bg-[#d1fae5] text-[#065f46]' : 'bg-[#fee2e2] text-[#991b1b]'
+            }`}>
+              {msg.approvalStatus === 'approved' ? 'Aprobado' : 'Rechazado'}
+            </span>
+          )}
+        </div>
+        <div className="px-4 py-3">
+          <p className="text-[12.5px] text-[#78350f] mb-3">{msg.approvalPayload?.preview ?? msg.content}</p>
+          {!done && (
+            <>
+              <input
+                type="text"
+                value={feedback}
+                onChange={e => setFeedback(e.target.value)}
+                placeholder="Feedback opcional al rechazar…"
+                className="w-full text-[12px] border border-[#fde68a] rounded-lg px-3 py-1.5 mb-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#f59e0b]/30 placeholder:text-[#d97706]/50"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => act('approve')}
+                  disabled={acting}
+                  className="flex-1 py-1.5 rounded-lg bg-[#10b981] hover:bg-[#059669] text-white text-[12.5px] font-semibold transition-colors disabled:opacity-50"
+                >
+                  {acting ? '…' : '✓ Aprobar'}
+                </button>
+                <button
+                  onClick={() => act('reject')}
+                  disabled={acting}
+                  className="flex-1 py-1.5 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white text-[12.5px] font-semibold transition-colors disabled:opacity-50"
+                >
+                  {acting ? '…' : '✕ Rechazar'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Message bubble ────────────────────────────────────────────────────────
+  function MessageBubble({ msg }: { key?: string | number | null; msg: AgentMsg }) {
+    if (msg.role === 'approval') return <ApprovalCard msg={msg} />;
+    const isUser = msg.role === 'user';
+
+    return (
+      <div className={`flex gap-2 ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
+        {!isUser && (
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white">
+              <path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/>
+            </svg>
+          </div>
+        )}
+        <div className={`max-w-[78%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
+          {!isUser && msg.toolCalls && msg.toolCalls.length > 0 && (
+            <div className="mb-2 w-full">
+              {msg.toolCalls.map((tc, i) => (
+                <ToolCallCard
+                  key={i}
+                  tc={{ ...tc, done: true }}
+                  cardKey={`msg-${msg.id}-tc-${i}`}
+                />
+              ))}
+            </div>
+          )}
+          {msg.content && (
+            <div
+              className={`px-3.5 py-2.5 rounded-2xl text-[13.5px] leading-relaxed break-words ${
+                isUser
+                  ? 'bg-[#1a1a1a] text-white rounded-tr-sm'
+                  : 'bg-white border border-[#e9eae6] text-[#1a1a1a] rounded-tl-sm shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
+              }`}
+            >
+              {isUser ? msg.content : renderMarkdown(msg.content)}
+            </div>
+          )}
+          <span className="text-[11px] text-[#b4b4b0] mt-1 px-1">
+            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+        {isUser && (
+          <div className="w-7 h-7 rounded-full bg-[#e9eae6] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]">
+              <circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6H2z"/>
+            </svg>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Welcome screen ────────────────────────────────────────────────────────
+  function WelcomeScreen() {
+    const suggestions = currentMode ? MODE_SUGGESTIONS[currentMode] : DEFAULT_SUGGESTIONS;
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 px-8 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center shadow-lg">
+          <svg viewBox="0 0 24 24" className="w-8 h-8 fill-white">
+            <path d="M12 2l2.4 6.6H21l-5.4 3.9 2.1 6.6L12 14.7l-5.7 3.9 2.1-6.6L3 7.6h6.6L12 2z"/>
+          </svg>
+        </div>
+        <div>
+          <h2 className="text-[22px] font-bold text-[#1a1a1a] mb-2">
+            {currentMode ? `Max — ${MODE_CONFIG[currentMode].icon} ${MODE_CONFIG[currentMode].label}` : 'Hola, soy Max'}
+          </h2>
+          <p className="text-[14px] text-[#646462] max-w-[360px] leading-relaxed">
+            {currentMode
+              ? MODE_CONFIG[currentMode].description
+              : 'Tu asistente IA para CRM-AI. Puedo buscar contactos, revisar conversaciones, generar informes y mucho más.'}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 w-full max-w-[480px]">
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => sendMessage(s)}
+              className="text-left px-3.5 py-2.5 rounded-xl border border-[#e9eae6] bg-white hover:bg-[#f9f9f7] hover:border-[#6366f1]/30 transition-all text-[12.5px] text-[#1a1a1a] font-medium shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Typing indicator ──────────────────────────────────────────────────────
+  function TypingIndicator() {
+    return (
+      <div className="flex gap-2 justify-start mb-3">
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center flex-shrink-0 mt-0.5">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white">
+            <path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/>
+          </svg>
+        </div>
+        <div className="bg-white border border-[#e9eae6] rounded-2xl rounded-tl-sm px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          {activeToolCalls.length > 0 ? (
+            <div className="min-w-[220px]">
+              {activeToolCalls.map((tc, i) => (
+                <ToolCallCard key={i} tc={tc} cardKey={`live-${i}`} live />
+              ))}
+            </div>
+          ) : streamingText ? (
+            <div className="text-[13.5px] leading-relaxed text-[#1a1a1a] max-w-[500px]">
+              {renderMarkdown(streamingText)}
+              <span className="inline-block w-2 h-4 bg-[#6366f1] ml-0.5 animate-pulse rounded-sm" />
+            </div>
+          ) : (
+            <div className="flex gap-1.5 items-center h-5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#9a9a98] animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#9a9a98] animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#9a9a98] animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      {/* Memory toast */}
+      {memoryToast && (
+        <div
+          className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-[#1a1a1a] text-white text-[12.5px] font-medium px-4 py-2.5 rounded-xl shadow-lg"
+          style={{ animation: 'fadeInOut 3s ease forwards' }}
+        >
+          <span>🧠</span>
+          <span>✓ Guardado en memoria</span>
+          <style>{`@keyframes fadeInOut { 0%{opacity:0;transform:translateY(-8px)} 10%{opacity:1;transform:translateY(0)} 80%{opacity:1} 100%{opacity:0;transform:translateY(-8px)} }`}</style>
+        </div>
+      )}
+
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+
+        {/* Main chat panel */}
+        <div className="flex flex-1 min-w-0 gap-2 h-full">
+
+          {/* Conversation history sidebar */}
+          <div className="w-[220px] flex-shrink-0 bg-[#fbfbf9] rounded-[12px] border border-[#e9eae6] flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-[#1a1a1a]">Conversaciones</span>
+              <button
+                onClick={newConversation}
+                title="Nueva conversación"
+                className="w-6 h-6 rounded-md hover:bg-[#e9eae6] flex items-center justify-center text-[#646462] transition-colors"
+              >
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current">
+                  <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-1">
+              {loadingHistory ? (
+                <div className="px-3 py-2 text-[12px] text-[#9a9a98]">Cargando…</div>
+              ) : conversations.length === 0 ? (
+                <div className="px-3 py-4 text-[12px] text-[#9a9a98] text-center">Sin conversaciones</div>
+              ) : (
+                conversations.map(c => (
+                  <div
+                    key={c.id}
+                    onClick={() => openConversation(c.id)}
+                    className={`group flex items-start gap-1 px-3 py-2 cursor-pointer hover:bg-[#f3f3f1] transition-colors ${
+                      activeConversationId === c.id ? 'bg-[#f0f0ef]' : ''
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-medium text-[#1a1a1a] truncate">{c.title || 'Sin título'}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <p className="text-[11px] text-[#9a9a98]">{c.messageCount ?? c.message_count ?? 0} msgs</p>
+                        {c.updatedAt || c.updated_at ? (
+                          <p className="text-[10px] text-[#b4b4b0]">{relativeTime(c.updatedAt ?? c.updated_at)}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <button
+                      onClick={e => deleteConv(c.id, e)}
+                      className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center hover:bg-[#e9eae6] text-[#9a9a98] hover:text-[#ef4444] transition-all flex-shrink-0 mt-0.5"
+                      title="Eliminar"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current">
+                        <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Active chat area */}
+          <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white">
+                  <path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">Max</p>
+                <p className="text-[11px] text-[#9a9a98]">Asistente IA · CRM-AI</p>
+              </div>
+
+              {/* Mode badge */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowModeDropdown(v => !v)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium transition-all hover:opacity-80"
+                  style={currentMode ? { background: MODE_CONFIG[currentMode].color + '18', borderColor: MODE_CONFIG[currentMode].color + '50', color: MODE_CONFIG[currentMode].color } : { background: '#f3f3f1', borderColor: '#e9eae6', color: '#9a9a98' }}
+                >
+                  <span>{currentMode ? MODE_CONFIG[currentMode].icon : '🤖'}</span>
+                  <span>{currentMode ? MODE_CONFIG[currentMode].label : 'Modo'}</span>
+                  <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-current opacity-60"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {showModeDropdown && (
+                  <div className="absolute top-full right-0 mt-1 w-[220px] bg-white border border-[#e9eae6] rounded-xl shadow-lg z-20 overflow-hidden py-1">
+                    {(Object.entries(MODE_CONFIG) as [AgentMode, typeof MODE_CONFIG[AgentMode]][]).map(([key, cfg]) => (
+                      <button
+                        key={key}
+                        onClick={() => selectMode(key)}
+                        className={`flex items-center gap-2.5 w-full px-3 py-2 hover:bg-[#f3f3f1] transition-colors text-left ${currentMode === key ? 'bg-[#f3f3f1]' : ''}`}
+                      >
+                        <span className="text-[16px] flex-shrink-0">{cfg.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12.5px] font-semibold" style={{ color: cfg.color }}>{cfg.label}</p>
+                          <p className="text-[11px] text-[#9a9a98] truncate">{cfg.description}</p>
+                        </div>
+                        {currentMode === key && <span className="text-[#6366f1] text-[11px]">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Memory indicator */}
+              {memoryCount > 0 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#fdf4ff] border border-[#e9d5ff] rounded-full" title={`${memoryCount} hechos en memoria`}>
+                  <span className="text-[11px]">🧠</span>
+                  <span className="text-[11px] text-[#7c3aed] font-medium">{memoryCount}</span>
+                </div>
+              )}
+
+              {/* Online badge */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#f0fdf4] border border-[#bbf7d0] rounded-full flex-shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
+                <span className="text-[11px] text-[#059669] font-medium">Online</span>
+              </div>
+
+              {activeConversationId && (
+                <button
+                  onClick={newConversation}
+                  className="ml-1 px-3 py-1.5 text-[12px] font-medium text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f3f3f1] transition-colors flex-shrink-0"
+                >
+                  Nuevo
+                </button>
+              )}
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4" onClick={() => setShowModeDropdown(false)}>
+              {messages.length === 0 && !streaming ? (
+                <WelcomeScreen />
+              ) : (
+                <>
+                  {messages.map(m => <MessageBubble key={m.id} msg={m} />)}
+                  {streaming && <TypingIndicator />}
+                  <div ref={messagesEndRef} />
+                </>
+              )}
+            </div>
+
+            {/* Input area */}
+            <div className="flex-shrink-0 border-t border-[#e9eae6] px-4 pt-3 pb-2">
+              {/* Mode selector bar */}
+              <div className="flex gap-1 mb-2 overflow-x-auto pb-0.5">
+                {(Object.entries(MODE_CONFIG) as [AgentMode, typeof MODE_CONFIG[AgentMode]][]).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    onClick={() => { setCurrentMode(currentMode === key ? null : key); }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium transition-all whitespace-nowrap flex-shrink-0 border"
+                    style={currentMode === key
+                      ? { background: cfg.color, color: '#fff', borderColor: cfg.color }
+                      : { background: 'transparent', color: '#9a9a98', borderColor: '#e9eae6' }}
+                  >
+                    <span>{cfg.icon}</span>
+                    <span>{cfg.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Suggestion chips */}
+              {messages.length === 0 && !streaming && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {(currentMode ? MODE_SUGGESTIONS[currentMode] : DEFAULT_SUGGESTIONS).slice(0, 3).map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => sendMessage(s)}
+                      className="px-3 py-1 text-[11.5px] text-[#646462] border border-[#e9eae6] rounded-full hover:bg-[#f3f3f1] hover:border-[#6366f1]/30 transition-all truncate max-w-[200px]"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Slash command autocomplete */}
+              <div className="relative">
+                {showSlashMenu && (
+                  <div className="absolute bottom-full left-0 mb-1 w-full bg-white border border-[#e9eae6] rounded-xl shadow-lg z-20 overflow-hidden py-1">
+                    {SLASH_COMMANDS.filter(sc => sc.cmd.startsWith(input) || input === '/').map((sc, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { setInput(sc.cmd); inputRef.current?.focus(); }}
+                        className="flex items-center gap-2 w-full px-3 py-2 hover:bg-[#f3f3f1] transition-colors text-left"
+                      >
+                        <code className="text-[12px] font-mono font-semibold text-[#6366f1] min-w-[120px]">{sc.cmd.trim()}</code>
+                        <span className="text-[11.5px] text-[#9a9a98]">{sc.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-end gap-2">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={handleKey}
+                    placeholder={pendingApproval ? 'Esperando aprobación…' : 'Pregunta a Max sobre tu CRM… (/ para comandos)'}
+                    rows={1}
+                    className="flex-1 resize-none border border-[#e9eae6] rounded-xl px-3.5 py-2.5 text-[13.5px] text-[#1a1a1a] placeholder:text-[#b4b4b0] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/20 focus:border-[#6366f1]/50 transition-all leading-relaxed max-h-32 overflow-y-auto"
+                    style={{ minHeight: '42px' }}
+                    disabled={streaming || pendingApproval}
+                  />
+                  <button
+                    onClick={() => streaming ? abortRef.current?.abort() : sendMessage()}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
+                      streaming
+                        ? 'bg-[#ef4444] hover:bg-[#dc2626] text-white'
+                        : (input.trim() && !pendingApproval)
+                          ? 'bg-[#1a1a1a] hover:bg-[#333] text-white'
+                          : 'bg-[#e9eae6] text-[#9a9a98] cursor-default'
+                    }`}
+                    disabled={(!input.trim() && !streaming) || pendingApproval}
+                  >
+                    {streaming ? (
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current">
+                        <rect x="4" y="4" width="8" height="8" rx="1"/>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current">
+                        <path d="M2 14L8 2l6 12-6-3-6 3z"/>
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+              <p className="text-[11px] text-[#b4b4b0] mt-1.5 text-center">
+                Max puede cometer errores. Verifica la información importante.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Prototype() {
   // ?icons=v2 → render the icon-library gallery instead of the app shell.
   // Computed once per page-load (URL doesn't change without a reload), so the
@@ -24290,7 +30184,8 @@ function readInitialViewFromUrl(): View {
     'notifications','visible','tokens','accountAccess','multilingual','assignments',
     'macros','tickets','sla','aiInbox','automation','appStore','connectors','labels',
     'people','companies','workspaceSecurity','workspaceMultilingual','workspaceHours',
-    'workspaceBrands','billing','messenger','email','phone','whatsapp','discord','sms',
+    'workspaceBrands','workspaceGeneral','workspaceTeammates','billing','messenger',
+    'email','phone','whatsapp','discord','sms',
     'social','allChannels','inboxTeam','fin','knowledge','reports','outbound',
   ];
   return v && (known as string[]).includes(v) ? (v as View) : 'inbox';
@@ -24325,6 +30220,7 @@ function PrototypeApp() {
 
   function renderView() {
     switch (view) {
+      case 'superAgent': return <SuperAgent />;
       case 'inbox':    return <InboxView />;
       case 'allLeads': return <AllLeadsView view={view} onNavigate={setView} onBack={() => setView('contacts')} />;
       case 'contacts': return <ContactsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;
@@ -24376,6 +30272,14 @@ function PrototypeApp() {
       case 'switchChannel':       return <SwitchChannelView view={view} onNavigate={setView} />;
       case 'slackChannel':        return <SlackChannelView view={view} onNavigate={setView} />;
       case 'helpCenter':          return <HelpCenterSettingsView view={view} onNavigate={setView} />;
+      case 'cannedResponses':     return <CannedResponsesView view={view} onNavigate={setView} />;
+      case 'customFilters':       return <CustomFiltersView view={view} onNavigate={setView} />;
+      case 'emailTemplates':      return <EmailTemplatesView view={view} onNavigate={setView} />;
+      case 'customRoles':         return <CustomRolesView view={view} onNavigate={setView} />;
+      case 'aiFeedback':          return <AiFeedbackView view={view} onNavigate={setView} />;
+      case 'callsLive':           return <CallsLiveView view={view} onNavigate={setView} />;
+      case 'mcpServers':          return <McpServersView view={view} onNavigate={setView} />;
+      case 'agentChat':           return <AgentChatView view={view} onNavigate={setView} currentCrmView="agentChat" />;
     }
   }
 

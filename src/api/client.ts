@@ -326,6 +326,11 @@ export const casesApi = {
       method: 'POST',
       body: JSON.stringify({ sourceId }),
     }),
+  patch: (id: string, payload: Record<string, any>) =>
+    request<any>(`/cases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
 };
 
 // ── Conversations ─────────────────────────────────────────
@@ -778,6 +783,10 @@ export const iamApi = {
   users: () => request<any>('/iam/users').then(unwrapList),
   members: () => request<any>('/iam/members').then(unwrapList),
   teams: () => request<any>('/iam/teams').then(unwrapList),
+  createTeam: (payload: { name: string; description?: string }) =>
+    request<any>('/iam/teams', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteTeam: (teamId: string) =>
+    request<any>(`/iam/teams/${teamId}`, { method: 'DELETE' }),
   roles: () => request<any>('/iam/roles').then(unwrapList),
   inviteMember: (payload: { email: string; name?: string; role_id: string }) =>
     request<any>('/iam/members/invite', {
@@ -813,6 +822,40 @@ export const iamApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+  uploadAvatar: (file: File | string) => {
+    if (typeof file === 'string') {
+      return request<{ url: string }>('/iam/me/avatar', {
+        method: 'POST',
+        body: JSON.stringify({ data_url: file }),
+      });
+    }
+    return new Promise<{ url: string }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const dataUrl = String(reader.result || '');
+          const res = await request<{ url: string }>('/iam/me/avatar', {
+            method: 'POST',
+            body: JSON.stringify({ data_url: dataUrl }),
+          });
+          resolve(res);
+        } catch (err) { reject(err); }
+      };
+      reader.onerror = () => reject(reader.error || new Error('No se pudo leer el archivo'));
+      reader.readAsDataURL(file);
+    });
+  },
+  changePassword: (current: string, next: string) =>
+    request<{ ok: boolean }>('/iam/me/password', {
+      method: 'POST',
+      body: JSON.stringify({ current, next }),
+    }),
+  mySessions: () => request<any[]>('/iam/me/sessions').then(unwrapList),
+  revokeSession: (id: string) =>
+    request<{ ok: boolean }>(`/iam/me/sessions/${id}`, { method: 'DELETE' }),
+  myActivity: (limit = 50) =>
+    request<any[]>(`/iam/me/activity?limit=${encodeURIComponent(limit)}`).then(unwrapList),
+  myPermissions: () => request<any>('/iam/me/permissions'),
 };
 
 export const workspacesApi = {
@@ -1101,4 +1144,353 @@ export const reconciliationApi = {
 // ── Health ────────────────────────────────────────────────
 export const healthApi = {
   check: () => request<any>('/health'),
+};
+
+// ── Companies ─────────────────────────────────────────────
+export const companiesApi = {
+  list: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<any>(`/companies${qs}`).then(unwrapList);
+  },
+  get: (id: string) => request<any>(`/companies/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/companies', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/companies/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) => request<any>(`/companies/${id}`, { method: 'DELETE' }),
+};
+
+// ── Custom Attributes ─────────────────────────────────────
+export const customAttributesApi = {
+  list: (params?: { entityType?: string }) => {
+    const qs = params?.entityType ? `?entity_type=${params.entityType}` : '';
+    return request<any>(`/custom-attributes/definitions${qs}`).then(unwrapList);
+  },
+  create: (payload: Record<string, any>) =>
+    request<any>('/custom-attributes/definitions', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/custom-attributes/definitions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/custom-attributes/definitions/${id}`, { method: 'DELETE' }),
+};
+
+// ── Assignment Policies ───────────────────────────────────
+export const assignmentPoliciesApi = {
+  list: () => request<any>('/assignment-policies').then(unwrapList),
+  get: (id: string) => request<any>(`/assignment-policies/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/assignment-policies', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/assignment-policies/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/assignment-policies/${id}`, { method: 'DELETE' }),
+};
+
+// ── Working Hours ─────────────────────────────────────────
+export const workingHoursApi = {
+  get: () => request<any>('/working-hours'),
+  upsert: (payload: Record<string, any>) =>
+    request<any>('/working-hours', { method: 'PUT', body: JSON.stringify(payload) }),
+};
+
+// ── SLA Policies ──────────────────────────────────────────
+export const slaPoliciesApi = {
+  list: () => request<any>('/sla-policies').then(unwrapList),
+  get: (id: string) => request<any>(`/sla-policies/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/sla-policies', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/sla-policies/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/sla-policies/${id}`, { method: 'DELETE' }),
+  apply: (conversationId: string, policyId: string) =>
+    request<any>('/sla-policies/apply', { method: 'POST', body: JSON.stringify({ conversation_id: conversationId, policy_id: policyId }) }),
+};
+
+// ── Automation Rules ──────────────────────────────────────
+export const automationRulesApi = {
+  list: (params?: { active?: boolean }) => {
+    const qs = params?.active !== undefined ? `?active=${params.active}` : '';
+    return request<any>(`/automation-rules${qs}`).then(unwrapList);
+  },
+  get: (id: string) => request<any>(`/automation-rules/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/automation-rules', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/automation-rules/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/automation-rules/${id}`, { method: 'DELETE' }),
+  run: (id: string, payload?: Record<string, any>) =>
+    request<any>(`/automation-rules/${id}/run`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+};
+
+// ── Inboxes ───────────────────────────────────────────────
+export const inboxesApi = {
+  list: () => request<any>('/inboxes').then(unwrapList),
+  get: (id: string) => request<any>(`/inboxes/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/inboxes', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/inboxes/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/inboxes/${id}`, { method: 'DELETE' }),
+};
+
+// ── Canned Responses ──────────────────────────────────────
+export const cannedResponsesApi = {
+  list: (params?: { search?: string }) => {
+    const qs = params?.search ? `?search=${encodeURIComponent(params.search)}` : '';
+    return request<any>(`/canned-responses${qs}`).then(unwrapList);
+  },
+  get: (id: string) => request<any>(`/canned-responses/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/canned-responses', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/canned-responses/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/canned-responses/${id}`, { method: 'DELETE' }),
+};
+
+// ── Email Templates ───────────────────────────────────────
+export const emailTemplatesApi = {
+  list: (params?: { category?: string; active?: boolean }) => {
+    const p: Record<string, string> = {};
+    if (params?.category) p.category = params.category;
+    if (params?.active !== undefined) p.active = String(params.active);
+    const qs = Object.keys(p).length ? '?' + new URLSearchParams(p).toString() : '';
+    return request<any>(`/email-templates${qs}`).then(unwrapList);
+  },
+  get: (id: string) => request<any>(`/email-templates/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/email-templates', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/email-templates/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/email-templates/${id}`, { method: 'DELETE' }),
+  render: (id: string, context: Record<string, string>) =>
+    request<any>(`/email-templates/${id}/render`, { method: 'POST', body: JSON.stringify({ context }) }),
+};
+
+// ── Custom Filters ────────────────────────────────────────
+export const customFiltersApi = {
+  list: (params?: { entityType?: string }) => {
+    const qs = params?.entityType ? `?entity_type=${params.entityType}` : '';
+    return request<any>(`/custom-filters${qs}`).then(unwrapList);
+  },
+  create: (payload: Record<string, any>) =>
+    request<any>('/custom-filters', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/custom-filters/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/custom-filters/${id}`, { method: 'DELETE' }),
+};
+
+// ── Custom Roles ──────────────────────────────────────────
+export const customRolesApi = {
+  list: () => request<any>('/custom-roles').then(unwrapList),
+  get: (id: string) => request<any>(`/custom-roles/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/custom-roles', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/custom-roles/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/custom-roles/${id}`, { method: 'DELETE' }),
+};
+
+// ── Notifications (user) ──────────────────────────────────
+export const notificationsApi = {
+  list: (userId: string, params?: { unreadOnly?: boolean }) => {
+    const qs = params?.unreadOnly ? '?unread_only=true' : '';
+    return request<any>(`/notifications/${userId}${qs}`).then(unwrapList);
+  },
+  markRead: (userId: string, notificationId?: string) => {
+    const path = notificationId
+      ? `/notifications/${userId}/${notificationId}/read`
+      : `/notifications/${userId}/read-all`;
+    return request<any>(path, { method: 'PATCH' });
+  },
+};
+
+// ── Data Imports ──────────────────────────────────────────
+export const dataImportsApi = {
+  list: (params?: { entityType?: string; status?: string }) => {
+    const p: Record<string, string> = {};
+    if (params?.entityType) p.entity_type = params.entityType;
+    if (params?.status) p.status = params.status;
+    const qs = Object.keys(p).length ? '?' + new URLSearchParams(p).toString() : '';
+    return request<any>(`/data-imports${qs}`).then(unwrapList);
+  },
+  get: (id: string) => request<any>(`/data-imports/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/data-imports', { method: 'POST', body: JSON.stringify(payload) }),
+  updateProgress: (id: string, payload: Record<string, any>) =>
+    request<any>(`/data-imports/${id}/progress`, { method: 'PATCH', body: JSON.stringify(payload) }),
+};
+
+// ── AI Feedback ───────────────────────────────────────────
+export const aiFeedbackApi = {
+  list: (params?: { feedbackType?: string; limit?: number }) => {
+    const p: Record<string, string> = {};
+    if (params?.feedbackType) p.feedback_type = params.feedbackType;
+    if (params?.limit) p.limit = String(params.limit);
+    const qs = Object.keys(p).length ? '?' + new URLSearchParams(p).toString() : '';
+    return request<any>(`/ai-feedback${qs}`).then(unwrapList);
+  },
+  submit: (payload: Record<string, any>) =>
+    request<any>('/ai-feedback', { method: 'POST', body: JSON.stringify(payload) }),
+};
+
+// ── MCP Servers ───────────────────────────────────────────
+export const mcpServersApi = {
+  list: () => request<any>('/mcp-servers').then(unwrapList),
+  get: (id: string) => request<any>(`/mcp-servers/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/mcp-servers', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/mcp-servers/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/mcp-servers/${id}`, { method: 'DELETE' }),
+};
+
+// ── Calls (live) ──────────────────────────────────────────
+export const callsApi = {
+  list: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<any>(`/calls${qs}`).then(unwrapList);
+  },
+  get: (id: string) => request<any>(`/calls/${id}`),
+  stats: (params?: { agentId?: string; from?: string; to?: string }) => {
+    const p: Record<string, string> = {};
+    if (params?.agentId) p.agent_id = params.agentId;
+    if (params?.from) p.from = params.from;
+    if (params?.to) p.to = params.to;
+    const qs = Object.keys(p).length ? '?' + new URLSearchParams(p).toString() : '';
+    return request<any>(`/calls/stats${qs}`);
+  },
+  create: (payload: Record<string, any>) =>
+    request<any>('/calls', { method: 'POST', body: JSON.stringify(payload) }),
+  updateStatus: (id: string, payload: Record<string, any>) =>
+    request<any>(`/calls/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }),
+};
+
+// ── Mentions ──────────────────────────────────────────────
+export const mentionsApi = {
+  list: (userId: string, params?: { unread?: boolean }) => {
+    const qs = params?.unread ? '?unread=true' : '';
+    return request<any>(`/mentions/${userId}${qs}`).then(unwrapList);
+  },
+  markRead: (id: string) =>
+    request<any>(`/mentions/${id}/read`, { method: 'PATCH' }),
+};
+
+// ── Visual Flows ──────────────────────────────────────────
+export const visualFlowsApi = {
+  list: (params?: { status?: string }) => {
+    const qs = params?.status ? `?status=${params.status}` : '';
+    return request<any>(`/visual-flows${qs}`).then(unwrapList);
+  },
+  get: (id: string) => request<any>(`/visual-flows/${id}`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/visual-flows', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/visual-flows/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  publish: (id: string) =>
+    request<any>(`/visual-flows/${id}/publish`, { method: 'POST', body: '{}' }),
+  createVersion: (id: string, payload: Record<string, any>) =>
+    request<any>(`/visual-flows/${id}/versions`, { method: 'POST', body: JSON.stringify(payload) }),
+};
+
+// ── Agent (Max AI) ────────────────────────────────────────
+export const agentApi = {
+  /**
+   * Open an SSE connection to stream a chat response.
+   * Returns an EventSource-compatible object.
+   *
+   * Usage:
+   *   const source = agentApi.chat({ message, conversationId, context });
+   *   source.addEventListener('text_chunk', e => ...);
+   *   source.addEventListener('done', e => ...);
+   *   source.close();
+   *
+   * Because the browser EventSource API only supports GET, we use fetch +
+   * ReadableStream to post the JSON body and still read the SSE stream.
+   */
+  chat: async (
+    payload: {
+      message: string;
+      conversationId?: string;
+      context?: Record<string, unknown>;
+    },
+    onEvent: (event: string, data: unknown) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    const { data } = await (await import('./supabase')).supabase.auth.getSession();
+    const token = data.session?.access_token;
+    const user = data.session?.user;
+    const tenantId =
+      user?.app_metadata?.tenant_id || user?.user_metadata?.tenant_id ||
+      (import.meta as any).env?.VITE_TENANT_ID || 'org_default';
+    const workspaceId =
+      user?.app_metadata?.workspace_id || user?.user_metadata?.workspace_id ||
+      (import.meta as any).env?.VITE_WORKSPACE_ID || 'ws_default';
+
+    const res = await fetch(`${BASE}/agent/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId,
+        'x-workspace-id': workspaceId,
+        'x-user-id': user?.id ?? 'system',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal,
+    });
+
+    if (!res.ok || !res.body) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Agent error ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      let eventName = 'message';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventName = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const raw = line.slice(6).trim();
+          try {
+            const parsed = JSON.parse(raw);
+            onEvent(eventName, parsed);
+          } catch {
+            onEvent(eventName, raw);
+          }
+          eventName = 'message';
+        }
+      }
+    }
+  },
+
+  listConversations: () =>
+    request<{ ok: boolean; conversations: any[] }>('/agent/conversations'),
+
+  getConversation: (id: string) =>
+    request<{ ok: boolean; conversation: any; messages: any[] }>(`/agent/conversations/${id}`),
+
+  deleteConversation: (id: string) =>
+    request<{ ok: boolean }>(`/agent/conversations/${id}`, { method: 'DELETE' }),
+
+  // Approve or reject a dangerous operation proposed by the agent
+  approve: (payload: { proposalId: string; action: 'approve' | 'reject'; feedback?: string; conversationId: string }) =>
+    request<any>('/agent/chat/approve', { method: 'POST', body: JSON.stringify(payload) }),
 };
