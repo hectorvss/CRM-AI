@@ -26641,6 +26641,633 @@ function WAAppProductAnalyticsView() {
 }
 
 
+function WAAppWebAnalyticsView() {
+  type WATab = 'web' | 'vitals' | 'reports';
+  const [waTab, setWaTab] = useState<WATab>('web');
+  const [visitorsTab, setVisitorsTab] = useState<'visitors'|'views'|'sessions'>('visitors');
+  const [pathsView, setPathsView] = useState<'path'|'entry'|'end'|'outbound'>('path');
+  const [channelsView, setChannelsView] = useState<'channel'|'referring'|'utm'>('channel');
+  const [deviceView, setDeviceView] = useState<'device'|'browser'|'os'|'viewport'>('device');
+  const [activeHoursTab, setActiveHoursTab] = useState<'unique'|'total'>('unique');
+  const [showBetaBanner, setShowBetaBanner] = useState(true);
+  const [vitalsPercentile, setVitalsPercentile] = useState<'P75'|'P90'|'P99'>('P90');
+  const [vitalsMetric, setVitalsMetric] = useState<'INP'|'LCP'|'FCP'|'CLS'>('INP');
+
+  const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  const EmptyChart = ({ h = 200, text }: { h?: number; text?: string }) => (
+    <div className="flex flex-col items-center justify-center gap-3" style={{ height: h }}>
+      <svg viewBox="0 0 64 64" className="w-12 h-12 opacity-25">
+        <rect x="4" y="10" width="56" height="38" rx="4" fill="none" stroke="#1a1a1a" strokeWidth="2.5"/>
+        <path d="M14 48v6M50 48v6M10 54h44" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+        <path d="M16 36l8-10 8 6 10-14 6 8" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 2"/>
+      </svg>
+      <div className="text-center">
+        <p className="text-[13px] font-semibold text-[#1a1a1a]">{text || 'No hay eventos coincidentes para esta consulta'}</p>
+        <p className="text-[12px] text-[#646462] mt-0.5">Cambia el rango de fechas, o elige otra acción, evento o desglose.</p>
+      </div>
+    </div>
+  );
+
+  const TableEmptyState = ({ cols }: { cols: number }) => (
+    <tr><td colSpan={cols} className="px-4 py-10">
+      <div className="flex flex-col items-center gap-2">
+        <svg viewBox="0 0 48 48" className="w-10 h-10 opacity-20"><rect x="3" y="7" width="42" height="28" rx="3" fill="none" stroke="#1a1a1a" strokeWidth="2"/><path d="M10 35v5M38 35v5M7 40h34" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round"/></svg>
+        <p className="text-[13px] text-[#1a1a1a] font-semibold">No hay eventos coincidentes para esta consulta</p>
+        <p className="text-[12px] text-[#646462]">Cambia el rango de fechas, o elige otra acción, evento o desglose.</p>
+      </div>
+    </td></tr>
+  );
+
+  const OpenInsightBtn = () => (
+    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M10 2v12M2 6h8"/></svg>
+      Abrir como nuevo insight
+    </button>
+  );
+  const ShowMoreBtn = () => (
+    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round"><path d="M3 8h10M7 4l4 4-4 4"/></svg>
+      Mostrar más
+    </button>
+  );
+
+  const SharedToolbar = ({ showVitalsPercentiles }: { showVitalsPercentiles?: boolean }) => (
+    <div className="flex items-center gap-2 flex-wrap">
+      <button className="p-1.5 rounded border border-[#e9eae6] hover:bg-[#f3f3f1]">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M2 8a6 6 0 1012 0M14 4l-2 2-2-2" strokeLinejoin="round"/></svg>
+      </button>
+      <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1.5v3M11 1.5v3M2 7h12" strokeLinecap="round"/></svg>
+        Últimos 7 días <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+      </button>
+      <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/></svg>
+        Todos los dominios <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+      </button>
+      <button className="p-1.5 rounded border border-[#e9eae6] hover:bg-[#f3f3f1]">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><path d="M3 2h10a1 1 0 011 1v7a1 1 0 01-1 1H6.5L4 13.5V11H3a1 1 0 01-1-1V3a1 1 0 011-1z"/></svg>
+      </button>
+      <button className="p-1.5 rounded border border-[#e9eae6] hover:bg-[#f3f3f1]">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg>
+      </button>
+      <div className="flex-1"/>
+      {showVitalsPercentiles ? (
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M4 8h8M6 12h4"/></svg>
+            Filtros
+            <span className="ml-1 w-4 h-4 rounded-full bg-[#9966cc] flex items-center justify-center text-white text-[9px]">+</span>
+          </button>
+          <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
+            {(['P75','P90','P99'] as const).map((p,i) => (
+              <button key={p} onClick={() => setVitalsPercentile(p)}
+                className={`h-8 px-3 text-[12px] font-bold transition-colors ${vitalsPercentile === p ? 'border border-[#f59e0b] text-[#1a1a1a] bg-white' : 'text-[#646462] hover:text-[#1a1a1a]'} ${i > 0 ? 'border-l border-[#e9eae6]' : ''}`}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M4 8h8M6 12h4"/></svg>
+            Filtros
+            <span className="ml-1 w-4 h-4 rounded-full bg-[#9966cc] flex items-center justify-center text-white text-[9px]">+</span>
+          </button>
+          <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            + Añadir objetivo de conversión <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+          </button>
+          <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 2" strokeLinecap="round"/></svg>
+            Comparar con período anterior <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+          </button>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white">
+      {/* Header */}
+      <div className="flex-shrink-0 px-6 pt-4 pb-0 border-b border-[#e9eae6]">
+        <div className="flex items-center gap-2 mb-1">
+          <svg viewBox="0 0 20 20" className="w-5 h-5 flex-shrink-0"><circle cx="10" cy="10" r="9" fill="#22c55e" opacity="0.2"/><circle cx="10" cy="10" r="5" fill="#22c55e"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">Web analytics</h1>
+          {waTab === 'web' && <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>}
+          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#e8572a]" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2l1.5 4H14l-3.5 2.5 1.5 4L8 10l-4 2.5 1.5-4L2 6h4.5L8 2z"/></svg>
+            Inicio rápido
+            <span className="text-[10px] bg-[#f59e0b] text-white px-1 rounded">0</span>
+          </button>
+          <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2a5.5 5.5 0 100 11M14 4l-2 2-2-2"/></svg></button>
+          <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2v12M8 2l-3 3M8 2l3 3"/></svg></button>
+          <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg></button>
+        </div>
+        <p className="text-[13px] text-[#646462] mb-3">Analiza los datos de analítica web para entender el rendimiento y el comportamiento de los usuarios.</p>
+        <div className="flex gap-0">
+          {[{k:'web',l:'Web analytics'},{k:'vitals',l:'Web vitals'},{k:'reports',l:'Informes de página'}].map(t => (
+            <button key={t.k} onClick={() => setWaTab(t.k as WATab)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold border-b-2 -mb-px transition-colors ${waTab === t.k ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+              {t.l}
+              {t.k === 'reports' && <span className="px-1.5 py-0.5 rounded border border-[#f59e0b] text-[10px] font-bold text-[#f59e0b] uppercase">Beta</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── WEB ANALYTICS TAB ─────────────────────────────────────────────── */}
+      {waTab === 'web' && (
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 py-4 space-y-6">
+            <SharedToolbar />
+            {/* Stats cards */}
+            <div className="grid grid-cols-5 gap-3">
+              {[{l:'VISITANTES',v:'0'},{l:'PÁGINAS VISTAS',v:'0'},{l:'SESIONES',v:'0'},{l:'DURACIÓN DE SESIÓN',v:'-'},{l:'TASA DE REBOTE',v:'-'}].map(s => (
+                <div key={s.l} className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col gap-2">
+                  <span className="text-[11px] font-bold text-[#646462] uppercase tracking-wide">{s.l}</span>
+                  <span className="text-[28px] font-bold text-[#1a1a1a] leading-none">{s.v}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end"><OpenInsightBtn /></div>
+
+            {/* Unique visitors */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
+                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Visitantes únicos</h2>
+                <div className="flex items-center gap-2">
+                  <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
+                    {[{k:'visitors',l:'Visitantes'},{k:'views',l:'Vistas'},{k:'sessions',l:'Sesiones'}].map((t,i) => (
+                      <button key={t.k} onClick={() => setVisitorsTab(t.k as any)}
+                        className={`h-7 px-3 text-[12px] font-semibold transition-colors ${visitorsTab === t.k ? 'bg-white text-[#1a1a1a] border border-[#f59e0b]' : 'text-[#646462] hover:text-[#1a1a1a]'} ${i > 0 ? 'border-l border-[#e9eae6]' : ''}`}>
+                        {t.l}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[12px] text-[#646462]">Agrupar por</span>
+                  <button className="flex items-center gap-1 h-7 px-2 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                    Día <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                  </button>
+                </div>
+              </div>
+              <EmptyChart h={240} />
+            </div>
+            <div className="flex justify-end gap-2"><OpenInsightBtn /><ShowMoreBtn /></div>
+
+            {/* Paths */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[15px] font-bold text-[#1a1a1a]">Rutas</h2>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
+                    <button className="h-7 px-2 border-r border-[#e9eae6] bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg></button>
+                    <button className="h-7 px-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg></button>
+                  </div>
+                  {[{k:'path',l:'Ruta'},{k:'entry',l:'Ruta de entrada'},{k:'end',l:'Ruta de salida'},{k:'outbound',l:'Clics salientes'}].map(t => (
+                    <button key={t.k} onClick={() => setPathsView(t.k as any)}
+                      className={`h-7 px-3 text-[12px] font-semibold rounded transition-colors ${pathsView === t.k ? 'bg-white border border-[#f59e0b] text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>
+                      {t.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <table className="w-full text-[12px]">
+                <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                  {['Ruta','Visitantes','Vistas','Tasa de rebote'].map(h => <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}
+                </tr></thead>
+                <tbody><TableEmptyState cols={4} /></tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="1.5" y="1.5" width="5" height="5" rx="0.5"/><rect x="9.5" y="1.5" width="5" height="5" rx="0.5"/><rect x="1.5" y="9.5" width="5" height="5" rx="0.5"/><rect x="9.5" y="9.5" width="5" height="5" rx="0.5"/></svg>
+                Copiar <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              <OpenInsightBtn /><ShowMoreBtn />
+            </div>
+
+            {/* Channels + Device type */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
+                  <div className="flex items-center gap-2"><h2 className="text-[14px] font-bold text-[#1a1a1a]">Canales</h2><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg></div>
+                  <div className="flex items-center gap-1">
+                    <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden mr-1">
+                      <button className="h-6 px-1.5 border-r border-[#e9eae6] bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg></button>
+                      <button className="h-6 px-1.5"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg></button>
+                    </div>
+                    {[{k:'channel',l:'Canal'},{k:'referring',l:'Ref. domain'},{k:'utm',l:'UTM source'}].map(t => (
+                      <button key={t.k} onClick={() => setChannelsView(t.k as any)}
+                        className={`h-6 px-2 text-[11px] font-semibold rounded transition-colors ${channelsView === t.k ? 'bg-white border border-[#f59e0b] text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>{t.l}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex justify-end px-4 py-1 border-b border-[#e9eae6]">
+                  <button className="flex items-center gap-1 text-[11px] text-[#646462] hover:text-[#1a1a1a]">Personalizar tipos de canal <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zM7 5h2v5H7zm0 6h2v2H7z"/></svg></button>
+                </div>
+                <table className="w-full text-[12px]">
+                  <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">{['Tipo de canal','Visitantes','Vistas'].map(h=><th key={h} className="px-4 py-2 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}</tr></thead>
+                  <tbody><TableEmptyState cols={3} /></tbody>
+                </table>
+                <div className="flex items-center justify-center gap-2 px-4 py-2 border-t border-[#e9eae6]"><OpenInsightBtn /><ShowMoreBtn /></div>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
+                  <h2 className="text-[14px] font-bold text-[#1a1a1a]">Tipo de dispositivo</h2>
+                  <div className="flex items-center gap-1">
+                    <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden mr-1">
+                      <button className="h-6 px-1.5 border-r border-[#e9eae6] bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg></button>
+                      <button className="h-6 px-1.5"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg></button>
+                    </div>
+                    {[{k:'device',l:'Tipo disp.'},{k:'browser',l:'Navegador'},{k:'os',l:'SO'},{k:'viewport',l:'Ventana'}].map(t => (
+                      <button key={t.k} onClick={() => setDeviceView(t.k as any)}
+                        className={`h-6 px-2 text-[11px] font-semibold rounded transition-colors ${deviceView === t.k ? 'bg-white border border-[#f59e0b] text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>{t.l}</button>
+                    ))}
+                  </div>
+                </div>
+                <table className="w-full text-[12px]">
+                  <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">{['Tipo de dispositivo','Visitantes','Vistas'].map(h=><th key={h} className="px-4 py-2 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}</tr></thead>
+                  <tbody><TableEmptyState cols={3} /></tbody>
+                </table>
+                <div className="flex items-center justify-center gap-2 px-4 py-2 border-t border-[#e9eae6]"><OpenInsightBtn /><ShowMoreBtn /></div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Idiomas</button>
+              <button className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Zonas horarias</button>
+            </div>
+            <div className="flex justify-end"><ShowMoreBtn /></div>
+
+            {/* Retention */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6]">
+                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Retención</h2>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              </div>
+              <table className="w-full text-[12px]">
+                <thead><tr className="border-b border-[#e9eae6]">
+                  {['Cohorte','Tamaño','Semana 0','Semana 1'].map(h=><th key={h} className="px-4 py-2.5 text-left text-[12px] font-semibold text-[#1a1a1a]">{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  <tr className="border-b border-[#e9eae6]">
+                    <td className="px-4 py-2.5 font-semibold text-[#1a1a1a] flex items-center gap-1"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg> Media</td>
+                    <td className="px-4 py-2.5 text-[#646462]">0</td>
+                    <td className="px-4 py-2.5"><div className="bg-[#ede9fe] rounded px-3 py-1 text-center text-[#646462]">0,0%</div></td>
+                    <td className="px-4 py-2.5"><div className="bg-[#ede9fe] rounded px-3 py-1 text-center text-[#646462]">0,0%</div></td>
+                  </tr>
+                  {['3 may – 9 may','10 may – 16 may'].map((c,i) => (
+                    <tr key={c} className="border-b border-[#e9eae6] last:border-0">
+                      <td className="px-4 py-2.5 text-[#1a1a1a]">{c}</td>
+                      <td className="px-4 py-2.5 text-[#646462]">0</td>
+                      <td className="px-4 py-2.5"><div className="bg-[#f3f0ff] rounded px-3 py-1 text-center text-[#646462]">0,0%</div></td>
+                      <td className="px-4 py-2.5 text-center text-[#646462]">{i===0?'0,0%':''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2"><OpenInsightBtn /><ShowMoreBtn /></div>
+
+            {/* Active Hours heatmap */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[15px] font-bold text-[#1a1a1a]">Horas activas</h2>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+                </div>
+                <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
+                  {[{k:'unique',l:'Usuarios únicos'},{k:'total',l:'Páginas vistas totales'}].map((t,i) => (
+                    <button key={t.k} onClick={() => setActiveHoursTab(t.k as any)}
+                      className={`h-7 px-3 text-[12px] font-semibold transition-colors ${activeHoursTab===t.k?'bg-white text-[#1a1a1a] border border-[#f59e0b]':'text-[#646462] hover:text-[#1a1a1a]'} ${i>0?'border-l border-[#e9eae6]':''}`}>
+                      {t.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="p-4 space-y-3">
+                {showBetaBanner && (
+                  <div className="flex items-start gap-2 px-3 py-2 bg-[#f0f9ff] border border-[#bae6fd] rounded-lg">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#0ea5e9] flex-shrink-0 mt-0.5"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zM7 5h2v5H7zm0 6h2v2H7z"/></svg>
+                    <p className="text-[12px] text-[#0369a1] flex-1">El mapa de calor de calendario está en versión beta. ¡Haznos saber qué te gustaría ver aquí y/o reporta cualquier problema directamente!</p>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button className="h-6 px-2 border border-[#bae6fd] rounded text-[11px] text-[#0369a1] hover:bg-[#bae6fd]">Enviar feedback</button>
+                      <button onClick={() => setShowBetaBanner(false)} className="text-[#0369a1]">×</button>
+                    </div>
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="text-[11px] border-separate border-spacing-[2px]">
+                    <thead>
+                      <tr>
+                        <td className="w-12"/>
+                        {Array.from({length:24},(_,i)=>i).map(h=><td key={h} className="text-center text-[#646462] font-semibold w-8 pb-1">{h}</td>)}
+                        <td className="text-center text-[#646462] font-semibold w-10 pb-1">All</td>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...days,'All'].map((day,di) => (
+                        <tr key={day}>
+                          <td className="text-[#646462] font-semibold pr-2 text-right whitespace-nowrap">{day}</td>
+                          {Array.from({length:25},(_,h) => (
+                            <td key={h} className={`w-8 h-6 rounded text-center text-[#646462] font-semibold ${di===7||h===24?'bg-[#e9d5ff]':'bg-[#ede9fe]'}`}>0</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[11px] text-[#646462] text-center">Datos mostrados en zona horaria: UTC (UTC+0:00) <button className="text-[#3b59f6] hover:underline">Cambiar</button></p>
+              </div>
+            </div>
+            <div className="flex justify-end"><ShowMoreBtn /></div>
+
+            {/* Goals */}
+            <div className="border border-dashed border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-dashed border-[#e9eae6]">
+                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Objetivos</h2>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              </div>
+              <div className="flex items-center justify-center gap-8 px-8 py-10">
+                <div className="w-32 h-32 flex-shrink-0">
+                  <svg viewBox="0 0 120 120" className="w-full h-full">
+                    <ellipse cx="60" cy="108" rx="32" ry="7" fill="#d1d5db"/>
+                    <circle cx="60" cy="58" r="36" fill="#c8a96e"/>
+                    <circle cx="60" cy="58" r="28" fill="#d4b482"/>
+                    <ellipse cx="52" cy="54" rx="4" ry="5" fill="#2d1a0a"/>
+                    <ellipse cx="68" cy="54" rx="4" ry="5" fill="#2d1a0a"/>
+                    <path d="M50 66 Q60 73 70 66" fill="none" stroke="#2d1a0a" strokeWidth="2" strokeLinecap="round"/>
+                    <rect x="50" y="88" width="20" height="22" rx="3" fill="#6b7280"/>
+                    <rect x="45" y="91" width="10" height="16" rx="2" fill="#4b5563"/>
+                    <rect x="65" y="91" width="10" height="16" rx="2" fill="#4b5563"/>
+                    <rect x="52" y="108" width="7" height="8" rx="1.5" fill="#2d1a0a"/>
+                    <rect x="61" y="108" width="7" height="8" rx="1.5" fill="#2d1a0a"/>
+                    <rect x="47" y="72" width="5" height="20" rx="2" fill="#6b7280"/>
+                    <rect x="68" y="72" width="5" height="20" rx="2" fill="#6b7280"/>
+                  </svg>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-[16px] font-bold text-[#1a1a1a]">Crea tu primera acción</h3>
+                  <p className="text-[13px] text-[#646462] max-w-sm leading-relaxed">Usa acciones para combinar eventos que quieres rastrear juntos o para hacer que los eventos de Autocaptura sean más fáciles de reutilizar.</p>
+                  <div className="flex items-center gap-3 pt-1">
+                    <div className="flex items-center border border-[#f59e0b] rounded-lg overflow-hidden">
+                      <button className="h-8 px-4 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7]">Nueva acción</button>
+                      <div className="w-px h-4 bg-[#f59e0b]"/>
+                      <button className="h-8 px-2 hover:bg-[#fef3c7]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M4 6l4 4 4-4"/></svg></button>
+                    </div>
+                    <button className="flex items-center gap-1 text-[13px] font-semibold text-[#1a1a1a] hover:underline">
+                      Saber más <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M10 2v12M2 6h8"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end"><ShowMoreBtn /></div>
+
+            {/* Session replay + Error tracking */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[#e9eae6]"><h2 className="text-[14px] font-bold text-[#1a1a1a]">Repetición de sesión</h2></div>
+                <div className="flex flex-col items-center justify-center gap-3 py-10 px-4">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a]">No hay grabaciones que coincidan con este rango de fechas</p>
+                  <p className="text-[12px] text-[#646462] text-center">Asegúrate de tener el fragmento de JavaScript configurado en tu sitio web.</p>
+                  <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Saber más</button>
+                </div>
+                <div className="flex justify-center px-4 py-2 border-t border-[#e9eae6]">
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                    Ver todo <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 2"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[#e9eae6]"><h2 className="text-[14px] font-bold text-[#1a1a1a]">Seguimiento de errores</h2></div>
+                <table className="w-full text-[12px]">
+                  <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">{['Error','Usuarios','Ocurrencias','Visto por última vez'].map(h=><th key={h} className="px-4 py-2 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}</tr></thead>
+                  <tbody><TableEmptyState cols={4} /></tbody>
+                </table>
+                <div className="flex justify-end px-4 py-2 border-t border-[#e9eae6]">
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M10 2v12M2 6h8"/></svg>
+                    Ver todo
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Frustrating Pages — hedgehog empty state */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6]">
+                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Páginas frustrantes</h2>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              </div>
+              <table className="w-full text-[12px]">
+                <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                  {['URL','Rage clicks','Dead clicks','Errores'].map(h=><th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  <tr><td colSpan={4} className="px-4 py-8">
+                    <div className="flex flex-col items-center gap-3">
+                      {/* Hedgehog with star */}
+                      <svg viewBox="0 0 100 100" className="w-20 h-20">
+                        <ellipse cx="50" cy="92" rx="28" ry="6" fill="#d1d5db"/>
+                        <circle cx="50" cy="60" r="30" fill="#c8a96e"/>
+                        <circle cx="50" cy="62" r="22" fill="#d4b482"/>
+                        <ellipse cx="42" cy="58" rx="3.5" ry="4" fill="#2d1a0a"/>
+                        <ellipse cx="58" cy="58" rx="3.5" ry="4" fill="#2d1a0a"/>
+                        <path d="M43 68 Q50 74 57 68" fill="none" stroke="#2d1a0a" strokeWidth="1.5" strokeLinecap="round"/>
+                        <rect x="42" y="82" width="16" height="14" rx="2" fill="#9ca3af"/>
+                        <rect x="37" y="84" width="8" height="10" rx="2" fill="#6b7280"/>
+                        <rect x="55" y="84" width="8" height="10" rx="2" fill="#6b7280"/>
+                        <rect x="43" y="94" width="5" height="6" rx="1" fill="#2d1a0a"/>
+                        <rect x="52" y="94" width="5" height="6" rx="1" fill="#2d1a0a"/>
+                        <rect x="36" y="70" width="4" height="15" rx="1.5" fill="#9ca3af"/>
+                        <rect x="60" y="70" width="4" height="15" rx="1.5" fill="#9ca3af"/>
+                        {/* Star held in arm */}
+                        <g transform="translate(60,45) rotate(-15)">
+                          <polygon points="0,-12 3,-4 11,-4 5,2 7,10 0,6 -7,10 -5,2 -11,-4 -3,-4" fill="#f59e0b"/>
+                        </g>
+                      </svg>
+                      <p className="text-[13px] text-[#22c55e] font-semibold">¡No hay páginas frustrantes! ¡Sigue así!</p>
+                    </div>
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2"><OpenInsightBtn /><ShowMoreBtn /></div>
+            <div className="h-8"/>
+          </div>
+        </div>
+      )}
+
+      {/* ── WEB VITALS TAB ────────────────────────────────────────────────── */}
+      {waTab === 'vitals' && (
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 py-4 space-y-4">
+            <SharedToolbar showVitalsPercentiles />
+
+            {/* Metric cards */}
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { key:'INP', label:'Interaction to Next Paint (INP)', good: '<200ms' },
+                { key:'LCP', label:'Largest Contentful Paint (LCP)', good: '<2.5s' },
+                { key:'FCP', label:'First Contentful Paint (FCP)', good: '<1.8s' },
+                { key:'CLS', label:'Cumulative Layout Shift (CLS)', good: '<0.1' },
+              ].map(m => (
+                <button key={m.key} onClick={() => setVitalsMetric(m.key as any)}
+                  className={`text-left p-3 border rounded-[10px] transition-colors ${vitalsMetric===m.key ? 'border-[#e8572a] bg-white' : 'border-[#e9eae6] hover:bg-[#fafaf9]'}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[12px] font-bold text-[#1a1a1a]">{m.label}</span>
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+                  </div>
+                  <p className="text-[12px] text-[#646462]">Sin datos para este rango</p>
+                </button>
+              ))}
+            </div>
+            <p className="text-[12px] text-[#646462]">Las métricas anteriores son del último día en el rango de tiempo seleccionado. <a href="#" className="text-[#3b59f6] hover:underline">Saber más en los Docs. ↗</a></p>
+
+            {/* Two-col chart area */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="border border-[#e9eae6] rounded-[10px] flex items-center justify-center" style={{height:280}}>
+                <p className="text-[13px] text-[#646462]">Sin datos para el rango de fechas seleccionado</p>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px]">
+                <EmptyChart h={280} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2"><OpenInsightBtn /><ShowMoreBtn /></div>
+
+            {/* Path Breakdown */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Desglose por ruta</h2>
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#f59e0b]" strokeWidth="1.5"><path d="M8 2L1.5 13h13L8 2z" strokeLinejoin="round"/><path d="M8 7v3M8 11.5v.5" strokeLinecap="round"/></svg>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#e9eae6]">
+                    <div className="flex items-center gap-1.5">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#22c55e]"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zM6 8l2 2 4-4" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="8" cy="8" r="6" fill="none" stroke="#22c55e" strokeWidth="1.5"/></svg>
+                      <span className="text-[13px] font-bold text-[#22c55e]">Bueno</span>
+                    </div>
+                    <span className="text-[12px] text-[#646462]">&lt; 200ms</span>
+                  </div>
+                  <div className="px-4 py-8 flex items-center justify-center gap-2">
+                    <span className="text-[13px]">📋</span>
+                    <span className="text-[12px] text-[#646462]">Sin puntuaciones en esta banda</span>
+                  </div>
+                </div>
+                <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#e9eae6]">
+                    <div className="flex items-center gap-1.5">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4" fill="none" stroke="#f59e0b" strokeWidth="1.5"><path d="M8 2L1.5 13h13L8 2z" strokeLinejoin="round"/><path d="M8 7v3M8 11.5v.5" strokeLinecap="round"/></svg>
+                      <span className="text-[13px] font-bold text-[#f59e0b]">Necesita mejoras</span>
+                    </div>
+                    <span className="text-[12px] text-[#646462]">200ms – 500ms</span>
+                  </div>
+                  <div className="px-4 py-8 flex items-center justify-center gap-2">
+                    <span className="text-[13px]">🚩</span>
+                    <span className="text-[12px] text-[#646462]">Sin puntuaciones en esta banda</span>
+                  </div>
+                </div>
+                <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#e9eae6]">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[#e8572a] font-bold text-[14px]">!</span>
+                      <span className="text-[13px] font-bold text-[#e8572a]">Pobre</span>
+                    </div>
+                    <span className="text-[12px] text-[#646462]">&gt; 500ms</span>
+                  </div>
+                  <div className="px-4 py-8 flex items-center justify-center gap-2">
+                    <span className="text-[13px]">🚩</span>
+                    <span className="text-[12px] text-[#646462]">Sin puntuaciones en esta banda</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end"><ShowMoreBtn /></div>
+            <div className="h-8"/>
+          </div>
+        </div>
+      )}
+
+      {/* ── PAGE REPORTS TAB ──────────────────────────────────────────────── */}
+      {waTab === 'reports' && (
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 py-4 space-y-4">
+            {/* Toolbar */}
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1.5v3M11 1.5v3M2 7h12" strokeLinecap="round"/></svg>
+                Últimos 7 días <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 2" strokeLinecap="round"/></svg>
+                Comparar con período anterior <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              <input placeholder="Haz clic o escribe para ver las páginas principales, o pega una URL" className="flex-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] placeholder:text-[#b0b0ae] outline-none focus:border-[#3b59f6] bg-white"/>
+            </div>
+
+            {/* Empty state with two hedgehogs */}
+            <div className="border border-dashed border-[#e9eae6] rounded-[10px] flex items-center gap-8 px-10 py-12">
+              <div className="w-40 h-32 flex-shrink-0">
+                <svg viewBox="0 0 160 120" className="w-full h-full">
+                  {/* Hedgehog 1 (smaller, left) */}
+                  <circle cx="38" cy="68" r="22" fill="#c8a96e"/>
+                  <circle cx="38" cy="70" r="16" fill="#d4b482"/>
+                  <ellipse cx="33" cy="66" rx="2.5" ry="3" fill="#2d1a0a"/>
+                  <ellipse cx="43" cy="66" rx="2.5" ry="3" fill="#2d1a0a"/>
+                  <path d="M32 73 Q38 77 44 73" fill="none" stroke="#2d1a0a" strokeWidth="1.2" strokeLinecap="round"/>
+                  <rect x="30" y="84" width="16" height="14" rx="2" fill="#9ca3af"/>
+                  <rect x="26" y="87" width="7" height="10" rx="1.5" fill="#6b7280"/>
+                  <rect x="45" y="87" width="7" height="10" rx="1.5" fill="#6b7280"/>
+                  <rect x="31" y="96" width="4.5" height="5" rx="1" fill="#2d1a0a"/>
+                  <rect x="38" y="96" width="4.5" height="5" rx="1" fill="#2d1a0a"/>
+                  {/* Plant pot */}
+                  <rect x="56" y="75" width="18" height="20" rx="2" fill="#92400e"/>
+                  <ellipse cx="65" cy="75" rx="9" ry="4" fill="#a16207"/>
+                  <path d="M65 74 Q58 60 52 50" stroke="#16a34a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+                  <ellipse cx="50" cy="48" rx="6" ry="4" fill="#16a34a" transform="rotate(-30 50 48)"/>
+                  <path d="M65 74 Q72 62 78 52" stroke="#16a34a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+                  <ellipse cx="80" cy="50" rx="6" ry="4" fill="#16a34a" transform="rotate(20 80 50)"/>
+                  {/* Hedgehog 2 (larger, right, standing) */}
+                  <circle cx="115" cy="52" r="26" fill="#c8a96e"/>
+                  <circle cx="115" cy="55" r="20" fill="#d4b482"/>
+                  <ellipse cx="109" cy="51" rx="3" ry="3.5" fill="#2d1a0a"/>
+                  <ellipse cx="121" cy="51" rx="3" ry="3.5" fill="#2d1a0a"/>
+                  <path d="M108 60 Q115 65 122 60" fill="none" stroke="#2d1a0a" strokeWidth="1.5" strokeLinecap="round"/>
+                  {/* Phone/tablet */}
+                  <rect x="124" y="38" width="20" height="30" rx="2.5" fill="#1e293b"/>
+                  <rect x="126" y="41" width="16" height="22" rx="1" fill="#3b82f6" opacity="0.8"/>
+                  <rect x="128" y="43" width="12" height="2.5" rx="0.5" fill="white" opacity="0.8"/>
+                  <rect x="128" y="47" width="8" height="2" rx="0.5" fill="white" opacity="0.5"/>
+                  <rect x="128" y="51" width="10" height="2" rx="0.5" fill="white" opacity="0.5"/>
+                  <rect x="128" y="55" width="6" height="2" rx="0.5" fill="white" opacity="0.5"/>
+                  <rect x="107" y="73" width="16" height="14" rx="2" fill="#9ca3af"/>
+                  <rect x="103" y="76" width="7" height="10" rx="1.5" fill="#6b7280"/>
+                  <rect x="122" y="76" width="7" height="10" rx="1.5" fill="#6b7280"/>
+                  <rect x="108" y="86" width="5" height="5.5" rx="1" fill="#2d1a0a"/>
+                  <rect x="116" y="86" width="5" height="5.5" rx="1" fill="#2d1a0a"/>
+                </svg>
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-[16px] font-bold text-[#1a1a1a]">Selecciona una página para analizar</h3>
+                <p className="text-[13px] text-[#646462] max-w-md leading-relaxed">
+                  Consulta métricas de rendimiento detalladas de cualquier página de tu sitio. Solo usa la barra de búsqueda de arriba para encontrar y seleccionar una página que quieras analizar.
+                </p>
+              </div>
+            </div>
+            <div className="h-8"/>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ── WADataSidebar — identical pattern to ReportsSidebar / KnowledgeSidebar ──
 function WADataSidebar({ sub, onSelect }: { sub: WADataSubView; onSelect: (s: WADataSubView) => void }) {
   const [open, setOpen] = useState<Record<string, boolean>>({
@@ -34523,7 +35150,8 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
         <WAAppsSidebar sub={appsSub} onSelect={setAppsSub} />
         <div className="flex-1 flex flex-col min-h-0 min-w-0 rounded-[12px] border border-[#e9eae6] overflow-hidden bg-white">
           {appsSub === 'appDashboards'       ? <WAAppDashboardsView /> :
-           appsSub === 'appProductAnalytics' ? <WAAppProductAnalyticsView /> : (
+           appsSub === 'appProductAnalytics' ? <WAAppProductAnalyticsView /> :
+           appsSub === 'appWebAnalytics'     ? <WAAppWebAnalyticsView /> : (
             <>
               <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
                 <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{appsSub.replace(/^app/, '').replace(/([A-Z])/g, ' $1').trim()}</h1>
