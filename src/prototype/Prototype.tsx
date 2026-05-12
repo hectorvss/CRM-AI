@@ -25777,211 +25777,151 @@ function ClainModuleCard({
 // ─────────────────────────────────────────────────────────────────────────────
 type WAView = 'waHome' | 'waActivity' | 'waData' | 'waFiles' | 'waApps' | 'waStarred' | 'waSettings' | 'waExports' | 'waHealth';
 
-// ── PostHog-structure sidebar, Clain design system ──────────────────────────
-function WASidebar({
+// ── Left-rail nav — pixel-perfect copy of LeftNav, PostHog nav items ─────────
+function WALeftNav({
   active, onSelect, onBackToHub,
 }: {
   active: WAView; onSelect: (v: WAView) => void; onBackToHub: () => void;
 }) {
-  const [dataOpen,    setDataOpen]    = useState(false);
-  const [recentsOpen, setRecentsOpen] = useState(true);
-  const [myAppsOpen,  setMyAppsOpen]  = useState(false);
-  const [healthOpen,  setHealthOpen]  = useState(false);
-  const [helpOpen,    setHelpOpen]    = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
-  const itemCls = (v: WAView) =>
-    `w-full flex items-center gap-2 px-2 py-[5px] rounded-[6px] text-[13px] cursor-pointer transition-colors ${
-      active === v
-        ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_2px_rgba(20,20,20,0.08)] text-[#1a1a1a] font-medium'
-        : 'text-[#4a4a48] hover:bg-[#ebebea]'
+  const btnCls = (isActive: boolean) =>
+    `w-full h-9 flex items-center rounded-lg relative ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${
+      isActive
+        ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]'
+        : 'hover:bg-white/60'
     }`;
 
-  const chevron = (open: boolean) => (
-    <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-none stroke-[#9a9a98] transition-transform flex-shrink-0 ${open ? 'rotate-90' : ''}`} strokeWidth="1.5">
-      <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
+  const labelCls = (isActive: boolean) =>
+    `text-[13px] truncate ${isActive ? 'font-semibold text-[#1a1a1a]' : 'font-medium text-[#1a1a1a]'}`;
+
+  function NavItem({ nav, label, icon }: { nav: WAView; label: string; icon: React.ReactNode }) {
+    return (
+      <button onClick={() => onSelect(nav)} title={label} className={btnCls(active === nav)}>
+        {icon}
+        {expanded && <span className={labelCls(active === nav)}>{label}</span>}
+      </button>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full bg-[#f3f3f1] border-r border-[#e9eae6]" style={{ width: 220, minWidth: 220, flexShrink: 0 }}>
-      {/* ── Header: project selector ── */}
-      <div className="flex items-center gap-2 px-3 py-[10px] border-b border-[#e9eae6] flex-shrink-0">
-        <button onClick={onBackToHub} className="flex items-center gap-2 flex-1 min-w-0 group">
-          <div className="w-6 h-6 rounded-[6px] bg-[#3b59f6] flex items-center justify-center flex-shrink-0">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white">
-              <path d="M2 12h2V8H2v4zm3 0h2V5H5v7zm3 0h2V2H8v10zm3 0h2V6h-2v6z"/>
+    <div
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+      className={`fixed top-0 left-0 h-full flex flex-col pt-3 pb-2 bg-[#f3f3f1] rounded-tr-2xl rounded-br-2xl justify-between transition-[width,box-shadow] duration-150 z-50 ${expanded ? 'shadow-[4px_0px_24px_rgba(20,20,20,0.10)]' : ''}`}
+      style={{ width: expanded ? 210 : 44 }}
+    >
+      {/* Top section */}
+      <div className="flex flex-col gap-3">
+        {/* Logo — click returns to hub */}
+        <div className={`flex items-center ${expanded ? 'justify-between px-3' : 'justify-center'} h-9 flex-shrink-0`}>
+          <button onClick={onBackToHub} title="Plataforma Clain" className="w-6 h-6 flex items-center justify-center hover:opacity-70 transition-opacity">
+            <img src={ICON_INBOX} alt="Clain" className="w-6 h-6" />
+          </button>
+          {expanded && (
+            <span className="text-[11px] font-semibold text-[#3b59f6] bg-[#eff2ff] px-2 py-0.5 rounded-full whitespace-nowrap">Analytics</span>
+          )}
+        </div>
+
+        <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'}`}>
+          {/* Back to hub */}
+          <button onClick={onBackToHub} title="Plataforma Clain" className={btnCls(false)}>
+            <svg viewBox="0 0 16 16" className="w-[18px] h-[18px] flex-shrink-0" fill="none">
+              <circle cx="8" cy="8" r="6.25" stroke="#1a1a1a" strokeWidth="2.75"/>
+              <circle cx="8" cy="8" r="1.75" fill="#1a1a1a"/>
             </svg>
-          </div>
-          <span className="text-[13px] font-semibold text-[#1a1a1a] truncate flex-1 text-left group-hover:text-[#3b59f6] transition-colors">Proyecto principal</span>
-        </button>
-        <button className="w-6 h-6 flex items-center justify-center rounded-[6px] hover:bg-[#ebebea] flex-shrink-0">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5">
-            <circle cx="7" cy="7" r="4"/>
-            <path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/>
-          </svg>
-        </button>
+            {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] truncate flex-1">Plataforma Clain</span>}
+          </button>
+
+          <div className={`${expanded ? 'mx-0.5' : 'mx-1'} h-px bg-[#e2e2e0] my-0.5`} />
+
+          {/* Inicio */}
+          <NavItem nav="waHome" label="Inicio" icon={
+            <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-[#1a1a1a]">
+              <path d="M8 2L2 7h1.5v6h3.5V9h2v4h3.5V7H14L8 2z"/>
+            </svg>
+          }/>
+
+          {/* Actividad */}
+          <NavItem nav="waActivity" label="Actividad" icon={
+            <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
+              <polyline points="1,10 4,6 7,8 10,4 13,7 15,5"/>
+            </svg>
+          }/>
+
+          {/* Datos */}
+          <NavItem nav="waData" label="Datos" icon={
+            <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
+              <ellipse cx="8" cy="4.5" rx="5" ry="2"/>
+              <path d="M3 4.5v7c0 1.1 2.24 2 5 2s5-.9 5-2v-7M3 8c0 1.1 2.24 2 5 2s5-.9 5-2" strokeLinecap="round"/>
+            </svg>
+          }/>
+
+          {/* Archivos */}
+          <NavItem nav="waFiles" label="Archivos" icon={
+            <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
+              <path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z" strokeLinejoin="round"/>
+              <path d="M9 2v4h4" strokeLinejoin="round"/>
+            </svg>
+          }/>
+
+          {/* Aplicaciones */}
+          <NavItem nav="waApps" label="Aplicaciones" icon={
+            <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-[#1a1a1a]">
+              <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/>
+              <rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/>
+              <rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/>
+              <rect x="9" y="9" width="5.5" height="5.5" rx="1"/>
+            </svg>
+          }/>
+
+          {/* Destacados */}
+          <NavItem nav="waStarred" label="Destacados" icon={
+            <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
+              <polygon points="8,2 10,6 14.5,6.5 11,9.5 12.5,14 8,11.5 3.5,14 5,9.5 1.5,6.5 6,6"/>
+            </svg>
+          }/>
+        </div>
       </div>
 
-      {/* ── Scrollable nav ── */}
-      <div className="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5 min-h-0">
-        {/* PROJECT section */}
-        <p className="text-[11px] font-semibold text-[#9a9a98] uppercase tracking-wide px-2 pt-1 pb-0.5">Proyecto</p>
+      {/* Bottom section */}
+      <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
+        {/* Configuración */}
+        <NavItem nav="waSettings" label="Configuración" icon={
+          <img src={ICON_SETTINGS} alt="Configuración" className="w-4 h-4 flex-shrink-0" />
+        }/>
 
-        <button onClick={() => onSelect('waHome')} className={itemCls('waHome')}>
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-current opacity-70">
-            <path d="M8 2L2 7h1.5v6h3.5V9h2v4h3.5V7H14L8 2z"/>
-          </svg>
-          Inicio
-        </button>
-
-        <button onClick={() => onSelect('waActivity')} className={itemCls('waActivity')}>
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-none stroke-current opacity-70" strokeWidth="1.5">
-            <polyline points="1,10 4,6 7,8 10,4 13,7 15,5"/>
-          </svg>
-          Actividad
-        </button>
-
-        {/* Data — expandable */}
-        <button onClick={() => setDataOpen(v => !v)} className="w-full flex items-center gap-2 px-2 py-[5px] rounded-[6px] text-[13px] text-[#4a4a48] hover:bg-[#ebebea] transition-colors">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-none stroke-current opacity-70" strokeWidth="1.5">
-            <ellipse cx="8" cy="4.5" rx="5" ry="2"/>
-            <path d="M3 4.5v7c0 1.1 2.24 2 5 2s5-.9 5-2v-7M3 8c0 1.1 2.24 2 5 2s5-.9 5-2" strokeLinecap="round"/>
-          </svg>
-          <span className="flex-1 text-left">Datos</span>
-          {chevron(dataOpen)}
-        </button>
-        {dataOpen && (
-          <div className="ml-4 flex flex-col gap-0.5 border-l border-[#e2e2e0] pl-2 pb-0.5">
-            {['Eventos', 'Acciones', 'Cohortes', 'Personas', 'Grupos', 'Anotaciones'].map(label => (
-              <button key={label} className="w-full text-left px-2 py-[4px] text-[12px] text-[#4a4a48] rounded-[5px] hover:bg-[#ebebea]">{label}</button>
-            ))}
-          </div>
-        )}
-
-        <button onClick={() => onSelect('waFiles')} className={itemCls('waFiles')}>
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-none stroke-current opacity-70" strokeWidth="1.5">
-            <path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z" strokeLinejoin="round"/>
-            <path d="M9 2v4h4" strokeLinejoin="round"/>
-          </svg>
-          Archivos
-        </button>
-
-        <button onClick={() => onSelect('waApps')} className={itemCls('waApps')}>
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-current opacity-70">
-            <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/>
-            <rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/>
-            <rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/>
-            <rect x="9" y="9" width="5.5" height="5.5" rx="1"/>
-          </svg>
-          Aplicaciones
-        </button>
-
-        <button onClick={() => onSelect('waStarred')} className={itemCls('waStarred')}>
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-none stroke-current opacity-70" strokeWidth="1.5">
-            <polygon points="8,2 10,6 14.5,6.5 11,9.5 12.5,14 8,11.5 3.5,14 5,9.5 1.5,6.5 6,6"/>
-          </svg>
-          Destacados
-        </button>
-
-        <div className="h-px bg-[#e2e2e0] mx-1 my-1.5" />
-
-        {/* RECENTS */}
-        <button onClick={() => setRecentsOpen(v => !v)} className="w-full flex items-center gap-1.5 px-2 py-[4px] rounded-[6px] hover:bg-[#ebebea] transition-colors">
-          <span className="text-[11px] font-semibold text-[#9a9a98] uppercase tracking-wide flex-1 text-left">Recientes</span>
-          {chevron(recentsOpen)}
-        </button>
-        {recentsOpen && (
-          <div className="flex flex-col gap-0.5">
-            {([
-              { label: 'Contabilidad de crecimiento', kind: 'chart' },
-              { label: 'Usuarios internos / Test',    kind: 'users' },
-              { label: 'Usuarios activos diarios',    kind: 'chart' },
-              { label: 'Mi panel de aplicación',      kind: 'dot'   },
-              { label: 'Generaciones por estado HTTP', kind: 'chart' },
-            ] as { label: string; kind: string }[]).map(item => (
-              <button key={item.label} className="w-full flex items-center gap-2 px-2 py-[4px] rounded-[6px] text-[12px] text-[#4a4a48] hover:bg-[#ebebea] transition-colors">
-                {item.kind === 'chart' && (
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-[#3b59f6]">
-                    <path d="M2 13h2V9H2v4zm3 0h2V6H5v7zm3 0h2V3H8v10zm3 0h2V7h-2v6z"/>
-                  </svg>
-                )}
-                {item.kind === 'users' && (
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-[#3b59f6]">
-                    <circle cx="6" cy="5" r="2.5"/>
-                    <path d="M1.8 13c.4-2 2.1-3.2 4.2-3.2s3.8 1.2 4.2 3.2H1.8z"/>
-                  </svg>
-                )}
-                {item.kind === 'dot' && (
-                  <div className="w-3.5 h-3.5 rounded-full bg-[#e88c30] flex-shrink-0 flex items-center justify-center">
-                    <div className="w-1.5 h-1.5 rounded-full bg-white"/>
-                  </div>
-                )}
-                <span className="truncate text-left">{item.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="h-px bg-[#e2e2e0] mx-1 my-1.5" />
-
-        {/* MY APPS */}
-        <button onClick={() => setMyAppsOpen(v => !v)} className="w-full flex items-center gap-1.5 px-2 py-[4px] rounded-[6px] hover:bg-[#ebebea] transition-colors">
-          <span className="text-[11px] font-semibold text-[#9a9a98] uppercase tracking-wide flex-1 text-left">Mis aplicaciones</span>
-          {chevron(myAppsOpen)}
-        </button>
-        {myAppsOpen && (
-          <p className="text-[12px] text-[#9a9a98] px-2 py-1">Sin aplicaciones instaladas</p>
-        )}
-      </div>
-
-      {/* ── Bottom fixed items ── */}
-      <div className="border-t border-[#e9eae6] px-2 py-2 flex flex-col gap-0.5 flex-shrink-0">
-        <button onClick={() => onSelect('waSettings')} className={itemCls('waSettings')}>
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-current opacity-70">
-            <path d="M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zm5.9-2a5.5 5.5 0 00.1-.5V7.5l-.1-.5 1.5-1.2-1-1.7-1.8.7a5.5 5.5 0 00-1-.5L11.5 2.5h-3l-.4 1.8a5.5 5.5 0 00-1 .5L5.3 4l-1 1.7 1.5 1.2-.1.5v1l.1.5L4.3 10.2l1 1.7 1.8-.7c.3.2.6.4 1 .5l.4 1.8h3l.4-1.8c.4-.1.7-.3 1-.5l1.8.7 1-1.7-1.8-1.2z"/>
-          </svg>
-          Configuración
-        </button>
-
-        <button onClick={() => onSelect('waExports')} className={itemCls('waExports')}>
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-none stroke-current opacity-70" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        {/* Exportaciones */}
+        <NavItem nav="waExports" label="Exportaciones" icon={
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#1a1a1a]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M8 2v7M5 6l3 3 3-3M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1"/>
           </svg>
-          Exportaciones
-        </button>
+        }/>
 
-        {/* Health — expandable */}
-        <button onClick={() => setHealthOpen(v => !v)} className="w-full flex items-center gap-2 px-2 py-[5px] rounded-[6px] text-[13px] text-[#4a4a48] hover:bg-[#ebebea] transition-colors">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-current opacity-70">
+        {/* Estado */}
+        <NavItem nav="waHealth" label="Estado" icon={
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-[#1a1a1a]">
             <path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/>
           </svg>
-          <span className="flex-1 text-left">Estado</span>
-          {chevron(healthOpen)}
-        </button>
-        {healthOpen && (
-          <div className="ml-4 flex flex-col gap-0.5 border-l border-[#e2e2e0] pl-2 pb-0.5">
-            {['Ingesta', 'Sistema', 'API'].map(l => (
-              <button key={l} className="w-full text-left px-2 py-[4px] text-[12px] text-[#4a4a48] rounded-[5px] hover:bg-[#ebebea]">{l}</button>
-            ))}
-          </div>
-        )}
+        }/>
 
-        {/* Help — expandable */}
-        <button onClick={() => setHelpOpen(v => !v)} className="w-full flex items-center gap-2 px-2 py-[5px] rounded-[6px] text-[13px] text-[#4a4a48] hover:bg-[#ebebea] transition-colors">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-none stroke-current opacity-70" strokeWidth="1.5">
-            <circle cx="8" cy="8" r="5.5"/>
-            <path d="M6.5 6.5c0-1 .67-1.5 1.5-1.5s1.5.5 1.5 1.5c0 1.5-3 1.5-3 3M8 12v.01" strokeLinecap="round"/>
-          </svg>
-          <span className="flex-1 text-left">Ayuda</span>
-          {chevron(helpOpen)}
+        {/* Buscar */}
+        <button title="Buscar" className={btnCls(false)}>
+          <img src={ICON_SEARCH} alt="Buscar" className="w-4 h-4 flex-shrink-0" />
+          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] truncate">Buscar</span>}
         </button>
-        {helpOpen && (
-          <div className="ml-4 flex flex-col gap-0.5 border-l border-[#e2e2e0] pl-2 pb-0.5">
-            {['Documentación', 'Comunidad', 'Soporte'].map(l => (
-              <button key={l} className="w-full text-left px-2 py-[4px] text-[12px] text-[#4a4a48] rounded-[5px] hover:bg-[#ebebea]">{l}</button>
-            ))}
-          </div>
-        )}
+
+        {/* Actualizar */}
+        <button title="Actualizar" className={`${btnCls(false)} bg-[#1a1a1a] hover:bg-[#333] text-white`}>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white flex-shrink-0"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+          {expanded && <span className="text-[13px] font-semibold text-white truncate">Actualizar</span>}
+        </button>
+
+        {/* Perfil */}
+        <button title="Mi perfil" className={btnCls(false)}>
+          <img src={AVATAR_ME} alt="Perfil" className="w-4 h-4 flex-shrink-0 rounded-full" />
+          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] truncate">Mi perfil</span>}
+        </button>
       </div>
     </div>
   );
@@ -25993,11 +25933,11 @@ function WAHomeView() {
     { label: 'Mi panel de aplicación', kind: 'dot' },
   ];
   const RECENTS: { label: string; kind: string }[] = [
-    { label: 'Contabilidad de crecimiento',  kind: 'chart' },
-    { label: 'Usuarios internos / Test',     kind: 'users' },
-    { label: 'Usuarios activos diarios (DAU)', kind: 'chart' },
-    { label: 'Mi panel de aplicación',       kind: 'dot'   },
-    { label: 'Generaciones por estado HTTP', kind: 'chart' },
+    { label: 'Contabilidad de crecimiento',    kind: 'chart' },
+    { label: 'Usuarios internos / Test',        kind: 'users' },
+    { label: 'Usuarios activos diarios (DAU)',  kind: 'chart' },
+    { label: 'Mi panel de aplicación',          kind: 'dot'   },
+    { label: 'Generaciones por estado HTTP',    kind: 'chart' },
   ];
 
   function ItemIcon({ kind }: { kind: string }) {
@@ -26021,7 +25961,6 @@ function WAHomeView() {
 
   return (
     <div className="flex-1 flex flex-col bg-[#f9f9f8] min-h-0 overflow-hidden">
-      {/* Main area — vertically centred */}
       <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center px-8 py-10 gap-8">
 
         {/* Logo + greeting */}
@@ -26171,12 +26110,20 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
   };
 
   return (
-    <div className="flex overflow-hidden w-screen h-screen min-w-0" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <WASidebar active={sub} onSelect={setSub} onBackToHub={onBackToHub} />
-      <div className="flex flex-1 min-w-0 h-full overflow-hidden bg-[#f9f9f8]">
+    <div className="flex bg-[#f3f3f1] overflow-hidden w-screen h-screen min-w-0" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <WALeftNav active={sub} onSelect={setSub} onBackToHub={onBackToHub} />
+      <div className="flex flex-1 min-w-0 pl-[44px] h-full overflow-hidden">
         {sub === 'waHome'
           ? <WAHomeView />
-          : <WADevContent title={titleMap[sub] ?? sub} />
+          : (
+            <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden m-2">
+              <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+                <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{titleMap[sub] ?? sub}</h1>
+                <span className="text-[12px] text-[#3b59f6] font-semibold bg-[#eff2ff] px-2.5 py-1 rounded-full">Clain Web Analytics</span>
+              </div>
+              <WADevContent title={titleMap[sub] ?? sub} />
+            </div>
+          )
         }
       </div>
     </div>
