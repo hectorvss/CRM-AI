@@ -8789,43 +8789,168 @@ function VisibleView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
 
 // ── TokensView ────────────────────────────────────────────────────────────────
 
+interface ApiTokenItem { id: string; name: string; token: string; createdAt: string; lastUsed: string | null; scopes: string[]; }
+
 function TokensView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
+  const [tokens, setTokens] = useState<ApiTokenItem[]>([]);
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newlyCreated, setNewlyCreated] = useState<ApiTokenItem | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ws) return;
+    const saved = (ws as any)?.settings?.apiTokens ?? [];
+    setTokens(saved);
+  }, [ws]);
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3000); }
+
+  function generateToken() {
+    return 'clain_' + Array.from(crypto.getRandomValues(new Uint8Array(24))).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function createToken() {
+    if (!newName.trim()) return;
+    const token: ApiTokenItem = { id: Date.now().toString(), name: newName.trim(), token: generateToken(), createdAt: new Date().toISOString(), lastUsed: null, scopes: ['read', 'write'] };
+    const updated = [...tokens, token];
+    const wsId = (ws as any)?.id ?? '';
+    if (wsId) await workspacesApi.updateSettings(wsId, { apiTokens: updated }).catch(() => {});
+    setTokens(updated);
+    setNewlyCreated(token);
+    setShowCreate(false);
+    setNewName('');
+  }
+
+  async function revokeToken(id: string) {
+    const updated = tokens.filter(t => t.id !== id);
+    const wsId = (ws as any)?.id ?? '';
+    if (wsId) await workspacesApi.updateSettings(wsId, { apiTokens: updated }).catch(() => {});
+    setTokens(updated);
+    if (newlyCreated?.id === id) setNewlyCreated(null);
+    showToast('Token revocado');
+  }
+
+  function copyToken(token: string, id: string) {
+    navigator.clipboard.writeText(token).then(() => { setCopiedId(id); setTimeout(() => setCopiedId(null), 2000); }).catch(() => {});
+  }
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="px-8 pt-6 pb-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div className="flex items-center justify-between px-8 pt-6 pb-4 border-b border-[#e9eae6] flex-shrink-0">
             <h1 className="text-[20px] font-bold text-[#1a1a1a]">Tokens de API</h1>
+            <div className="flex items-center gap-3">
+              {toast && <span className="text-[13px] text-[#16a34a] font-medium">✓ {toast}</span>}
+              <button onClick={() => setShowCreate(true)} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nuevo token</button>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto min-h-0 px-8 py-4 flex flex-col gap-3">
-            <div className="flex items-start gap-3 bg-[#f8f8f8] border border-[#e9eae6] rounded-[8px] px-4 py-3">
-              <span className="text-[#4f52cc] mt-0.5 flex-shrink-0">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 4a1 1 0 110 2 1 1 0 010-2zm0 4a1 1 0 011 1v3a1 1 0 01-2 0V9a1 1 0 011-1z"/></svg>
-              </span>
-              <p className="text-[13px] text-[#1a1a1a]">
-                Puede restringir el acceso a la API por dirección IP.{' '}
-                <a className="text-[#4f52cc] underline cursor-pointer">Configurar lista de IP permitidas</a>
-              </p>
+          <div className="flex-1 overflow-y-auto min-h-0 px-8 py-5 flex flex-col gap-4">
+            {/* Info banner */}
+            <div className="flex items-start gap-3 bg-[#eff6ff] border border-[#dbeafe] rounded-[8px] px-4 py-3">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b82f6] mt-0.5 flex-shrink-0"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 4a1 1 0 110 2 1 1 0 010-2zm0 4a1 1 0 011 1v3a1 1 0 01-2 0V9a1 1 0 011-1z"/></svg>
+              <p className="text-[13px] text-[#1d4ed8]">Los tokens de API te permiten autenticarte con la API REST de Clain. Trátalos como contraseñas — guárdalos en un lugar seguro.</p>
             </div>
-            <div className="flex items-start gap-3 bg-[#f8f8f8] border border-[#e9eae6] rounded-[8px] px-4 py-3">
-              <span className="text-[#4f52cc] mt-0.5 flex-shrink-0">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 4a1 1 0 110 2 1 1 0 010-2zm0 4a1 1 0 011 1v3a1 1 0 01-2 0V9a1 1 0 011-1z"/></svg>
-              </span>
-              <p className="text-[13px] text-[#1a1a1a]">Los tokens OAuth se crean cuando autorizas a otra aplicación para que acceda a Intercom en tu nombre. En este momento no tienes aplicaciones conectadas activas.</p>
-            </div>
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
-              <svg viewBox="0 0 48 48" className="w-12 h-12 fill-none stroke-[#ccc]" strokeWidth="2">
-                <path d="M30 10l8 8-20 20-10 2 2-10 20-20z"/>
-                <path d="M26 14l8 8"/>
-              </svg>
-              <h2 className="text-[17px] font-semibold text-[#1a1a1a]">Todavía no hay tokens de OAuth</h2>
-              <p className="text-[13px] text-[#646462]">Cree un token para acceder a sus datos a través de la API</p>
-            </div>
+
+            {/* Newly created token — show once */}
+            {newlyCreated && (
+              <div className="border border-[#bbf7d0] rounded-[12px] p-4 bg-[#f0fdf4]">
+                <div className="flex items-start gap-2 mb-2">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#16a34a] mt-0.5 flex-shrink-0"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zM6.7 11.3L3.4 8l1.4-1.4L6.7 8.5l4.5-4.5 1.4 1.4z"/></svg>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#166534]">Token creado: <span className="font-normal">{newlyCreated.name}</span></p>
+                    <p className="text-[12px] text-[#166534] mt-0.5">Copia este token ahora — no podrás verlo de nuevo.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-white border border-[#86efac] rounded-[8px] px-3 py-2">
+                  <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] break-all">{newlyCreated.token}</code>
+                  <button onClick={() => copyToken(newlyCreated.token, newlyCreated.id)} className="flex-shrink-0 border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[12px] font-medium hover:bg-[#f8f8f7]">
+                    {copiedId === newlyCreated.id ? '✓ Copiado' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Token table */}
+            {tokens.length > 0 ? (
+              <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead className="bg-[#fafaf9]">
+                    <tr>
+                      {['Nombre', 'Token', 'Creado', 'Último uso', 'Permisos', ''].map(h => (
+                        <th key={h} className="text-left px-4 py-2.5 font-medium text-[#646462] text-[12px] border-b border-[#e9eae6]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e9eae6]">
+                    {tokens.map(t => (
+                      <tr key={t.id} className="hover:bg-[#fafaf9]">
+                        <td className="px-4 py-3 font-medium text-[#1a1a1a]">{t.name}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <code className="text-[12px] font-mono text-[#646462]">
+                              {revealedId === t.id ? t.token.slice(0, 20) + '…' : t.token.slice(0, 10) + '••••••••••'}
+                            </code>
+                            <button onClick={() => setRevealedId(id => id === t.id ? null : t.id)} className="text-[11px] text-[#3b59f6] hover:underline">{revealedId === t.id ? 'Ocultar' : 'Ver'}</button>
+                            <button onClick={() => copyToken(t.token, t.id)} className="text-[11px] text-[#646462] hover:text-[#1a1a1a]">{copiedId === t.id ? '✓' : '📋'}</button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-[#646462]">{new Date(t.createdAt).toLocaleDateString('es-ES')}</td>
+                        <td className="px-4 py-3 text-[#646462]">{t.lastUsed ? new Date(t.lastUsed).toLocaleDateString('es-ES') : 'Nunca'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1">
+                            {t.scopes.map(s => <span key={s} className="bg-[#f1f1ee] rounded-full px-2 py-0.5 text-[11px] text-[#646462]">{s}</span>)}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button onClick={() => revokeToken(t.id)} className="text-[12px] text-[#b91c1c] hover:underline">Revocar</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              !newlyCreated && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <svg viewBox="0 0 48 48" className="w-12 h-12 fill-none stroke-[#ccc]" strokeWidth="2">
+                    <path d="M30 10l8 8-20 20-10 2 2-10 20-20z"/><path d="M26 14l8 8"/>
+                  </svg>
+                  <h2 className="text-[17px] font-semibold text-[#1a1a1a]">Sin tokens de API</h2>
+                  <p className="text-[13px] text-[#646462]">Crea un token para acceder a tus datos a través de la API REST de Clain.</p>
+                  <button onClick={() => setShowCreate(true)} className="mt-2 bg-[#1a1a1a] text-white rounded-full px-5 py-[9px] text-[13px] font-semibold hover:bg-[#444]">+ Crear token de API</button>
+                </div>
+              )
+            )}
           </div>
         </div>
       </div>
+
+      {/* Create token modal */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowCreate(false)}>
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[420px] flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Crear token de API</h2>
+            <div>
+              <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre del token *</label>
+              <input autoFocus className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Mi integración, Script de exportación…" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createToken()} />
+            </div>
+            <div className="bg-[#fef3c7] border border-[#fde68a] rounded-[8px] px-3 py-2 text-[12px] text-[#92400e]">
+              ⚠ El token solo se mostrará una vez al crearlo. Cópialo y guárdalo en un lugar seguro.
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setShowCreate(false)} className="border border-[#e9eae6] rounded-lg px-4 py-2 text-[13px] font-medium text-[#646462] hover:bg-[#f8f8f7]">Cancelar</button>
+              <button onClick={createToken} disabled={!newName.trim()} className="bg-[#1a1a1a] text-white rounded-lg px-4 py-2 text-[13px] font-semibold hover:bg-[#333] disabled:opacity-50">Crear token</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -8873,14 +8998,35 @@ function AccountAccessView({ view, onNavigate }: { view: View; onNavigate: (v: V
 // ── MultilingualView ──────────────────────────────────────────────────────────
 
 function MultilingualView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
+  const [aiTranslate, setAiTranslate] = useState(true);
+  const [myLang, setMyLang] = useState('Español');
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ws) return;
+    const s = (ws as any)?.settings ?? {};
+    if (s.personalAiTranslate !== undefined) setAiTranslate(!!s.personalAiTranslate);
+    if (s.personalLang) setMyLang(s.personalLang);
+  }, [ws]);
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3000); }
+
+  async function save(key: string, value: unknown) {
+    const wsId = (ws as any)?.id ?? '';
+    if (!wsId) return;
+    try { await workspacesApi.updateSettings(wsId, { [key]: value }); showToast('Preferencia guardada'); } catch { /* silent */ }
+  }
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="px-8 pt-6 pb-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div className="flex items-center justify-between px-8 pt-6 pb-4 border-b border-[#e9eae6] flex-shrink-0">
             <h1 className="text-[20px] font-bold text-[#1a1a1a]">Multilingüe</h1>
+            {toast && <span className="text-[13px] text-[#16a34a] font-medium">✓ {toast}</span>}
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 px-8 py-6 flex flex-col gap-6">
             {/* General section */}
@@ -8894,9 +9040,12 @@ function MultilingualView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
                   </p>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0 pt-0.5">
-                  <div className="w-9 h-5 bg-[#f97316] rounded-full relative cursor-pointer flex-shrink-0">
-                    <div className="absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm" />
-                  </div>
+                  <button
+                    onClick={() => { setAiTranslate(v => { save('personalAiTranslate', !v); return !v; }); }}
+                    className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${aiTranslate ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${aiTranslate ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
                   <span className="text-[13px] text-[#1a1a1a] whitespace-nowrap">Habilitar la traducción de IA para el buzón</span>
                 </div>
               </div>
@@ -8908,14 +9057,21 @@ function MultilingualView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
                 <div className="flex-1">
                   <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Su idioma</p>
                   <p className="text-[13px] text-[#646462] leading-relaxed">
-                    Traduciremos las conversaciones del buzón a este idioma. Responda siempre en el idioma en que se muestra la conversación; por lo general, será su idioma, a menos que la conversación esté en el idioma predeterminado de su espacio de trabajo (English) o en un idioma no compatible. Estas conversaciones no admiten traducción.
+                    Traduciremos las conversaciones del buzón a este idioma. Responda siempre en el idioma en que se muestra la conversación.
                   </p>
                 </div>
                 <div className="flex-shrink-0 pt-0.5">
-                  <select className="border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] text-[#1a1a1a] bg-white min-w-[120px]">
+                  <select
+                    value={myLang}
+                    onChange={e => { setMyLang(e.target.value); save('personalLang', e.target.value); }}
+                    className="border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] text-[#1a1a1a] bg-white min-w-[140px] focus:outline-none focus:border-[#1a1a1a]"
+                  >
                     <option>English</option>
                     <option>Español</option>
                     <option>Français</option>
+                    <option>Deutsch</option>
+                    <option>Português</option>
+                    <option>Italiano</option>
                   </select>
                 </div>
               </div>
