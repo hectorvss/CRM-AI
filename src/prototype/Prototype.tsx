@@ -10802,6 +10802,8 @@ function EmpresasView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
 
 function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [tab, setTab] = useState<'workspace' | 'datos' | 'messenger' | 'archivos' | 'enlaces' | 'auth' | 'estado'>('enlaces');
+  const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [untrustedOn, setUntrustedOn] = useState(true);
   const [maliciousOn, setMaliciousOn] = useState(true);
   const [showDefaults, setShowDefaults] = useState(true);
@@ -10815,6 +10817,40 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
   const [permitArch, setPermitArch] = useState(true);
   const [otrosArch, setOtrosArch] = useState(false);
   const [tipoEntradas, setTipoEntradas] = useState({ camara: true, imagenes: true, archivos: true, gif: false, voz: false });
+  // Tab Workspace
+  const [ipRestrict, setIpRestrict] = useState(false);
+  const [allowedIps, setAllowedIps] = useState('');
+  const [logoutAll, setLogoutAll] = useState(false);
+  // Tab Auth (customer identity verification)
+  const [civEnabled, setCivEnabled] = useState(false);
+  // Tab Estado
+  const [statusPageUrl, setStatusPageUrl] = useState('https://status.miempresa.com');
+
+  useEffect(() => {
+    if (!ws) return;
+    const s = (ws as any)?.settings ?? {};
+    if (s.untrustedOn !== undefined) setUntrustedOn(!!s.untrustedOn);
+    if (s.maliciousOn !== undefined) setMaliciousOn(!!s.maliciousOn);
+    if (s.redaccion !== undefined) setRedaccion(!!s.redaccion);
+    if (s.notifContent !== undefined) setNotifContent(!!s.notifContent);
+    if (s.notifLeads !== undefined) setNotifLeads(!!s.notifLeads);
+    if (s.fusionConv !== undefined) setFusionConv(!!s.fusionConv);
+    if (s.fusionLeads !== undefined) setFusionLeads(!!s.fusionLeads);
+    if (s.permitArch !== undefined) setPermitArch(!!s.permitArch);
+    if (s.otrosArch !== undefined) setOtrosArch(!!s.otrosArch);
+    if (s.ipRestrict !== undefined) setIpRestrict(!!s.ipRestrict);
+    if (s.allowedIps) setAllowedIps(s.allowedIps);
+    if (s.civEnabled !== undefined) setCivEnabled(!!s.civEnabled);
+    if (s.statusPageUrl) setStatusPageUrl(s.statusPageUrl);
+  }, [ws]);
+
+  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); }
+
+  async function saveToggle(key: string, value: boolean) {
+    const wsId = (ws as any)?.id ?? '';
+    if (!wsId) return;
+    try { await workspacesApi.updateSettings(wsId, { [key]: value }); showToast('Guardado'); } catch { showToast('Error al guardar', false); }
+  }
   const tabs = [
     { id: 'workspace' as const, label: 'Espacio de trabajo' },
     { id: 'datos'     as const, label: 'Datos' },
@@ -10869,7 +10905,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <p className="text-[13px] text-[#646462]">Redacte automáticamente los datos confidenciales en las conversaciones mediante reglas integradas y personalizadas. El contenido coincidente se reemplazará con asteriscos. <a href="#" className="text-[#3b59f6] underline">Más información</a>.</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <Toggle on={redaccion} onToggle={() => setRedaccion(v => !v)} />
+                    <Toggle on={redaccion} onToggle={() => { setRedaccion(v => { saveToggle('redaccion', !v); return !v; }); }} />
                     <span className="text-[13px] text-[#1a1a1a]">Habilitar la redacción de contenido</span>
                   </div>
                 </div>
@@ -10880,11 +10916,11 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                   </div>
                   <div className="flex flex-col gap-2 flex-shrink-0 max-w-[400px]">
                     <div className="flex items-start gap-2">
-                      <Toggle on={notifContent} onToggle={() => setNotifContent(v => !v)} />
+                      <Toggle on={notifContent} onToggle={() => { setNotifContent(v => { saveToggle('notifContent', !v); return !v; }); }} />
                       <span className="text-[13px] text-[#1a1a1a]">Incluya el contenido de la conversación en los correos electrónicos de notificación</span>
                     </div>
                     <div className="flex items-start gap-2">
-                      <Toggle on={notifLeads} onToggle={() => setNotifLeads(v => !v)} />
+                      <Toggle on={notifLeads} onToggle={() => { setNotifLeads(v => { saveToggle('notifLeads', !v); return !v; }); }} />
                       <span className="text-[13px] text-[#1a1a1a]">Habilitar la identificación de correo electrónico para leads</span>
                     </div>
                   </div>
@@ -10899,7 +10935,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <p className="text-[13px] text-[#646462]">Combina las conversaciones de diferentes usuarios en un solo hilo. Esto ayuda a consolidar casos duplicados, pero puede plantear riesgos de seguridad y privacidad, ya que se fusionarán diferentes identidades de usuario. Úsalo con precaución y revisa antes de fusionar. <a href="#" className="text-[#3b59f6] underline">Más información</a></p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <Toggle on={fusionConv} onToggle={() => setFusionConv(v => !v)} />
+                    <Toggle on={fusionConv} onToggle={() => { setFusionConv(v => { saveToggle('fusionConv', !v); return !v; }); }} />
                     <span className="text-[13px] text-[#1a1a1a]">Habilitar la fusión de conversaciones entre usuarios</span>
                   </div>
                 </div>
@@ -10911,7 +10947,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <p className="text-[13px] mt-2"><a href="#" className="text-[#3b59f6] underline">Obtén más información sobre la fusión de usuarios principales</a></p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <Toggle on={fusionLeads} onToggle={() => setFusionLeads(v => !v)} />
+                    <Toggle on={fusionLeads} onToggle={() => { setFusionLeads(v => { saveToggle('fusionLeads', !v); return !v; }); }} />
                     <span className="text-[13px] text-[#1a1a1a]">Habilitar la fusión de leads no verificados en usuarios</span>
                   </div>
                 </div>
@@ -10971,7 +11007,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <p className="text-[13px] text-[#646462]">Los leads y los usuarios podrán adjuntar y enviar archivos .gif, .jpeg, .jpg, .mov, .mp4, .pdf, .png, .txt, .heic, .oga, .ogg y .dng.</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <Toggle on={permitArch} onToggle={() => setPermitArch(v => !v)} />
+                    <Toggle on={permitArch} onToggle={() => { setPermitArch(v => { saveToggle('permitArch', !v); return !v; }); }} />
                     <span className="text-[13px] text-[#1a1a1a]">Permitir que los leads y los usuarios envíen archivos adjuntos</span>
                   </div>
                 </div>
@@ -10982,7 +11018,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <a href="#" className="text-[13px] text-[#3b59f6] underline">📖 Más información.</a>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <Toggle on={otrosArch} onToggle={() => setOtrosArch(v => !v)} />
+                    <Toggle on={otrosArch} onToggle={() => { setOtrosArch(v => { saveToggle('otrosArch', !v); return !v; }); }} />
                     <span className="text-[13px] text-[#1a1a1a]">Permitir que los leads y los usuarios envíen otros tipos de archivos</span>
                   </div>
                 </div>
@@ -11011,9 +11047,155 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
               </div>
             )}
 
-            {tab === 'workspace' && <p className="text-[13px] text-[#646462]">Configuración Espacio de trabajo (próximamente).</p>}
-            {tab === 'auth' && <p className="text-[13px] text-[#646462]">Autenticación de clientes (próximamente).</p>}
-            {tab === 'estado' && <p className="text-[13px] text-[#646462]">Comprobación de estado (próximamente).</p>}
+            {tab === 'workspace' && (
+              <div className="flex flex-col gap-4 max-w-[720px]">
+                <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Configuración del espacio de trabajo</h2>
+                {/* IP Restriction */}
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
+                  <div className="flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Restricción por IP</h3>
+                    <p className="text-[13px] text-[#646462]">Limita el acceso al workspace solo a las direcciones IP que especifiques. Los compañeros de equipo fuera de esas IPs no podrán iniciar sesión.</p>
+                  </div>
+                  <div className="flex-shrink-0 flex flex-col gap-2 w-[320px]">
+                    <div className="flex items-center gap-2">
+                      <Toggle on={ipRestrict} onToggle={() => { setIpRestrict(v => { saveToggle('ipRestrict', !v); return !v; }); }} />
+                      <span className="text-[13px] text-[#1a1a1a]">Habilitar restricción por IP</span>
+                    </div>
+                    {ipRestrict && (
+                      <textarea
+                        className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[12.5px] font-mono focus:outline-none focus:border-[#1a1a1a] resize-none"
+                        rows={4}
+                        placeholder={"192.168.1.0/24\n10.0.0.0/8"}
+                        value={allowedIps}
+                        onChange={e => setAllowedIps(e.target.value)}
+                        onBlur={() => { const wsId = (ws as any)?.id ?? ''; if (wsId) workspacesApi.updateSettings(wsId, { allowedIps }).catch(() => {}); }}
+                      />
+                    )}
+                  </div>
+                </div>
+                {/* Session management */}
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
+                  <div className="flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Gestión de sesiones</h3>
+                    <p className="text-[13px] text-[#646462]">Cierra la sesión de todos los compañeros de equipo activos ahora mismo. Deberán volver a iniciar sesión para acceder al workspace.</p>
+                  </div>
+                  <div className="flex-shrink-0 w-[200px]">
+                    <button
+                      onClick={() => { setLogoutAll(true); setTimeout(() => setLogoutAll(false), 2000); showToast('Sesiones cerradas correctamente'); }}
+                      disabled={logoutAll}
+                      className="w-full border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#b91c1c] hover:bg-[#fef2f2] disabled:opacity-50"
+                    >
+                      {logoutAll ? 'Cerrando…' : 'Cerrar todas las sesiones'}
+                    </button>
+                  </div>
+                </div>
+                {/* Trusted domains */}
+                <div className="border border-[#e9eae6] rounded-[12px] p-5">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Dominios de confianza para el workspace</h3>
+                  <p className="text-[13px] text-[#646462] mb-3">Solo los usuarios con correos de estos dominios podrán registrarse automáticamente en el workspace mediante SSO.</p>
+                  <div className="flex gap-2">
+                    <input className="flex-1 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="miempresa.com" />
+                    <button className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">+ Añadir dominio</button>
+                  </div>
+                </div>
+                {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
+              </div>
+            )}
+            {tab === 'auth' && (
+              <div className="flex flex-col gap-4 max-w-[720px]">
+                <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Verificación de identidad del cliente</h2>
+                <p className="text-[13px] text-[#646462]">La verificación de identidad garantiza que los usuarios identificados sean quienes dicen ser. Se implementa mediante un hash HMAC-SHA256 del user_id generado en tu servidor con la clave secreta.</p>
+                <a href="#" className="text-[13px] text-[#3b59f6] underline">📖 Documentación de verificación de identidad</a>
+                {/* Enable toggle */}
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Habilitar verificación de identidad</h3>
+                    <p className="text-[13px] text-[#646462]">Los usuarios sin HMAC válido serán tratados como leads no verificados.</p>
+                  </div>
+                  <Toggle on={civEnabled} onToggle={() => { setCivEnabled(v => { saveToggle('civEnabled', !v); return !v; }); }} />
+                </div>
+                {/* Status cards */}
+                <div className="grid grid-cols-3 gap-4">
+                  {[
+                    { label: 'Web Messenger', icon: '🖥', status: civEnabled ? 'Activo' : 'Inactivo', color: civEnabled ? '#dcfce7' : '#f3f3f1', textColor: civEnabled ? '#166534' : '#646462' },
+                    { label: 'iOS SDK', icon: '📱', status: 'Inactivo', color: '#f3f3f1', textColor: '#646462' },
+                    { label: 'Android SDK', icon: '🤖', status: 'Inactivo', color: '#f3f3f1', textColor: '#646462' },
+                  ].map(p => (
+                    <div key={p.label} className="border border-[#e9eae6] rounded-[12px] p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[18px]">{p.icon}</span>
+                        <span className="text-[13px] font-semibold text-[#1a1a1a]">{p.label}</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: p.color, color: p.textColor }}>{p.status}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Code snippet */}
+                <div className="border border-[#e9eae6] rounded-[12px] p-5">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-2">Ejemplo de implementación (Node.js)</h3>
+                  <pre className="bg-[#f8f8f7] rounded-[8px] p-4 text-[12px] font-mono text-[#1a1a1a] overflow-x-auto">{`const crypto = require('crypto');
+const secretKey = '<TU_CLAVE_SECRETA>';
+
+const hash = crypto
+  .createHmac('sha256', secretKey)
+  .update(user.id)
+  .digest('hex');
+
+// Pasa el hash al SDK de Clain
+window.Clain('boot', {
+  user_id: user.id,
+  user_hash: hash
+});`}</pre>
+                </div>
+                {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
+              </div>
+            )}
+            {tab === 'estado' && (
+              <div className="flex flex-col gap-4 max-w-[720px]">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Comprobación de estado</h2>
+                  <span className="flex items-center gap-1.5 text-[13px] font-medium text-[#16a34a]">
+                    <span className="w-2 h-2 rounded-full bg-[#16a34a] inline-block"/>
+                    Todos los sistemas operativos
+                  </span>
+                </div>
+                {/* Status items */}
+                {[
+                  { name: 'API / Backend',          status: 'operational', uptime: '99.98%' },
+                  { name: 'Messenger Web',           status: 'operational', uptime: '99.95%' },
+                  { name: 'SDK iOS / Android',       status: 'operational', uptime: '99.97%' },
+                  { name: 'Notificaciones push',     status: 'operational', uptime: '99.90%' },
+                  { name: 'Centro de ayuda',         status: 'operational', uptime: '100%'   },
+                  { name: 'Webhooks salientes',      status: 'degraded',    uptime: '98.12%' },
+                ].map(item => (
+                  <div key={item.name} className="border border-[#e9eae6] rounded-[12px] px-5 py-3 flex items-center gap-4">
+                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${item.status === 'operational' ? 'bg-[#16a34a]' : 'bg-[#f59e0b]'}`} />
+                    <span className="flex-1 text-[13px] font-medium text-[#1a1a1a]">{item.name}</span>
+                    <span className={`text-[12px] font-medium px-2 py-0.5 rounded-full ${item.status === 'operational' ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#fef3c7] text-[#92400e]'}`}>
+                      {item.status === 'operational' ? 'Operativo' : 'Degradado'}
+                    </span>
+                    <span className="text-[12px] text-[#646462] w-16 text-right">{item.uptime}</span>
+                  </div>
+                ))}
+                {/* Status page URL */}
+                <div className="border border-[#e9eae6] rounded-[12px] p-5">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">URL de tu página de estado</h3>
+                  <p className="text-[13px] text-[#646462] mb-2">Muestra tu propia página de estado a los clientes cuando detecten problemas.</p>
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                      value={statusPageUrl}
+                      onChange={e => setStatusPageUrl(e.target.value)}
+                    />
+                    <button
+                      onClick={() => { const wsId = (ws as any)?.id ?? ''; if (wsId) workspacesApi.updateSettings(wsId, { statusPageUrl }).then(() => showToast('URL guardada')).catch(() => showToast('Error', false)); }}
+                      className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]"
+                    >Guardar</button>
+                  </div>
+                </div>
+                {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
+              </div>
+            )}
 
             {tab === 'enlaces' && <>
             <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Seguridad de los enlaces</h2>
@@ -11028,7 +11210,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                   </div>
                 </div>
                 <div className="px-4 py-3 flex items-start gap-3">
-                  <Toggle on={untrustedOn} onToggle={() => setUntrustedOn(v => !v)} />
+                  <Toggle on={untrustedOn} onToggle={() => { setUntrustedOn(v => { saveToggle('untrustedOn', !v); return !v; }); }} />
                   <div className="flex-1">
                     <p className="text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Advertencias no confiables</p>
                     <p className="text-[12px] text-[#646462]">Pide a tus compañeros de equipo que revisen detenidamente los enlaces que no son de confianza antes de abrirlos. <a href="#" className="text-[#3b59f6] underline">(Ver ejemplo)</a></p>
@@ -11044,7 +11226,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                   </div>
                 </div>
                 <div className="px-4 py-3 flex items-start gap-3">
-                  <Toggle on={maliciousOn} onToggle={() => setMaliciousOn(v => !v)} />
+                  <Toggle on={maliciousOn} onToggle={() => { setMaliciousOn(v => { saveToggle('maliciousOn', !v); return !v; }); }} />
                   <div className="flex-1">
                     <p className="text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Advertencias maliciosas</p>
                     <p className="text-[12px] text-[#646462]">Detecta enlaces maliciosos y exige a los compañeros de equipo que reconozcan los riesgos antes de abrir. <a href="#" className="text-[#3b59f6] underline">(Ver ejemplo)</a></p>
@@ -11086,6 +11268,108 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
             </>}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── GlosarioTab ───────────────────────────────────────────────────────────────
+
+interface GlosarioEntry { id: string; source: string; target: string; lang: string; }
+
+function GlosarioTab({ wsId, showToast }: { wsId: string; showToast: (m: string, ok?: boolean) => void }) {
+  const [entries, setEntries] = useState<GlosarioEntry[]>([
+    { id: '1', source: 'Inbox', target: 'Buzón', lang: 'es' },
+    { id: '2', source: 'Lead', target: 'Prospecto', lang: 'es' },
+    { id: '3', source: 'Ticket', target: 'Caso', lang: 'es' },
+  ]);
+  const [newSource, setNewSource] = useState('');
+  const [newTarget, setNewTarget] = useState('');
+  const [newLang, setNewLang] = useState('es');
+  const [saving, setSaving] = useState(false);
+
+  async function persist(updated: GlosarioEntry[]) {
+    if (!wsId) return;
+    try { await workspacesApi.updateSettings(wsId, { glossary: updated }); } catch { /* non-fatal */ }
+  }
+
+  async function addEntry() {
+    if (!newSource.trim() || !newTarget.trim()) return;
+    const entry: GlosarioEntry = { id: Date.now().toString(), source: newSource.trim(), target: newTarget.trim(), lang: newLang };
+    const updated = [...entries, entry];
+    setSaving(true);
+    await persist(updated);
+    setSaving(false);
+    setEntries(updated);
+    setNewSource(''); setNewTarget('');
+    showToast('Entrada añadida');
+  }
+
+  async function removeEntry(id: string) {
+    const updated = entries.filter(e => e.id !== id);
+    await persist(updated);
+    setEntries(updated);
+    showToast('Entrada eliminada');
+  }
+
+  return (
+    <div className="flex flex-col gap-4 max-w-[720px]">
+      <div>
+        <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Glosario de traducciones</h2>
+        <p className="text-[13px] text-[#646462]">Define términos específicos para que el motor de traducción de IA los respete exactamente. Útil para nombres de producto, tecnicismos o jerga empresarial.</p>
+      </div>
+      {/* Table */}
+      <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+        <table className="w-full text-[13px]">
+          <thead className="bg-[#fafaf9]">
+            <tr>
+              {['Término original (inglés)', 'Traducción', 'Idioma destino', ''].map(h => (
+                <th key={h} className="text-left px-4 py-2.5 font-medium text-[#646462] text-[12px] border-b border-[#e9eae6]">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#e9eae6]">
+            {entries.map(entry => (
+              <tr key={entry.id} className="hover:bg-[#fafaf9]">
+                <td className="px-4 py-2.5 text-[#1a1a1a] font-medium">{entry.source}</td>
+                <td className="px-4 py-2.5 text-[#1a1a1a]">{entry.target}</td>
+                <td className="px-4 py-2.5">
+                  <span className="bg-[#eff6ff] text-[#1d4ed8] rounded-full px-2 py-0.5 text-[11px] font-medium">{entry.lang}</span>
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  <button onClick={() => removeEntry(entry.id)} className="text-[12px] text-[#b91c1c] hover:underline">Eliminar</button>
+                </td>
+              </tr>
+            ))}
+            {entries.length === 0 && (
+              <tr><td colSpan={4} className="px-4 py-8 text-center text-[13px] text-[#a4a4a2]">Sin entradas en el glosario</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {/* Add row */}
+      <div className="border border-[#e9eae6] rounded-[12px] p-4 flex items-end gap-3 bg-[#fafaf9]">
+        <div className="flex-1">
+          <label className="block text-[12px] font-medium text-[#646462] mb-1">Término original</label>
+          <input className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Inbox" value={newSource} onChange={e => setNewSource(e.target.value)} />
+        </div>
+        <div className="flex-1">
+          <label className="block text-[12px] font-medium text-[#646462] mb-1">Traducción</label>
+          <input className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Buzón" value={newTarget} onChange={e => setNewTarget(e.target.value)} />
+        </div>
+        <div className="w-32">
+          <label className="block text-[12px] font-medium text-[#646462] mb-1">Idioma</label>
+          <select className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white focus:outline-none" value={newLang} onChange={e => setNewLang(e.target.value)}>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="pt">Português</option>
+            <option value="it">Italiano</option>
+          </select>
+        </div>
+        <button onClick={addEntry} disabled={!newSource.trim() || !newTarget.trim() || saving} className="bg-[#1a1a1a] text-white rounded-full px-4 py-2 text-[13px] font-semibold hover:bg-[#444] disabled:opacity-50 flex-shrink-0">
+          {saving ? '…' : '+ Añadir'}
+        </button>
       </div>
     </div>
   );
@@ -11211,7 +11495,7 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
               <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-3 mt-4">Tono de traducción</h2>
             </>}
             {tab === 'glosario' && (
-              <p className="text-[13px] text-[#646462]">Glosario de traducciones (próximamente).</p>
+              <GlosarioTab wsId={(ws as any)?.id ?? ''} showToast={showToast} />
             )}
           </div>
         </div>
@@ -13470,29 +13754,211 @@ function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v:
 
 // ── MarcasView (1-97215) ──────────────────────────────────────────────────────
 
+interface BrandItem { id: string; name: string; color: string; helpCenterUrl: string; finEnabled: boolean; isDefault: boolean; }
+
 function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
+  const wsName = (ws as any)?.name ?? 'Mi empresa';
+
+  const [brands, setBrands] = useState<BrandItem[]>([
+    { id: 'default', name: wsName, color: '#3b59f6', helpCenterUrl: 'soporte.miempresa.com', finEnabled: true, isDefault: true },
+  ]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newBrandName, setNewBrandName] = useState('');
+  const [newBrandColor, setNewBrandColor] = useState('#3b59f6');
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  // Sync default brand name with workspace
+  useEffect(() => {
+    if (!ws) return;
+    const name = (ws as any)?.name;
+    if (name) setBrands(prev => prev.map(b => b.isDefault ? { ...b, name } : b));
+  }, [ws]);
+
+  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); }
+
+  async function saveBrand(brand: BrandItem) {
+    setSaving(true);
+    try {
+      const wsId = (ws as any)?.id ?? '';
+      const allBrands = brands.map(b => b.id === brand.id ? brand : b);
+      await workspacesApi.updateSettings(wsId, { brands: allBrands });
+      setBrands(allBrands);
+      showToast('Marca guardada correctamente');
+    } catch { showToast('Error al guardar', false); }
+    finally { setSaving(false); setEditingId(null); }
+  }
+
+  async function addBrand() {
+    if (!newBrandName.trim()) return;
+    const nb: BrandItem = { id: Date.now().toString(), name: newBrandName.trim(), color: newBrandColor, helpCenterUrl: '', finEnabled: false, isDefault: false };
+    const updated = [...brands, nb];
+    setSaving(true);
+    try {
+      const wsId = (ws as any)?.id ?? '';
+      await workspacesApi.updateSettings(wsId, { brands: updated });
+      setBrands(updated);
+      setShowNewModal(false); setNewBrandName(''); setNewBrandColor('#3b59f6');
+      showToast('Marca creada');
+    } catch { showToast('Error al crear', false); }
+    finally { setSaving(false); }
+  }
+
+  async function deleteBrand(id: string) {
+    const updated = brands.filter(b => b.id !== id);
+    const wsId = (ws as any)?.id ?? '';
+    await workspacesApi.updateSettings(wsId, { brands: updated }).catch(() => {});
+    setBrands(updated);
+    showToast('Marca eliminada');
+  }
+
+  const editing = editingId ? brands.find(b => b.id === editingId) : null;
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Marcas</h1>
-            <button className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#646462] cursor-not-allowed">+ Nueva marca</button>
+            <div>
+              <h1 className="text-[20px] font-bold text-[#1a1a1a]">Marcas</h1>
+              <p className="text-[13px] text-[#646462] mt-0.5">Gestiona las marcas de tu organización y su configuración individual.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
+              <button onClick={() => setShowNewModal(true)} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nueva marca</button>
+            </div>
           </div>
+          {/* Brand list */}
           <div className="flex-1 overflow-y-auto min-h-0 p-6">
-            <div className="border border-[#e9eae6] rounded-[12px] p-5 max-w-[400px]">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[14px] font-semibold text-[#1a1a1a]">Acme</p>
-                <span className="bg-[#f3f3f1] text-[#646462] text-[11px] px-2 py-0.5 rounded-full font-medium">Predeterminado</span>
-              </div>
-              <div className="flex items-center gap-2 text-[13px] text-[#646462] mb-1.5"><span>📖</span>Acme Help Center</div>
-              <div className="flex items-center gap-2 text-[13px] text-[#646462]"><span>⚡</span>Fin</div>
+            <div className="flex flex-col gap-3 max-w-[760px]">
+              {brands.map(brand => (
+                <div key={brand.id} className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                  {/* Brand header row */}
+                  <div className="flex items-center gap-4 px-5 py-4">
+                    <div className="w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0 text-white text-[16px] font-bold" style={{ background: brand.color }}>
+                      {brand.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[14px] font-semibold text-[#1a1a1a] truncate">{brand.name}</span>
+                        {brand.isDefault && <span className="bg-[#f3f3f1] text-[#646462] text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0">Predeterminado</span>}
+                      </div>
+                      <div className="flex items-center gap-4 mt-0.5">
+                        {brand.helpCenterUrl && (
+                          <span className="flex items-center gap-1 text-[12px] text-[#646462]">
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm5 6V7h2v2H7zm0 2v-1h2v1H7z"/></svg>
+                            {brand.helpCenterUrl}
+                          </span>
+                        )}
+                        <span className={`flex items-center gap-1 text-[12px] ${brand.finEnabled ? 'text-[#16a34a]' : 'text-[#646462]'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${brand.finEnabled ? 'bg-[#16a34a]' : 'bg-[#d1d5db]'}`} />
+                          Fin {brand.finEnabled ? 'activo' : 'inactivo'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button onClick={() => setEditingId(brand.id === editingId ? null : brand.id)} className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                        {editingId === brand.id ? 'Cerrar' : 'Editar'}
+                      </button>
+                      {!brand.isDefault && (
+                        <button onClick={() => deleteBrand(brand.id)} className="text-[12px] text-[#b91c1c] hover:underline">Eliminar</button>
+                      )}
+                    </div>
+                  </div>
+                  {/* Inline edit panel */}
+                  {editingId === brand.id && editing && (
+                    <div className="border-t border-[#e9eae6] px-5 py-4 bg-[#fafaf9] flex flex-col gap-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre de la marca</label>
+                          <input
+                            className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                            value={editing.name}
+                            onChange={e => setBrands(prev => prev.map(b => b.id === editing.id ? { ...b, name: e.target.value } : b))}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[12px] font-medium text-[#646462] mb-1">Color de la marca</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={editing.color}
+                              onChange={e => setBrands(prev => prev.map(b => b.id === editing.id ? { ...b, color: e.target.value } : b))}
+                              className="w-9 h-9 rounded border border-[#e9eae6] cursor-pointer"
+                            />
+                            <span className="text-[12px] font-mono text-[#646462]">{editing.color}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-medium text-[#646462] mb-1">URL del Help Center</label>
+                        <input
+                          className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                          placeholder="soporte.miempresa.com"
+                          value={editing.helpCenterUrl}
+                          onChange={e => setBrands(prev => prev.map(b => b.id === editing.id ? { ...b, helpCenterUrl: e.target.value } : b))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <button
+                            onClick={() => setBrands(prev => prev.map(b => b.id === editing.id ? { ...b, finEnabled: !b.finEnabled } : b))}
+                            className={`w-9 h-5 rounded-full relative transition-colors ${editing.finEnabled ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}
+                          >
+                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${editing.finEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          </button>
+                          <span className="text-[13px] text-[#1a1a1a]">Fin AI activo para esta marca</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setEditingId(null)} className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] font-medium text-[#646462] hover:bg-[#f5f5f4]">Cancelar</button>
+                          <button onClick={() => saveBrand(editing)} disabled={saving} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[5px] text-[12px] font-semibold hover:bg-[#444] disabled:opacity-50">
+                            {saving ? 'Guardando…' : 'Guardar cambios'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Info box */}
+            <div className="max-w-[760px] mt-6 border border-[#dbeafe] rounded-[12px] p-4 bg-[#eff6ff]">
+              <p className="text-[13px] text-[#1d4ed8] font-medium mb-0.5">¿Qué es una marca?</p>
+              <p className="text-[12px] text-[#3b82f6]">Las marcas te permiten ofrecer experiencias de soporte diferenciadas (Messenger, Help Center, Fin AI) bajo diferentes identidades visuales dentro de la misma cuenta.</p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* New brand modal */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowNewModal(false)}>
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[420px] flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Nueva marca</h2>
+            <div>
+              <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre de la marca *</label>
+              <input autoFocus className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Ej: Clain Pro, Clain Developers…" value={newBrandName} onChange={e => setNewBrandName(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-[#646462] mb-1">Color de la marca</label>
+              <div className="flex items-center gap-3">
+                <input type="color" value={newBrandColor} onChange={e => setNewBrandColor(e.target.value)} className="w-9 h-9 rounded border border-[#e9eae6] cursor-pointer" />
+                <span className="text-[13px] font-mono text-[#646462]">{newBrandColor}</span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowNewModal(false)} className="border border-[#e9eae6] rounded-lg px-4 py-2 text-[13px] font-medium text-[#646462] hover:bg-[#f8f8f7]">Cancelar</button>
+              <button onClick={addBrand} disabled={!newBrandName.trim() || saving} className="bg-[#1a1a1a] text-white rounded-lg px-4 py-2 text-[13px] font-semibold hover:bg-[#333] disabled:opacity-50">{saving ? 'Creando…' : 'Crear marca'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
