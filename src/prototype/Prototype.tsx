@@ -14116,7 +14116,8 @@ function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          {/* Header */}
+
+          {/* ── Header ── */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
             <div>
               <h1 className="text-[20px] font-bold text-[#1a1a1a]">Marcas</h1>
@@ -14127,55 +14128,54 @@ function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
               <button onClick={() => setShowNewModal(true)} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nueva marca</button>
             </div>
           </div>
-          {/* Brand list */}
-          <div className="flex-1 overflow-y-auto min-h-0 p-6">
-            <div className="flex flex-col gap-3 max-w-[760px]">
-              {brands.map(brand => (
-                <div key={brand.id} className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
-                  <div className="flex items-center gap-4 px-5 py-4">
-                    <div className="w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0 text-white text-[16px] font-bold" style={{ background: brand.color }}>
-                      {brand.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[14px] font-semibold text-[#1a1a1a] truncate">{brand.name}</span>
-                        {brand.isDefault && <span className="bg-[#f3f3f1] text-[#646462] text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0">Predeterminado</span>}
-                      </div>
-                      <div className="flex items-center gap-4 mt-0.5">
-                        {brand.helpCenterUrl && (
-                          <span className="flex items-center gap-1 text-[12px] text-[#646462]">
-                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm5 6V7h2v2H7zm0 2v-1h2v1H7z"/></svg>
-                            {brand.helpCenterUrl}
-                          </span>
-                        )}
-                        <span className={`flex items-center gap-1 text-[12px] ${brand.finEnabled ? 'text-[#16a34a]' : 'text-[#646462]'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${brand.finEnabled ? 'bg-[#16a34a]' : 'bg-[#d1d5db]'}`} />
-                          Fin {brand.finEnabled ? 'activo' : 'inactivo'}
-                        </span>
-                        <span className="text-[12px] text-[#c8c9c4] font-mono">{brand.brandId}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => setDrawerBrand({ ...brand })}
-                        className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]"
-                      >
-                        Editar
-                      </button>
-                      {!brand.isDefault && (
-                        <button onClick={() => deleteBrand(brand.id)} className="text-[12px] text-[#b91c1c] hover:underline">Eliminar</button>
+
+          {/* ── Brand list ── */}
+          <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-3">
+            {brands.map(brand => (
+              <div
+                key={brand.id}
+                className="border border-[#e9eae6] rounded-[12px] p-5 cursor-pointer hover:border-[#c8c9c4] transition-colors group"
+                onClick={() => setDrawerBrand({ ...brand })}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    {/* Name + badge */}
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <span className="text-[15px] font-bold text-[#1a1a1a]">{brand.name}</span>
+                      {brand.isDefault && (
+                        <span className="bg-[#f3f3f1] text-[#646462] text-[11px] px-2 py-0.5 rounded-full font-medium">Predeterminado</span>
                       )}
                     </div>
+                    {/* Sub-items */}
+                    <div className="flex flex-col gap-1.5">
+                      {brand.helpCenter && (
+                        <div className="flex items-center gap-1.5 text-[13px] text-[#646462]">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a96] flex-shrink-0">
+                            <path d="M1 2.75A.75.75 0 011.75 2h12.5a.75.75 0 010 1.5H1.75A.75.75 0 011 2.75zm0 5A.75.75 0 011.75 7h12.5a.75.75 0 010 1.5H1.75A.75.75 0 011 7.75zM1.75 12a.75.75 0 000 1.5h12.5a.75.75 0 000-1.5H1.75z"/>
+                          </svg>
+                          <span>{brand.helpCenter}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5 text-[13px] text-[#646462]">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a96] flex-shrink-0">
+                          <path d="M8 0a8 8 0 110 16A8 8 0 018 0zM1.5 8a6.5 6.5 0 1013 0 6.5 6.5 0 00-13 0zm7-3.25v2.5l1.75 1.75-.53.53-2-2a.75.75 0 01-.22-.53v-2.25h1z"/>
+                        </svg>
+                        <span>{brand.finIdentity || 'Fin'}</span>
+                      </div>
+                    </div>
                   </div>
+                  {/* Delete — only for non-default, visible on hover */}
+                  {!brand.isDefault && (
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteBrand(brand.id); }}
+                      className="opacity-0 group-hover:opacity-100 text-[12px] text-[#b91c1c] hover:underline transition-opacity ml-4 flex-shrink-0"
+                    >
+                      Eliminar
+                    </button>
+                  )}
                 </div>
-              ))}
-            </div>
-
-            {/* Info box */}
-            <div className="max-w-[760px] mt-6 border border-[#dbeafe] rounded-[12px] p-4 bg-[#eff6ff]">
-              <p className="text-[13px] text-[#1d4ed8] font-medium mb-0.5">¿Qué es una marca?</p>
-              <p className="text-[12px] text-[#3b82f6]">Las marcas te permiten ofrecer experiencias de soporte diferenciadas (Messenger, Help Center, Fin AI) bajo diferentes identidades visuales dentro de la misma cuenta.</p>
-            </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -14185,183 +14185,170 @@ function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
         <div className="fixed inset-0 z-50 flex" onClick={() => setDrawerBrand(null)}>
           <div className="flex-1" />
           <div
-            className="w-[520px] bg-white h-full shadow-2xl flex flex-col border-l border-[#e9eae6]"
+            className="w-[580px] bg-[#f3f3f1] h-full shadow-2xl flex flex-col border-l border-[#e9eae6]"
             onClick={e => e.stopPropagation()}
           >
             {/* Drawer header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-[8px] flex items-center justify-center text-white text-[13px] font-bold" style={{ background: drawerBrand.color }}>
-                  {drawerBrand.name.charAt(0).toUpperCase()}
-                </div>
-                <span className="text-[15px] font-bold text-[#1a1a1a]">Editar marca</span>
-              </div>
+            <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#e9eae6] flex-shrink-0">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Editar marca</h2>
               <div className="flex items-center gap-2">
-                <a href="#" className="text-[13px] text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Aprender</a>
-                <button onClick={() => setDrawerBrand(null)} className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] font-medium text-[#646462] hover:bg-[#f5f5f4] ml-2">Cancelar</button>
+                <button className="flex items-center gap-1.5 text-[13px] text-[#646462] border border-[#e9eae6] rounded-lg px-3 py-1.5 bg-white hover:bg-[#f8f8f7]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M0 8a8 8 0 1116 0A8 8 0 010 8zm8-6.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM6.92 6.085h.001a.75.75 0 11-1.342-.67c.169-.339.436-.701.849-.977C6.845 4.16 7.369 4 8 4a2.756 2.756 0 012.515 1.339c.357.548.485 1.093.435 1.585-.04.427-.188.717-.354.934a2.18 2.18 0 01-.346.335c-.113.087-.226.167-.31.232l-.05.036c-.083.059-.144.103-.188.149-.026.027-.03.036-.03.043v.25a.75.75 0 01-1.5 0v-.25c0-.388.168-.712.379-.938.163-.174.365-.329.481-.414l.049-.036c.084-.059.144-.103.187-.148.028-.03.043-.052.048-.071.001-.003.001-.004.001-.004a1.275 1.275 0 01-.218-.386 1.21 1.21 0 01-.054-.329V6.75l-.025.01A1.25 1.25 0 008 5.5c-.316 0-.473.06-.567.124a1.023 1.023 0 00-.312.347l-.201.114zM8 11a1 1 0 110 2 1 1 0 010-2z"/></svg>
+                  Aprender
+                </button>
+                <button onClick={() => setDrawerBrand(null)} className="text-[13px] text-[#646462] px-3 py-1.5 rounded-lg bg-white hover:bg-[#f8f8f7] border border-[#e9eae6]">Cancelar</button>
                 <button
                   onClick={() => saveBrand(drawerBrand)}
                   disabled={saving}
-                  className="bg-[#1a1a1a] text-white rounded-full px-4 py-[5px] text-[12px] font-semibold hover:bg-[#444] disabled:opacity-50"
+                  className="bg-[#1a1a1a] text-white rounded-lg px-4 py-1.5 text-[13px] font-semibold hover:bg-[#333] disabled:opacity-50"
                 >
                   {saving ? 'Guardando…' : 'Guardar'}
                 </button>
               </div>
             </div>
 
-            {/* Drawer body */}
-            <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-6">
+            {/* Drawer body — sections as 2-col cards */}
+            <div className="flex-1 overflow-y-auto min-h-0 p-4 flex flex-col gap-3">
 
-              {/* Brand ID */}
-              <div>
-                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">ID de marca</label>
-                <p className="text-[12px] text-[#646462] mb-2">Identificador único de solo lectura generado automáticamente.</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={drawerBrand.brandId}
-                    className="flex-1 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[12px] font-mono text-[#646462] bg-[#f8f8f7] focus:outline-none"
-                  />
-                  <button
-                    onClick={() => copyBrandId(drawerBrand.brandId)}
-                    className="flex items-center gap-1.5 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4] transition-colors flex-shrink-0"
-                  >
-                    {copied ? (
-                      <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#16a34a]"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Copiado</>
-                    ) : (
-                      <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>Copiar</>
-                    )}
-                  </button>
+              {/* Nombre de la marca */}
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex gap-6">
+                <div className="w-[200px] flex-shrink-0">
+                  <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Nombre de la marca</h3>
+                  <p className="text-[12px] text-[#646462] leading-[1.5]">Elige un nombre para esta marca. Los clientes pueden ver los nombres de las marcas.</p>
                 </div>
-              </div>
-
-              <div className="border-t border-[#e9eae6]" />
-
-              {/* Brand name + color */}
-              <div className="flex flex-col gap-4">
-                <div>
-                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Nombre de la marca</label>
+                <div className="flex-1">
                   <input
                     className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                    placeholder={drawerBrand.name}
                     value={drawerBrand.name}
                     onChange={e => setDrawerBrand(prev => prev ? { ...prev, name: e.target.value } : prev)}
                   />
                 </div>
-                <div>
-                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Color de la marca</label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={drawerBrand.color}
-                      onChange={e => setDrawerBrand(prev => prev ? { ...prev, color: e.target.value } : prev)}
-                      className="w-9 h-9 rounded-[6px] border border-[#e9eae6] cursor-pointer"
-                    />
-                    <span className="text-[13px] font-mono text-[#646462]">{drawerBrand.color}</span>
-                  </div>
+              </div>
+
+              {/* ID de marca */}
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex gap-6">
+                <div className="w-[200px] flex-shrink-0">
+                  <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-1">ID de marca</h3>
+                  <p className="text-[12px] text-[#646462] leading-[1.5]">Un identificador único para esta marca, utilizado en las APIs y en la asistencia a clientes.</p>
+                </div>
+                <div className="flex-1 flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={drawerBrand.brandId.replace('brand_', '')}
+                    className="flex-1 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] font-mono text-[#646462] bg-[#f8f8f7] focus:outline-none"
+                  />
+                  <button
+                    onClick={() => copyBrandId(drawerBrand.brandId)}
+                    className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4] transition-colors flex-shrink-0"
+                  >
+                    {copied ? 'Copiado' : 'Copiar'}
+                  </button>
                 </div>
               </div>
 
-              <div className="border-t border-[#e9eae6]" />
-
               {/* Fin AI Agent */}
-              <div>
-                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Agente de IA Fin</label>
-                <p className="text-[12px] text-[#646462] mb-3">Configura la identidad del agente Fin para esta marca.</p>
-                <div className="flex flex-col gap-3">
-                  <div>
-                    <label className="block text-[12px] font-medium text-[#646462] mb-1">Identidad de Fin</label>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex gap-6">
+                <div className="w-[200px] flex-shrink-0">
+                  <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Fin AI Agent</h3>
+                  <p className="text-[12px] text-[#646462] leading-[1.5]">Tu identidad de IA de Fin y ajustes de audiencia para esta marca</p>
+                </div>
+                <div className="flex-1 flex flex-col gap-2">
+                  <p className="text-[11px] text-[#646462]">Identidad de Fin en Messenger específica para esta marca</p>
+                  <div className="flex items-center gap-2">
                     <input
-                      className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-                      placeholder="Ej: Fin, Asistente, Bot de soporte…"
+                      className="flex-1 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                      placeholder="Fin"
                       value={drawerBrand.finIdentity}
                       onChange={e => setDrawerBrand(prev => prev ? { ...prev, finIdentity: e.target.value } : prev)}
                     />
+                    <button className="border border-[#e9eae6] rounded-[8px] p-2 hover:bg-[#f5f5f4] flex-shrink-0">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zM1.5 8a6.5 6.5 0 1013 0 6.5 6.5 0 00-13 0zm4.75-1.25a.75.75 0 000 1.5h.5v2.5h-.5a.75.75 0 000 1.5h2.5a.75.75 0 000-1.5H7.5v-3.25a.75.75 0 00-.75-.75h-1zM8 3.5a1 1 0 110 2 1 1 0 010-2z"/></svg>
+                    </button>
+                    <button className="border border-[#e9eae6] rounded-[8px] p-2 hover:bg-[#f5f5f4] flex-shrink-0">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25a1.75 1.75 0 01.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 00-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 000-.354l-1.086-1.086zM11.189 6.25L9.75 4.81 3.558 11H3v.56l-1 3.5 3.5-1v-.56h.56l6.129-6.25z"/></svg>
+                    </button>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <button
-                        onClick={() => setDrawerBrand(prev => prev ? { ...prev, finEnabled: !prev.finEnabled } : prev)}
-                        className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${drawerBrand.finEnabled ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}
-                      >
-                        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${drawerBrand.finEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
-                      </button>
-                      <span className="text-[13px] text-[#1a1a1a]">Fin activo para esta marca</span>
-                    </label>
-                    <a href="#" className="text-[13px] text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>
-                      Editar audiencias →
-                    </a>
-                  </div>
+                  <p className="text-[12px] text-[#646462] mt-1">Agregar su marca a una audiencia de Fin.</p>
+                  <a href="#" className="flex items-center gap-1 text-[13px] text-[#1a1a1a] font-medium hover:underline w-fit" onClick={e => e.preventDefault()}>
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25a1.75 1.75 0 01.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 00-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 000-.354l-1.086-1.086zM11.189 6.25L9.75 4.81 3.558 11H3v.56l-1 3.5 3.5-1v-.56h.56l6.129-6.25z"/></svg>
+                    Editar audiencias
+                  </a>
                 </div>
               </div>
 
-              <div className="border-t border-[#e9eae6]" />
-
               {/* Centro de ayuda */}
-              <div>
-                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Centro de ayuda</label>
-                <p className="text-[12px] text-[#646462] mb-2">Selecciona el centro de ayuda asociado a esta marca.</p>
-                <select
-                  className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
-                  value={drawerBrand.helpCenter}
-                  onChange={e => setDrawerBrand(prev => prev ? { ...prev, helpCenter: e.target.value, helpCenterUrl: e.target.value } : prev)}
-                >
-                  <option value="">Ninguno</option>
-                  <option value="Centro de ayuda principal">Centro de ayuda principal</option>
-                  <option value="Help Center Desarrolladores">Help Center Desarrolladores</option>
-                  <option value="Soporte Enterprise">Soporte Enterprise</option>
-                </select>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex gap-6">
+                <div className="w-[200px] flex-shrink-0">
+                  <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Centro de ayuda</h3>
+                  <p className="text-[12px] text-[#646462] leading-[1.5]">Asegúrate de que tus usuarios vean los artículos correctos cuando se pongan en contacto con esta marca a través de Messenger vinculándolo a un centro de ayuda.</p>
+                </div>
+                <div className="flex-1">
+                  <select
+                    className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                    value={drawerBrand.helpCenter}
+                    onChange={e => setDrawerBrand(prev => prev ? { ...prev, helpCenter: e.target.value, helpCenterUrl: e.target.value } : prev)}
+                  >
+                    <option value="">Ninguno</option>
+                    <option value="Centro de ayuda principal">Centro de ayuda principal</option>
+                    <option value="Help Center Desarrolladores">Help Center Desarrolladores</option>
+                    <option value="Soporte Enterprise">Soporte Enterprise</option>
+                  </select>
+                </div>
               </div>
-
-              <div className="border-t border-[#e9eae6]" />
 
               {/* Dirección predeterminada */}
-              <div>
-                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Dirección predeterminada</label>
-                <p className="text-[12px] text-[#646462] mb-2">Dirección que aparece en los emails enviados por esta marca.</p>
-                <select
-                  className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
-                  value={drawerBrand.defaultAddress}
-                  onChange={e => setDrawerBrand(prev => prev ? { ...prev, defaultAddress: e.target.value } : prev)}
-                >
-                  <option value="">Ninguna</option>
-                  <option value="Dirección de la empresa">Dirección de la empresa</option>
-                  <option value="Oficina central">Oficina central</option>
-                  <option value="Delegación Madrid">Delegación Madrid</option>
-                </select>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex gap-6">
+                <div className="w-[200px] flex-shrink-0">
+                  <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Dirección predeterminada</h3>
+                  <p className="text-[12px] text-[#646462] leading-[1.5]">Las notificaciones, los mensajes de flujo de trabajo y otros correos electrónicos automáticos de esta marca utilizarán esta dirección.</p>
+                </div>
+                <div className="flex-1">
+                  <select
+                    className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                    value={drawerBrand.defaultAddress}
+                    onChange={e => setDrawerBrand(prev => prev ? { ...prev, defaultAddress: e.target.value } : prev)}
+                  >
+                    <option value="">Ninguna</option>
+                    <option value="Dirección de la empresa">Dirección de la empresa</option>
+                    <option value="Oficina central">Oficina central</option>
+                    <option value="Delegación Madrid">Delegación Madrid</option>
+                  </select>
+                </div>
               </div>
-
-              <div className="border-t border-[#e9eae6]" />
 
               {/* Dirección de correo electrónico de Fin */}
-              <div>
-                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Dirección de correo electrónico de Fin</label>
-                <p className="text-[12px] text-[#646462] mb-2">Email desde el que Fin responde a los clientes de esta marca.</p>
-                <select
-                  className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
-                  value={drawerBrand.finEmail}
-                  onChange={e => setDrawerBrand(prev => prev ? { ...prev, finEmail: e.target.value } : prev)}
-                >
-                  <option value="">Ninguno</option>
-                  <option value="fin@miempresa.com">fin@miempresa.com</option>
-                  <option value="soporte@miempresa.com">soporte@miempresa.com</option>
-                  <option value="hola@miempresa.com">hola@miempresa.com</option>
-                </select>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex gap-6">
+                <div className="w-[200px] flex-shrink-0">
+                  <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Dirección de correo electrónico de Fin</h3>
+                  <p className="text-[12px] text-[#646462] leading-[1.5]">Los correos de Fin para esta marca se enviarán desde esta dirección.</p>
+                </div>
+                <div className="flex-1">
+                  <select
+                    className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                    value={drawerBrand.finEmail}
+                    onChange={e => setDrawerBrand(prev => prev ? { ...prev, finEmail: e.target.value } : prev)}
+                  >
+                    <option value="">Ninguno</option>
+                    <option value="fin@miempresa.com">fin@miempresa.com</option>
+                    <option value="soporte@miempresa.com">soporte@miempresa.com</option>
+                    <option value="hola@miempresa.com">hola@miempresa.com</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="border-t border-[#e9eae6]" />
-
               {/* Estilos de Messenger */}
-              <div>
-                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Estilos de Messenger</label>
-                <p className="text-[12px] text-[#646462] mb-3">Personaliza la apariencia del Messenger para esta marca.</p>
-                <button
-                  className="flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-4 py-2.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4] transition-colors"
-                  onClick={() => {}}
-                >
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M8 1a7 7 0 110 14A7 7 0 018 1zm0 1.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM8 4a.75.75 0 01.75.75v3.5l2.25 1.3a.75.75 0 11-.75 1.3l-2.625-1.516A.75.75 0 017.25 8.75v-4A.75.75 0 018 4z"/></svg>
-                  Abrir editor de Messenger
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a96] ml-auto"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
-                </button>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex gap-6">
+                <div className="w-[200px] flex-shrink-0">
+                  <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Estilos de Messenger</h3>
+                  <p className="text-[12px] text-[#646462] leading-[1.5]">Personaliza la apariencia del Messenger para esta marca.</p>
+                </div>
+                <div className="flex-1 flex items-start pt-1">
+                  <button className="flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-4 py-2 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4] transition-colors">
+                    Personalizar Messenger
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a96]"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+                  </button>
+                </div>
               </div>
 
             </div>
@@ -28750,6 +28737,63 @@ function SettingsToggle({ checked, onChange }: { checked: boolean; onChange: (v:
   );
 }
 
+function SettingsSelect({
+  value, onChange, options, className, placeholder, compact,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  className?: string;
+  placeholder?: string;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+  const selected = options.find(o => o.value === value);
+  const h = compact ? 'h-7 px-2 text-[12px]' : 'h-9 px-3 text-[13px]';
+  return (
+    <div ref={ref} className={`relative w-full ${className ?? ''}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`w-full ${h} flex items-center justify-between gap-2 border rounded-lg bg-white hover:border-[#1a1a1a] transition-colors focus:outline-none ${open ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}
+      >
+        <span className={`truncate flex-1 text-left ${selected ? 'text-[#1a1a1a]' : 'text-[#a4a4a2]'}`}>
+          {selected?.label ?? placeholder ?? '—'}
+        </span>
+        <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+      </button>
+      {open && (
+        <div className="absolute top-[calc(100%+4px)] left-0 w-full min-w-[160px] z-50 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 max-h-[240px] overflow-y-auto">
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left hover:bg-[#f8f8f7] ${value === opt.value ? 'font-semibold bg-[#f8f8f7]' : ''} text-[#1a1a1a]`}
+            >
+              <span className="flex-1 truncate">{opt.label}</span>
+              {value === opt.value && (
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-[#3b59f6]">
+                  <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
   const [name, setName]         = useState('');
@@ -28885,12 +28929,11 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
                     </div>
                     <div>
                       <label className="block text-[12px] font-medium text-[#646462] mb-1">Zona horaria</label>
-                      <select
-                        value={timezone} onChange={e => setTimezone(e.target.value)}
-                        className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6] bg-white"
-                      >
-                        {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-                      </select>
+                      <SettingsSelect
+                        value={timezone}
+                        onChange={setTimezone}
+                        options={TIMEZONES.map(tz => ({ value: tz, label: tz }))}
+                      />
                     </div>
                   </div>
                 </div>
@@ -28934,9 +28977,9 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
                       Cómo configurar un espacio de trabajo de prueba
                     </a>
                   </div>
-                  <div className="flex items-center gap-3 min-w-[260px]">
-                    <SettingsToggle checked={testWorkspace} onChange={v => setTestWorkspace(v)} />
+                  <div className="flex items-center justify-between gap-3 min-w-[260px]">
                     <span className="text-[13px] text-[#1a1a1a]">Habilitar un espacio de trabajo de prueba</span>
+                    <SettingsToggle checked={testWorkspace} onChange={v => setTestWorkspace(v)} />
                   </div>
                 </div>
               </div>
@@ -28972,9 +29015,9 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
                     <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Mensaje de atribución de Clain</p>
                     <p className="text-[12.5px] text-[#646462]">Al habilitar esto, se añade un mensaje de atribución sutil en la parte inferior de tu Messenger y correos electrónicos.</p>
                   </div>
-                  <div className="flex items-center gap-3 min-w-[260px]">
-                    <SettingsToggle checked={showAttribution} onChange={v => { setShowAttribution(v); handleToggleSave('showAttribution', v); }} />
+                  <div className="flex items-center justify-between gap-3 min-w-[260px]">
                     <span className="text-[13px] text-[#1a1a1a]">Muestra el mensaje de atribución de Clain</span>
+                    <SettingsToggle checked={showAttribution} onChange={v => { setShowAttribution(v); handleToggleSave('showAttribution', v); }} />
                   </div>
                 </div>
               </div>
@@ -28986,9 +29029,9 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
                     <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Menciones del equipo</p>
                     <p className="text-[12.5px] text-[#646462]">Controle si los compañeros de equipo pueden @mencionar equipos en notas y conversaciones internas sobre folios de atención.</p>
                   </div>
-                  <div className="flex items-center gap-3 min-w-[260px]">
-                    <SettingsToggle checked={disableTeamMentions} onChange={v => { setDisableTeamMentions(v); handleToggleSave('disableTeamMentions', v); }} />
+                  <div className="flex items-center justify-between gap-3 min-w-[260px]">
                     <span className="text-[13px] text-[#1a1a1a]">Deshabilitar menciones del equipo en las notas</span>
+                    <SettingsToggle checked={disableTeamMentions} onChange={v => { setDisableTeamMentions(v); handleToggleSave('disableTeamMentions', v); }} />
                   </div>
                 </div>
               </div>
@@ -29373,6 +29416,8 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
   const [creatingRole, setCreatingRole] = useState(false);
   const [actDateFrom, setActDateFrom] = useState('');
   const [actDateTo, setActDateTo]    = useState('');
+  const [actMember, setActMember]    = useState('all');
+  const [actType, setActType]        = useState('all');
   const [memberMenuId, setMemberMenuId]       = useState<string | null>(null);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
@@ -29606,22 +29651,30 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                       value={search} onChange={e => setSearch(e.target.value)}
                     />
                   </div>
-                  <select
-                    value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                    className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a] text-[#646462]"
-                  >
-                    <option value="all">El estado es Cualquiera</option>
-                    <option value="active">Activo</option>
-                    <option value="away">Ausente</option>
-                  </select>
-                  <select
-                    value={filterSeat} onChange={e => setFilterSeat(e.target.value)}
-                    className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a] text-[#646462]"
-                  >
-                    <option value="all">La plaza es Cualquiera</option>
-                    <option value="full">FULL</option>
-                    <option value="limited">LIMITED</option>
-                  </select>
+                  <div className="w-[200px]">
+                    <SettingsSelect
+                      value={filterStatus}
+                      onChange={setFilterStatus}
+                      options={[
+                        { value: 'all', label: 'El estado es Cualquiera' },
+                        { value: 'active', label: 'Activo' },
+                        { value: 'away', label: 'Ausente' },
+                      ]}
+                      compact
+                    />
+                  </div>
+                  <div className="w-[200px]">
+                    <SettingsSelect
+                      value={filterSeat}
+                      onChange={setFilterSeat}
+                      options={[
+                        { value: 'all', label: 'La plaza es Cualquiera' },
+                        { value: 'full', label: 'FULL' },
+                        { value: 'limited', label: 'LIMITED' },
+                      ]}
+                      compact
+                    />
+                  </div>
                   <span className="text-[12.5px] text-[#646462] ml-1">{filteredMembers.length} compañero{filteredMembers.length !== 1 ? 's' : ''} de equipo</span>
                 </div>
 
@@ -29680,24 +29733,24 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                               <span className="text-[11.5px] font-bold text-[#646462]">{(m.seat_type ?? 'FULL').toUpperCase()}</span>
                             </td>
                             <td className="px-3 py-2.5">
-                              <select
+                              <SettingsSelect
                                 value={m.copilot_access ?? 'unlimited'}
-                                onChange={e => handleRoleChange(m.id, m.role_id)} // simplified - real implementation would update copilot_access
-                                className="border border-[#e9eae6] rounded-md px-1.5 py-0.5 text-[12px] bg-white focus:outline-none focus:border-[#1a1a1a] w-full"
-                              >
-                                <option value="unlimited">Ilimitado</option>
-                                <option value="limited">Limitado</option>
-                                <option value="none">Sin acceso</option>
-                              </select>
+                                onChange={() => handleRoleChange(m.id, m.role_id)}
+                                options={[
+                                  { value: 'unlimited', label: 'Ilimitado' },
+                                  { value: 'limited', label: 'Limitado' },
+                                  { value: 'none', label: 'Sin acceso' },
+                                ]}
+                                compact
+                              />
                             </td>
                             <td className="px-3 py-2.5">
-                              <select
+                              <SettingsSelect
                                 value={m.role_id || ''}
-                                onChange={e => handleRoleChange(m.id, e.target.value)}
-                                className="border border-[#e9eae6] rounded-md px-1.5 py-0.5 text-[12px] bg-white focus:outline-none focus:border-[#1a1a1a] w-full"
-                              >
-                                {displayRoles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                              </select>
+                                onChange={v => handleRoleChange(m.id, v)}
+                                options={displayRoles.map((r: any) => ({ value: r.id, label: r.name }))}
+                                compact
+                              />
                             </td>
                             <td className="px-3 py-2.5 text-[#646462]">—</td>
                             <td className="px-3 py-2.5">
@@ -29903,17 +29956,31 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                     type="date" value={actDateTo} onChange={e => setActDateTo(e.target.value)}
                     className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] focus:outline-none focus:border-[#1a1a1a]"
                   />
-                  <select className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] bg-white focus:outline-none text-[#646462]">
-                    <option>Todos los compañeros de equipo</option>
-                    {activeMembers.map(m => <option key={m.id}>{m.name ?? m.email}</option>)}
-                  </select>
-                  <select className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] bg-white focus:outline-none text-[#646462]">
-                    <option>Toda la actividad</option>
-                    <option>Inicio de sesión</option>
-                    <option>Cambio de rol</option>
-                    <option>Invitación enviada</option>
-                    <option>Ajustes modificados</option>
-                  </select>
+                  <div className="w-[220px]">
+                    <SettingsSelect
+                      value={actMember}
+                      onChange={setActMember}
+                      options={[
+                        { value: 'all', label: 'Todos los compañeros de equipo' },
+                        ...activeMembers.map((m: any) => ({ value: m.id, label: m.name ?? m.email })),
+                      ]}
+                      compact
+                    />
+                  </div>
+                  <div className="w-[200px]">
+                    <SettingsSelect
+                      value={actType}
+                      onChange={setActType}
+                      options={[
+                        { value: 'all', label: 'Toda la actividad' },
+                        { value: 'login', label: 'Inicio de sesión' },
+                        { value: 'role_change', label: 'Cambio de rol' },
+                        { value: 'invite_sent', label: 'Invitación enviada' },
+                        { value: 'settings_changed', label: 'Ajustes modificados' },
+                      ]}
+                      compact
+                    />
+                  </div>
                   <button className="flex items-center gap-1.5 px-3 py-1.5 text-[12.5px] font-medium text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7] ml-auto">
                     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 10.5L4.5 7H7V2h2v5h2.5L8 10.5zM2 13h12v-2h1.5v3.5H.5V11H2v2z"/></svg>
                     Descargar CSV
@@ -29993,28 +30060,32 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                 <div className="flex flex-col gap-2">
                   <div>
                     <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-1">PRINCIPAL</p>
-                    <select className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a]">
-                      <option value="">Seleccionar bandejas de entrada</option>
-                    </select>
+                    <SettingsSelect
+                      value=""
+                      onChange={() => {}}
+                      options={[]}
+                      placeholder="Seleccionar bandejas de entrada"
+                    />
                   </div>
                   <div>
                     <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-1">SECUNDARIA</p>
-                    <select className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a]">
-                      <option value="">Seleccionar bandejas de entrada</option>
-                    </select>
+                    <SettingsSelect
+                      value=""
+                      onChange={() => {}}
+                      options={[]}
+                      placeholder="Seleccionar bandejas de entrada"
+                    />
                   </div>
                 </div>
               </div>
               {displayRoles.length > 0 && (
                 <div>
                   <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Función</label>
-                  <select
+                  <SettingsSelect
                     value={inviteRoleId || displayRoles[0]?.id || ''}
-                    onChange={e => setInviteRoleId(e.target.value)}
-                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] focus:outline-none focus:border-[#1a1a1a] bg-white"
-                  >
-                    {displayRoles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                  </select>
+                    onChange={setInviteRoleId}
+                    options={displayRoles.map((r: any) => ({ value: r.id, label: r.name }))}
+                  />
                 </div>
               )}
             </div>
@@ -30049,25 +30120,21 @@ function AuthSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
           <p className="text-[13.5px] text-[#646462]">Configura cómo acceden los compañeros de equipo.</p>
         </div>
         <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-[14px] font-semibold text-[#1a1a1a]">Google Sign-In</p>
               <p className="text-[12.5px] text-[#646462]">Permite iniciar sesión con cuentas de Google Workspace.</p>
             </div>
-            <button onClick={() => setGoogleOn(v => !v)} className={`w-10 h-6 rounded-full transition-colors ${googleOn ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} flex items-center`}>
-              <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${googleOn ? 'translate-x-5' : 'translate-x-1'}`} />
-            </button>
+            <SettingsToggle checked={googleOn} onChange={setGoogleOn} />
           </div>
         </div>
         <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between gap-4 mb-2">
             <div>
               <p className="text-[14px] font-semibold text-[#1a1a1a]">SAML 2.0 SSO</p>
               <p className="text-[12.5px] text-[#646462]">Integra con Okta, Azure AD u otros proveedores de identidad.</p>
             </div>
-            <button onClick={() => setSamlOn(v => !v)} className={`w-10 h-6 rounded-full transition-colors ${samlOn ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} flex items-center`}>
-              <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${samlOn ? 'translate-x-5' : 'translate-x-1'}`} />
-            </button>
+            <SettingsToggle checked={samlOn} onChange={setSamlOn} />
           </div>
           {samlOn && (
             <div className="mt-4 border-t border-[#e9eae6] pt-4 flex flex-col gap-3">
@@ -30087,9 +30154,7 @@ function AuthSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
               <p className="text-[14px] font-semibold text-[#1a1a1a]">Exigir autenticación de dos factores</p>
               <p className="text-[12.5px] text-[#646462]">Todos los compañeros deberán activar 2FA.</p>
             </div>
-            <button onClick={() => setMfaOn(v => !v)} className={`w-10 h-6 rounded-full transition-colors ${mfaOn ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} flex items-center`}>
-              <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${mfaOn ? 'translate-x-5' : 'translate-x-1'}`} />
-            </button>
+            <SettingsToggle checked={mfaOn} onChange={setMfaOn} />
           </div>
         </div>
         <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
@@ -30647,11 +30712,15 @@ function CustomFiltersView({ view, onNavigate }: { view: View; onNavigate: (v: V
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Tipo de entidad</label>
-                  <select value={form.entityType} onChange={e => setForm(f => ({ ...f, entityType: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] bg-white focus:outline-none">
-                    <option value="conversation">Conversaciones</option>
-                    <option value="contact">Contactos</option>
-                    <option value="company">Empresas</option>
-                  </select>
+                  <SettingsSelect
+                    value={form.entityType}
+                    onChange={v => setForm(f => ({ ...f, entityType: v }))}
+                    options={[
+                      { value: 'conversation', label: 'Conversaciones' },
+                      { value: 'contact', label: 'Contactos' },
+                      { value: 'company', label: 'Empresas' },
+                    ]}
+                  />
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-1">
@@ -31264,12 +31333,16 @@ function McpServersView({ view, onNavigate }: { view: View; onNavigate: (v: View
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-[#6b6b6b] mb-1 block">Autenticación</label>
-                  <select value={form.authType} onChange={e => setForm(f => ({ ...f, authType: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-[#e5e5e2] text-[13px] bg-white focus:outline-none">
-                    <option value="none">Sin autenticación</option>
-                    <option value="bearer">Bearer token</option>
-                    <option value="api_key">API Key</option>
-                    <option value="oauth2">OAuth 2.0</option>
-                  </select>
+                  <SettingsSelect
+                    value={form.authType}
+                    onChange={v => setForm(f => ({ ...f, authType: v }))}
+                    options={[
+                      { value: 'none', label: 'Sin autenticación' },
+                      { value: 'bearer', label: 'Bearer token' },
+                      { value: 'api_key', label: 'API Key' },
+                      { value: 'oauth2', label: 'OAuth 2.0' },
+                    ]}
+                  />
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-1">
