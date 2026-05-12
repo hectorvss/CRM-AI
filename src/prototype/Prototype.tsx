@@ -9224,7 +9224,7 @@ function AccountAccessView({ view, onNavigate }: { view: View; onNavigate: (v: V
 
 function MultilingualView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
-  const [aiTranslate, setAiTranslate] = useState(true);
+  const [aiTranslate, setAiTranslate] = useState(false);
   const [myLang, setMyLang] = useState('Español');
   const [toast, setToast] = useState<string | null>(null);
 
@@ -9265,13 +9265,23 @@ function MultilingualView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
                   </p>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0 pt-0.5">
+                  <span className="text-[13px] text-[#1a1a1a] whitespace-nowrap">Habilitar la traducción de IA para el buzón</span>
                   <button
                     onClick={() => { setAiTranslate(v => { save('personalAiTranslate', !v); return !v; }); }}
-                    className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${aiTranslate ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}
+                    style={{
+                      width: 36, height: 20, borderRadius: 10, position: 'relative',
+                      flexShrink: 0, border: 'none', cursor: 'pointer', padding: 0,
+                      background: aiTranslate ? '#f97316' : '#d1d5db',
+                      transition: 'background 0.2s',
+                    }}
                   >
-                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${aiTranslate ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    <span style={{
+                      position: 'absolute', top: 2, width: 16, height: 16, borderRadius: '50%',
+                      background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      transition: 'left 0.2s',
+                      left: aiTranslate ? 18 : 2,
+                    }} />
                   </button>
-                  <span className="text-[13px] text-[#1a1a1a] whitespace-nowrap">Habilitar la traducción de IA para el buzón</span>
                 </div>
               </div>
             </div>
@@ -9285,19 +9295,19 @@ function MultilingualView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
                     Traduciremos las conversaciones del buzón a este idioma. Responda siempre en el idioma en que se muestra la conversación.
                   </p>
                 </div>
-                <div className="flex-shrink-0 pt-0.5">
-                  <select
+                <div className="flex-shrink-0 pt-0.5 w-[200px]">
+                  <SettingsSelect
                     value={myLang}
-                    onChange={e => { setMyLang(e.target.value); save('personalLang', e.target.value); }}
-                    className="border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] text-[#1a1a1a] bg-white min-w-[140px] focus:outline-none focus:border-[#1a1a1a]"
-                  >
-                    <option>English</option>
-                    <option>Español</option>
-                    <option>Français</option>
-                    <option>Deutsch</option>
-                    <option>Português</option>
-                    <option>Italiano</option>
-                  </select>
+                    onChange={v => { setMyLang(v); save('personalLang', v); }}
+                    options={[
+                      { value: 'English',    label: '🇬🇧  English' },
+                      { value: 'Español',    label: '🇪🇸  Español' },
+                      { value: 'Français',   label: '🇫🇷  Français' },
+                      { value: 'Deutsch',    label: '🇩🇪  Deutsch' },
+                      { value: 'Português',  label: '🇵🇹  Português' },
+                      { value: 'Italiano',   label: '🇮🇹  Italiano' },
+                    ]}
+                  />
                 </div>
               </div>
             </div>
@@ -11226,77 +11236,632 @@ const CONNECTOR_CARDS: { svg: string; label: string; bg: string }[] = [
 
 function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const { data: connectors, loading: connectorsLoading } = useApi(() => connectorsApi.list(), [], []);
-  const hasConnectors = connectors.length > 0;
 
+  // Modal state
+  type ModalType = null | 'mcp' | 'stripe' | 'linear' | 'shopify' | 'editor';
+  const [modal, setModal] = useState<ModalType>(null);
+  const close = () => setModal(null);
+
+  // MCP modal fields
+  const [mcpName, setMcpName] = useState('');
+  const [mcpUrl, setMcpUrl] = useState('');
+  const [mcpAuthType, setMcpAuthType] = useState('Token o clave de API');
+  const [mcpToken, setMcpToken] = useState('');
+  const [mcpAuthOpen, setMcpAuthOpen] = useState(false);
+
+  // Stripe modal
+  const [stripeTokenId, setStripeTokenId] = useState('');
+  const [stripeTokenOpen, setStripeTokenOpen] = useState(false);
+
+  // Shopify modal
+  const [shopifyUrl, setShopifyUrl] = useState('');
+
+  // Linear modal
+  const [linearApiKey, setLinearApiKey] = useState('');
+
+  // Connected services (in-session)
+  const [connected, setConnected] = useState<string[]>([]);
+  const [toast, setToast] = useState('');
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2500); };
+
+  // Editor state
+  const [editorTab, setEditorTab] = useState<'api' | 'datos' | 'fin' | 'seguridad'>('api');
+  const [editorTitle, setEditorTitle] = useState('Sin título');
+  const [editorDesc, setEditorDesc] = useState('');
+  const [apiMethod, setApiMethod] = useState('GET');
+  const [apiUrl, setApiUrl] = useState('');
+  const [methodOpen, setMethodOpen] = useState(false);
+  const [authType, setAuthType] = useState('Sin autenticación');
+  const [authOpen, setAuthOpen] = useState(false);
+  const [headers, setHeaders] = useState<{ key: string; value: string }[]>([
+    { key: 'X-Intercom-Verified-Email', value: 'Correo electrónico de usuario verificado' }
+  ]);
+  const [newHeaderKey, setNewHeaderKey] = useState('');
+  const [newHeaderVal, setNewHeaderVal] = useState('');
+  const [dataInputs, setDataInputs] = useState<string[]>([]);
+  const [mockMode, setMockMode] = useState<'mock' | 'live' | null>(null);
+
+  const hasConnectors = connectors.length > 0 || connected.length > 0;
+
+  // Full-screen editor
+  if (modal === 'editor') {
+    return (
+      <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden" style={{ background: '#f3f3f1' }}>
+        {/* Editor top bar */}
+        <div className="flex items-center px-6 h-[52px] bg-white border-b border-[#e9eae6] flex-shrink-0 gap-3">
+          <input
+            value={editorTitle}
+            onChange={e => setEditorTitle(e.target.value)}
+            className="text-[15px] font-semibold text-[#1a1a1a] bg-transparent outline-none border-none min-w-0 flex-1 max-w-[200px]"
+          />
+          <div className="flex-1" />
+          {/* History */}
+          <button className="w-8 h-8 flex items-center justify-center rounded-[6px] hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4"><path d="M2 8a6 6 0 1 0 1.5-3.9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M2 4v4h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          {/* More */}
+          <button className="w-8 h-8 flex items-center justify-center rounded-[6px] hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><circle cx="3" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="13" cy="8" r="1.3"/></svg>
+          </button>
+          <button
+            onClick={() => showToast('Conector guardado')}
+            className="text-[13px] font-semibold text-[#1a1a1a] hover:opacity-70 px-1"
+          >Guardar</button>
+          <button className="flex items-center gap-1.5 text-[13px] font-semibold text-[#646462] hover:text-[#1a1a1a]">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M4 8l8-8v16L4 8z"/></svg>
+            Establecer en vivo
+          </button>
+          <button className="text-[13px] font-semibold text-[#1a1a1a] bg-[#f3f3f1] hover:bg-[#ededea] rounded-full px-3 py-1.5">Vista previa de Fin</button>
+          <button onClick={close} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-1 px-6 bg-white border-b border-[#e9eae6] flex-shrink-0">
+          {([
+            { id: 'api' as const,       num: 1, label: 'API' },
+            { id: 'datos' as const,     num: 2, label: 'Datos' },
+            { id: 'fin' as const,       num: 3, label: 'Fin' },
+            { id: 'seguridad' as const, num: 4, label: 'Seguridad' },
+          ]).map(t => (
+            <button
+              key={t.id}
+              onClick={() => setEditorTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-3 text-[13px] font-medium border-b-2 -mb-px transition-colors ${
+                editorTab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+              }`}
+            >
+              <span className={`text-[12px] ${editorTab === t.id ? 'text-[#fa7938]' : 'text-[#c0c0bc]'}`}>{t.num}</span>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-10 py-6 flex flex-col gap-4 max-w-[900px]">
+
+          {editorTab === 'api' && <>
+            {/* Descripción */}
+            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-5">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+              <p className="text-[12px] text-[#646462] mb-3">Interna, solo para consulta de su equipo.</p>
+              <textarea
+                value={editorDesc}
+                onChange={e => setEditorDesc(e.target.value)}
+                placeholder="Entrar"
+                rows={3}
+                className="w-full border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6] resize-none"
+              />
+            </div>
+
+            {/* Entradas de datos */}
+            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-5">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Entradas de datos</h3>
+                  <p className="text-[12px] text-[#646462] max-w-[480px]">Especifica si debe recoger algún dato antes de ejecutar este conector de datos. Las entradas pueden provenir del historial de conversaciones, acciones anteriores o preguntando al cliente.</p>
+                </div>
+                <button
+                  onClick={() => setDataInputs(p => [...p, ''])}
+                  className="flex items-center gap-1 text-[13px] font-semibold text-[#1a1a1a] hover:opacity-70 flex-shrink-0 ml-4"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
+                  Entrada de datos
+                </button>
+              </div>
+              {dataInputs.map((inp, i) => (
+                <div key={i} className="flex items-center gap-2 mt-2">
+                  <input
+                    value={inp}
+                    onChange={e => setDataInputs(p => p.map((v, j) => j === i ? e.target.value : v))}
+                    placeholder="Nombre de la entrada"
+                    className="flex-1 border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] outline-none focus:border-[#3b59f6]"
+                  />
+                  <button onClick={() => setDataInputs(p => p.filter((_, j) => j !== i))} className="text-[#9a9a98] hover:text-[#1a1a1a]">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Punto final de API */}
+            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Punto final de API</h3>
+                <span className="bg-[#fef3c7] text-[#92400e] text-[11px] font-semibold px-2 py-0.5 rounded-[4px]">Obligatorio</span>
+              </div>
+              <p className="text-[12px] text-[#646462] mb-4">Ingrese el endpoint de la API que debe llamarse para acceder o actualizar datos.</p>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-[13px] font-medium text-[#1a1a1a] w-[80px] flex-shrink-0 flex items-center gap-1">
+                    Métodos
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#9a9a98]"><circle cx="8" cy="8" r="5.5" opacity="0.25"/><path d="M8 7v4M8 5.3v.7" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/></svg>
+                  </span>
+                  <div className="relative">
+                    <button
+                      onClick={() => setMethodOpen(o => !o)}
+                      className="flex items-center gap-2 border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] font-medium text-[#1a1a1a] bg-white hover:bg-[#f8f8f7]"
+                    >
+                      {apiMethod}
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                    </button>
+                    {methodOpen && (
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-[#e9eae6] rounded-[8px] shadow-lg z-10 min-w-[80px] overflow-hidden">
+                        {['GET','POST','PUT','PATCH','DELETE'].map(m => (
+                          <button key={m} onClick={() => { setApiMethod(m); setMethodOpen(false); }}
+                            className={`block w-full text-left px-3 py-2 text-[13px] hover:bg-[#f3f3f1] ${apiMethod === m ? 'font-semibold text-[#1a1a1a]' : 'text-[#646462]'}`}
+                          >{m}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[13px] font-medium text-[#1a1a1a] w-[80px] flex-shrink-0 flex items-center gap-1">
+                    URL HTTPS
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#9a9a98]"><circle cx="8" cy="8" r="5.5" opacity="0.25"/><path d="M8 7v4M8 5.3v.7" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/></svg>
+                  </span>
+                  <div className="flex-1">
+                    <input
+                      value={apiUrl}
+                      onChange={e => setApiUrl(e.target.value)}
+                      placeholder="Entrar"
+                      className="w-full border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] outline-none focus:border-[#3b59f6]"
+                    />
+                    <p className="text-[11px] text-[#9a9a98] mt-1">Ejemplo: https://example.com/api/v1/</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Probar */}
+            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Probar</h3>
+                <span className="bg-[#fef3c7] text-[#92400e] text-[11px] font-semibold px-2 py-0.5 rounded-[4px]">Obligatorio</span>
+              </div>
+              <p className="text-[12px] text-[#646462] mb-4">Utilice una respuesta simulada si su API aún no está lista o ejecute una solicitud en vivo para confirmar su endpoint, la autenticación y el formato de respuesta.</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setMockMode('mock')}
+                  className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${mockMode === 'mock' ? 'border-[#3b59f6] bg-[#eef1ff] text-[#3b59f6]' : 'border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5"><path d="M2 8h4M10 8h4M8 2v4M8 10v4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  Respuesta simulada
+                </button>
+                <button
+                  onClick={() => setMockMode('live')}
+                  className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${mockMode === 'live' ? 'border-[#3b59f6] bg-[#eef1ff] text-[#3b59f6]' : 'border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M4 8l8-8v16L4 8z"/></svg>
+                  Prueba de conexión en vivo
+                </button>
+                <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-1.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                  <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5"><path d="M8 1C4.7 1 2 3.7 2 7s2.7 6 6 6 6-2.7 6-6-2.7-6-6-6zm0 2c.7 0 1.4.2 2 .5L4.5 9c-.3-.6-.5-1.3-.5-2 0-2.2 1.8-4 4-4zm0 8c-.7 0-1.4-.2-2-.5l5.5-5.5c.3.6.5 1.3.5 2 0 2.2-1.8 4-4 4z" fill="currentColor" opacity="0.6"/></svg>
+                  Probar
+                </button>
+              </div>
+              {mockMode === 'mock' && (
+                <div className="mt-4 bg-[#f8f8f7] rounded-[8px] p-4">
+                  <p className="text-[12px] text-[#646462] mb-2">Ingresa una respuesta JSON simulada:</p>
+                  <textarea rows={4} placeholder='{"data": "ejemplo"}' className="w-full border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[12px] font-mono outline-none focus:border-[#3b59f6] resize-none bg-white"/>
+                </div>
+              )}
+            </div>
+
+            {/* Tokens de autenticación */}
+            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-5">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Tokens de autenticación</h3>
+              <p className="text-[12px] text-[#646462] mb-3">Seleccione las credenciales del token si su API las requiere. Los tokens identifican de forma segura su conector cuando realiza una solicitud.</p>
+              <div className="relative inline-block">
+                <button
+                  onClick={() => setAuthOpen(o => !o)}
+                  className="flex items-center gap-2 border border-[#e9eae6] rounded-full px-3 py-1.5 text-[13px] font-medium text-[#1a1a1a] bg-white hover:bg-[#f8f8f7]"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#646462]"><path d="M8 1L4 5h3v5H5l3 5 3-5H9V5h3L8 1z" opacity="0.5"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1" fill="none"/></svg>
+                  {authType}
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                </button>
+                {authOpen && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-[#e9eae6] rounded-[8px] shadow-lg z-10 min-w-[200px] overflow-hidden">
+                    {['Sin autenticación', 'Bearer token', 'API key', 'OAuth 2.0', 'Basic auth'].map(a => (
+                      <button key={a} onClick={() => { setAuthType(a); setAuthOpen(false); }}
+                        className={`block w-full text-left px-4 py-2.5 text-[13px] hover:bg-[#f3f3f1] ${authType === a ? 'font-semibold text-[#1a1a1a]' : 'text-[#646462]'}`}
+                      >{a}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Encabezados */}
+            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-5 mb-6">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Encabezados</h3>
+              <p className="text-[12px] text-[#646462] mb-4">Agregue pares de valores clave que proporcionen información adicional para su solicitud de API, como preferencias de formato o metadatos personalizados requeridos por su sistema.</p>
+              <button
+                onClick={() => { if (newHeaderKey.trim()) { setHeaders(p => [...p, { key: newHeaderKey.trim(), value: newHeaderVal.trim() }]); setNewHeaderKey(''); setNewHeaderVal(''); } }}
+                className="flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:opacity-70 mb-4"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
+                Agregue la clave y el valor
+              </button>
+              {/* New header inputs */}
+              <div className="flex gap-2 mb-3">
+                <input value={newHeaderKey} onChange={e => setNewHeaderKey(e.target.value)} placeholder="Clave" className="flex-1 border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[12px] outline-none focus:border-[#3b59f6]" />
+                <input value={newHeaderVal} onChange={e => setNewHeaderVal(e.target.value)} placeholder="Valor" className="flex-1 border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[12px] outline-none focus:border-[#3b59f6]" />
+              </div>
+              {headers.length > 0 && (
+                <table className="w-full text-[13px]">
+                  <thead><tr><th className="text-left text-[12px] font-medium text-[#646462] pb-2 w-1/2">Clave</th><th className="text-left text-[12px] font-medium text-[#646462] pb-2">Valor</th><th className="w-8"/></tr></thead>
+                  <tbody>
+                    {headers.map((h, i) => (
+                      <tr key={i} className="border-t border-[#f3f3f1]">
+                        <td className="py-2 pr-4 text-[#1a1a1a]">{h.key}</td>
+                        <td className="py-2 text-[#646462]">{h.value}</td>
+                        <td className="py-2 text-right">
+                          <button onClick={() => setHeaders(p => p.filter((_, j) => j !== i))} className="text-[#9a9a98] hover:text-[#e11d48]">
+                            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>}
+
+          {editorTab === 'datos' && (
+            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-8 flex flex-col items-center justify-center min-h-[300px] text-center">
+              <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 mb-4 opacity-30"><ellipse cx="24" cy="12" rx="16" ry="6" stroke="#1a1a1a" strokeWidth="2"/><path d="M8 12v12c0 3.3 7.2 6 16 6s16-2.7 16-6V12" stroke="#1a1a1a" strokeWidth="2"/><path d="M8 24v12c0 3.3 7.2 6 16 6s16-2.7 16-6V24" stroke="#1a1a1a" strokeWidth="2"/></svg>
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-2">Esquema de datos</h3>
+              <p className="text-[13px] text-[#646462] max-w-[380px]">Define el esquema de los datos que devuelve tu API. Completa primero la sección API y haz una prueba de conexión para detectar el esquema automáticamente.</p>
+              <button className="mt-5 bg-[#1a1a1a] text-white rounded-full px-4 py-2 text-[13px] font-semibold hover:bg-[#444]">Detectar esquema</button>
+            </div>
+          )}
+
+          {editorTab === 'fin' && (
+            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-8 flex flex-col gap-5">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Acceso de Fin</h3>
+                <p className="text-[12px] text-[#646462] mb-3">Controla si Fin puede usar este conector al responder conversaciones.</p>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className="w-9 h-5 bg-[#1a1a1a] rounded-full relative flex-shrink-0">
+                    <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-white shadow"/>
+                  </div>
+                  <span className="text-[13px] text-[#1a1a1a] font-medium">Permitir que Fin use este conector</span>
+                </label>
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Instrucciones para Fin</h3>
+                <p className="text-[12px] text-[#646462] mb-2">Explica a Fin cuándo y cómo usar este conector.</p>
+                <textarea rows={4} placeholder="Ej: Usa este conector para buscar información de pedidos cuando el cliente pregunte por el estado de su pedido." className="w-full border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] outline-none focus:border-[#3b59f6] resize-none"/>
+              </div>
+            </div>
+          )}
+
+          {editorTab === 'seguridad' && (
+            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-8 flex flex-col gap-5">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Control de acceso</h3>
+                <p className="text-[12px] text-[#646462] mb-3">Define qué roles pueden ver o usar este conector.</p>
+                <div className="flex flex-col gap-2">
+                  {['Administradores', 'Agentes', 'Fin AI'].map(role => (
+                    <label key={role} className="flex items-center gap-3 cursor-pointer">
+                      <span className={`inline-flex w-4 h-4 rounded-[3px] border items-center justify-center cursor-pointer ${true ? 'bg-[#3b59f6] border-[#3b59f6]' : 'border-[#c9cac7]'}`}>
+                        <svg viewBox="0 0 10 8" className="w-2.5 h-2"><path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                      </span>
+                      <span className="text-[13px] text-[#1a1a1a]">{role}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Registro de actividad</h3>
+                <p className="text-[12px] text-[#646462]">Todas las llamadas a este conector quedan registradas para auditoría. Los registros se conservan 90 días.</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Toast */}
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 bg-[#1a1a1a] text-white text-[13px] font-medium rounded-[8px] px-4 py-2.5 shadow-lg flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><path d="M3 8l3.5 3.5L13 4" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+            {toast}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Main connectors list view ──────────────────────────────────────────────
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden relative">
+
+          {/* Toast */}
+          {toast && (
+            <div className="absolute top-4 right-4 z-10 bg-[#1a1a1a] text-white text-[13px] font-medium rounded-[8px] px-4 py-2.5 shadow-lg flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><path d="M3 8l3.5 3.5L13 4" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+              {toast}
+            </div>
+          )}
+
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
             <h1 className="text-[20px] font-bold text-[#1a1a1a]">Conectores de datos</h1>
             <div className="flex items-center gap-2">
               <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
                 Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
               </button>
-              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nuevo</button>
+              <button onClick={() => setModal('mcp')} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nuevo</button>
             </div>
           </div>
+
           <div className="flex-1 overflow-y-auto min-h-0 px-12 py-12 flex flex-col items-center">
             {hasConnectors ? (
               <div className="w-full max-w-[800px]">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-[18px] font-bold text-[#1a1a1a]">Tus conectores ({connectors.length})</h2>
+                  <h2 className="text-[18px] font-bold text-[#1a1a1a]">Tus conectores ({connectors.length + connected.length})</h2>
                 </div>
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 mb-8">
+                  {connected.map((svc) => (
+                    <div key={svc} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-center gap-4 hover:bg-[#fafaf9]">
+                      <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[15px] font-bold text-[#1a1a1a]">{svc[0]}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-semibold text-[#1a1a1a]">{svc}</p>
+                        <p className="text-[12px] text-[#646462]">Conectado</p>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#dcfce7] text-[#166534]">Activo</span>
+                    </div>
+                  ))}
                   {connectors.map((c: any) => (
                     <div key={c.id} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-center gap-4 hover:bg-[#fafaf9]">
-                      <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[18px]">
-                        {c.icon ?? '🔌'}
-                      </div>
+                      <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[18px]">{c.icon ?? '🔌'}</div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[14px] font-semibold text-[#1a1a1a]">{c.name ?? c.label ?? c.id}</p>
                         <p className="text-[12px] text-[#646462] truncate">{c.description ?? c.type ?? ''}</p>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0 ${
-                        c.status === 'active' || c.isActive ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#f3f3f1] text-[#646462]'
-                      }`}>
+                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0 ${c.status === 'active' || c.isActive ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
                         {c.status === 'active' || c.isActive ? 'Activo' : c.status ?? 'Inactivo'}
                       </span>
                     </div>
                   ))}
                 </div>
-                <div className="mt-8 grid grid-cols-3 gap-4">
-                  {CONNECTOR_CARDS.map(card => (
-                    <button key={card.label} className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]">
-                      <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
-                        <img src={card.svg} alt="" className="w-4 h-4" />
-                      </div>
-                      <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
-                    </button>
-                  ))}
-                </div>
+                <ConnectorCardGrid onCardClick={(label) => {
+                  if (label === 'Stripe') setModal('stripe');
+                  else if (label === 'Shopify Storefront') setModal('shopify');
+                  else if (label === 'Linear') setModal('linear');
+                  else if (label === 'Crear desde cero') setModal('editor');
+                  else if (label === 'MCP personalizado') setModal('mcp');
+                }} />
               </div>
             ) : (
               <>
                 <h2 className="text-[28px] font-bold text-[#1a1a1a] text-center mb-3 leading-tight">Incorpore datos de sus clientes<br/>en tiempo real en Intercom</h2>
                 <p className="text-[14px] text-[#646462] text-center mb-10 max-w-[600px]">Conéctese a cualquier sistema externo o API personalizada con Conectores de datos sin código. Impulse Fin y el servicio de asistencia con datos en tiempo real para ofrecer asistencia más personalizada.</p>
-                <div className="grid grid-cols-3 gap-4 w-full max-w-[800px]">
-                  {CONNECTOR_CARDS.map(card => (
-                    <button key={card.label} className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]">
-                      <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
-                        <img src={card.svg} alt="" className="w-4 h-4" />
-                      </div>
-                      <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
-                    </button>
-                  ))}
-                </div>
+                <ConnectorCardGrid onCardClick={(label) => {
+                  if (label === 'Stripe') setModal('stripe');
+                  else if (label === 'Shopify Storefront') setModal('shopify');
+                  else if (label === 'Linear') setModal('linear');
+                  else if (label === 'Crear desde cero') setModal('editor');
+                  else if (label === 'MCP personalizado') setModal('mcp');
+                }} />
               </>
             )}
           </div>
+
+          {/* ── Modal overlay ─────────────────────────────────────────── */}
+          {modal && modal !== 'editor' && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.35)' }}>
+
+              {/* MCP modal */}
+              {modal === 'mcp' && (
+                <div className="bg-white rounded-[16px] w-full max-w-[520px] mx-4 shadow-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-6 py-5">
+                    <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Agregar servidor MCP</h2>
+                    <button onClick={close} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                    </button>
+                  </div>
+                  <div className="px-6 pb-6 flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[13px] font-medium text-[#1a1a1a]">Nombre</label>
+                      <input value={mcpName} onChange={e => setMcpName(e.target.value)} placeholder="Nombre del servidor"
+                        className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#1a1a1a]"/>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[13px] font-medium text-[#1a1a1a]">URL</label>
+                      <input value={mcpUrl} onChange={e => setMcpUrl(e.target.value)} placeholder="https://mcp.example.com"
+                        className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#1a1a1a]"/>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[13px] font-medium text-[#1a1a1a]">Autenticación</label>
+                      <div className="relative">
+                        <button onClick={() => setMcpAuthOpen(o => !o)}
+                          className="w-full flex items-center justify-between border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f8f8f7]">
+                          {mcpAuthType}
+                          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                        </button>
+                        {mcpAuthOpen && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e9eae6] rounded-[8px] shadow-lg z-10 overflow-hidden">
+                            {['Sin autenticación', 'Token o clave de API', 'Bearer token', 'Basic auth'].map(a => (
+                              <button key={a} onClick={() => { setMcpAuthType(a); setMcpAuthOpen(false); }}
+                                className={`block w-full text-left px-4 py-2.5 text-[13px] hover:bg-[#f3f3f1] ${mcpAuthType === a ? 'font-semibold' : ''}`}>{a}</button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {mcpAuthType !== 'Sin autenticación' && (
+                        <>
+                          <input
+                            type="password"
+                            value={mcpToken}
+                            onChange={e => setMcpToken(e.target.value)}
+                            placeholder="••••••••••"
+                            className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#1a1a1a] bg-[#f8f9ff]"
+                          />
+                          <p className="text-[12px] text-[#646462] leading-[1.5]">
+                            Por defecto, los tokens de API se envían en el encabezado "Authorization" con el prefijo "Bearer".{' '}
+                            <a href="#" className="text-[#3b59f6] hover:underline">Cree un token personalizado</a> para cambiar cualquiera de ellos.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button onClick={close} className="text-[13px] font-semibold text-[#1a1a1a] hover:opacity-70 px-2">Cancelar</button>
+                      <button
+                        onClick={() => { if (mcpName.trim()) { setConnected(p => [...p, mcpName.trim()]); showToast(`Servidor MCP "${mcpName.trim()}" añadido`); } close(); setMcpName(''); setMcpUrl(''); setMcpToken(''); }}
+                        className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]"
+                      >Añadir servidor</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Stripe modal */}
+              {modal === 'stripe' && (
+                <div className="bg-white rounded-[16px] w-full max-w-[480px] mx-4 shadow-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-6 py-5">
+                    <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Conectar Stripe</h2>
+                    <button onClick={close} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                    </button>
+                  </div>
+                  <div className="px-6 pb-6 flex flex-col gap-4">
+                    <p className="text-[13px] text-[#646462]">Añade una clave de API para el servidor MCP seleccionado.</p>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[13px] font-medium text-[#1a1a1a]">Clave API de Stripe</label>
+                      <div className="relative">
+                        <button onClick={() => setStripeTokenOpen(o => !o)}
+                          className="w-full flex items-center justify-between border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] text-[#646462] bg-white hover:bg-[#f8f8f7]">
+                          {stripeTokenId || 'Elige el token'}
+                          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                        </button>
+                        {stripeTokenOpen && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e9eae6] rounded-[8px] shadow-lg z-10 overflow-hidden">
+                            <div className="px-4 py-3 text-[12px] text-[#646462] border-b border-[#f3f3f1]">Tokens disponibles</div>
+                            {['sk_live_•••••••••abc123', 'sk_test_•••••••••def456'].map(t => (
+                              <button key={t} onClick={() => { setStripeTokenId(t); setStripeTokenOpen(false); }}
+                                className="block w-full text-left px-4 py-2.5 text-[13px] hover:bg-[#f3f3f1] font-mono">{t}</button>
+                            ))}
+                            <div className="border-t border-[#f3f3f1]">
+                              <button className="block w-full text-left px-4 py-2.5 text-[13px] text-[#3b59f6] hover:bg-[#f3f3f1]">+ Crear nuevo token</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button onClick={close} className="text-[13px] font-semibold text-[#1a1a1a] hover:opacity-70 px-2">Cancelar</button>
+                      <button
+                        onClick={() => { setConnected(p => [...p, 'Stripe']); showToast('Stripe conectado correctamente'); close(); }}
+                        className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]"
+                      >Conectar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Shopify modal */}
+              {modal === 'shopify' && (
+                <div className="bg-white rounded-[16px] w-full max-w-[480px] mx-4 shadow-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-6 py-5">
+                    <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Conectar Shopify Storefront</h2>
+                    <button onClick={close} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                    </button>
+                  </div>
+                  <div className="px-6 pb-6 flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[13px] font-medium text-[#1a1a1a]">URL de la tienda</label>
+                      <input value={shopifyUrl} onChange={e => setShopifyUrl(e.target.value)} placeholder="https://www.shopifystore.com"
+                        className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#1a1a1a]"/>
+                    </div>
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button onClick={close} className="text-[13px] font-semibold text-[#1a1a1a] hover:opacity-70 px-2">Cancelar</button>
+                      <button
+                        onClick={() => { setConnected(p => [...p, 'Shopify Storefront']); showToast('Shopify Storefront conectado'); close(); setShopifyUrl(''); }}
+                        className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]"
+                      >Conectar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Linear modal */}
+              {modal === 'linear' && (
+                <div className="bg-white rounded-[16px] w-full max-w-[480px] mx-4 shadow-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-6 py-5">
+                    <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Conectar Linear</h2>
+                    <button onClick={close} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                    </button>
+                  </div>
+                  <div className="px-6 pb-6 flex flex-col gap-4">
+                    <p className="text-[13px] text-[#646462]">Añade tu clave de API de Linear para sincronizar issues y proyectos.</p>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[13px] font-medium text-[#1a1a1a]">Clave API de Linear</label>
+                      <input type="password" value={linearApiKey} onChange={e => setLinearApiKey(e.target.value)} placeholder="lin_api_••••••••••"
+                        className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#1a1a1a]"/>
+                    </div>
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button onClick={close} className="text-[13px] font-semibold text-[#1a1a1a] hover:opacity-70 px-2">Cancelar</button>
+                      <button
+                        onClick={() => { setConnected(p => [...p, 'Linear']); showToast('Linear conectado correctamente'); close(); setLinearApiKey(''); }}
+                        className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]"
+                      >Conectar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ConnectorCardGrid({ onCardClick }: { onCardClick: (label: string) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-4 w-full max-w-[800px]">
+      {CONNECTOR_CARDS.map(card => (
+        <button
+          key={card.label}
+          onClick={() => onCardClick(card.label)}
+          className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]"
+        >
+          <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
+            <img src={card.svg} alt="" className="w-4 h-4" />
+          </div>
+          <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
+        </button>
+      ))}
     </div>
   );
 }
