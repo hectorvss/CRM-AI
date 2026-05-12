@@ -10,7 +10,7 @@ import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
-type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat' | 'finSettings';
+type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat' | 'audiences' | 'finSettings';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -7306,6 +7306,7 @@ const SETTINGS_NAV_BOTTOM = [
 
 const IA_SUB: { label: string; nav: View | null }[] = [
   { label: "Fin AI Agent",   nav: 'finSettings' },
+  { label: "Audiences",      nav: 'audiences' },
   { label: "Buzón de IA",    nav: 'aiInbox' },
   { label: "Automatización", nav: 'automation' },
 ];
@@ -7328,7 +7329,7 @@ const PERSONAL_SUB: { label: string; nav: View | null }[] = [
 function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies' || view === 'customObjects' || view === 'topics' || view === 'customFilters' || view === 'emailTemplates';
   const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'inboxTeam' || view === 'cannedResponses' || view === 'callsLive';
-  const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin' || view === 'finSettings' || view === 'aiFeedback' || view === 'agentChat';
+  const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin' || view === 'finSettings' || view === 'aiFeedback' || view === 'agentChat' || view === 'audiences';
   const isIntegSection = view === 'appStore' || view === 'connectors' || view === 'auth' || view === 'developer' || view === 'mcpServers';
   const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands' || view === 'workspaceGeneral' || view === 'workspaceTeammates' || view === 'customRoles';
   const isSuscripcionSection = view === 'billing';
@@ -9674,6 +9675,283 @@ function SlaView({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
   );
 }
 
+// ── AudiencesSettingsView ─────────────────────────────────────────────────────
+
+function AudiencesSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [audiences, setAudiences] = useState([
+    { id: '1', name: 'Todos', filters: [] as string[], articles: 0 },
+    { id: '2', name: 'Audiencia sin título', filters: ['Type is Lead, Visitor, or User'], articles: 0 },
+  ]);
+  const [drawerAud, setDrawerAud] = useState<{ id: string; name: string; filters: string[]; articles: number } | null>(null);
+  const [drawerName, setDrawerName] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterSearch, setFilterSearch] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  const FILTER_OPTIONS = [
+    'Account', 'Owner', 'Lead category', 'Qualification status', 'Conversation Rating',
+    'Email', 'Email domain', 'Phone', 'User ID', 'First Seen', 'Signed up',
+    'Last seen', 'Last contacted', 'Last heard from', 'Last active', 'Last opened',
+    'Web sessions', 'Country', 'Region',
+  ];
+
+  const filteredOpts = FILTER_OPTIONS.filter(o => o.toLowerCase().includes(filterSearch.toLowerCase()));
+
+  function openDrawer(a: typeof audiences[0]) {
+    setDrawerAud(a);
+    setDrawerName(a.name);
+    setFilterOpen(false);
+    setFilterSearch('');
+    setPreviewOpen(false);
+  }
+
+  function addNewAudience() {
+    const newA = { id: String(Date.now()), name: 'Sin título', filters: ['Users, Visitors, and Leads'], articles: 0 };
+    setAudiences(s => [...s, newA]);
+    openDrawer(newA);
+  }
+
+  function saveDrawer() {
+    if (!drawerAud) return;
+    setAudiences(s => s.map(a => a.id === drawerAud.id ? { ...a, name: drawerName } : a));
+    showToast('Audiencia guardada correctamente.');
+    setDrawerAud(null);
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2 relative">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+
+        {/* Main content */}
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden relative">
+
+          {/* Toast */}
+          {toast && (
+            <div className={`absolute top-4 right-4 z-50 px-4 py-2.5 rounded-[8px] text-[13px] font-medium shadow-lg ${toast.ok ? 'bg-[#1a1a1a] text-white' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              {toast.msg}
+            </div>
+          )}
+
+          {/* Dismiss X */}
+          <button
+            type="button"
+            onClick={() => onNavigate('finSettings')}
+            className="absolute top-4 right-4 z-10 w-7 h-7 bg-[#1a1a1a] rounded-full flex items-center justify-center hover:bg-[#333]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+          </button>
+
+          {/* Banner */}
+          <div className="px-8 py-7 border-b border-[#e9eae6] flex-shrink-0">
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-2">Segmenta tu contenido y pautas de Fin para usuarios específicos</h2>
+            <p className="text-[13px] text-[#646462] mb-4 max-w-[680px] leading-relaxed">
+              Crea y administra audiencias personalizadas para controlar qué conocimientos utiliza Fin y qué pauta aplica, asegurando que los usuarios obtengan respuestas que siempre sean relevantes.
+            </p>
+            <button type="button" className="flex items-center gap-1.5 border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v8A1.5 1.5 0 0113.5 12H9.06l-2.56 2.56A.5.5 0 016 14.5V12H2.5A1.5 1.5 0 011 10.5v-8z"/></svg>
+              Cómo usar las audiencias para segmentar a Fin
+            </button>
+          </div>
+
+          {/* List body */}
+          <div className="flex-1 overflow-y-auto min-h-0 px-8 py-6">
+            {/* Section header */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 20 20" className="w-4 h-4 flex-shrink-0">
+                  <rect x="2" y="2" width="16" height="16" rx="3" fill="#1a1a1a"/>
+                  <path d="M10 6.5a3.5 3.5 0 00-3.5 3.5v.5a3.5 3.5 0 007 0V10A3.5 3.5 0 0010 6.5z" fill="white"/>
+                </svg>
+                <h3 className="text-[15px] font-bold text-[#1a1a1a]">Audiencias</h3>
+              </div>
+              <button
+                type="button"
+                onClick={addNewAudience}
+                className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3.5 py-1.5 text-[13px] font-semibold hover:bg-[#333] transition-colors"
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
+                Nuevo
+              </button>
+            </div>
+
+            {/* Cards grid */}
+            <div className="grid grid-cols-2 gap-4">
+              {audiences.map(a => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => openDrawer(a)}
+                  className="text-left border border-[#e9eae6] rounded-[10px] p-5 hover:border-[#1a1a1a] transition-colors flex flex-col min-h-[120px]"
+                >
+                  <div className="flex-1">
+                    <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-1.5">{a.name}</p>
+                    {a.filters.map(f => (
+                      <div key={f} className="flex items-center gap-1.5">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a96] flex-shrink-0"><path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H7zm4-6a3 3 0 100-6 3 3 0 000 6z"/><path d="M5.216 14A2.238 2.238 0 015 13c0-1.355.68-2.75 1.936-3.72A6.325 6.325 0 005 9c-4 0-5 3-5 4s1 1 1 1h4.216z"/><path d="M4.5 8a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/></svg>
+                        <span className="text-[12px] text-[#646462]">{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-[#f0f0ee]">
+                    <svg viewBox="0 0 20 20" className="w-4 h-4 flex-shrink-0">
+                      <rect x="2" y="2" width="16" height="16" rx="3" fill="#1a1a1a"/>
+                      <path d="M10 6.5a3.5 3.5 0 00-3.5 3.5v.5a3.5 3.5 0 007 0V10A3.5 3.5 0 0010 6.5z" fill="white"/>
+                    </svg>
+                    <span className="text-[12px] text-[#646462]">{a.articles} artículos disponibles para el agente de IA, Fin</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right-side drawer */}
+          {drawerAud && (
+            <div className="absolute inset-0 z-20 flex">
+              {/* Dimmed backdrop */}
+              <div className="flex-1 bg-black/20" onClick={() => setDrawerAud(null)} />
+              {/* Panel */}
+              <div className="w-[560px] bg-white h-full shadow-2xl flex flex-col border-l border-[#e9eae6]">
+                {/* Drawer header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+                  <input
+                    value={drawerName}
+                    onChange={e => setDrawerName(e.target.value)}
+                    className="text-[16px] font-bold text-[#f97316] border-b-2 border-[#f97316] focus:outline-none bg-transparent min-w-0 max-w-[200px]"
+                  />
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#f5f5f4] text-[#646462]">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M3 9.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></svg>
+                    </button>
+                    <button type="button" onClick={() => setDrawerAud(null)} className="text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] px-2 py-1">Cancelar</button>
+                    <button type="button" onClick={saveDrawer} className="text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] px-2 py-1">Guardar</button>
+                  </div>
+                </div>
+
+                {/* Drawer body */}
+                <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+
+                  {/* Audience rules card */}
+                  <div className="border border-[#e9eae6] rounded-[10px] p-5">
+                    <p className="text-[14px] font-bold text-[#1a1a1a] mb-3">Reglas de audiencia</p>
+                    <div className="flex items-center gap-2 mb-3 flex-wrap relative">
+                      <div className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-1 text-[12.5px] text-[#1a1a1a] bg-[#f8f8f7]">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H7zm4-6a3 3 0 100-6 3 3 0 000 6z"/><path d="M5.216 14A2.238 2.238 0 015 13c0-1.355.68-2.75 1.936-3.72A6.325 6.325 0 005 9c-4 0-5 3-5 4s1 1 1 1h4.216z"/><path d="M4.5 8a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/></svg>
+                        Users, Visitors, and Leads
+                      </div>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setFilterOpen(s => !s)}
+                          className="flex items-center gap-1 text-[12.5px] text-[#f97316] font-semibold hover:text-[#e06000]"
+                        >
+                          + Agregar regla de audiencia
+                        </button>
+                        {filterOpen && (
+                          <div className="absolute top-full left-0 mt-1 w-[280px] bg-white border border-[#e9eae6] rounded-[10px] shadow-xl z-30 flex flex-col overflow-hidden">
+                            <div className="px-3 py-2 border-b border-[#f0f0ee]">
+                              <div className="flex items-center gap-2 border border-[#e9eae6] rounded-[6px] px-2.5 py-1.5">
+                                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a96] flex-shrink-0"><path d="M11.742 10.344a6.5 6.5 0 10-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 001.415-1.414l-3.85-3.85a1.007 1.007 0 00-.115-.1zM12 6.5a5.5 5.5 0 11-11 0 5.5 5.5 0 0111 0z"/></svg>
+                                <input
+                                  autoFocus
+                                  value={filterSearch}
+                                  onChange={e => setFilterSearch(e.target.value)}
+                                  placeholder="Buscar..."
+                                  className="flex-1 text-[12.5px] focus:outline-none bg-transparent"
+                                />
+                              </div>
+                            </div>
+                            <div className="overflow-y-auto max-h-[260px] py-1">
+                              {filteredOpts.map(opt => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => { setFilterOpen(false); setFilterSearch(''); showToast(`Regla "${opt}" añadida.`); }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] text-left"
+                                >
+                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a96] flex-shrink-0"><path d="M2.5 4a.5.5 0 000 1h11a.5.5 0 000-1h-11zm2 3a.5.5 0 000 1h7a.5.5 0 000-1h-7zm2 3a.5.5 0 000 1h3a.5.5 0 000-1h-3z"/></svg>
+                                  {opt}
+                                </button>
+                              ))}
+                              <div className="border-t border-[#f0f0ee] mt-1 pt-1">
+                                <button type="button" className="w-full flex items-center gap-2 px-4 py-2 text-[12.5px] text-[#646462] hover:bg-[#f8f8f7] text-left">
+                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a96] flex-shrink-0"><path d="M.5 9.9a.5.5 0 01.5.5v2.5a1 1 0 001 1h12a1 1 0 001-1v-2.5a.5.5 0 011 0v2.5a2 2 0 01-2 2H2a2 2 0 01-2-2v-2.5a.5.5 0 01.5-.5z"/><path d="M7.646 1.146a.5.5 0 01.708 0l3 3a.5.5 0 01-.708.708L8.5 2.707V11.5a.5.5 0 01-1 0V2.707L5.354 4.854a.5.5 0 11-.708-.708l3-3z"/></svg>
+                                  Filter audience from CSV
+                                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a96] ml-1"><path d="M8 15A7 7 0 118 1a7 7 0 010 14zm0-1A6 6 0 108 2a6 6 0 000 12zm-.75-5.75V5h1.5v3.25H7.25zm0 2.5v-1.5h1.5v1.5H7.25z"/></svg>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Audience preview */}
+                    <button
+                      type="button"
+                      onClick={() => setPreviewOpen(s => !s)}
+                      className="w-full flex items-center justify-between py-2 text-[12.5px] text-[#1a1a1a] font-medium hover:text-[#3b59f6] border-t border-[#f0f0ee] pt-3"
+                    >
+                      <span>Obtén una vista previa de aproximadamente 4 personas que están en tu audiencia en este momento</span>
+                      <svg viewBox="0 0 16 16" className={`w-4 h-4 fill-current flex-shrink-0 ml-2 transition-transform ${previewOpen ? 'rotate-90' : ''}`}><path d="M6.72 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L10.44 8 6.72 4.28a.75.75 0 010-1.06z"/></svg>
+                    </button>
+                    {previewOpen && (
+                      <div className="mt-2 border border-[#e9eae6] rounded-[8px] p-4">
+                        <p className="text-[12px] text-[#646462]">4 personas coinciden con los criterios de esta audiencia en este momento.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Articles available card */}
+                  <div className="border border-[#e9eae6] rounded-[10px] p-5">
+                    <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-4">0 artículos disponibles para el agente de IA, Fin</p>
+                    <table className="w-full">
+                      <tbody>
+                        {[
+                          ['Identidad', null],
+                          ['Contenido', '0 artículos'],
+                          ['Pautas', '0 artículos'],
+                          ['Escalamiento', '0 artículos'],
+                          ['Flujos de trabajo', '0 artículos'],
+                          ['Procedimientos', '0 artículos'],
+                          ['Conectores de datos', '0 artículos'],
+                        ].map(([label, value]) => (
+                          <tr key={label as string} className="border-t border-[#f5f5f3] first:border-0">
+                            <td className="py-2 text-[12.5px] text-[#646462] w-[140px] pr-4 align-top">{label}</td>
+                            <td className="py-2 text-[12.5px] text-[#1a1a1a]">
+                              {label === 'Identidad' ? (
+                                <div className="flex items-center gap-2">
+                                  <svg viewBox="0 0 20 20" className="w-4 h-4 flex-shrink-0">
+                                    <rect x="2" y="2" width="16" height="16" rx="3" fill="#1a1a1a"/>
+                                    <path d="M10 6.5a3.5 3.5 0 00-3.5 3.5v.5a3.5 3.5 0 007 0V10A3.5 3.5 0 0010 6.5z" fill="white"/>
+                                  </svg>
+                                  <span>Fin</span>
+                                  <span className="border border-[#e9eae6] rounded-[4px] px-1.5 py-0.5 text-[11px] text-[#646462]">Predeterminado</span>
+                                </div>
+                              ) : value}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── AiInboxView ───────────────────────────────────────────────────────────────
 
 function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
@@ -9712,11 +9990,11 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Buzón de IA</h1>
+            <h1 className="text-[16px] font-bold text-[#1a1a1a]">Buzón de IA</h1>
             <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M8 1v14M3 6l5-5 5 5"/><path d="M2 14h12"/></svg>
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v8A1.5 1.5 0 0113.5 12H9.06l-2.56 2.56A.5.5 0 016 14.5V12H2.5A1.5 1.5 0 011 10.5v-8z"/></svg>
               Más información
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
             </button>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 px-6 py-8 flex flex-col gap-6">
@@ -9773,50 +10051,194 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
 // ── AutomationView ────────────────────────────────────────────────────────────
 
 function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [botInboxOn, setBotInboxOn] = useState(false);
+  const [slaExclude, setSlaExclude] = useState(false);
+  const [waitTime, setWaitTime] = useState('3 minutos');
+  const [triggers, setTriggers] = useState<Record<string, boolean>>({
+    visita: true, pagina: true, clic: true,
+    nuevaConvMsg: false, nuevaConvVisitante: false, primerMensaje: false,
+    cualquierMensaje: false, clienteNoResponde: false, equipoNoResponde: false, estadoCambia: false,
+  });
+
+  function toggleTrigger(k: string) {
+    setTriggers(s => ({ ...s, [k]: !s[k] }));
+  }
+
+  function AccRow({ id, icon, title, desc, rightAction, children }: {
+    id: string; icon: React.ReactNode; title: string; desc: string;
+    rightAction?: React.ReactNode; children?: React.ReactNode;
+  }) {
+    const isExp = expanded === id && !!children;
+    return (
+      <div className={`rounded-[10px] border overflow-hidden transition-all ${isExp ? 'border-[#f97316]' : 'border-[#e9eae6]'}`}>
+        <button
+          type="button"
+          className="w-full flex items-start gap-4 px-5 py-4 text-left hover:bg-[#fafaf8] transition-colors"
+          onClick={() => { if (children) setExpanded(s => s === id ? null : id); }}
+        >
+          <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 mt-0.5">{icon}</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-0.5">{title}</p>
+            <p className="text-[12.5px] text-[#646462] leading-[1.5]">{desc}</p>
+          </div>
+          {rightAction && <div className="flex-shrink-0 self-center ml-2">{rightAction}</div>}
+          {children && (
+            <svg viewBox="0 0 16 16" className={`w-4 h-4 self-center flex-shrink-0 ml-1 transition-transform ${isExp ? 'rotate-180' : ''}`}>
+              <path d="M4 6l4 4 4-4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
+          )}
+        </button>
+        {isExp && (
+          <div className="border-t border-[#f0f0ee] px-5 py-5">{children}</div>
+        )}
+      </div>
+    );
+  }
+
+  const TRIGGER_LIST: { key: string; label: string }[] = [
+    { key: 'visita',           label: 'El usuario visita tu sitio web' },
+    { key: 'pagina',           label: 'El visitante va a una página' },
+    { key: 'clic',             label: 'El cliente hace clic en un elemento del sitio web' },
+    { key: 'nuevaConvMsg',     label: 'El usuario abre una nueva conversación en Messenger' },
+    { key: 'nuevaConvVisitante', label: 'El visitante abre una nueva conversación en Messenger' },
+    { key: 'primerMensaje',    label: 'El cliente envía su primer mensaje' },
+    { key: 'cualquierMensaje', label: 'El cliente envía cualquier mensaje' },
+    { key: 'clienteNoResponde', label: 'El cliente no ha respondido' },
+    { key: 'equipoNoResponde', label: 'El compañero de equipo no ha respondido' },
+    { key: 'estadoCambia',     label: 'El compañero de equipo cambia el estado de la conversación' },
+  ];
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Automatización</h1>
-            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M13 3H3v10h10V3z"/><path d="M3 7h10M7 3v10"/></svg>
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 h-14 border-b border-[#e9eae6] flex-shrink-0">
+            <div className="flex items-center gap-2.5">
+              <svg viewBox="0 0 20 20" className="w-5 h-5 flex-shrink-0">
+                <rect x="2" y="2" width="16" height="16" rx="3" fill="#1a1a1a"/>
+                <path d="M10 6.5a3.5 3.5 0 00-3.5 3.5v.5a3.5 3.5 0 007 0V10A3.5 3.5 0 0010 6.5z" fill="white"/>
+              </svg>
+              <h1 className="text-[16px] font-bold text-[#1a1a1a]">Automatización</h1>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('automation')}
+              className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]"
+            >
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#646462]"><path d="M6.72 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L10.44 8 6.72 4.28a.75.75 0 010-1.06z"/></svg>
               Ir a Flujos de trabajo
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6 flex flex-col gap-4">
-            {/* Card 1: Identidad */}
-            <div className="border border-[#e9eae6] rounded-[10px] px-5 py-4 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
-                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-[#646462]" strokeWidth="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/></svg>
-              </div>
-              <div className="flex-1">
-                <p className="text-[13px] font-semibold text-[#1a1a1a]">Elige una identidad para los bots de Fin y de los flujos de trabajo</p>
-                <p className="text-[12px] text-[#646462] mt-0.5">Personaliza la foto de perfil de Fin y el nombre. Esta identidad también se utilizará para los bots en los flujos de trabajo.</p>
-              </div>
-              <button className="flex-shrink-0 flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
-                Ajustes de Fin
-              </button>
-            </div>
-            {/* Accordion items */}
-            {[
-              { title: 'Activar el Inbox del bot', desc: 'Mantén tus conversaciones en un buzón independiente mientras Fin AI Agent y los flujos de trabajo están activos al comienzo de una…' },
-              { title: 'Cierre automático de conversaciones de flujo de trabajo abandonadas', desc: 'Si un cliente no ha respondido en 3 minutos, la conversación se cerrará automáticamente. Otras respuestas reabrirán la conversación.' },
-            ].map(item => (
-              <div key={item.title} className="border border-[#e9eae6] rounded-[10px] px-5 py-4 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
-                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M9 12l2 2 4-4"/></svg>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6 flex flex-col gap-3">
+
+            {/* Row 1: Identidad (non-expandable) */}
+            <AccRow
+              id="identidad"
+              icon={<svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-[#646462]" strokeWidth="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v5M15 4v5"/><circle cx="8" cy="14" r="1.5"/><path d="M11.5 14h5M11.5 17h5"/></svg>}
+              title="Elige una identidad para los bots de Fin y de los flujos de trabajo"
+              desc="Personaliza la foto de perfil de Fin y el nombre. Esta identidad también se utilizará para los bots en los flujos de trabajo."
+              rightAction={
+                <button type="button" onClick={() => onNavigate('finSettings')} className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 01-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 01.872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 012.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 012.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 01.872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 01-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 01-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 110-5.86 2.929 2.929 0 010 5.858z"/></svg>
+                  Ajustes de Fin
+                </button>
+              }
+            />
+
+            {/* Row 2: Activar el Inbox del bot (expandable) */}
+            <AccRow
+              id="botInbox"
+              icon={<svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-[#646462]" strokeWidth="1.5"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M2 10h20M8 4v6M16 4v6"/><path d="M6 14h4M14 14h4"/></svg>}
+              title="Activar el Inbox del bot"
+              desc="Mantén tus conversaciones en un buzón independiente mientras Fin AI Agent y los flujos de trabajo están activos al comienzo de una conversación"
+            >
+              <div className="flex flex-col gap-4">
+                {/* Toggle */}
+                <div className="flex items-start gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setBotInboxOn(s => !s)}
+                    className={`mt-0.5 w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${botInboxOn ? 'bg-[#f97316]' : 'bg-[#d4d4d2]'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0 w-4 h-4 rounded-full bg-white shadow transition-transform ${botInboxOn ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                  <div className="flex-1">
+                    <p className="text-[12.5px] text-[#1a1a1a] leading-relaxed">
+                      Asigna automáticamente conversaciones a un buzón de bot independiente mientras un flujo de trabajo o Fin está activo.<br/>
+                      Cuando finalice el bot, se aplicarán las asignaciones de flujos de trabajo en segundo plano. De lo contrario, la conversación se trasladará al destinatario predeterminado o al buzón No asignado.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">{item.title}</p>
-                  <p className="text-[12px] text-[#646462] mt-0.5">{item.desc}</p>
+                {/* SLA checkbox */}
+                <label className="flex items-center gap-2 cursor-pointer ml-12">
+                  <input
+                    type="checkbox"
+                    checked={slaExclude}
+                    onChange={e => setSlaExclude(e.target.checked)}
+                    className="w-4 h-4 rounded border-[#d4d4d2] accent-[#1a1a1a] cursor-pointer"
+                  />
+                  <span className="text-[12.5px] text-[#646462]">Excluir el tiempo que las conversaciones pasan en el Inbox del bot de los objetivos de SLA</span>
+                </label>
+                {/* Links */}
+                <div className="flex items-center gap-4 pt-3 border-t border-[#f0f0ee]">
+                  <button type="button" onClick={() => setExpanded(null)} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                  <a href="#" className="flex items-center gap-1 text-[12.5px] text-[#3b59f6] hover:underline font-medium" onClick={e => e.preventDefault()}>
+                    📖 Cómo funciona el Inbox del bot
+                  </a>
                 </div>
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4"/></svg>
               </div>
-            ))}
+            </AccRow>
+
+            {/* Row 3: Cierre automático (expandable) */}
+            <AccRow
+              id="cierre"
+              icon={<svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              title="Cierre automático de conversaciones de flujo de trabajo abandonadas"
+              desc="Si un cliente no ha respondido en 3 minutos, la conversación se cerrará automáticamente. Otras respuestas reabrirán la conversación."
+            >
+              <div className="flex flex-col gap-3">
+                {/* Trigger checkboxes */}
+                <div className="flex flex-col gap-2">
+                  {TRIGGER_LIST.map(t => (
+                    <label key={t.key} className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={triggers[t.key] ?? false}
+                        onChange={() => toggleTrigger(t.key)}
+                        className="w-4 h-4 rounded border-[#d4d4d2] accent-[#1a1a1a] cursor-pointer flex-shrink-0"
+                      />
+                      <span className="text-[12.5px] text-[#1a1a1a]">{t.label}</span>
+                    </label>
+                  ))}
+                </div>
+                {/* Info note */}
+                <div className="flex items-start gap-2 bg-[#f3f3f1] rounded-[8px] px-4 py-3 mt-1">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><path d="M8 15A7 7 0 118 1a7 7 0 010 14zm0-1A6 6 0 108 2a6 6 0 000 12zm-.75-5.75V5h1.5v3.25H7.25zm0 2.5v-1.5h1.5v1.5H7.25z"/></svg>
+                  <p className="text-[12px] text-[#646462]">Los flujos de trabajo reutilizables utilizarán la configuración del flujo de trabajo que los activa.</p>
+                </div>
+                {/* Wait time */}
+                <div className="flex flex-col gap-2 mt-1">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a]">¿Cuánto tiempo debe esperar el flujo de trabajo antes de cerrar la conversación?</p>
+                  <select
+                    value={waitTime}
+                    onChange={e => setWaitTime(e.target.value)}
+                    className="w-fit border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  >
+                    {['1 minuto', '2 minutos', '3 minutos', '5 minutos', '10 minutos', '15 minutos', '30 minutos'].map(o => <option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                {/* Close */}
+                <div className="pt-3 border-t border-[#f0f0ee]">
+                  <button type="button" onClick={() => setExpanded(null)} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                </div>
+              </div>
+            </AccRow>
           </div>
         </div>
       </div>
@@ -12166,7 +12588,7 @@ function BillingPlanCard({ plan, billing, current, isLaunch }: { plan: typeof PL
   );
 }
 
-function BillingView({ view: _view, onNavigate: _onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+function BillingView({ view: _view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [tab, setTab] = useState<'subscription' | 'invoices' | 'payment'>('subscription');
   const [billingEmail, setBillingEmail] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
@@ -12263,7 +12685,7 @@ function BillingView({ view: _view, onNavigate: _onNavigate }: { view: View; onN
 
         {/* ═══ TAB: Suscripción ═══ */}
         {tab === 'subscription' && (
-          <div className="px-8 py-7 max-w-[860px]">
+          <div className="px-8 py-7 max-w-[860px] mx-auto w-full">
 
             {/* Summary row */}
             <div className="flex items-start justify-between pb-6 mb-6 border-b border-[#e5e7eb]">
@@ -12301,10 +12723,10 @@ function BillingView({ view: _view, onNavigate: _onNavigate }: { view: View; onN
                       Prueba De {planName}
                     </span>
                   )}
-                  <button onClick={openPortal} disabled={portalLoading}
-                    className="flex items-center gap-1.5 text-[13px] text-[#374151] hover:text-[#111827] transition-colors disabled:opacity-50">
+                  <button onClick={() => onNavigate('featuresComparison')}
+                    className="flex items-center gap-1.5 text-[13px] text-[#374151] hover:text-[#111827] transition-colors">
                     <svg viewBox="0 0 20 20" className="w-3.5 h-3.5 fill-[#6b7280]"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/></svg>
-                    {portalLoading ? 'Abriendo…' : 'Cambiar plan'}
+                    Cambiar plan
                   </button>
                 </div>
                 <p className="text-[12px] text-[#6b7280] flex items-start gap-1.5">
@@ -33426,6 +33848,7 @@ function PrototypeApp() {
       case 'macros':         return <MacrosView view={view} onNavigate={setView} />;
       case 'tickets':        return <TicketsView view={view} onNavigate={setView} />;
       case 'sla':            return <SlaView view={view} onNavigate={setView} />;
+      case 'audiences':      return <AudiencesSettingsView view={view} onNavigate={setView} />;
       case 'aiInbox':        return <AiInboxView view={view} onNavigate={setView} />;
       case 'automation':     return <AutomationView view={view} onNavigate={setView} />;
       case 'appStore':       return <AppStoreView view={view} onNavigate={setView} />;
