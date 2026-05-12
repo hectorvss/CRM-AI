@@ -12842,7 +12842,7 @@ function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View)
   );
 }
 
-// ── HorarioAtencionView (1-96065) ─────────────────────────────────────────────
+// ── HorarioAtencionView ────────────────────────────────────────────────────────
 
 interface DaySchedule { enabled: boolean; start: string; end: string; }
 type WeekSchedule = Record<string, DaySchedule>;
@@ -12858,12 +12858,7 @@ const DEFAULT_WEEK_SCHEDULE: WeekSchedule = {
 };
 
 interface HolidayEntry { id: string; name: string; date: string; }
-
-interface TeamSchedule {
-  id: string; teamName: string;
-  schedule: WeekSchedule;
-  responseTime: string;
-}
+interface TeamSchedule { id: string; teamName: string; timezone: string; schedule: WeekSchedule; responseTime: string; }
 
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
   const h = Math.floor(i / 2).toString().padStart(2, '0');
@@ -12872,38 +12867,43 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
 });
 
 const RESPONSE_TIME_OPTIONS = [
-  { value: 'asap',     label: 'Respondemos lo antes posible' },
-  { value: 'minutes',  label: 'En minutos' },
-  { value: 'hours',    label: 'En pocas horas' },
-  { value: 'day',      label: 'En el mismo día' },
-  { value: 'days',     label: 'En 2–3 días hábiles' },
-  { value: 'week',     label: 'En una semana' },
+  { value: 'asap',    label: 'Respondemos lo antes posible' },
+  { value: 'minutes', label: 'En minutos' },
+  { value: 'hours',   label: 'En pocas horas' },
+  { value: 'day',     label: 'En el mismo día' },
+  { value: 'days',    label: 'En 2–3 días hábiles' },
+  { value: 'week',    label: 'En una semana' },
 ];
 
+const TIMEZONES_SHORT = ['Europe/Madrid','Europe/London','America/New_York','America/Los_Angeles','America/Chicago','America/Sao_Paulo','Asia/Tokyo','Asia/Shanghai','Australia/Sydney','UTC'];
+
 function WeekScheduleEditor({ schedule, onChange }: { schedule: WeekSchedule; onChange: (s: WeekSchedule) => void }) {
-  const days = Object.keys(schedule);
   return (
-    <div className="flex flex-col gap-2 mt-3">
-      {days.map(day => {
+    <div className="flex flex-col gap-2">
+      {Object.keys(schedule).map(day => {
         const d = schedule[day];
         return (
           <div key={day} className="flex items-center gap-3">
             <button
               onClick={() => onChange({ ...schedule, [day]: { ...d, enabled: !d.enabled } })}
-              className={`w-[100px] text-left text-[13px] font-medium capitalize transition-colors ${d.enabled ? 'text-[#1a1a1a]' : 'text-[#bbb]'}`}
+              className="flex items-center gap-2 w-[110px] text-left"
             >
-              <span className={`inline-block w-3 h-3 rounded-full mr-2 border-2 transition-colors ${d.enabled ? 'bg-[#3b59f6] border-[#3b59f6]' : 'bg-white border-[#d1d1ce]'}`} />
-              {day.charAt(0).toUpperCase() + day.slice(1)}
+              <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${d.enabled ? 'bg-[#3b59f6] border-[#3b59f6]' : 'bg-white border-[#d1d1ce]'}`}>
+                {d.enabled && <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-white"><path d="M1 5l3 3 5-5" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+              </span>
+              <span className={`text-[13px] font-medium capitalize ${d.enabled ? 'text-[#1a1a1a]' : 'text-[#bbb]'}`}>
+                {day.charAt(0).toUpperCase() + day.slice(1)}
+              </span>
             </button>
             {d.enabled ? (
               <div className="flex items-center gap-2">
                 <select value={d.start} onChange={e => onChange({ ...schedule, [day]: { ...d, start: e.target.value } })}
-                  className="border border-[#e9eae6] rounded-[6px] px-2 py-1 text-[13px] bg-white w-[90px]">
+                  className="border border-[#e9eae6] rounded-[6px] px-2 py-1 text-[13px] bg-white w-[85px] focus:outline-none focus:border-[#3b59f6]">
                   {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <span className="text-[13px] text-[#646462]">–</span>
                 <select value={d.end} onChange={e => onChange({ ...schedule, [day]: { ...d, end: e.target.value } })}
-                  className="border border-[#e9eae6] rounded-[6px] px-2 py-1 text-[13px] bg-white w-[90px]">
+                  className="border border-[#e9eae6] rounded-[6px] px-2 py-1 text-[13px] bg-white w-[85px] focus:outline-none focus:border-[#3b59f6]">
                   {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
@@ -12917,45 +12917,107 @@ function WeekScheduleEditor({ schedule, onChange }: { schedule: WeekSchedule; on
   );
 }
 
+// Mini messenger preview for the promo banner
+function MessengerPreview() {
+  return (
+    <div className="bg-white rounded-[12px] shadow-lg overflow-hidden w-[220px] border border-[#e9eae6]">
+      <div className="bg-[#6366f1] px-3 py-2 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M8 1C4.13 1 1 3.91 1 7.5c0 1.99.97 3.77 2.5 4.95V15l2.56-1.41A8.17 8.17 0 008 14c3.87 0 7-2.91 7-6.5S11.87 1 8 1z"/></svg>
+        <span className="text-white text-[11px] font-medium">New conversation</span>
+      </div>
+      <div className="p-3">
+        <div className="flex -space-x-1.5 mb-2">
+          {['#a78bfa','#60a5fa','#34d399'].map((c,i) => (
+            <div key={i} className="w-6 h-6 rounded-full border-2 border-white" style={{ background: c }} />
+          ))}
+        </div>
+        <p className="text-[11px] font-semibold text-[#1a1a1a]">Usual reply time is a few minutes</p>
+        <p className="text-[10px] text-[#646462] mt-0.5">Ask us anything, or share your feedback</p>
+      </div>
+    </div>
+  );
+}
+
+// Mini flow cards preview
+function FinFlowPreview() {
+  const cards = [
+    { title: 'When customer\nsends their\nfirst message', sub: 'Outside →' },
+    { title: "Hi there! You're\nspeaking with an AI\nAgent…", sub: 'Branches →' },
+    { title: "Hi Fin! Here's a\nsummary… Contact\nour team.", sub: 'Continue →' },
+  ];
+  return (
+    <div className="flex gap-2">
+      {cards.map((c, i) => (
+        <div key={i} className="bg-white border border-[#e9eae6] rounded-lg p-2.5 w-[110px] flex flex-col gap-1.5 shadow-sm">
+          <div className="w-5 h-5 rounded-full bg-[#fef3c7] flex items-center justify-center text-[10px]">🤖</div>
+          <p className="text-[9.5px] text-[#1a1a1a] font-medium leading-tight whitespace-pre-line">{c.title}</p>
+          <p className="text-[9px] text-[#3b59f6]">{c.sub}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
-  const [tab, setTab] = useState<'general' | 'personalizado'>('general');
-  const [toast, setToast] = useState('');
-  const [saving, setSaving] = useState(false);
+  const { data: hoursData } = useApi(() => workingHoursApi.get(), [], null);
 
-  // General schedule state
-  const [showScheduleEditor, setShowScheduleEditor] = useState(false);
+  const [tab, setTab] = useState<'general' | 'personalizado'>('general');
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [promoDismissed, setPromoDismissed] = useState(false);
+
+  // General schedule
   const [weekSchedule, setWeekSchedule] = useState<WeekSchedule>(DEFAULT_WEEK_SCHEDULE);
   const [responseTime, setResponseTime] = useState('asap');
   const [holidays, setHolidays] = useState<HolidayEntry[]>([]);
+  const [showScheduleEditor, setShowScheduleEditor] = useState(false);
   const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [newHolidayName, setNewHolidayName] = useState('');
   const [newHolidayDate, setNewHolidayDate] = useState('');
 
-  // Personalizado tab state
-  const [teamSchedules, setTeamSchedules] = useState<TeamSchedule[]>([
-    { id: 'ts1', teamName: 'Soporte', schedule: { ...DEFAULT_WEEK_SCHEDULE }, responseTime: 'hours' },
-  ]);
+  // Personalizado
+  const [teamSchedules, setTeamSchedules] = useState<TeamSchedule[]>([]);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamSchedule | null>(null);
   const [teamFormName, setTeamFormName] = useState('');
+  const [teamFormTz, setTeamFormTz] = useState('Europe/Madrid');
   const [teamFormSchedule, setTeamFormSchedule] = useState<WeekSchedule>(DEFAULT_WEEK_SCHEDULE);
   const [teamFormResponse, setTeamFormResponse] = useState('asap');
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
+  // Load persisted working hours
+  useEffect(() => {
+    if (!hoursData) return;
+    const d = hoursData as any;
+    if (d.schedule) setWeekSchedule(d.schedule);
+    if (d.response_time) setResponseTime(d.response_time);
+    if (d.holidays) setHolidays(d.holidays);
+    if (d.team_schedules) setTeamSchedules(d.team_schedules);
+  }, [hoursData]);
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
   }
 
-  async function handleSaveGeneral() {
+  async function handleSave() {
     setSaving(true);
     try {
-      const wsId = (ws as any)?.id ?? '';
-      await workspacesApi.updateSettings(wsId, {
-        officeHours: weekSchedule,
-        responseTime,
+      await workingHoursApi.upsert({
+        schedule: weekSchedule,
+        response_time: responseTime,
         holidays,
-      } as any);
+        team_schedules: teamSchedules,
+      });
+      // Also persist to workspace settings as fallback
+      const wsId = (ws as any)?.id ?? '';
+      if (wsId) {
+        await workspacesApi.updateSettings(wsId, {
+          officeHours: weekSchedule,
+          responseTime,
+          holidays,
+        } as any).catch(() => {/* non-fatal */});
+      }
       showToast('Horario guardado correctamente.');
     } catch {
       showToast('Horario guardado (modo demo).');
@@ -12967,8 +13029,8 @@ function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v:
   function addHoliday() {
     if (!newHolidayName.trim() || !newHolidayDate) return;
     setHolidays(prev => [...prev, { id: Date.now().toString(), name: newHolidayName.trim(), date: newHolidayDate }]);
-    setNewHolidayName(''); setNewHolidayDate(''); setShowHolidayModal(false);
-    showToast('Día festivo añadido.');
+    setNewHolidayName(''); setNewHolidayDate('');
+    setShowHolidayModal(false);
   }
 
   function removeHoliday(id: string) {
@@ -12977,32 +13039,32 @@ function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v:
 
   function openNewTeam() {
     setEditingTeam(null);
-    setTeamFormName('');
-    setTeamFormSchedule({ ...DEFAULT_WEEK_SCHEDULE });
-    setTeamFormResponse('asap');
+    setTeamFormName(''); setTeamFormTz('Europe/Madrid');
+    setTeamFormSchedule({ ...DEFAULT_WEEK_SCHEDULE }); setTeamFormResponse('asap');
     setShowTeamModal(true);
   }
 
   function openEditTeam(ts: TeamSchedule) {
     setEditingTeam(ts);
-    setTeamFormName(ts.teamName);
-    setTeamFormSchedule({ ...ts.schedule });
-    setTeamFormResponse(ts.responseTime);
+    setTeamFormName(ts.teamName); setTeamFormTz(ts.timezone ?? 'Europe/Madrid');
+    setTeamFormSchedule({ ...ts.schedule }); setTeamFormResponse(ts.responseTime);
     setShowTeamModal(true);
   }
 
   function saveTeam() {
     if (!teamFormName.trim()) return;
-    if (editingTeam) {
-      setTeamSchedules(prev => prev.map(t => t.id === editingTeam.id
-        ? { ...t, teamName: teamFormName.trim(), schedule: teamFormSchedule, responseTime: teamFormResponse }
-        : t));
-      showToast('Horario de equipo actualizado.');
-    } else {
-      setTeamSchedules(prev => [...prev, { id: Date.now().toString(), teamName: teamFormName.trim(), schedule: teamFormSchedule, responseTime: teamFormResponse }]);
-      showToast('Equipo añadido.');
-    }
+    const updated: TeamSchedule = {
+      id: editingTeam?.id ?? Date.now().toString(),
+      teamName: teamFormName.trim(),
+      timezone: teamFormTz,
+      schedule: teamFormSchedule,
+      responseTime: teamFormResponse,
+    };
+    setTeamSchedules(prev =>
+      editingTeam ? prev.map(t => t.id === editingTeam.id ? updated : t) : [...prev, updated]
+    );
     setShowTeamModal(false);
+    showToast(editingTeam ? 'Horario actualizado.' : 'Equipo añadido.');
   }
 
   function removeTeam(id: string) {
@@ -13011,265 +13073,392 @@ function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v:
     showToast('Equipo eliminado.');
   }
 
+  function scheduleSummary(schedule: WeekSchedule) {
+    const enabled = (Object.entries(schedule) as [string, DaySchedule][]).filter(([, d]) => d.enabled);
+    if (enabled.length === 0) return 'Disponible 24/7';
+    if (enabled.length === 7) return `Todos los días ${enabled[0][1].start}–${enabled[0][1].end}`;
+    const grouped = enabled.map(([day]) => day.slice(0, 3)).join(', ');
+    return `${grouped} · ${enabled[0][1].start}–${enabled[0][1].end}`;
+  }
+
   const enabledDays = (Object.entries(weekSchedule) as [string, DaySchedule][]).filter(([, d]) => d.enabled);
+  const wsTimezone = (ws as any)?.settings?.timezone ?? 'Europe/Madrid';
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#1a1a1a] text-white text-[13px] px-4 py-2.5 rounded-[10px] shadow-lg animate-fade-in">
-          {toast}
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 text-white text-[13px] px-4 py-2.5 rounded-[10px] shadow-lg ${toast.ok ? 'bg-[#1a1a1a]' : 'bg-[#b91c1c]'}`}>
+          {toast.msg}
         </div>
       )}
+
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+
+          {/* ── Header ── */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Horario de atención</h1>
+            <h1 className="text-[18px] font-bold text-[#1a1a1a]">Horario de atención</h1>
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 text-[13px] text-[#646462] border border-[#e9eae6] rounded-lg px-3 py-1.5 hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zm.75 9H7.25V7h1.5v4zm0-5H7.25V4.5h1.5V6z"/></svg>
+                Aprender
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+            </div>
           </div>
-          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
-            {(['general', 'personalizado'] as const).map(id => (
-              <button key={id} onClick={() => setTab(id)}
-                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
-                  tab === id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
-                }`}>
-                {id === 'general' ? 'General' : 'Horario personalizado por equipo'}
+
+          {/* ── Tabs ── */}
+          <div className="flex gap-0 px-6 border-b border-[#e9eae6] flex-shrink-0">
+            {[
+              { id: 'general' as const, label: 'General' },
+              { id: 'personalizado' as const, label: 'Horario de atención personalizado' },
+            ].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-3 py-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${tab === t.id ? 'border-[#f97316] text-[#f97316]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+                {t.label}
               </button>
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+          <div className="flex-1 overflow-y-auto min-h-0">
+
+            {/* ══ TAB: General ══ */}
             {tab === 'general' && (
-              <div className="max-w-[780px] flex flex-col gap-4">
-                {/* Promo card */}
-                <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-5 mb-2">
-                  <h2 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Establece las expectativas correctas</h2>
-                  <p className="text-[13px] text-[#646462]">Los horarios de atención y los tiempos de respuesta permiten a los clientes saber cuándo están disponibles tus equipos. Los horarios se basan en la zona horaria del espacio de trabajo.</p>
-                </div>
+              <div className="p-6 flex flex-col gap-0 max-w-[820px]">
 
-                {/* Horario predeterminado */}
-                <div className="border border-[#e9eae6] rounded-[12px] p-5">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Horario de oficina predeterminado</h3>
-                    <button onClick={() => setShowScheduleEditor(v => !v)}
-                      className="text-[13px] text-[#fa7938] font-medium hover:underline">
-                      {showScheduleEditor ? 'Ocultar editor' : (enabledDays.length === 0 ? '+ Añadir horas' : 'Editar horario')}
+                {/* Promo banner */}
+                {!promoDismissed && (
+                  <div className="border border-[#e9eae6] rounded-[12px] mb-5 overflow-hidden relative">
+                    <button
+                      onClick={() => setPromoDismissed(true)}
+                      className="absolute top-3 right-3 text-[#a4a4a2] hover:text-[#1a1a1a] z-10"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                     </button>
-                  </div>
-                  <p className="text-[13px] text-[#646462] mb-3">
-                    Se aplica a todas las conversaciones. Si no se especifica, la disponibilidad predeterminada es 24/7.
-                  </p>
-
-                  {/* Summary when collapsed */}
-                  {!showScheduleEditor && enabledDays.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      {enabledDays.map(([day, d]) => (
-                        <div key={day} className="flex items-center gap-3 text-[13px]">
-                          <span className="w-[90px] capitalize text-[#1a1a1a] font-medium">{day}</span>
-                          <span className="text-[#646462]">{d.start} – {d.end}</span>
+                    <div className="flex gap-6 p-5">
+                      <div className="flex-1">
+                        <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-2">Establece siempre las expectativas correctas</h2>
+                        <p className="text-[13px] text-[#646462] mb-4">
+                          <span className="text-[#f97316]">Los horarios de atención y los tiempos de respuesta</span> permiten a los clientes saber cuándo están disponibles tus equipos y con qué rapidez suelen responder.
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          <a href="#" className="flex items-center gap-1.5 text-[12.5px] text-[#1a1a1a] hover:text-[#3b59f6]" onClick={e => e.preventDefault()}>
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#a4a4a2]"><path d="M2 2h5v2H4v8h8v-3h2v5H2V2zm7 0h5v5h-2V4.41l-5.3 5.3-1.41-1.41L12.59 3H9V1z"/></svg>
+                            Horario de atención y tiempo de respuesta
+                          </a>
+                          <a href="#" className="flex items-center gap-1.5 text-[12.5px] text-[#1a1a1a] hover:text-[#3b59f6]" onClick={e => e.preventDefault()}>
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#a4a4a2]"><path d="M2 2h5v2H4v8h8v-3h2v5H2V2zm7 0h5v5h-2V4.41l-5.3 5.3-1.41-1.41L12.59 3H9V1z"/></svg>
+                            Utiliza Fin AI Agent fuera del horario de oficina
+                          </a>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                  {!showScheduleEditor && enabledDays.length === 0 && (
-                    <p className="text-[13px] text-[#bbb] italic">Sin horario definido — disponible 24/7</p>
-                  )}
-
-                  {showScheduleEditor && (
-                    <>
-                      <WeekScheduleEditor schedule={weekSchedule} onChange={setWeekSchedule} />
-                      <div className="flex justify-end mt-4 gap-2">
-                        <button onClick={() => setShowScheduleEditor(false)}
-                          className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">
-                          Cancelar
-                        </button>
-                        <button onClick={() => { setShowScheduleEditor(false); handleSaveGeneral(); }}
-                          disabled={saving}
-                          className="bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium disabled:opacity-50">
-                          {saving ? 'Guardando…' : 'Guardar horario'}
-                        </button>
                       </div>
-                    </>
-                  )}
-
-                  {/* Holidays */}
-                  <div className="mt-5 pt-4 border-t border-[#e9eae6]">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-[13px] font-semibold text-[#1a1a1a]">Vacaciones y cierres</p>
-                      <button onClick={() => setShowHolidayModal(true)}
-                        className="text-[13px] text-[#fa7938] font-medium hover:underline">+ Agregar día festivo</button>
+                      <div className="flex-shrink-0 flex items-center">
+                        <MessengerPreview />
+                      </div>
                     </div>
-                    <p className="text-[13px] text-[#646462] mb-3">Fechas específicas en las que el equipo está cerrado o tiene horario diferente.</p>
-                    {holidays.length === 0 && <p className="text-[13px] text-[#bbb] italic">No hay días festivos configurados.</p>}
-                    <div className="flex flex-col gap-2">
-                      {holidays.map(h => (
-                        <div key={h.id} className="flex items-center justify-between bg-[#f8f8f7] rounded-[8px] px-3 py-2">
-                          <div>
-                            <span className="text-[13px] font-medium text-[#1a1a1a]">{h.name}</span>
-                            <span className="text-[13px] text-[#646462] ml-3">{new Date(h.date + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
-                          </div>
-                          <button onClick={() => removeHoliday(h.id)}
-                            className="text-[13px] text-[#ef4444] hover:underline">Eliminar</button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tiempos de respuesta */}
-                <div className="border border-[#e9eae6] rounded-[12px] p-5">
-                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Tiempos de respuesta</h3>
-                  <p className="text-[13px] text-[#646462] mb-4">El cliente verá este tiempo al iniciar una conversación durante el horario de atención.</p>
-                  <div className="flex items-center gap-4">
-                    <span className="text-[13px] text-[#1a1a1a] whitespace-nowrap">El equipo suele responder:</span>
-                    <select value={responseTime} onChange={e => setResponseTime(e.target.value)}
-                      className="flex-1 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white max-w-[280px]">
-                      {RESPONSE_TIME_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <button onClick={handleSaveGeneral} disabled={saving}
-                      className="bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium disabled:opacity-50 whitespace-nowrap">
-                      {saving ? 'Guardando…' : 'Guardar'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {tab === 'personalizado' && (
-              <div className="max-w-[780px] flex flex-col gap-4">
-                <div className="flex items-center justify-between mb-1">
-                  <div>
-                    <h2 className="text-[15px] font-semibold text-[#1a1a1a]">Horario por equipo</h2>
-                    <p className="text-[13px] text-[#646462]">Configura horarios y tiempos de respuesta específicos para cada equipo.</p>
-                  </div>
-                  <button onClick={openNewTeam}
-                    className="flex items-center gap-1.5 bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium">
-                    + Nuevo equipo
-                  </button>
-                </div>
-
-                {teamSchedules.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-16 gap-3 border border-dashed border-[#e9eae6] rounded-[12px]">
-                    <span className="text-[40px]">🗓️</span>
-                    <p className="text-[14px] font-medium text-[#1a1a1a]">Sin horarios de equipo</p>
-                    <p className="text-[13px] text-[#646462]">Crea un horario personalizado para tus equipos de soporte.</p>
-                    <button onClick={openNewTeam}
-                      className="mt-1 bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium">
-                      + Nuevo equipo
-                    </button>
                   </div>
                 )}
 
-                {teamSchedules.map(ts => {
-                  const active = (Object.entries(ts.schedule) as [string, DaySchedule][]).filter(([, d]) => d.enabled);
-                  const rtLabel = RESPONSE_TIME_OPTIONS.find(o => o.value === ts.responseTime)?.label ?? ts.responseTime;
-                  return (
-                    <div key={ts.id} className="border border-[#e9eae6] rounded-[12px] p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-[14px] font-semibold text-[#1a1a1a]">{ts.teamName}</h3>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => openEditTeam(ts)}
-                            className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">
-                            Editar
+                {/* ── Horario de oficina predeterminado ── */}
+                <div className="border border-[#e9eae6] rounded-[12px] mb-4 overflow-hidden">
+                  <div className="flex gap-6 p-5">
+                    <div className="flex-1">
+                      <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-1">horario de oficina predeterminado</h3>
+                      <p className="text-[12.5px] text-[#646462] mb-3">
+                        Esto se aplica a todas las conversaciones en tu espacio de trabajo. Si un cliente inicia una conversación fuera de este horario, verá cuándo volverás a su zona horaria. También puedes establecer horarios de atención para equipos específicos.
+                      </p>
+                      <a href="#" className="text-[12.5px] text-[#f97316] hover:underline" onClick={e => { e.preventDefault(); setTab('personalizado'); }}>
+                        Ver el horario de atención personalizado.
+                      </a>
+                    </div>
+                    <div className="w-[320px] flex-shrink-0">
+                      <p className="text-[12px] text-[#646462] mb-3">
+                        Los horarios se basan en la zona horaria de tu espacio de trabajo (<span className="text-[#f97316] underline cursor-pointer" onClick={() => onNavigate('workspaceGeneral')}>{wsTimezone}</span>). Si no se especifica, la disponibilidad predeterminada es 24 horas al día, los 7 días a la semana (siempre activo).
+                      </p>
+
+                      {!showScheduleEditor && (
+                        <>
+                          {enabledDays.length > 0 ? (
+                            <div className="flex flex-col gap-1 mb-3">
+                              {enabledDays.map(([day, d]) => (
+                                <div key={day} className="flex items-center gap-3 text-[12.5px]">
+                                  <span className="w-[90px] capitalize text-[#1a1a1a] font-medium">{day}</span>
+                                  <span className="text-[#646462]">{d.start} – {d.end}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[12.5px] text-[#a4a4a2] italic mb-3">Disponible 24/7 (sin restricciones)</p>
+                          )}
+                          <button
+                            onClick={() => setShowScheduleEditor(true)}
+                            className="text-[12.5px] text-[#f97316] font-medium hover:underline flex items-center gap-1"
+                          >
+                            + {enabledDays.length === 0 ? 'Añadir horas' : 'Editar horas'}
                           </button>
-                          <button onClick={() => removeTeam(ts.id)}
-                            className="border border-[#ffd5d5] rounded-full px-3 py-[5px] text-[13px] font-medium text-[#ef4444] hover:bg-[#fff0f0]">
-                            Eliminar
-                          </button>
+                        </>
+                      )}
+
+                      {showScheduleEditor && (
+                        <div className="flex flex-col gap-3">
+                          <WeekScheduleEditor schedule={weekSchedule} onChange={setWeekSchedule} />
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              onClick={() => setShowScheduleEditor(false)}
+                              className="text-[12.5px] text-[#646462] border border-[#e9eae6] rounded-lg px-3 py-1.5 hover:bg-[#f8f8f7]"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() => { setShowScheduleEditor(false); handleSave(); }}
+                              disabled={saving}
+                              className="text-[12.5px] font-semibold text-white bg-[#1a1a1a] rounded-lg px-3 py-1.5 hover:bg-[#333] disabled:opacity-50"
+                            >
+                              {saving ? 'Guardando…' : 'Guardar'}
+                            </button>
+                          </div>
                         </div>
+                      )}
+
+                      {/* Vacaciones y cierres */}
+                      <div className="mt-4 pt-4 border-t border-[#e9eae6]">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Vacaciones y cierres</p>
+                        <p className="text-[12px] text-[#646462] mb-2">Agregue fechas específicas en las que su equipo está cerrado o tiene un horario diferente al horario regular.</p>
+                        {holidays.map(h => (
+                          <div key={h.id} className="flex items-center justify-between py-1.5 text-[12.5px] border-b border-[#f1f1ee] last:border-0">
+                            <div>
+                              <span className="font-medium text-[#1a1a1a]">{h.name}</span>
+                              <span className="text-[#646462] ml-2">{new Date(h.date + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long' })}</span>
+                            </div>
+                            <button onClick={() => removeHoliday(h.id)} className="text-[#ef4444] hover:underline text-[11.5px] ml-2">×</button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => setShowHolidayModal(true)}
+                          className="mt-2 text-[12.5px] text-[#f97316] font-medium hover:underline flex items-center gap-1"
+                        >
+                          + Agregar día festivo o cierre
+                        </button>
                       </div>
-                      <div className="flex flex-col gap-1 mb-3">
-                        {active.length === 0
-                          ? <p className="text-[13px] text-[#bbb] italic">Sin horario — disponible 24/7</p>
-                          : active.map(([day, d]) => (
-                            <div key={day} className="flex items-center gap-3 text-[13px]">
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Tiempos de respuesta ── */}
+                <div className="border border-[#e9eae6] rounded-[12px] mb-4 overflow-hidden">
+                  <div className="flex gap-6 p-5">
+                    <div className="flex-1">
+                      <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-1">Tiempos de respuesta</h3>
+                      <p className="text-[12.5px] text-[#646462] mb-2">
+                        Esto se aplica a todas las conversaciones en tu espacio de trabajo. Si un cliente inicia una conversación durante el horario de atención, verá tu tiempo de respuesta habitual. También puedes establecer tiempos de respuesta para equipos específicos.
+                        {' '}<a href="#" className="text-[#f97316] hover:underline" onClick={e => e.preventDefault()}>Consulta los ajustes del equipo.</a>
+                      </p>
+                    </div>
+                    <div className="w-[320px] flex-shrink-0 flex flex-col gap-3">
+                      <div>
+                        <p className="text-[12px] text-[#646462] mb-1.5">El equipo suele responder:</p>
+                        <select
+                          value={responseTime} onChange={e => setResponseTime(e.target.value)}
+                          className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] bg-white focus:outline-none focus:border-[#3b59f6]"
+                        >
+                          {RESPONSE_TIME_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        </select>
+                      </div>
+                      <button
+                        onClick={handleSave} disabled={saving}
+                        className="self-start text-[12.5px] font-semibold text-white bg-[#1a1a1a] rounded-lg px-4 py-1.5 hover:bg-[#333] disabled:opacity-50"
+                      >
+                        {saving ? 'Guardando…' : 'Guardar'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Fin AI Agent ── */}
+                <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                  <div className="flex gap-6 p-5">
+                    <div className="flex-1">
+                      <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-1">Fin AI Agent</h3>
+                      <p className="text-[12.5px] text-[#646462]">
+                        Cuando tu personal está fuera de línea, Fin puede intervenir y encargarse de las conversaciones de modo que los clientes reciban ayuda oportuna las 24 horas.
+                        {' '}<a href="#" className="text-[#f97316] hover:underline" onClick={e => { e.preventDefault(); onNavigate('fin'); }}>Configúralo en los flujos de trabajo.</a>
+                      </p>
+                    </div>
+                    <div className="w-[360px] flex-shrink-0 flex items-center justify-center py-2">
+                      <FinFlowPreview />
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* ══ TAB: Personalizado ══ */}
+            {tab === 'personalizado' && (
+              <div className="p-6 flex flex-col gap-4 max-w-[820px]">
+
+                {/* Promo card */}
+                <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                  <div className="flex gap-6 p-5">
+                    <div className="flex-1">
+                      <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-2">Diferentes equipos, diferentes horarios de atención</h2>
+                      <p className="text-[12.5px] text-[#646462] mb-4">
+                        Puedes <span className="text-[#f97316]">establecer un horario de atención personalizado</span> para cualquier equipo. Así, los clientes siempre sabrán cuándo están disponibles los compañeros de equipo y con qué rapidez responderán.
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={openNewTeam}
+                          className="flex items-center gap-1.5 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg px-4 py-2 hover:bg-[#333]"
+                        >
+                          + Nuevo horario personalizado
+                        </button>
+                        <a href="#" className="flex items-center gap-1.5 text-[12.5px] text-[#646462] hover:text-[#3b59f6]" onClick={e => e.preventDefault()}>
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M2 2h5v2H4v8h8v-3h2v5H2V2zm7 0h5v5h-2V4.41l-5.3 5.3-1.41-1.41L12.59 3H9V1z"/></svg>
+                          Horarios y tiempos personalizados
+                        </a>
+                      </div>
+                    </div>
+                    {/* Preview table */}
+                    <div className="w-[280px] flex-shrink-0 bg-[#f0fdf4] rounded-xl overflow-hidden border border-[#bbf7d0]">
+                      <div className="h-1.5 bg-[#22c55e]" />
+                      <table className="w-full text-[11px]">
+                        <thead>
+                          <tr className="border-b border-[#bbf7d0]">
+                            {['Name','Time zone','Scheduled hours'].map(h => (
+                              <th key={h} className="text-left px-3 py-2 text-[#15803d] font-semibold">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            ['EMEA','London','Weekdays 9am – 5pm'],
+                            ['APAC - VIP','Sydney','Every day 12am – 11:59pm'],
+                            ['US - Late Shift','New York','Weekdays 12pm – 9pm'],
+                          ].map(([name, tz, hours]) => (
+                            <tr key={name} className="border-b border-[#dcfce7] last:border-0">
+                              <td className="px-3 py-2 font-semibold text-[#1a1a1a]">{name}</td>
+                              <td className="px-3 py-2 text-[#646462]">{tz}</td>
+                              <td className="px-3 py-2 text-[#646462]">{hours}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Team schedule list or empty state */}
+                {teamSchedules.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <div className="w-14 h-14 rounded-full bg-[#f1f1ee] flex items-center justify-center">
+                      <svg viewBox="0 0 24 24" className="w-7 h-7 text-[#a4a4a2]" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" strokeLinecap="round"/></svg>
+                    </div>
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Aún no se han creado horarios de atención personalizados</p>
+                    <p className="text-[13px] text-[#646462] text-center max-w-[380px]">Establece horarios personalizados para equipos que operan en diferentes zonas horarias o con horarios variables</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {teamSchedules.map(ts => (
+                      <div key={ts.id} className="border border-[#e9eae6] rounded-[12px] p-5 hover:border-[#d1d1ce] transition-colors">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h3 className="text-[14px] font-bold text-[#1a1a1a]">{ts.teamName}</h3>
+                            <p className="text-[12px] text-[#646462] mt-0.5">{ts.timezone} · {scheduleSummary(ts.schedule)}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => openEditTeam(ts)} className="text-[12.5px] text-[#646462] border border-[#e9eae6] rounded-lg px-3 py-1.5 hover:bg-[#f8f8f7]">Editar</button>
+                            <button onClick={() => removeTeam(ts.id)} className="text-[12.5px] text-[#b91c1c] border border-[#fca5a5] rounded-lg px-3 py-1.5 hover:bg-[#fef2f2]">Eliminar</button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                          {(Object.entries(ts.schedule) as [string, DaySchedule][]).filter(([, d]) => d.enabled).map(([day, d]) => (
+                            <div key={day} className="flex items-center gap-3 text-[12.5px]">
                               <span className="w-[90px] capitalize text-[#1a1a1a] font-medium">{day}</span>
                               <span className="text-[#646462]">{d.start} – {d.end}</span>
                             </div>
-                          ))
-                        }
+                          ))}
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-[#f1f1ee] flex items-center gap-2 text-[12px]">
+                          <span className="text-[#a4a4a2]">Tiempo de respuesta:</span>
+                          <span className="font-medium text-[#1a1a1a]">{RESPONSE_TIME_OPTIONS.find(o => o.value === ts.responseTime)?.label ?? ts.responseTime}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-[13px]">
-                        <span className="text-[#646462]">Tiempo de respuesta:</span>
-                        <span className="font-medium text-[#1a1a1a]">{rtLabel}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Holiday modal */}
+      {/* ── Holiday modal ── */}
       {showHolidayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowHolidayModal(false)}>
-          <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-[16px] shadow-xl p-6 w-[400px] flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowHolidayModal(false)}>
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[400px] flex flex-col gap-4" onClick={e => e.stopPropagation()}>
             <h2 className="text-[16px] font-bold text-[#1a1a1a]">Agregar día festivo o cierre</h2>
             <div className="flex flex-col gap-1">
               <label className="text-[12px] font-medium text-[#646462]">Nombre</label>
-              <input value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)}
-                placeholder="Ej: Navidad"
-                className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#fa7938]" />
+              <input autoFocus value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)}
+                placeholder="Ej: Navidad, Día de la empresa…"
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#f97316]" />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-[12px] font-medium text-[#646462]">Fecha</label>
               <input type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)}
-                className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#fa7938]" />
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#f97316]" />
             </div>
-            <div className="flex justify-end gap-2 mt-1">
-              <button onClick={() => setShowHolidayModal(false)}
-                className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">
-                Cancelar
-              </button>
-              <button onClick={addHoliday}
-                disabled={!newHolidayName.trim() || !newHolidayDate}
-                className="bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium disabled:opacity-40">
-                Añadir
-              </button>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowHolidayModal(false)} className="border border-[#e9eae6] rounded-lg px-4 py-2 text-[13px] font-medium text-[#646462] hover:bg-[#f8f8f7]">Cancelar</button>
+              <button onClick={addHoliday} disabled={!newHolidayName.trim() || !newHolidayDate}
+                className="bg-[#1a1a1a] text-white rounded-lg px-4 py-2 text-[13px] font-medium hover:bg-[#333] disabled:opacity-40">Añadir</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Team schedule modal */}
+      {/* ── Team schedule modal ── */}
       {showTeamModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowTeamModal(false)}>
-          <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-[16px] shadow-xl p-6 w-[520px] flex flex-col gap-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-[16px] font-bold text-[#1a1a1a]">{editingTeam ? 'Editar horario de equipo' : 'Nuevo horario de equipo'}</h2>
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-medium text-[#646462]">Nombre del equipo</label>
-              <input value={teamFormName} onChange={e => setTeamFormName(e.target.value)}
-                placeholder="Ej: Ventas, Soporte técnico…"
-                className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#fa7938]" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowTeamModal(false)}>
+          <div className="bg-white rounded-[16px] shadow-xl w-[540px] flex flex-col max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 pt-5 pb-4 border-b border-[#e9eae6]">
+              <h2 className="text-[16px] font-bold text-[#1a1a1a]">{editingTeam ? 'Editar horario de equipo' : 'Nuevo horario de equipo'}</h2>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-medium text-[#646462]">Horario semanal</label>
-              <WeekScheduleEditor schedule={teamFormSchedule} onChange={setTeamFormSchedule} />
+            <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+              <div className="flex gap-4">
+                <div className="flex-1 flex flex-col gap-1">
+                  <label className="text-[12px] font-medium text-[#646462]">Nombre del equipo *</label>
+                  <input autoFocus value={teamFormName} onChange={e => setTeamFormName(e.target.value)}
+                    placeholder="Ej: Soporte EMEA, Ventas…"
+                    className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#3b59f6]" />
+                </div>
+                <div className="flex-1 flex flex-col gap-1">
+                  <label className="text-[12px] font-medium text-[#646462]">Zona horaria</label>
+                  <select value={teamFormTz} onChange={e => setTeamFormTz(e.target.value)}
+                    className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] bg-white outline-none focus:border-[#3b59f6]">
+                    {TIMEZONES_SHORT.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-medium text-[#646462]">Horario semanal</label>
+                <WeekScheduleEditor schedule={teamFormSchedule} onChange={setTeamFormSchedule} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-medium text-[#646462]">Tiempo de respuesta habitual</label>
+                <select value={teamFormResponse} onChange={e => setTeamFormResponse(e.target.value)}
+                  className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] bg-white outline-none focus:border-[#3b59f6]">
+                  {RESPONSE_TIME_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-medium text-[#646462]">Tiempo de respuesta habitual</label>
-              <select value={teamFormResponse} onChange={e => setTeamFormResponse(e.target.value)}
-                className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white">
-                {RESPONSE_TIME_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex justify-end gap-2 mt-1">
-              <button onClick={() => setShowTeamModal(false)}
-                className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">
-                Cancelar
-              </button>
-              <button onClick={saveTeam}
-                disabled={!teamFormName.trim()}
-                className="bg-[#fa7938] hover:bg-[#e8692a] text-white rounded-full px-4 py-[6px] text-[13px] font-medium disabled:opacity-40">
-                {editingTeam ? 'Guardar cambios' : 'Crear equipo'}
+            <div className="px-6 py-4 border-t border-[#e9eae6] flex justify-end gap-2">
+              <button onClick={() => setShowTeamModal(false)} className="border border-[#e9eae6] rounded-lg px-4 py-2 text-[13px] font-medium text-[#646462] hover:bg-[#f8f8f7]">Cancelar</button>
+              <button onClick={saveTeam} disabled={!teamFormName.trim()}
+                className="bg-[#1a1a1a] text-white rounded-lg px-4 py-2 text-[13px] font-semibold hover:bg-[#333] disabled:opacity-40">
+                {editingTeam ? 'Guardar cambios' : 'Crear horario'}
               </button>
             </div>
           </div>
