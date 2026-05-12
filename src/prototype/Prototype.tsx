@@ -29851,7 +29851,7 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                           <tr key={m.id} className="hover:bg-[#f8f8f7]">
                             <td className="px-4 py-3 text-[#1a1a1a] font-medium">{m.email ?? '—'}</td>
                             <td className="px-4 py-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${roleColor(m.role_id)}`}>{roleLabel(m.role_id)}</span>
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white border border-[#e9eae6] text-[#1a1a1a]">{roleLabel(m.role_id)}</span>
                             </td>
                             <td className="px-4 py-3 text-[#a4a4a2]">{m.joined_at ? new Date(m.joined_at).toLocaleDateString('es') : '—'}</td>
                             <td className="px-4 py-3 text-right">
@@ -29908,7 +29908,7 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                         {/* Card header row */}
                         <div className="flex items-center gap-4 px-5 py-4">
                           {/* Role badge */}
-                          <span className={`px-2.5 py-1 rounded-full text-[12px] font-semibold flex-shrink-0 min-w-[120px] text-center ${r.color ?? roleColor(r.id)}`}>
+                          <span className="px-2.5 py-1 rounded-full text-[12px] font-semibold flex-shrink-0 min-w-[120px] text-center bg-white border border-[#e9eae6] text-[#1a1a1a]">
                             {r.name}
                           </span>
                           {/* Description */}
@@ -29949,8 +29949,8 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                                     {g.perms.map(p => {
                                       const has = rolePms.includes(p.id);
                                       return (
-                                        <span key={p.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${has ? g.color : 'bg-transparent text-[#d1d5db] border-[#e9eae6] opacity-40'}`}>
-                                          {has && <svg viewBox="0 0 8 8" className="w-2 h-2 fill-current flex-shrink-0"><path d="M1 4l2 2 4-4"/></svg>}
+                                        <span key={p.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-[#e9eae6] ${has ? 'bg-white text-[#1a1a1a]' : 'bg-transparent text-[#d1d5db] opacity-40'}`}>
+                                          {has && <svg viewBox="0 0 8 8" className="w-2 h-2 fill-[#1a1a1a] flex-shrink-0"><path d="M1 4l2 2 4-4"/></svg>}
                                           {p.label}
                                         </span>
                                       );
@@ -30010,7 +30010,7 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                       </button>
                       <div className="w-px h-5 bg-[#e9eae6]" />
                       <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${editingRole.color ?? roleColor(editingRole.id)}`}>
+                        <span className="px-3 py-1.5 rounded-full text-[12px] font-semibold bg-white border border-[#e9eae6] text-[#1a1a1a]">
                           {editingRole.name}
                         </span>
                         <div>
@@ -30348,68 +30348,276 @@ function AuthSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
   const [samlOn, setSamlOn] = useState(false);
   const [mfaOn, setMfaOn] = useState(false);
   const [minLen, setMinLen] = useState(8);
+  const [requireUpper, setRequireUpper] = useState(true);
+  const [requireNumber, setRequireNumber] = useState(true);
+  const [requireSpecial, setRequireSpecial] = useState(false);
+  const [sessionTimeout, setSessionTimeout] = useState('8');
+  const [maxAttempts, setMaxAttempts] = useState('5');
+  const [lockoutMins, setLockoutMins] = useState('15');
+  const [ipRestrict, setIpRestrict] = useState(false);
+  const [ipList, setIpList] = useState('');
+  const [trustedDevices, setTrustedDevices] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const FAKE_SESSIONS = [
+    { id: '1', device: 'Chrome · macOS', ip: '85.32.14.201', location: 'Madrid, ES', last: 'Ahora mismo', current: true },
+    { id: '2', device: 'Safari · iPhone', ip: '85.32.14.202', location: 'Madrid, ES', last: 'Hace 2 horas', current: false },
+    { id: '3', device: 'Firefox · Windows', ip: '91.40.12.7', location: 'Barcelona, ES', last: 'Hace 3 días', current: false },
+  ];
+  const [sessions, setSessions] = useState(FAKE_SESSIONS);
+
+  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); }
+
+  async function handleSave() {
+    setSaving(true);
+    await new Promise(r => setTimeout(r, 700));
+    setSaving(false);
+    showToast('Configuración de seguridad guardada.');
+  }
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[18px] font-bold text-[#1a1a1a]">Seguridad</h1>
+            <div className="flex items-center gap-3">
+              {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
+              <button onClick={handleSave} disabled={saving} className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50 transition-colors">
+                {saving ? 'Guardando…' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto min-h-0">
-      <div className="max-w-[640px] mx-auto py-10 px-6 flex flex-col gap-8">
-        <div>
-          <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Autenticación</h1>
-          <p className="text-[13.5px] text-[#646462]">Configura cómo acceden los compañeros de equipo.</p>
-        </div>
-        <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-[14px] font-semibold text-[#1a1a1a]">Google Sign-In</p>
-              <p className="text-[12.5px] text-[#646462]">Permite iniciar sesión con cuentas de Google Workspace.</p>
-            </div>
-            <SettingsToggle checked={googleOn} onChange={setGoogleOn} />
-          </div>
-        </div>
-        <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
-          <div className="flex items-center justify-between gap-4 mb-2">
-            <div>
-              <p className="text-[14px] font-semibold text-[#1a1a1a]">SAML 2.0 SSO</p>
-              <p className="text-[12.5px] text-[#646462]">Integra con Okta, Azure AD u otros proveedores de identidad.</p>
-            </div>
-            <SettingsToggle checked={samlOn} onChange={setSamlOn} />
-          </div>
-          {samlOn && (
-            <div className="mt-4 border-t border-[#e9eae6] pt-4 flex flex-col gap-3">
-              {['URL de inicio de sesión (SSO)', 'URL del emisor del IdP', 'Certificado X.509'].map(label => (
-                <div key={label}>
-                  <label className="block text-[12px] font-medium text-[#646462] mb-1">{label}</label>
-                  <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] focus:outline-none" placeholder={label === 'Certificado X.509' ? '-----BEGIN CERTIFICATE-----' : 'https://'} />
+            <div className="py-8 px-8 flex flex-col gap-4 w-full max-w-[800px]">
+
+              {/* ── Inicio de sesión ── */}
+              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mb-1">Inicio de sesión</h2>
+
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between gap-4 p-5">
+                  <div>
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Google Sign-In</p>
+                    <p className="text-[12.5px] text-[#646462]">Permite iniciar sesión con cuentas de Google Workspace.</p>
+                  </div>
+                  <SettingsToggle checked={googleOn} onChange={setGoogleOn} />
                 </div>
-              ))}
-              <button className="self-start px-4 py-2 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333]">Guardar configuración SAML</button>
+              </div>
+
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between gap-4 p-5">
+                  <div>
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">SAML 2.0 SSO</p>
+                    <p className="text-[12.5px] text-[#646462]">Integra con Okta, Azure AD u otros proveedores de identidad SAML.</p>
+                  </div>
+                  <SettingsToggle checked={samlOn} onChange={setSamlOn} />
+                </div>
+                {samlOn && (
+                  <div className="border-t border-[#e9eae6] px-5 py-4 flex flex-col gap-3 bg-[#f8f8f7]">
+                    {[
+                      { key: 'ssoUrl', label: 'URL de inicio de sesión (SSO)', ph: 'https://your-idp.com/sso' },
+                      { key: 'issuer', label: 'URL del emisor del IdP', ph: 'https://your-idp.com' },
+                      { key: 'cert',   label: 'Certificado X.509', ph: '-----BEGIN CERTIFICATE-----' },
+                    ].map(f => (
+                      <div key={f.key}>
+                        <label className="block text-[12px] font-medium text-[#646462] mb-1">{f.label}</label>
+                        <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a]" placeholder={f.ph} />
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2 pt-1">
+                      <button className="px-4 py-2 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333]">Guardar configuración SAML</button>
+                      <button className="px-4 py-2 border border-[#e9eae6] text-[12.5px] font-medium text-[#646462] rounded-lg hover:bg-white">Probar conexión</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── 2FA ── */}
+              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Autenticación de dos factores</h2>
+
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between gap-4 p-5">
+                  <div>
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Exigir 2FA a todos los compañeros</p>
+                    <p className="text-[12.5px] text-[#646462]">Los compañeros que no hayan activado 2FA serán bloqueados al iniciar sesión.</p>
+                  </div>
+                  <SettingsToggle checked={mfaOn} onChange={setMfaOn} />
+                </div>
+                <div className="border-t border-[#e9eae6] flex items-center justify-between gap-4 px-5 py-4">
+                  <div>
+                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Dispositivos de confianza</p>
+                    <p className="text-[12px] text-[#646462]">Permite a los compañeros marcar un dispositivo como de confianza para omitir 2FA durante 30 días.</p>
+                  </div>
+                  <SettingsToggle checked={trustedDevices} onChange={setTrustedDevices} />
+                </div>
+              </div>
+
+              {/* ── Contraseñas ── */}
+              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Política de contraseñas</h2>
+
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden divide-y divide-[#e9eae6]">
+                <div className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div>
+                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Longitud mínima</p>
+                    <p className="text-[12px] text-[#646462]">Número mínimo de caracteres requeridos.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={6} max={64} value={minLen} onChange={e => setMinLen(+e.target.value)}
+                      className="w-16 border border-[#e9eae6] rounded-lg px-2 py-1.5 text-[13px] text-center focus:outline-none focus:border-[#1a1a1a]" />
+                    <span className="text-[12.5px] text-[#646462]">caracteres</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div>
+                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Requerir mayúsculas</p>
+                    <p className="text-[12px] text-[#646462]">Al menos una letra mayúscula en la contraseña.</p>
+                  </div>
+                  <SettingsToggle checked={requireUpper} onChange={setRequireUpper} />
+                </div>
+                <div className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div>
+                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Requerir números</p>
+                    <p className="text-[12px] text-[#646462]">Al menos un dígito numérico en la contraseña.</p>
+                  </div>
+                  <SettingsToggle checked={requireNumber} onChange={setRequireNumber} />
+                </div>
+                <div className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div>
+                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Requerir caracteres especiales</p>
+                    <p className="text-[12px] text-[#646462]">Al menos un carácter especial (!@#$%^&*).</p>
+                  </div>
+                  <SettingsToggle checked={requireSpecial} onChange={setRequireSpecial} />
+                </div>
+              </div>
+
+              {/* ── Sesiones ── */}
+              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Sesiones y bloqueo</h2>
+
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden divide-y divide-[#e9eae6]">
+                <div className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div>
+                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Tiempo de inactividad de sesión</p>
+                    <p className="text-[12px] text-[#646462]">Cierra la sesión automáticamente tras este período de inactividad.</p>
+                  </div>
+                  <div className="w-[180px]">
+                    <SettingsSelect
+                      value={sessionTimeout}
+                      onChange={setSessionTimeout}
+                      options={[
+                        { value: '1', label: '1 hora' },
+                        { value: '4', label: '4 horas' },
+                        { value: '8', label: '8 horas' },
+                        { value: '24', label: '24 horas' },
+                        { value: '72', label: '3 días' },
+                        { value: '168', label: '7 días' },
+                        { value: '0', label: 'Nunca' },
+                      ]}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div>
+                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Intentos máximos de inicio de sesión</p>
+                    <p className="text-[12px] text-[#646462]">Bloquea la cuenta temporalmente tras este número de intentos fallidos.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={3} max={20} value={maxAttempts} onChange={e => setMaxAttempts(e.target.value)}
+                      className="w-16 border border-[#e9eae6] rounded-lg px-2 py-1.5 text-[13px] text-center focus:outline-none focus:border-[#1a1a1a]" />
+                    <span className="text-[12.5px] text-[#646462]">intentos</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div>
+                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Duración del bloqueo</p>
+                    <p className="text-[12px] text-[#646462]">Tiempo que permanece bloqueada la cuenta tras superar el límite de intentos.</p>
+                  </div>
+                  <div className="w-[180px]">
+                    <SettingsSelect
+                      value={lockoutMins}
+                      onChange={setLockoutMins}
+                      options={[
+                        { value: '5', label: '5 minutos' },
+                        { value: '15', label: '15 minutos' },
+                        { value: '30', label: '30 minutos' },
+                        { value: '60', label: '1 hora' },
+                        { value: '1440', label: '24 horas' },
+                      ]}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Restricción IP ── */}
+              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Lista de IPs permitidas</h2>
+
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between gap-4 p-5">
+                  <div>
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Restringir acceso por IP</p>
+                    <p className="text-[12.5px] text-[#646462]">Solo los compañeros que accedan desde las IPs autorizadas podrán iniciar sesión.</p>
+                  </div>
+                  <SettingsToggle checked={ipRestrict} onChange={setIpRestrict} />
+                </div>
+                {ipRestrict && (
+                  <div className="border-t border-[#e9eae6] px-5 py-4 bg-[#f8f8f7] flex flex-col gap-2">
+                    <label className="text-[12px] font-medium text-[#646462]">IPs o rangos CIDR permitidos (uno por línea)</label>
+                    <textarea
+                      rows={4}
+                      value={ipList}
+                      onChange={e => setIpList(e.target.value)}
+                      placeholder={'192.168.1.0/24\n10.0.0.1\n85.32.14.0/28'}
+                      className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] font-mono bg-white focus:outline-none focus:border-[#1a1a1a] resize-none"
+                    />
+                    <p className="text-[11.5px] text-[#f97316] flex items-center gap-1">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current flex-shrink-0"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 3.5h1.5v5h-1.5v-5zm0 6h1.5v1.5h-1.5V10.5z"/></svg>
+                      Asegúrate de incluir tu IP actual antes de guardar para no bloquearte.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Sesiones activas ── */}
+              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Sesiones activas</h2>
+
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden divide-y divide-[#e9eae6]">
+                {sessions.map(s => (
+                  <div key={s.id} className="flex items-center gap-3 px-5 py-3.5">
+                    <div className="w-8 h-8 rounded-full bg-[#f1f1ee] flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M13 2H3a1 1 0 00-1 1v8a1 1 0 001 1h4v1H5v1h6v-1H9v-1h4a1 1 0 001-1V3a1 1 0 00-1-1zm-1 8H4V4h8v6z"/></svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[13px] font-medium text-[#1a1a1a]">{s.device}</p>
+                        {s.current && <span className="px-1.5 py-0.5 rounded-full bg-[#f0fdf4] text-[10px] font-semibold text-[#15803d] border border-[#bbf7d0]">Sesión actual</span>}
+                      </div>
+                      <p className="text-[12px] text-[#646462]">{s.ip} · {s.location} · {s.last}</p>
+                    </div>
+                    {!s.current && (
+                      <button
+                        onClick={() => { setSessions(prev => prev.filter(x => x.id !== s.id)); showToast('Sesión cerrada correctamente.'); }}
+                        className="text-[12px] text-[#b91c1c] hover:underline flex-shrink-0"
+                      >
+                        Cerrar sesión
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <div className="px-5 py-3 flex justify-end">
+                  <button
+                    onClick={() => { setSessions(prev => prev.filter(s => s.current)); showToast('Todas las sesiones externas cerradas.'); }}
+                    className="text-[12.5px] font-medium text-[#b91c1c] hover:underline"
+                  >
+                    Cerrar todas las demás sesiones
+                  </button>
+                </div>
+              </div>
+
             </div>
-          )}
-        </div>
-        <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[14px] font-semibold text-[#1a1a1a]">Exigir autenticación de dos factores</p>
-              <p className="text-[12.5px] text-[#646462]">Todos los compañeros deberán activar 2FA.</p>
-            </div>
-            <SettingsToggle checked={mfaOn} onChange={setMfaOn} />
-          </div>
-        </div>
-        <div className="bg-white border border-[#e9eae6] rounded-xl p-5">
-          <p className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Política de contraseñas</p>
-          <label className="block text-[12px] font-medium text-[#646462] mb-1">Longitud mínima</label>
-          <div className="flex items-center gap-3">
-            <input type="number" min={6} max={64} value={minLen} onChange={e => setMinLen(+e.target.value)} className="w-20 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none" />
-            <span className="text-[12.5px] text-[#646462]">caracteres</span>
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <button className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Guardar cambios</button>
-        </div>
-      </div>
           </div>
         </div>
       </div>
