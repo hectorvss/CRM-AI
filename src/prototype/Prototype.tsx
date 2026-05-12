@@ -8412,6 +8412,53 @@ function ImportsExportTab() {
   );
 }
 
+function ImportHistorySection({ entityType }: { entityType: string }) {
+  const { data: imports, loading } = useApi(
+    () => dataImportsApi.list({ entityType }),
+    [entityType],
+    [],
+  );
+  if (loading) return (
+    <div className="flex items-center gap-2 px-6 py-4 text-[13px] text-[#646462]">
+      <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#3b59f6', borderTopColor: 'transparent' }} />
+      Cargando historial…
+    </div>
+  );
+  if (!(imports as any[]).length) return null;
+  return (
+    <div className="px-6 py-4 border-t border-[#e9eae6] flex-shrink-0">
+      <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Historial de importaciones</p>
+      <div className="flex flex-col gap-2">
+        {(imports as any[]).map((imp: any) => (
+          <div key={imp.id} className="flex items-center gap-3 border border-[#e9eae6] rounded-[8px] px-4 py-3 bg-[#fafaf9]">
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              imp.status === 'completed' ? 'bg-[#22c55e]' :
+              imp.status === 'failed'    ? 'bg-[#ef4444]' :
+              imp.status === 'running'   ? 'bg-[#f97316]' : 'bg-[#d1d5db]'
+            }`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-medium text-[#1a1a1a] truncate">{imp.file_name ?? imp.source ?? imp.entity_type}</p>
+              <p className="text-[11px] text-[#646462]">
+                {imp.status === 'completed' ? `${imp.rows_imported ?? 0} filas importadas` :
+                 imp.status === 'failed'    ? (imp.error_message ?? 'Error') :
+                 imp.status === 'running'   ? `${imp.rows_processed ?? 0} / ${imp.total_rows ?? '?'} filas` :
+                 'Pendiente'}
+                {imp.created_at ? ` · ${new Date(imp.created_at).toLocaleDateString('es-ES')}` : ''}
+              </p>
+            </div>
+            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+              imp.status === 'completed' ? 'bg-[#d1fae5] text-[#065f46]' :
+              imp.status === 'failed'    ? 'bg-red-50 text-red-700' :
+              imp.status === 'running'   ? 'bg-[#fff7ed] text-[#9a3412]' :
+              'bg-[#f3f4f6] text-[#6b7280]'
+            }`}>{imp.status}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ImportsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v: View) => void; onBack: () => void }) {
   const [activeTab, setActiveTab] = useState(0);
 
@@ -8461,27 +8508,48 @@ function ImportsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v:
           </div>
 
           {/* Tab content */}
-          {activeTab === 0 && <ImportsZendeskTab />}
-          {activeTab === 1 && <ImportsIntercomTab />}
-          {activeTab === 2 && (
-            <ImportsEmptyTab
-              description="Importar datos de un archivo CSV a Clain."
-              btnLabel="Importar"
-            />
-          )}
-          {activeTab === 3 && (
-            <ImportsEmptyTab
-              description="Importa datos de tu cuenta de Mixpanel a Clain."
-              btnLabel="Conectar con Mixpanel"
-            />
-          )}
-          {activeTab === 4 && (
-            <ImportsEmptyTab
-              description="Importa datos de tu lista de correo de Mailchimp a Clain. Vamos a obtener el nombre y la dirección de correo electrónico de las personas."
-              btnLabel="Conectar con Mailchimp"
-            />
-          )}
-          {activeTab === 5 && <ImportsExportTab />}
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            {activeTab === 0 && (
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <ImportsZendeskTab />
+                <ImportHistorySection entityType="zendesk" />
+              </div>
+            )}
+            {activeTab === 1 && (
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <ImportsIntercomTab />
+                <ImportHistorySection entityType="intercom" />
+              </div>
+            )}
+            {activeTab === 2 && (
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <ImportsEmptyTab
+                  description="Importar datos de un archivo CSV a Clain."
+                  btnLabel="Importar"
+                />
+                <ImportHistorySection entityType="csv" />
+              </div>
+            )}
+            {activeTab === 3 && (
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <ImportsEmptyTab
+                  description="Importa datos de tu cuenta de Mixpanel a Clain."
+                  btnLabel="Conectar con Mixpanel"
+                />
+                <ImportHistorySection entityType="mixpanel" />
+              </div>
+            )}
+            {activeTab === 4 && (
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <ImportsEmptyTab
+                  description="Importa datos de tu lista de correo de Mailchimp a Clain. Vamos a obtener el nombre y la dirección de correo electrónico de las personas."
+                  btnLabel="Conectar con Mailchimp"
+                />
+                <ImportHistorySection entityType="mailchimp" />
+              </div>
+            )}
+            {activeTab === 5 && <ImportsExportTab />}
+          </div>
         </div>
       </div>
     </div>
@@ -9640,11 +9708,38 @@ function SettingsPromoCard({ title, description, primaryBtn, secondaryBtn, image
 
 // ── AssignmentsGeneralTab (1-70140 / 1-71522): 8 sub-sections ─────────────────
 function AssignmentsGeneralTab() {
+  const { data: wsCtx } = useApi(() => workspacesApi.currentContext(), [], null);
   const [autoAssign, setAutoAssign] = useState<'self' | 'keep'>('self');
   const [presence, setPresence] = useState(true);
   const [obligatorio, setObligatorio] = useState(false);
   const [reasignAct, setReasignAct] = useState(false);
   const [reasignFar, setReasignFar] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Hydrate from workspace settings once loaded
+  useEffect(() => {
+    if (!wsCtx?.settings) return;
+    const s = wsCtx.settings;
+    if (s.auto_assign_on_reply)         setAutoAssign(s.auto_assign_on_reply as 'self' | 'keep');
+    if (s.show_teammate_presence !== undefined) setPresence(!!s.show_teammate_presence);
+    if (s.away_reason_required   !== undefined) setObligatorio(!!s.away_reason_required);
+    if (s.reassign_on_capacity   !== undefined) setReasignAct(!!s.reassign_on_capacity);
+    if (s.reassign_on_away       !== undefined) setReasignFar(!!s.reassign_on_away);
+  }, [wsCtx]);
+
+  async function persist(patch: Record<string, unknown>) {
+    if (!wsCtx?.id) return;
+    setSaving(true);
+    try { await workspacesApi.updateSettings(wsCtx.id, patch); }
+    catch { /* best-effort */ }
+    finally { setSaving(false); }
+  }
+
+  function toggle<T>(setter: React.Dispatch<React.SetStateAction<T>>, key: string, current: T, next: T) {
+    setter(next);
+    persist({ [key]: next });
+  }
+
   return (
     <div className="px-6 py-6">
       {/* Promo card "Asegúrate de que las conversaciones lleguen al miembro adecuado" */}
@@ -9690,7 +9785,7 @@ function AssignmentsGeneralTab() {
             { id: 'self' as const, label: 'Asígnamela' },
             { id: 'keep' as const, label: 'Mantener sin asignar o asignada al buzón de equipo' },
           ].map(o => (
-            <label key={o.id} onClick={() => setAutoAssign(o.id)} className="flex items-center gap-3 cursor-pointer">
+            <label key={o.id} onClick={() => { setAutoAssign(o.id); persist({ auto_assign_on_reply: o.id }); }} className="flex items-center gap-3 cursor-pointer">
               <div className={`w-4 h-4 rounded-full border-2 ${autoAssign === o.id ? 'border-[#3b59f6]' : 'border-[#ccc]'} flex items-center justify-center`}>
                 {autoAssign === o.id && <div className="w-2 h-2 rounded-full bg-[#3b59f6]"/>}
               </div>
@@ -9708,7 +9803,7 @@ function AssignmentsGeneralTab() {
         </div>
         <div className="w-[400px] flex flex-col gap-3 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <button onClick={() => setPresence(v => !v)} className={`w-8 h-[18px] rounded-full relative ${presence ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${presence ? 'right-0.5' : 'left-0.5'}`}/></button>
+            <button onClick={() => toggle(setPresence, 'show_teammate_presence', presence, !presence)} className={`w-8 h-[18px] rounded-full relative ${presence ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${presence ? 'right-0.5' : 'left-0.5'}`}/></button>
             <span className="text-[13px] text-[#1a1a1a]">Mostrar presencia de compañeros de equipo</span>
           </div>
           <div className="bg-[#fafaf9] border border-[#e9eae6] rounded-[8px] p-3">
@@ -9759,7 +9854,7 @@ function AssignmentsGeneralTab() {
         </div>
         <div className="w-[400px] flex flex-col gap-3 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <button onClick={() => setObligatorio(v => !v)} className={`w-8 h-[18px] rounded-full relative ${obligatorio ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${obligatorio ? 'right-0.5' : 'left-0.5'}`}/></button>
+            <button onClick={() => toggle(setObligatorio, 'away_reason_required', obligatorio, !obligatorio)} className={`w-8 h-[18px] rounded-full relative ${obligatorio ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${obligatorio ? 'right-0.5' : 'left-0.5'}`}/></button>
             <span className="text-[13px] text-[#1a1a1a]">Hacer que los motivos de ausencia sean obligatorios</span>
           </div>
           <button className="text-[13px] text-[#3b59f6] hover:underline text-left">Personalice los motivos de ausencia ›</button>
@@ -9774,11 +9869,11 @@ function AssignmentsGeneralTab() {
         </div>
         <div className="w-[400px] flex flex-col gap-3 flex-shrink-0">
           <div className="flex items-start gap-2">
-            <button onClick={() => setReasignAct(v => !v)} className={`w-8 h-[18px] rounded-full relative mt-0.5 flex-shrink-0 ${reasignAct ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${reasignAct ? 'right-0.5' : 'left-0.5'}`}/></button>
+            <button onClick={() => toggle(setReasignAct, 'reassign_on_capacity', reasignAct, !reasignAct)} className={`w-8 h-[18px] rounded-full relative mt-0.5 flex-shrink-0 ${reasignAct ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${reasignAct ? 'right-0.5' : 'left-0.5'}`}/></button>
             <span className="text-[12px] text-[#1a1a1a]">Reasignar automáticamente las conversaciones activas cuando los miembros del equipo hayan alcanzado su capacidad máxima.</span>
           </div>
           <div className="flex items-start gap-2">
-            <button onClick={() => setReasignFar(v => !v)} className={`w-8 h-[18px] rounded-full relative mt-0.5 flex-shrink-0 ${reasignFar ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${reasignFar ? 'right-0.5' : 'left-0.5'}`}/></button>
+            <button onClick={() => toggle(setReasignFar, 'reassign_on_away', reasignFar, !reasignFar)} className={`w-8 h-[18px] rounded-full relative mt-0.5 flex-shrink-0 ${reasignFar ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${reasignFar ? 'right-0.5' : 'left-0.5'}`}/></button>
             <div className="flex-1 flex items-center justify-between">
               <span className="text-[12px] text-[#1a1a1a]">Reasignar automáticamente las conversaciones activas cuando los miembros del equipo estén</span>
               <select className="border border-[#e9eae6] rounded-[6px] px-2 py-1 text-[12px] ml-2"><option>Lejos</option></select>
@@ -9852,7 +9947,7 @@ function AssignmentsView({ view, onNavigate }: { view: View; onNavigate: (v: Vie
                 }
               />
             )}
-            {tab === 'general' && <AssignmentsGeneralTab />}
+            {tab === 'general' && <AssignmentsGeneralTab key="assignments-general" />}
           </div>
         </div>
       </div>
@@ -10144,44 +10239,220 @@ function TicketsView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
 // ── SlaView ───────────────────────────────────────────────────────────────────
 
 function SlaView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: policies, loading, refetch: reload } = useApi(() => slaPoliciesApi.list(), [], []);
+  const [showModal, setShowModal] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  // Create-form state
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [firstResp, setFirstResp] = useState('');
+  const [nextResp, setNextResp]   = useState('');
+  const [resolution, setResolution] = useState('');
+  const [businessHours, setBusinessHours] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  }
+
+  function minutesToSec(val: string): number | null {
+    const n = parseFloat(val);
+    return isNaN(n) || n <= 0 ? null : Math.round(n * 60);
+  }
+  function secToMin(sec: number | null): string {
+    if (!sec) return '—';
+    const m = Math.round(sec / 60);
+    return m >= 60 ? `${(m / 60).toFixed(1)} h` : `${m} min`;
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setCreating(true);
+    try {
+      await slaPoliciesApi.create({
+        name: newName.trim(),
+        description: newDesc.trim() || null,
+        first_response_time: minutesToSec(firstResp),
+        next_response_time:  minutesToSec(nextResp),
+        resolution_time:     minutesToSec(resolution),
+        business_hours:      businessHours,
+      });
+      showToast('Política SLA creada correctamente.');
+      setShowModal(false);
+      setNewName(''); setNewDesc(''); setFirstResp(''); setNextResp(''); setResolution(''); setBusinessHours(false);
+      reload();
+    } catch (err: any) {
+      showToast(err?.message ?? 'Error al crear la política', false);
+    } finally { setCreating(false); }
+  }
+
+  async function handleDelete(id: string) {
+    setDeleting(id);
+    try {
+      await slaPoliciesApi.delete(id);
+      showToast('Política eliminada.');
+      reload();
+    } catch (err: any) {
+      showToast(err?.message ?? 'Error al eliminar', false);
+    } finally { setDeleting(null); }
+  }
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden relative">
+
+          {/* Toast */}
+          {toast && (
+            <div className={`absolute top-4 right-4 z-50 px-4 py-2.5 rounded-[8px] text-[13px] font-medium shadow-lg ${toast.ok ? 'bg-[#1a1a1a] text-white' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              {toast.msg}
+            </div>
+          )}
+
+          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
             <h1 className="text-[20px] font-bold text-[#1a1a1a]">SLA</h1>
-            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M8 1v14M3 6l5-5 5 5"/><path d="M2 14h12"/></svg>
-              Aprender
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
-            <div className="rounded-[12px] bg-[#f8f7ff] border border-[#e9eae6] p-6 flex items-start gap-6 relative">
-              <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M8 1v14M3 6l5-5 5 5"/><path d="M2 14h12"/></svg>
+                Aprender
               </button>
-              <div className="flex-1 max-w-[500px]">
-                <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Acuerdos de nivel de servicio (SLA)</h2>
-                <p className="text-[13px] text-[#646462] mb-4">Los SLA te ayudan a establecer objetivos para que tu equipo proporcione una experiencia del cliente uniforme y de alta calidad. Al crear los SLA, puedes brindarle a cada cliente el nivel perfecto de asistencia.</p>
-                <div className="flex items-center gap-3">
-                  <button className="bg-[#7c3aed] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#6d28d9]">Get the feature</button>
-                  <button className="flex items-center gap-1 text-[13px] text-[#646462] hover:text-[#1a1a1a]">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/><rect x="5" y="1" width="6" height="4" rx="1"/></svg>
-                    Acuerdos de nivel de servicio para conversaciones y folios de atención
+              <button
+                onClick={() => setShowModal(true)}
+                className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]"
+              >
+                + Nueva política SLA
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
+
+            {/* Promo banner */}
+            <div className="rounded-[12px] bg-[#f8f7ff] border border-[#e9eae6] p-5 flex items-start gap-5 relative flex-shrink-0">
+              <div className="flex-1">
+                <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-1">Acuerdos de nivel de servicio (SLA)</h2>
+                <p className="text-[13px] text-[#646462] leading-relaxed">
+                  Los SLA te ayudan a establecer objetivos para que tu equipo proporcione una experiencia de alta calidad.
+                  Define tiempos de primera respuesta, respuesta siguiente y resolución por política.
+                </p>
+              </div>
+              <img src={IMG_SLA_BANNER} alt="" className="w-[200px] h-[100px] flex-shrink-0 rounded-[8px] object-cover opacity-80" />
+            </div>
+
+            {/* List */}
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#3b59f6', borderTopColor: 'transparent' }} />
+              </div>
+            ) : policies.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <svg viewBox="0 0 40 40" className="w-10 h-10 fill-none stroke-[#ccc]" strokeWidth="1.5"><circle cx="20" cy="20" r="17"/><path d="M20 11v9l5 5"/></svg>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">Aún no se han creado políticas SLA</p>
+                <button onClick={() => setShowModal(true)} className="text-[13px] text-[#3b59f6] underline hover:opacity-80">Crear primera política SLA</button>
+              </div>
+            ) : (
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                      <th className="text-left px-4 py-2.5 font-semibold text-[#1a1a1a]">Nombre</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-[#1a1a1a]">1ª respuesta</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-[#1a1a1a]">Sig. respuesta</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-[#1a1a1a]">Resolución</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-[#1a1a1a]">Horario</th>
+                      <th className="w-[48px]" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(policies as any[]).map((p) => (
+                      <tr key={p.id} className="border-t border-[#e9eae6] hover:bg-[#fafaf9] group">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-[#1a1a1a]">{p.name}</p>
+                          {p.description && <p className="text-[12px] text-[#646462]">{p.description}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-[#646462]">{secToMin(p.first_response_time)}</td>
+                        <td className="px-4 py-3 text-[#646462]">{secToMin(p.next_response_time)}</td>
+                        <td className="px-4 py-3 text-[#646462]">{secToMin(p.resolution_time)}</td>
+                        <td className="px-4 py-3 text-[#646462]">{p.business_hours ? 'Laboral' : '24/7'}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            disabled={deleting === p.id}
+                            onClick={() => handleDelete(p.id)}
+                            className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 transition-opacity"
+                          >
+                            {deleting === p.id
+                              ? <div className="w-3.5 h-3.5 border border-t-transparent rounded-full animate-spin border-red-400" />
+                              : <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#ef4444]" strokeWidth="1.5"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9h8l1-9"/></svg>
+                            }
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Create Modal */}
+          {showModal && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/30">
+              <div className="bg-white rounded-[16px] shadow-2xl w-[500px] flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a]">Nueva política SLA</h2>
+                  <button onClick={() => setShowModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
                   </button>
                 </div>
+                <form onSubmit={handleCreate} className="px-6 py-5 flex flex-col gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[13px] font-semibold text-[#1a1a1a]">Nombre *</label>
+                    <input required value={newName} onChange={e => setNewName(e.target.value)}
+                      placeholder="Ej. SLA estándar" className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[13px] font-medium text-[#646462]">Descripción</label>
+                    <input value={newDesc} onChange={e => setNewDesc(e.target.value)}
+                      placeholder="Opcional" className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: '1ª respuesta (min)', val: firstResp, set: setFirstResp },
+                      { label: 'Sig. respuesta (min)', val: nextResp, set: setNextResp },
+                      { label: 'Resolución (min)', val: resolution, set: setResolution },
+                    ].map(({ label, val, set }) => (
+                      <div key={label} className="flex flex-col gap-1">
+                        <label className="text-[12px] font-medium text-[#646462]">{label}</label>
+                        <input type="number" min="1" value={val} onChange={e => set(e.target.value)}
+                          placeholder="—" className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] w-full" />
+                      </div>
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={businessHours} onChange={e => setBusinessHours(e.target.checked)}
+                      className="w-4 h-4 rounded accent-[#1a1a1a]" />
+                    <span className="text-[13px] text-[#1a1a1a]">Solo horario laboral</span>
+                  </label>
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e9eae6]">
+                    <button type="button" onClick={() => setShowModal(false)}
+                      className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium hover:bg-[#f5f5f4]">Cancelar</button>
+                    <button type="submit" disabled={creating}
+                      className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444] disabled:opacity-50">
+                      {creating ? 'Creando…' : 'Crear política'}
+                    </button>
+                  </div>
+                </form>
               </div>
-              <img src={IMG_SLA_BANNER} alt="SLA preview" className="w-[458px] h-[213px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:26051" />
             </div>
-            {/* Empty state */}
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <svg viewBox="0 0 40 40" className="w-10 h-10 fill-none stroke-[#ccc]" strokeWidth="1.5"><circle cx="20" cy="20" r="17"/><path d="M20 11v9l5 5"/></svg>
-              <p className="text-[14px] font-semibold text-[#1a1a1a]">Aún no se han creado SLA</p>
-              <a href="#" className="text-[13px] text-[#3b59f6] underline">Los SLA están limitados a planes específicos y configurados a través de flujos de trabajo.</a>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -10564,6 +10835,7 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
 // ── AutomationView ────────────────────────────────────────────────────────────
 
 function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: wsCtx } = useApi(() => workspacesApi.currentContext(), [], null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [botInboxOn, setBotInboxOn] = useState(false);
   const [slaExclude, setSlaExclude] = useState(false);
@@ -10574,8 +10846,29 @@ function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View
     cualquierMensaje: false, clienteNoResponde: false, equipoNoResponde: false, estadoCambia: false,
   });
 
+  // Hydrate from workspace settings
+  useEffect(() => {
+    if (!wsCtx?.settings) return;
+    const s = wsCtx.settings;
+    if (s.automation_bot_inbox      !== undefined) setBotInboxOn(!!s.automation_bot_inbox);
+    if (s.automation_sla_exclude    !== undefined) setSlaExclude(!!s.automation_sla_exclude);
+    if (s.automation_wait_time      !== undefined) setWaitTime(String(s.automation_wait_time));
+    if (s.automation_triggers && typeof s.automation_triggers === 'object')
+      setTriggers(t => ({ ...t, ...(s.automation_triggers as Record<string, boolean>) }));
+  }, [wsCtx]);
+
+  async function persist(patch: Record<string, unknown>) {
+    if (!wsCtx?.id) return;
+    try { await workspacesApi.updateSettings(wsCtx.id, patch); }
+    catch { /* best-effort */ }
+  }
+
   function toggleTrigger(k: string) {
-    setTriggers(s => ({ ...s, [k]: !s[k] }));
+    setTriggers(s => {
+      const next = { ...s, [k]: !s[k] };
+      persist({ automation_triggers: next });
+      return next;
+    });
   }
 
   function AccRow({ id, icon, title, desc, rightAction, children }: {
@@ -10676,7 +10969,7 @@ function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View
                 <div className="flex items-start gap-3">
                   <button
                     type="button"
-                    onClick={() => setBotInboxOn(s => !s)}
+                    onClick={() => { const v = !botInboxOn; setBotInboxOn(v); persist({ automation_bot_inbox: v }); }}
                     className={`mt-0.5 w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${botInboxOn ? 'bg-[#f97316]' : 'bg-[#d4d4d2]'}`}
                   >
                     <span className={`absolute top-0.5 left-0 w-4 h-4 rounded-full bg-white shadow transition-transform ${botInboxOn ? 'translate-x-4' : 'translate-x-0.5'}`} />
@@ -10693,7 +10986,7 @@ function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View
                   <input
                     type="checkbox"
                     checked={slaExclude}
-                    onChange={e => setSlaExclude(e.target.checked)}
+                    onChange={e => { setSlaExclude(e.target.checked); persist({ automation_sla_exclude: e.target.checked }); }}
                     className="w-4 h-4 rounded border-[#d4d4d2] accent-[#1a1a1a] cursor-pointer"
                   />
                   <span className="text-[12.5px] text-[#646462]">Excluir el tiempo que las conversaciones pasan en el Inbox del bot de los objetivos de SLA</span>
@@ -10740,7 +11033,7 @@ function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View
                   <p className="text-[13px] font-semibold text-[#1a1a1a]">¿Cuánto tiempo debe esperar el flujo de trabajo antes de cerrar la conversación?</p>
                   <select
                     value={waitTime}
-                    onChange={e => setWaitTime(e.target.value)}
+                    onChange={e => { setWaitTime(e.target.value); persist({ automation_wait_time: e.target.value }); }}
                     className="w-fit border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] bg-white"
                   >
                     {['1 minuto', '2 minutos', '3 minutos', '5 minutos', '10 minutos', '15 minutos', '30 minutos'].map(o => <option key={o}>{o}</option>)}
@@ -15399,13 +15692,46 @@ function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View)
   const [method, setMethod] = useState<'manual' | 'roundrobin' | 'equilibrio'>('manual');
   const { data: teams, loading: teamsLoading } = useApi(() => iamApi.teams(), [], []);
   const { data: members } = useApi(() => iamApi.members(), [], []);
+  const { data: inboxes, refetch: reloadInboxes } = useApi(() => inboxesApi.list(), [], []);
+  const [inboxName, setInboxName] = useState('');
+  const [creatingInbox, setCreatingInbox] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  }
+
+  async function handleCreateInbox() {
+    if (!inboxName.trim()) { showToast('El nombre del buzón es obligatorio', false); return; }
+    setCreatingInbox(true);
+    try {
+      await inboxesApi.create({
+        name: inboxName.trim(),
+        channel_type: 'web_widget',
+        auto_assignment_enabled: method !== 'manual',
+      });
+      showToast('Buzón de equipo creado correctamente.');
+      setInboxName('');
+      setMethod('manual');
+      reloadInboxes();
+    } catch (err: any) {
+      showToast(err?.message ?? 'Error al crear el buzón', false);
+    } finally { setCreatingInbox(false); }
+  }
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden relative">
+          {/* Toast */}
+          {toast && (
+            <div className={`absolute top-4 right-4 z-50 px-4 py-2.5 rounded-[8px] text-[13px] font-medium shadow-lg ${toast.ok ? 'bg-[#1a1a1a] text-white' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              {toast.msg}
+            </div>
+          )}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
             <h1 className="text-[20px] font-bold text-[#1a1a1a]">Inbox para el equipo</h1>
             <div className="flex items-center gap-2">
@@ -15414,6 +15740,29 @@ function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View)
             </div>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {/* Existing inboxes list */}
+            {(inboxes as any[]).length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-[15px] font-semibold text-[#1a1a1a] mb-3">Buzones ({(inboxes as any[]).length})</h2>
+                <div className="flex flex-col gap-2">
+                  {(inboxes as any[]).map((inbox: any) => (
+                    <div key={inbox.id} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-center gap-4 hover:bg-[#fafaf9]">
+                      <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[18px]">
+                        {inbox.channel_type === 'email' ? '✉️' : inbox.channel_type === 'whatsapp' ? '💬' : inbox.channel_type === 'phone' ? '📞' : '📥'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-semibold text-[#1a1a1a]">{inbox.name}</p>
+                        <p className="text-[12px] text-[#646462]">{inbox.channel_type} · {inbox.enabled ? 'Activo' : 'Desactivado'}</p>
+                      </div>
+                      <div className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${inbox.enabled ? 'bg-[#d1fae5] text-[#065f46]' : 'bg-[#f3f4f6] text-[#6b7280]'}`}>
+                        {inbox.enabled ? 'Activo' : 'Inactivo'}
+                      </div>
+                      <button className="text-[13px] text-[#646462] border border-[#e9eae6] rounded-full px-3 py-1.5 hover:bg-[#f3f3f1]">Editar</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Existing teams list */}
             {teams.length > 0 && (
               <div className="mb-6">
@@ -15459,9 +15808,14 @@ function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View)
                 {/* Agregar compañeros */}
                 <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Agregar compañeros de equipo</p>
                 <div className="flex items-center gap-2 mb-6">
-                  <div className="flex-1 max-w-[500px] flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-3 py-2">
-                    <span className="text-[#646462]">🔍</span>
-                    <input placeholder="Selecciona al menos un compañero de equipo" className="flex-1 outline-none text-[13px] bg-transparent" />
+                  <div className="flex-1 max-w-[360px] flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-3 py-2 focus-within:border-[#1a1a1a]">
+                    <span className="text-[#646462] text-[14px]">📥</span>
+                    <input
+                      value={inboxName}
+                      onChange={e => setInboxName(e.target.value)}
+                      placeholder="Nombre del buzón del equipo"
+                      className="flex-1 outline-none text-[13px] bg-transparent"
+                    />
                   </div>
                   <button className="text-[13px] text-[#1a1a1a] flex items-center gap-1 px-3 py-2 hover:bg-[#f3f3f1] rounded">+ Invitar a miembros del equipo</button>
                 </div>
@@ -15503,8 +15857,14 @@ function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View)
 
             {/* Footer actions */}
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#e9eae6]">
-              <button className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Cancelar</button>
-              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Crear un buzón para el equipo</button>
+              <button className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]" onClick={() => setInboxName('')}>Cancelar</button>
+              <button
+                disabled={creatingInbox}
+                onClick={handleCreateInbox}
+                className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444] disabled:opacity-50"
+              >
+                {creatingInbox ? 'Creando…' : 'Crear un buzón para el equipo'}
+              </button>
             </div>
           </div>
         </div>
@@ -22219,17 +22579,38 @@ function KnowledgeContenido({
 
   const counts = useMemo(() => {
     let pub = 0, internal = 0, snippet = 0, doc = 0, published = 0;
+    let pubService = 0, internalService = 0, snippetService = 0, docService = 0;
+    let pubSales = 0, internalSales = 0, snippetSales = 0, docSales = 0;
     for (const a of articles) {
       const visibility = String((a as any).visibility || 'public').toLowerCase();
       const type = String((a as any).type || 'ARTICLE').toUpperCase();
       const status = String((a as any).status || (a as any).state || '').toLowerCase();
+      const hasService = !!(a as any).fin_service;
+      const hasSales = !!(a as any).fin_sales;
       if (status === 'published' || status === 'active' || status === 'live') published++;
-      if (type === 'SNIPPET') snippet++;
-      else if (type === 'DOCUMENT') doc++;
-      else if (visibility === 'internal') internal++;
-      else pub++;
+      if (type === 'SNIPPET') {
+        snippet++;
+        if (hasService) snippetService++;
+        if (hasSales) snippetSales++;
+      } else if (type === 'DOCUMENT') {
+        doc++;
+        if (hasService) docService++;
+        if (hasSales) docSales++;
+      } else if (visibility === 'internal') {
+        internal++;
+        if (hasService) internalService++;
+        if (hasSales) internalSales++;
+      } else {
+        pub++;
+        if (hasService) pubService++;
+        if (hasSales) pubSales++;
+      }
     }
-    return { pub, internal, snippet, doc, published, total: articles.length };
+    return {
+      pub, internal, snippet, doc, published, total: articles.length,
+      pubService, internalService, snippetService, docService,
+      pubSales,   internalSales,   snippetSales,   docSales,
+    };
   }, [articles]);
 
   const [search, setSearch] = useState('');
@@ -22327,10 +22708,10 @@ function KnowledgeContenido({
               <div>Ventas</div>
             </div>
             {[
-              { label: 'Artículos públicos', desc: 'Visibles en el centro de ayuda', n: counts.pub,      sub: 'articulos' as const },
-              { label: 'Artículos internos', desc: 'Sólo para Copilot y el equipo',  n: counts.internal, sub: 'articulos' as const },
-              { label: 'Fragmentos de texto', desc: 'Bloques reutilizables',         n: counts.snippet,  sub: 'articulos' as const },
-              { label: 'Documentos',         desc: 'PDFs y archivos importados',     n: counts.doc,      sub: 'articulos' as const },
+              { label: 'Artículos públicos',  desc: 'Visibles en el centro de ayuda', n: counts.pub,      nSvc: counts.pubService,      nSal: counts.pubSales,      sub: 'articulos' as const },
+              { label: 'Artículos internos',  desc: 'Sólo para Copilot y el equipo',  n: counts.internal, nSvc: counts.internalService, nSal: counts.internalSales, sub: 'articulos' as const },
+              { label: 'Fragmentos de texto', desc: 'Bloques reutilizables',           n: counts.snippet,  nSvc: counts.snippetService,  nSal: counts.snippetSales,  sub: 'articulos' as const },
+              { label: 'Documentos',          desc: 'PDFs y archivos importados',      n: counts.doc,      nSvc: counts.docService,      nSal: counts.docSales,      sub: 'articulos' as const },
             ].map((row, idx) => (
               <button
                 key={row.label}
@@ -22348,8 +22729,8 @@ function KnowledgeContenido({
                 </div>
                 <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.n > 0 ? 'bg-[#22c55e]' : 'bg-[#d4d4d2]'}`}/><span className="text-[12px] text-[#646462]">{row.n > 0 ? 'Activo' : '—'}</span></div>
                 <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.n > 0 ? 'bg-[#22c55e]' : 'bg-[#d4d4d2]'}`}/><span className="text-[12px] text-[#646462]">{row.n > 0 ? 'Activo' : '—'}</span></div>
-                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
-                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
+                <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.nSvc > 0 ? 'bg-[#22c55e]' : 'bg-[#d4d4d2]'}`}/><span className="text-[12px] text-[#646462]">{row.nSvc > 0 ? 'Activo' : '—'}</span></div>
+                <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.nSal > 0 ? 'bg-[#22c55e]' : 'bg-[#d4d4d2]'}`}/><span className="text-[12px] text-[#646462]">{row.nSal > 0 ? 'Activo' : '—'}</span></div>
               </button>
             ))}
           </div>
@@ -24507,6 +24888,226 @@ function KnowledgePruebas({ onAction }: { onAction: (msg: string, type?: 'succes
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Knowledge — Help Center (Centro de ayuda) — collections + article stats
+// ─────────────────────────────────────────────────────────────────────────────
+function KnowledgeCentroAyuda({
+  onAction,
+  onNavigate,
+}: {
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onNavigate: (sub: KnowledgeSubView) => void;
+}) {
+  const { data: domainsRaw, loading: domainsLoading } = useApi(() => knowledgeApi.listDomains(), [], []);
+  const domains: Array<{ id: string; name: string; description?: string }> =
+    Array.isArray(domainsRaw) ? (domainsRaw as any[]) : [];
+
+  const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const articles: any[] = Array.isArray(articlesRaw) ? articlesRaw : [];
+
+  // HC-published articles (helpcenter_status === 'published' or status === 'published' / 'live')
+  const hcLive = articles.filter(a =>
+    a.helpcenter_status === 'published' ||
+    ['published', 'active', 'live'].includes(String(a.status || '').toLowerCase()),
+  );
+
+  // Count articles per domain
+  const countByDomain = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const a of hcLive) {
+      const did = a.domain_id || a.domainId || '';
+      map[did] = (map[did] || 0) + 1;
+    }
+    return map;
+  }, [hcLive]);
+
+  const [hcEnabled, setHcEnabled] = useState(true);
+  const [folderModal, setFolderModal] = useState<null | 'create' | { id: string; name: string; description?: string }>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  async function deleteCollection(d: { id: string; name: string }) {
+    if (typeof window !== 'undefined' && !window.confirm(`¿Eliminar la colección "${d.name}"?`)) return;
+    try {
+      await knowledgeApi.deleteDomain(d.id);
+      setRefreshKey(k => k + 1);
+      onAction('Colección eliminada');
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo eliminar', 'error');
+    }
+  }
+
+  return (
+    <>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Centro de ayuda</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFolderModal('create')}
+            className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Nueva colección
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-6">
+        {/* Status card */}
+        <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-center justify-between bg-white">
+          <div className="flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-[10px] flex items-center justify-center ${hcEnabled ? 'bg-[#dcfce7]' : 'bg-[#f3f3f1]'}`}>
+              <svg viewBox="0 0 16 16" className={`w-5 h-5 fill-none stroke-current ${hcEnabled ? 'text-[#15803d]' : 'text-[#646462]'}`} strokeWidth="1.5"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+            </div>
+            <div>
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">Centro de ayuda público</p>
+              <p className="text-[12.5px] text-[#646462] mt-0.5">
+                {hcEnabled
+                  ? `${hcLive.length} artículo${hcLive.length !== 1 ? 's' : ''} en vivo · accesible por los clientes`
+                  : 'Deshabilitado · no visible para los clientes'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[13px] text-[#646462]">{hcEnabled ? 'Activo' : 'Inactivo'}</span>
+            <button
+              onClick={() => setHcEnabled(v => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${hcEnabled ? 'bg-[#1a1a1a]' : 'bg-[#d4d4d2]'}`}
+            >
+              <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${hcEnabled ? 'left-[26px]' : 'left-1'}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: 'Artículos en vivo', value: hcLive.length },
+            { label: 'Colecciones', value: domains.length },
+            { label: 'Sin colección', value: hcLive.filter(a => !a.domain_id && !a.domainId).length },
+          ].map(s => (
+            <div key={s.label} className="border border-[#e9eae6] rounded-[10px] p-4 bg-white">
+              <p className="text-[26px] font-bold text-[#1a1a1a]">{s.value}</p>
+              <p className="text-[12.5px] text-[#646462] mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Collections table */}
+        <div>
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Colecciones</h3>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+            <div className="grid grid-cols-[1fr_120px_40px] px-5 py-2.5 border-b border-[#f1f1ee] text-[12px] font-medium text-[#646462]">
+              <div>Nombre</div>
+              <div>Artículos</div>
+              <div />
+            </div>
+            {domainsLoading && (
+              <div className="px-5 py-8 text-center text-[13px] text-[#646462]">Cargando…</div>
+            )}
+            {!domainsLoading && domains.length === 0 && (
+              <div className="px-5 py-8 text-center">
+                <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Sin colecciones</p>
+                <p className="text-[13px] text-[#646462] mb-4">Organiza tus artículos del Centro de ayuda en colecciones para que los clientes puedan encontrarlos fácilmente.</p>
+                <button
+                  onClick={() => setFolderModal('create')}
+                  className="bg-[#1a1a1a] text-white rounded-full px-4 py-2 text-[13px] font-semibold hover:bg-[#444]"
+                >
+                  Crear primera colección
+                </button>
+              </div>
+            )}
+            {!domainsLoading && domains.map((d, idx) => {
+              const count = countByDomain[d.id] || 0;
+              return (
+                <div
+                  key={d.id}
+                  className={`grid grid-cols-[1fr_120px_40px] px-5 py-3 items-center hover:bg-[#fafaf9] ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-[#1a1a1a] truncate">{d.name}</p>
+                      {d.description && <p className="text-[12px] text-[#646462] truncate">{d.description}</p>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${count > 0 ? 'bg-[#22c55e]' : 'bg-[#d4d4d2]'}`} />
+                    <span className="text-[13px] text-[#646462]">{count} artículo{count !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setFolderModal({ id: d.id, name: d.name, description: d.description })}
+                      title="Editar"
+                      className="w-7 h-7 rounded-full hover:bg-[#f3f3f1] flex items-center justify-center"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M11 2l3 3-9 9-4 1 1-4 9-9z"/></svg>
+                    </button>
+                    <button
+                      onClick={() => deleteCollection(d)}
+                      title="Eliminar"
+                      className="w-7 h-7 rounded-full hover:bg-[#fee2e2] flex items-center justify-center"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#b91c1c]" strokeWidth="1.4"><path d="M3 4h10M6 4V3h4v1M5 4v9h6V4H5z"/></svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Quick links */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => onNavigate('articulos')}
+            className="border border-[#e9eae6] rounded-[10px] p-4 text-left hover:border-[#c8c9c4] bg-white flex items-start gap-3"
+          >
+            <div className="w-8 h-8 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3.5 2h6l3 3v9a0.5 0.5 0 0 1-.5.5h-8.5A0.5 0.5 0 0 1 3 14V2.5z"/></svg>
+            </div>
+            <div>
+              <p className="text-[13px] font-semibold text-[#1a1a1a]">Ver todos los artículos</p>
+              <p className="text-[12px] text-[#646462] mt-0.5">Gestiona y publica artículos del Centro de ayuda</p>
+            </div>
+          </button>
+          <button
+            onClick={() => onNavigate('contenido')}
+            className="border border-[#e9eae6] rounded-[10px] p-4 text-left hover:border-[#c8c9c4] bg-white flex items-start gap-3"
+          >
+            <div className="w-8 h-8 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 9h6M5 11.5h4"/></svg>
+            </div>
+            <div>
+              <p className="text-[13px] font-semibold text-[#1a1a1a]">Resumen de contenido</p>
+              <p className="text-[12px] text-[#646462] mt-0.5">Ver el estado de todo el contenido de conocimiento</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Reuse the existing folder modal for collections */}
+      {folderModal && (
+        <KnowledgeFolderModal
+          initial={folderModal === 'create' ? null : folderModal}
+          onClose={() => setFolderModal(null)}
+          onSaved={(_id) => {
+            setFolderModal(null);
+            setRefreshKey(k => k + 1);
+            // toast already emitted by the modal via onAction
+          }}
+          onAction={onAction}
+        />
+      )}
+    </>
+  );
+}
+
 function KnowledgePlaceholder({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <>
@@ -24603,7 +25204,7 @@ function KnowledgeView() {
       case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
       case 'gaps':        return <KnowledgeGaps    onAction={showToast} onDraftFromGap={draftFromGap} />;
       case 'pruebas':     return <KnowledgePruebas onAction={showToast} />;
-      case 'centroAyuda': return <KnowledgePlaceholder title="Centro de ayuda" subtitle="Configuración del Help Center y experiencias de cliente autoservicio." />;
+      case 'centroAyuda': return <KnowledgeCentroAyuda onAction={showToast} onNavigate={setSub} />;
     }
   }
   return (
