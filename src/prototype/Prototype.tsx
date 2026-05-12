@@ -10,7 +10,7 @@ import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
-type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat' | 'audiences' | 'finSettings';
+type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'billingPlans' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat' | 'audiences' | 'finSettings';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -462,8 +462,8 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
       <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
         {/* Upgrade — lightning bolt button */}
         <button
-          onClick={() => onNavigate('featuresComparison')}
-          className={`w-full h-9 flex items-center rounded-lg ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${view === 'billing' || view === 'featuresComparison' ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"}`}
+          onClick={() => onNavigate('billingPlans')}
+          className={`w-full h-9 flex items-center rounded-lg ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${view === 'billing' || view === 'billingPlans' || view === 'featuresComparison' ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"}`}
         >
           <svg viewBox="0 0 16 16" className="w-5 h-5 flex-shrink-0 fill-[#111]"><path d="M9.5 1 L4 9h4.5L6.5 15 13 7H8.5z"/></svg>
           {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Upgrade</span>}
@@ -8280,7 +8280,7 @@ function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
           {/* Content below map */}
           <div className="flex flex-1 min-h-0 overflow-hidden">
             {/* Profile sidebar */}
-            <div className="w-[268px] flex-shrink-0 overflow-y-auto border-r border-[#e9eae6] py-5 px-[30px]">
+            <div className="w-[320px] flex-shrink-0 overflow-y-auto border-r border-[#e9eae6] py-5 px-[30px]">
               <h3 className="text-[18px] font-semibold text-[#1a1a1a] mb-3">Tú</h3>
 
               {/* Perfil público */}
@@ -8357,7 +8357,7 @@ function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
             {/* Conversations area */}
             <div className="flex-1 overflow-y-auto px-6 py-5">
               <h3 className="text-[18px] font-semibold text-[#1a1a1a] mb-4">Tus conversaciones</h3>
-              <div className="flex flex-col gap-3 max-w-[638px]">
+              <div className="flex flex-col gap-3">
                 {convFeedItems.map((item) => (
                   <div key={item.id} className="border border-[#e9eae6] rounded-xl p-4 bg-white hover:bg-[#f8f8f7] cursor-pointer">
                     <div className="flex items-start gap-3">
@@ -12582,6 +12582,206 @@ function BillingPlanCard({ plan, billing, current, isLaunch }: { plan: typeof PL
         <p style={{ fontSize: 10, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 18 }}>{plan.featuresLabel}</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {plan.features.map(f => <LandingBullet key={f}>{f}</LandingBullet>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BillingPlansView({ view: _view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [billing, setBilling] = useState<'monthly' | 'annual'>('annual');
+  const [selectedPack, setSelectedPack] = useState('pack-20k');
+  // Launch-pricing toggle: when on, all plans show their 73%-off launch rate
+  // until 31 dic 2026. Independent from monthly/annual billing cadence.
+  const [isLaunch, setIsLaunch] = useState(false);
+  const { data: sub } = useApi(() => billingApi.subscription('org_default'), [], null);
+  const currentPlan = sub?.planId ?? sub?.plan_id ?? sub?.plan?.name ?? 'growth';
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden" style={{ background: LC.bg }}>
+      <TrialBanner />
+      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        {/* Hero */}
+        <div style={{ borderBottom: `1px solid ${LC.border}`, padding: '48px 64px 40px', position: 'relative' }}>
+          <LandingCornerDots />
+          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 12 }}>Facturación &amp; Planes</p>
+          <h1 style={{ fontSize: 36, fontWeight: 800, color: LC.text, marginBottom: 12, lineHeight: '1.15' }}>
+            El plan perfecto<br />para tu equipo
+          </h1>
+          <p style={{ fontSize: 15, color: LC.text60, marginBottom: 32, maxWidth: 480 }}>
+            Empieza gratis y escala cuando lo necesites. Sin contratos, sin sorpresas.
+          </p>
+          {/* Billing toggle + launch-price tab */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'inline-flex', border: `1px solid ${LC.border}`, background: LC.bg2, padding: 3 }}>
+              {(['monthly', 'annual'] as const).map(b => (
+                <button key={b} onClick={() => setBilling(b)}
+                  style={{ padding: '6px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: billing === b ? '#fff' : 'transparent', color: billing === b ? LC.text : LC.text60, boxShadow: billing === b ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}
+                >
+                  {b === 'monthly' ? 'Mensual' : 'Anual'}{b === 'annual' ? ' (-15%)' : ''}
+                </button>
+              ))}
+            </div>
+            {/* Square launch-price tab — sits next to the monthly/annual toggle */}
+            <button
+              onClick={() => setIsLaunch(v => !v)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 10,
+                padding: '8px 16px',
+                border: `1px solid ${isLaunch ? LC.accent : LC.border}`,
+                background: isLaunch ? LC.accent : '#fff',
+                color: isLaunch ? '#fff' : LC.text,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Precio lanzamiento</span>
+              <span style={{ width: 3, height: 3, borderRadius: '50%', background: isLaunch ? '#fff' : LC.text }} />
+              <span style={{ fontSize: 13 }}>Hasta 31 dic 2026</span>
+              <span style={{ width: 3, height: 3, borderRadius: '50%', background: isLaunch ? '#fff' : LC.text }} />
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Ahorra 73%</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Plans grid */}
+        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
+          <div style={{ display: 'flex', gap: 0, border: `1px solid ${LC.border}` }}>
+            {PLANS.map((plan, i) => (
+              <Fragment key={plan.id}>
+                {i > 0 && <div style={{ width: 1, background: LC.border, flexShrink: 0 }} />}
+                <BillingPlanCard plan={plan} billing={billing} current={currentPlan} isLaunch={isLaunch} />
+              </Fragment>
+            ))}
+            {/* Business column — same 3-section structure as BillingPlanCard */}
+            <div style={{ width: 1, background: LC.border, flexShrink: 0 }} />
+            <div style={{ position: 'relative', border: 'none', background: LC.bg, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <LandingCornerDots color={LC.border} />
+              {/* ① Fixed-height info block — matches BillingPlanCard height:268 */}
+              <div style={{ height: 268, padding: '24px 24px 0', display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${LC.border}` }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{BUSINESS_PLAN.name}</p>
+                <p style={{ fontSize: 12, color: LC.text, marginBottom: 6 }}>{BUSINESS_PLAN.subtitle}</p>
+                <p style={{ fontSize: 12, color: LC.text60, lineHeight: '1.5', marginBottom: 0, flex: 1 }}>{BUSINESS_PLAN.desc}</p>
+                <div style={{ marginTop: 'auto', paddingBottom: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>Precio</span>
+                      <span style={{ fontSize: 15, color: LC.text60 }}>por contrato</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                      <span style={{ fontSize: 36, fontWeight: 800, color: LC.text, letterSpacing: '-0.6px', lineHeight: 1 }}>Custom</span>
+                      <span style={{ fontSize: 12, color: LC.text80 }}>negociado</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* ② CTA — same fixed height as BillingPlanCard */}
+              <div style={{ height: 68, padding: '12px 24px', display: 'flex', alignItems: 'center', borderBottom: `1px solid ${LC.border}` }}>
+                <button style={{ width: '100%', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${LC.accent}`, background: LC.accent, color: '#fff' }}>
+                  Hablar con ventas
+                </button>
+              </div>
+              {/* ③ Features */}
+              <div style={{ padding: '20px 24px 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 18 }}>{BUSINESS_PLAN.featuresLabel}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {BUSINESS_PLAN.features.map(f => <LandingBullet key={f}>{f}</LandingBullet>)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Features comparison link */}
+          <div style={{ marginTop: 20, textAlign: 'center' }}>
+            <button
+              onClick={() => onNavigate('featuresComparison')}
+              style={{ fontSize: 13, color: LC.accent, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: 600 }}
+            >
+              Ver comparación completa de funciones →
+            </button>
+          </div>
+        </div>
+
+        {/* AI Credits — selector + detail (real packs €79 / €249 / €549 / flexible) */}
+        <BillingCreditsBlock selectedPack={selectedPack} setSelectedPack={setSelectedPack} currentPlan={currentPlan} />
+
+        {/* ── Seats — full width ───────────────────────────────────────────────── */}
+        <div style={{ borderBottom: `1px solid ${LC.border}` }}>
+          {/* Section header */}
+          <div style={{ padding: '32px 64px 0' }}>
+            <p style={{ fontSize: 20, fontWeight: 800, color: LC.text, marginBottom: 6 }}>Puestos adicionales</p>
+            <p style={{ fontSize: 13, color: LC.text60, lineHeight: '1.7', maxWidth: 680, marginBottom: 28 }}>
+              Cada plan incluye puestos de base. Añade más en cualquier momento — la facturación <strong style={{ color: LC.text }}>se prorratea automáticamente</strong> hasta tu próxima fecha de renovación. Los puestos Lite (solo lectura) son <strong style={{ color: LC.text }}>gratuitos e ilimitados</strong> en todos los planes.
+            </p>
+          </div>
+          {/* Table */}
+          <div style={{ borderTop: `1px solid ${LC.border}` }}>
+            {/* Header row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr', padding: '0 64px', background: LC.bg2, borderBottom: `1px solid ${LC.border}` }}>
+              {['Plan', 'Puestos incluidos', 'Precio / puesto extra', 'Colaboradores Lite', ''].map((h, i) => (
+                <div key={h + i} style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</div>
+              ))}
+            </div>
+            {[
+              { id: 'starter',  name: 'Starter',  seats: 3,    extraPrice: '€25 / mes',     note: 'Empieza desde aquí' },
+              { id: 'growth',   name: 'Growth',   seats: 8,    extraPrice: '€22 / mes',     note: 'Más popular' },
+              { id: 'scale',    name: 'Scale',    seats: 20,   extraPrice: '€19 / mes',     note: 'Para equipos grandes' },
+              { id: 'business', name: 'Business', seats: null, extraPrice: 'Personalizado', note: 'Habla con ventas' },
+            ].map(row => {
+              const isCurrent = currentPlan.toLowerCase().includes(row.id);
+              return (
+                <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr', padding: '0 64px', borderBottom: `1px solid ${LC.border}`, background: isCurrent ? LC.bg2 : 'transparent' }}>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 14, fontWeight: isCurrent ? 700 : 500, color: LC.text }}>{row.name}</span>
+                    {isCurrent && <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: LC.accent, padding: '2px 7px', letterSpacing: '0.04em' }}>ACTUAL</span>}
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: LC.text }}>{row.seats != null ? `${row.seats} puestos` : 'Personalizado'}</span>
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 400, color: isCurrent ? LC.accent : LC.text }}>{row.extraPrice}</span>
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: LC.text }}>Ilimitados · Gratis</span>
+                  </div>
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    {isCurrent ? (
+                      <button style={{ height: 34, padding: '0 16px', fontSize: 12, fontWeight: 600, background: LC.text, color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Añadir puesto
+                      </button>
+                    ) : (
+                      <button onClick={() => onNavigate('billing')} style={{ height: 34, padding: '0 16px', fontSize: 12, fontWeight: 600, background: 'transparent', color: LC.text60, border: `1px solid ${LC.border}`, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Cambiar a {row.name}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ padding: '16px 64px 32px' }}>
+            <p style={{ fontSize: 12, color: LC.text60 }}>
+              * El precio por puesto extra se aplica al puesto adicional por encima del límite incluido en tu plan. Se prorratea desde el momento de la activación.
+            </p>
+          </div>
+        </div>
+
+        {/* FAQs — full width */}
+        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 24 }}>Preguntas frecuentes</p>
+          <div>
+            {FAQS.map(f => <BillingFaqItem key={f.q} q={f.q} a={f.a} />)}
+            <div style={{ borderTop: `1px solid ${LC.border}` }} />
+          </div>
+        </div>
+
+        {/* Final CTA */}
+        <div style={{ padding: '48px 64px', position: 'relative', textAlign: 'center' }}>
+          <LandingCornerDots />
+          <p style={{ fontSize: 24, fontWeight: 800, color: LC.text, marginBottom: 12 }}>¿Tienes preguntas?</p>
+          <p style={{ fontSize: 14, color: LC.text60, marginBottom: 24 }}>Nuestro equipo está disponible para ayudarte a elegir el plan adecuado.</p>
+          <button style={{ padding: '12px 32px', fontSize: 14, fontWeight: 700, background: LC.accent, color: '#fff', border: 'none', cursor: 'pointer' }}>
+            Hablar con ventas
+          </button>
         </div>
       </div>
     </div>
@@ -33795,7 +33995,7 @@ function readInitialViewFromUrl(): View {
     'notifications','visible','tokens','accountAccess','multilingual','assignments',
     'macros','tickets','sla','aiInbox','automation','appStore','connectors','labels',
     'people','companies','workspaceSecurity','workspaceMultilingual','workspaceHours',
-    'workspaceBrands','workspaceGeneral','workspaceTeammates','billing','messenger',
+    'workspaceBrands','workspaceGeneral','workspaceTeammates','billingPlans','billing','messenger',
     'email','phone','whatsapp','discord','sms',
     'social','allChannels','inboxTeam','fin','knowledge','reports','outbound',
   ];
@@ -33860,6 +34060,7 @@ function PrototypeApp() {
       case 'workspaceMultilingual': return <WorkspaceMultilingualView view={view} onNavigate={setView} />;
       case 'workspaceHours':        return <HorarioAtencionView view={view} onNavigate={setView} />;
       case 'workspaceBrands':       return <MarcasView view={view} onNavigate={setView} />;
+      case 'billingPlans':       return <BillingPlansView view={view} onNavigate={setView} />;
       case 'billing':            return <BillingView view={view} onNavigate={setView} />;
       case 'featuresComparison': return <FeaturesComparisonView view={view} onNavigate={setView} />;
       case 'messenger':      return <MessengerView view={view} onNavigate={setView} />;
