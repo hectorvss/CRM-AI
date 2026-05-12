@@ -1,4 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Unified prototype – Inbox + Contacts (connected screens)
 // Navigate via the left-nav icons. All assets from Figma CDN (7-day TTL).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7314,7 +7314,6 @@ const INTEG_SUB: { label: string; nav: View | null }[] = [
   { label: "Tienda de aplicaciones",   nav: 'appStore' },
   { label: "Conectores de datos",      nav: 'connectors' },
   { label: "Autenticación",            nav: 'auth' },
-  { label: "Centro para desarrolladores", nav: 'developer' },
 ];
 const PERSONAL_SUB: { label: string; nav: View | null }[] = [
   { label: "Información",            nav: 'personal' },
@@ -7330,7 +7329,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies' || view === 'customObjects' || view === 'topics' || view === 'customFilters' || view === 'emailTemplates';
   const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'inboxTeam' || view === 'cannedResponses' || view === 'callsLive';
   const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin' || view === 'finSettings' || view === 'aiFeedback' || view === 'agentChat' || view === 'audiences';
-  const isIntegSection = view === 'appStore' || view === 'connectors' || view === 'auth' || view === 'developer' || view === 'mcpServers';
+  const isIntegSection = view === 'appStore' || view === 'connectors' || view === 'auth';
   const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands' || view === 'workspaceGeneral' || view === 'workspaceTeammates' || view === 'customRoles';
   const isSuscripcionSection = view === 'billing';
   const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels' || view === 'switchChannel' || view === 'slackChannel';
@@ -7548,8 +7547,6 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoAppS}  label="Tienda de aplicaciones"    nav={'appStore'} />
             <SubRow icon={IcoConnS} label="Conectores de datos"       nav={'connectors'} />
             <SubRow icon={IcoAuthS} label="Autenticación"             nav={'auth'} />
-            <SubRow icon={IcoDevS}  label="Centro para desarrolladores" nav={'developer'} />
-            <SubRow icon={IcoMCPS}  label="Servidores MCP"              nav={'mcpServers'} />
           </div>
         )}
 
@@ -7863,7 +7860,6 @@ function SettingsInicioContent({ onNavigate }: { onNavigate?: (v: View) => void 
         <SettingsCardGrid onNavigate={onNavigate} title="Integraciones" cards={[
           { icon: 'shop', bg: '#dbeafe', name: 'Tienda de aplicaciones',     desc: 'Conecta a Intercom todos los servicios y herramientas que ya usas.', target: 'appStore' },
           { icon: 'plug', bg: '#dcfce7', name: 'Conectores de datos',        desc: 'Especifica los datos de los sistemas externos que usa tu equipo.', target: 'connectors' },
-          { icon: 'code', bg: '#fef3c7', name: 'Centro para desarrolladores', desc: 'Crea aplicaciones y servicios personalizados para tu propio negocio.', target: 'developer' },
           { icon: 'flow', bg: '#fce7f3', name: 'Automatizaciones',           desc: 'Crea automatizaciones con cualquier información o paso a paso.', target: 'automation' },
         ]} />
         <SettingsCardGrid onNavigate={onNavigate} title="Datos" cards={[
@@ -11533,53 +11529,106 @@ function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View
           </>}
 
           {editorTab === 'datos' && (
-            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-8 flex flex-col items-center justify-center min-h-[300px] text-center">
-              <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 mb-4 opacity-30"><ellipse cx="24" cy="12" rx="16" ry="6" stroke="#1a1a1a" strokeWidth="2"/><path d="M8 12v12c0 3.3 7.2 6 16 6s16-2.7 16-6V12" stroke="#1a1a1a" strokeWidth="2"/><path d="M8 24v12c0 3.3 7.2 6 16 6s16-2.7 16-6V24" stroke="#1a1a1a" strokeWidth="2"/></svg>
-              <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-2">Esquema de datos</h3>
-              <p className="text-[13px] text-[#646462] max-w-[380px]">Define el esquema de los datos que devuelve tu API. Completa primero la sección API y haz una prueba de conexión para detectar el esquema automáticamente.</p>
-              <button className="mt-5 bg-[#1a1a1a] text-white rounded-full px-4 py-2 text-[13px] font-semibold hover:bg-[#444]">Detectar esquema</button>
+            <div className="flex flex-col gap-4">
+              {/* Card 1: Restringir y configurar los datos */}
+              <div className="bg-white rounded-[10px] border border-[#e9eae6] overflow-hidden">
+                <div className="px-6 py-5 border-b border-[#e9eae6] flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Restringir y configurar los datos</h3>
+                    <p className="text-[12.5px] text-[#646462] mt-0.5">Selecciona los campos de respuesta que Fin y tus compañeros pueden ver.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7] transition-colors">
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#646462]"><path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1zM7 7H5V5h2v2zm0 4H5V9h2v2zm4-4H9V5h2v2zm0 4H9V9h2v2z"/></svg>
+                      Tabla
+                    </button>
+                    <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7] transition-colors">
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#646462]"><path d="M3 3h2v2H3V3zm0 4h2v2H3V7zm0 4h2v2H3v-2zm4-8h6v2H7V3zm0 4h6v2H7V7zm0 4h6v2H7v-2z"/></svg>
+                      Python
+                    </button>
+                  </div>
+                </div>
+                <div className="px-6 py-10 flex flex-col items-center justify-center text-center">
+                  <svg viewBox="0 0 40 40" fill="none" className="w-10 h-10 mb-3 opacity-25"><rect x="4" y="4" width="32" height="32" rx="4" stroke="#1a1a1a" strokeWidth="2"/><path d="M4 13h32M13 4v32" stroke="#1a1a1a" strokeWidth="2"/></svg>
+                  <p className="text-[13px] font-medium text-[#646462]">Aún no hay campos de respuesta</p>
+                  <p className="text-[12px] text-[#9a9a98] mt-1 max-w-[300px]">Haz una prueba de conexión en la pestaña API para detectar los campos automáticamente.</p>
+                </div>
+              </div>
+              {/* Card 2: Mapeo de objetos */}
+              <div className="bg-white rounded-[10px] border border-[#e9eae6] overflow-hidden">
+                <div className="px-6 py-5 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Mapeo de objetos</h3>
+                    <p className="text-[12.5px] text-[#646462] mt-0.5">Vincula los datos devueltos con objetos de Clain (contactos, empresas, conversaciones).</p>
+                  </div>
+                  <button className="border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7] transition-colors">+ Añadir mapeo</button>
+                </div>
+                <div className="px-6 pb-6 flex flex-col items-center text-center">
+                  <p className="text-[12px] text-[#9a9a98]">No hay mapeos configurados. Añade uno para enriquecer los perfiles automáticamente.</p>
+                </div>
+              </div>
             </div>
           )}
 
           {editorTab === 'fin' && (
-            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-8 flex flex-col gap-5">
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Acceso de Fin</h3>
-                <p className="text-[12px] text-[#646462] mb-3">Controla si Fin puede usar este conector al responder conversaciones.</p>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <div className="w-9 h-5 bg-[#1a1a1a] rounded-full relative flex-shrink-0">
-                    <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-white shadow"/>
+            <div className="flex flex-col gap-4">
+              {/* Card: ¿Cómo debe Fin usar este conector? */}
+              <div className="bg-white rounded-[10px] border border-[#e9eae6] overflow-hidden">
+                <div className="px-6 py-5 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-[#1a1a1a]">¿Cómo debe Fin usar este conector?</h3>
+                    <p className="text-[12.5px] text-[#646462] mt-0.5">Controla si Fin puede acceder a este conector al responder conversaciones.</p>
                   </div>
-                  <span className="text-[13px] text-[#1a1a1a] font-medium">Permitir que Fin use este conector</span>
-                </label>
-              </div>
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Instrucciones para Fin</h3>
-                <p className="text-[12px] text-[#646462] mb-2">Explica a Fin cuándo y cómo usar este conector.</p>
-                <textarea rows={4} placeholder="Ej: Usa este conector para buscar información de pedidos cuando el cliente pregunte por el estado de su pedido." className="w-full border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] outline-none focus:border-[#3b59f6] resize-none"/>
+                  {/* Toggle OFF */}
+                  <button className="w-10 h-6 rounded-full bg-[#d4d4d0] flex items-center px-0.5 flex-shrink-0 transition-colors">
+                    <span className="w-5 h-5 rounded-full bg-white shadow-sm translate-x-0 transition-transform"/>
+                  </button>
+                </div>
+                {/* Yellow warning box */}
+                <div className="mx-6 mb-5 flex items-start gap-3 rounded-[8px] px-4 py-3" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#d97706' }}>
+                    <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 3.5h1.5v5h-1.5v-5zm0 6h1.5v1.5h-1.5V10.5z"/>
+                  </svg>
+                  <p className="text-[12.5px]" style={{ color: '#92400e' }}>
+                    Fin no podrá usar este conector hasta que lo actives. Actívalo cuando hayas terminado de configurarlo y probado que funciona correctamente.
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
           {editorTab === 'seguridad' && (
-            <div className="bg-white rounded-[10px] border border-[#e9eae6] p-8 flex flex-col gap-5">
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Control de acceso</h3>
-                <p className="text-[12px] text-[#646462] mb-3">Define qué roles pueden ver o usar este conector.</p>
-                <div className="flex flex-col gap-2">
-                  {['Administradores', 'Agentes', 'Fin AI'].map(role => (
-                    <label key={role} className="flex items-center gap-3 cursor-pointer">
-                      <span className={`inline-flex w-4 h-4 rounded-[3px] border items-center justify-center cursor-pointer ${true ? 'bg-[#3b59f6] border-[#3b59f6]' : 'border-[#c9cac7]'}`}>
-                        <svg viewBox="0 0 10 8" className="w-2.5 h-2"><path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                      </span>
-                      <span className="text-[13px] text-[#1a1a1a]">{role}</span>
-                    </label>
-                  ))}
+            <div className="flex flex-col gap-4">
+              {/* Card: Autenticación de clientes */}
+              <div className="bg-white rounded-[10px] border border-[#e9eae6] overflow-hidden">
+                <div className="px-6 py-5 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Autenticación de clientes</h3>
+                    <p className="text-[12.5px] text-[#646462] mt-0.5">Verifica la identidad del usuario antes de devolver datos sensibles.</p>
+                  </div>
+                  {/* Toggle ON — orange */}
+                  <button className="w-10 h-6 rounded-full flex items-center px-0.5 flex-shrink-0 transition-colors" style={{ background: '#f97316' }}>
+                    <span className="w-5 h-5 rounded-full bg-white shadow-sm translate-x-4 transition-transform"/>
+                  </button>
                 </div>
               </div>
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Registro de actividad</h3>
-                <p className="text-[12px] text-[#646462]">Todas las llamadas a este conector quedan registradas para auditoría. Los registros se conservan 90 días.</p>
+              {/* Card: Verificación de seguridad */}
+              <div className="bg-white rounded-[10px] border border-[#e9eae6] overflow-hidden">
+                <div className="px-6 py-5">
+                  <h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-1">Verificación de seguridad</h3>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="px-2.5 py-1 rounded-full text-[11.5px] font-semibold bg-[#f3f3f1] text-[#646462]">Aún no evaluado</span>
+                  </div>
+                  {/* Grey info box */}
+                  <div className="flex items-start gap-3 rounded-[8px] px-4 py-3 bg-[#f8f8f7] border border-[#e9eae6]">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 flex-shrink-0 mt-0.5 text-[#646462]">
+                      <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 3.5h1.5v5h-1.5v-5zm0 6h1.5v1.5h-1.5V10.5z"/>
+                    </svg>
+                    <p className="text-[12.5px] text-[#646462]">
+                      Realiza una prueba de conexión en la pestaña API para evaluar la seguridad de este conector. La verificación comprueba si los datos sensibles están correctamente protegidos.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -11622,46 +11671,106 @@ function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto min-h-0 px-12 py-12 flex flex-col items-center">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {hasConnectors ? (
-              <div className="w-full max-w-[800px]">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-[18px] font-bold text-[#1a1a1a]">Tus conectores ({connectors.length + connected.length})</h2>
+              <div className="px-6 py-5 flex flex-col gap-4">
+                {/* Filter bar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12.5px] bg-white flex-1 min-w-[180px] max-w-[260px]">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#9a9a98] flex-shrink-0"><path d="M11.742 10.344a6.5 6.5 0 10-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 001.415-1.414l-3.85-3.85a1.007 1.007 0 00-.115-.099zm-5.44 1.406a5.5 5.5 0 110-11 5.5 5.5 0 010 11z"/></svg>
+                    <input placeholder="Buscar conectores…" className="outline-none text-[12.5px] bg-transparent w-full placeholder-[#9a9a98]"/>
+                  </div>
+                  <button className="flex items-center gap-1 border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12.5px] text-[#646462] bg-white hover:bg-[#f8f8f7]">
+                    Estado <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M4 6l4 4 4-4"/></svg>
+                  </button>
+                  <button className="flex items-center gap-1 border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12.5px] text-[#646462] bg-white hover:bg-[#f8f8f7]">
+                    Tipo <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M4 6l4 4 4-4"/></svg>
+                  </button>
+                  <div className="ml-auto">
+                    <button onClick={() => setModal('editor')} className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-4 py-1.5 text-[12.5px] font-semibold hover:bg-[#333] transition-colors">
+                      + Nuevo conector de datos
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-3 mb-8">
-                  {connected.map((svc) => (
-                    <div key={svc} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-center gap-4 hover:bg-[#fafaf9]">
-                      <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[15px] font-bold text-[#1a1a1a]">{svc[0]}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-semibold text-[#1a1a1a]">{svc}</p>
-                        <p className="text-[12px] text-[#646462]">Conectado</p>
-                      </div>
-                      <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#dcfce7] text-[#166534]">Activo</span>
-                    </div>
-                  ))}
-                  {connectors.map((c: any) => (
-                    <div key={c.id} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-center gap-4 hover:bg-[#fafaf9]">
-                      <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[18px]">{c.icon ?? '🔌'}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-semibold text-[#1a1a1a]">{c.name ?? c.label ?? c.id}</p>
-                        <p className="text-[12px] text-[#646462] truncate">{c.description ?? c.type ?? ''}</p>
-                      </div>
-                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0 ${c.status === 'active' || c.isActive ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
-                        {c.status === 'active' || c.isActive ? 'Activo' : c.status ?? 'Inactivo'}
-                      </span>
-                    </div>
-                  ))}
+
+                {/* Table section — collapsible */}
+                <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden bg-white">
+                  {/* Section header */}
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6] bg-[#f8f8f7]">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+                    <span className="text-[12.5px] font-semibold text-[#646462]">Conectores de datos ({connected.length + connectors.length})</span>
+                  </div>
+                  {/* Table */}
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-[#e9eae6]">
+                        {['Nombre', 'Estado', 'Salud', 'Seguridad', 'Utilizado por', 'Fin', 'Última actualización'].map(h => (
+                          <th key={h} className="text-left px-4 py-2.5 text-[11.5px] font-semibold text-[#9a9a98] uppercase tracking-wide whitespace-nowrap">{h}</th>
+                        ))}
+                        <th className="w-8"/>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#f3f3f1]">
+                      {connected.map((svc) => (
+                        <tr key={svc} className="hover:bg-[#fafaf9] cursor-pointer group">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-7 h-7 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center text-[13px] font-bold text-[#1a1a1a] flex-shrink-0">{svc[0]}</div>
+                              <span className="text-[13px] font-semibold text-[#1a1a1a]">{svc}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#dcfce7] text-[#166534]">Activo</span></td>
+                          <td className="px-4 py-3"><span className="text-[12px] text-[#16a34a] font-medium">● Buena</span></td>
+                          <td className="px-4 py-3"><span className="text-[12px] text-[#646462]">Estándar</span></td>
+                          <td className="px-4 py-3"><span className="text-[12px] text-[#646462]">Fin, Agentes</span></td>
+                          <td className="px-4 py-3"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#16a34a] fill-current"><path d="M3 8l3.5 3.5L13 4"/></svg></td>
+                          <td className="px-4 py-3 text-[12px] text-[#9a9a98]">Hace 2 días</td>
+                          <td className="px-4 py-3">
+                            <button className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-[#f3f3f1]">
+                              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#646462]"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {connectors.map((c: any) => (
+                        <tr key={c.id} className="hover:bg-[#fafaf9] cursor-pointer group">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-7 h-7 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center text-[15px] flex-shrink-0">{c.icon ?? '🔌'}</div>
+                              <span className="text-[13px] font-semibold text-[#1a1a1a]">{c.name ?? c.id}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${c.status === 'active' || c.isActive ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#f3f3f1] text-[#646462]'}`}>{c.status === 'active' || c.isActive ? 'Activo' : 'Inactivo'}</span></td>
+                          <td className="px-4 py-3 text-[12px] text-[#9a9a98]">—</td>
+                          <td className="px-4 py-3 text-[12px] text-[#9a9a98]">—</td>
+                          <td className="px-4 py-3 text-[12px] text-[#9a9a98]">—</td>
+                          <td className="px-4 py-3 text-[12px] text-[#9a9a98]">—</td>
+                          <td className="px-4 py-3 text-[12px] text-[#9a9a98]">—</td>
+                          <td className="px-4 py-3">
+                            <button className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-[#f3f3f1]">
+                              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#646462]"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <ConnectorCardGrid onCardClick={(label) => {
-                  if (label === 'Stripe') setModal('stripe');
-                  else if (label === 'Shopify Storefront') setModal('shopify');
-                  else if (label === 'Linear') setModal('linear');
-                  else if (label === 'Crear desde cero') setModal('editor');
-                  else if (label === 'MCP personalizado') setModal('mcp');
-                }} />
+
+                {/* MCP section */}
+                <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden bg-white">
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6] bg-[#f8f8f7]">
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+                    <span className="text-[12.5px] font-semibold text-[#646462]">Servidores MCP (0)</span>
+                  </div>
+                  <div className="px-4 py-8 flex flex-col items-center text-center">
+                    <p className="text-[12.5px] text-[#9a9a98]">No hay servidores MCP configurados.</p>
+                    <button onClick={() => setModal('mcp')} className="mt-3 text-[12.5px] font-semibold text-[#3b59f6] hover:underline">+ Agregar servidor MCP</button>
+                  </div>
+                </div>
               </div>
             ) : (
-              <>
+              <div className="px-12 py-12 flex flex-col items-center">
                 <h2 className="text-[28px] font-bold text-[#1a1a1a] text-center mb-3 leading-tight">Incorpore datos de sus clientes<br/>en tiempo real en Intercom</h2>
                 <p className="text-[14px] text-[#646462] text-center mb-10 max-w-[600px]">Conéctese a cualquier sistema externo o API personalizada con Conectores de datos sin código. Impulse Fin y el servicio de asistencia con datos en tiempo real para ofrecer asistencia más personalizada.</p>
                 <ConnectorCardGrid onCardClick={(label) => {
@@ -11671,7 +11780,7 @@ function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View
                   else if (label === 'Crear desde cero') setModal('editor');
                   else if (label === 'MCP personalizado') setModal('mcp');
                 }} />
-              </>
+              </div>
             )}
           </div>
 
@@ -11870,11 +11979,25 @@ function ConnectorCardGrid({ onCardClick }: { onCardClick: (label: string) => vo
 
 function LabelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [search, setSearch] = useState('');
-  const { data: tags, loading: tagsLoading } = useApi(() =>
-    fetch('/api/tags').then(r => r.ok ? r.json() : []).then((d: any) => Array.isArray(d) ? d : []),
-    [], []
-  );
-  const labelRows = tags.length > 0 ? tags : [{ name: 'Feature Request', createdAt: '1h ago', createdBy: '—', people: 0, companies: 0, conversations: 0, messages: 0 }];
+  const [isCreating, setIsCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [labels, setLabels] = useState([
+    { name: 'Feature Request', createdAt: '7d ago', createdBy: '—', people: 0, companies: 0, conversations: 0, messages: 0, articles: 0, responses: 0 },
+  ]);
+  const newInputRef = useRef<HTMLInputElement>(null);
+
+  function startCreating() { setIsCreating(true); setNewName(''); setTimeout(() => newInputRef.current?.focus(), 50); }
+
+  function confirmNew() {
+    const trimmed = newName.trim();
+    if (!trimmed) { setIsCreating(false); return; }
+    setLabels(prev => [{ name: trimmed, createdAt: 'Just now', createdBy: 'Hector Vidal Sanchez', people: 0, companies: 0, conversations: 0, messages: 0, articles: 0, responses: 0 }, ...prev]);
+    setIsCreating(false);
+    setNewName('');
+  }
+
+  const filtered = labels.filter(l => l.name.toLowerCase().includes(search.toLowerCase()));
+  const COLS = ['Nombre de la etiqueta', 'Creado', 'Creado por', 'Personas:', 'Empresas', 'Conversaciones', 'Mensajes', 'Artículos', 'Respuestas'];
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
@@ -11883,32 +12006,62 @@ function LabelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Etiquetas</h1>
+            <h1 className="text-[20px] font-bold text-[#1a1a1a] flex items-center gap-2">
+              <svg viewBox="0 0 20 20" className="w-5 h-5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M3 5l6-3 8 3-6 10-8-10z"/></svg>
+              Etiquetas
+            </h1>
             <div className="flex items-center gap-2">
               <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
                 Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
               </button>
-              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nueva etiqueta</button>
+              <button onClick={startCreating} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nueva etiqueta</button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4">
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar etiquetas..." className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] mb-4 focus:outline-none focus:border-[#3b59f6]" />
             <table className="w-full text-[13px]">
               <thead><tr className="border-b border-[#e9eae6]">
-                {['Nombre de la etiqueta', 'Creado', 'Creado por', 'Personas:', 'Empresas', 'Conversaciones', 'Mensajes'].map(h => (
-                  <th key={h} className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">{h} <span className="text-[#ccc]">↕</span></th>
+                {COLS.map(h => (
+                  <th key={h} className="text-left px-4 py-2 font-medium text-[#646462] text-[12px] whitespace-nowrap">{h} <span className="text-[#ccc]">↕</span></th>
                 ))}
               </tr></thead>
               <tbody>
-                {labelRows.map((lbl: any, i: number) => (
-                  <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
-                    <td className="px-4 py-3"><span className="flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M2 5l5-3 7 3-5 9-7-9z"/></svg>{lbl.name ?? lbl.label ?? lbl.tag}</span></td>
-                    <td className="px-4 py-3 text-[#646462]">{lbl.createdAt ?? '—'}</td>
-                    <td className="px-4 py-3 text-[#646462]">{lbl.createdBy ?? '—'}</td>
-                    <td className="px-4 py-3 text-[#646462]">{lbl.people ?? 0}</td>
-                    <td className="px-4 py-3 text-[#646462]">{lbl.companies ?? 0}</td>
-                    <td className="px-4 py-3 text-[#646462]">{lbl.conversations ?? 0}</td>
-                    <td className="px-4 py-3 text-[#646462]">{lbl.messages ?? 0}</td>
+                {/* Inline new-label row */}
+                {isCreating && (
+                  <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                    <td className="px-4 py-2">
+                      <span className="flex items-center gap-2">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M2 5l5-3 7 3-5 9-7-9z"/></svg>
+                        <input
+                          ref={newInputRef}
+                          value={newName}
+                          onChange={e => setNewName(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') confirmNew(); if (e.key === 'Escape') setIsCreating(false); }}
+                          placeholder="Nombre de la etiqueta"
+                          className="border border-[#3b59f6] rounded-[6px] px-2 py-1 text-[13px] outline-none w-[220px]"
+                        />
+                        <button onClick={confirmNew} className="w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a] hover:bg-[#444] flex-shrink-0">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="2"><path d="M3 8l4 4 6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                        <button onClick={() => setIsCreating(false)} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#f3f3f1] flex-shrink-0">
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                        </button>
+                      </span>
+                    </td>
+                    {[...Array(8)].map((_, i) => <td key={i} className="px-4 py-2 text-[#646462]">—</td>)}
+                  </tr>
+                )}
+                {filtered.map((lbl, i) => (
+                  <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] group">
+                    <td className="px-4 py-3"><span className="flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M2 5l5-3 7 3-5 9-7-9z"/></svg>{lbl.name}</span></td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.createdAt}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.createdBy}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.people}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.companies}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.conversations}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.messages}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.articles}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.responses}</td>
                   </tr>
                 ))}
               </tbody>
@@ -11922,8 +12075,55 @@ function LabelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
 
 // ── PeopleView (with 6 tabs) ──────────────────────────────────────────────────
 
+const PEOPLE_ATTRS = [
+  { icon: '👥', name: 'Name',                        desc: "A person's full name",                                         protect: 'Deshabilitado', format: 'Texto' },
+  { icon: '🏢', name: 'Account',                     desc: 'The account that owns a lead or user in Intercom',             protect: '',              format: 'Cuenta' },
+  { icon: '🏢', name: 'Account name',                desc: 'The name of the account that owns a lead or user in Intercom', protect: '',              format: 'Texto' },
+  { icon: '👤', name: 'Owner',                       desc: 'The teammate that owns a lead or user in Intercom',            protect: '',              format: 'Compañero de equipo' },
+  { icon: '👤', name: 'Owner name',                  desc: 'The name of the teammate that owns a lead or user in Intercom',protect: '',              format: 'Texto' },
+  { icon: '🔗', name: 'UTM Term',                    desc: 'The product promotion or campaign that directed a person to your app or website', protect: '', format: 'Texto' },
+  { icon: '🔗', name: 'Referral URL',                desc: 'The previous page the person was on',                          protect: '',              format: 'Texto' },
+  { icon: '📋', name: 'Subscription type opt-outs',  desc: 'The subscription types a person has opted-out from',           protect: '',              format: 'Desconocido' },
+  { icon: '📋', name: 'Subscription type opt-ins',   desc: 'The subscription types a person has opted-in to',              protect: '',              format: 'Desconocido' },
+  { icon: '📅', name: 'Last Survey received',        desc: 'The last day a person received a Survey',                      protect: '',              format: 'Fecha' },
+  { icon: '💬', name: 'WhatsApp number',             desc: "A person's WhatsApp number",                                   protect: '',              format: 'Texto' },
+  { icon: '🏢', name: 'Companies',                   desc: 'The Companies the person is a member of',                      protect: 'Deshabilitado', format: 'Texto' },
+  { icon: '📱', name: 'Phone Number Country',        desc: "The ISO country code of the person's phone number",            protect: '',              format: 'Texto' },
+  { icon: '💬', name: 'Slack Email',                 desc: "A person's Slack email",                                       protect: '',              format: 'Texto' },
+];
+
 function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [tab, setTab] = useState<'atributos' | 'segmentos' | 'eventos' | 'bot' | 'eliminar' | 'bloqueado'>('atributos');
+  const [showModal, setShowModal] = useState(false);
+  const [attrFormat, setAttrFormat] = useState('Texto');
+  const [attrName, setAttrName] = useState('');
+  const [attrDesc, setAttrDesc] = useState('');
+  const [attrVerified, setAttrVerified] = useState(true);
+  const [attrSearch, setAttrSearch] = useState('');
+  const [customAttrs, setCustomAttrs] = useState<typeof PEOPLE_ATTRS>([]);
+  const [botFields, setBotFields] = useState<Array<{name: string; desc: string}>>([
+    { name: 'Name', desc: "A person's full name" },
+    { name: 'Email', desc: 'The email address assigned to a user or lead' },
+    { name: 'Phone', desc: "A person's phone number" },
+    { name: 'Company name', desc: 'The name of a company' },
+    { name: 'Company size', desc: 'The number of people employed in this company, expressed as a single number' },
+    { name: 'Company website', desc: "The web address for the company's primary marketing site" },
+    { name: 'Company industry', desc: "The category or domain this company belongs to e.g. 'ecommerce' or 'SaaS'" },
+  ]);
+  const [showAddPopover, setShowAddPopover] = useState(false);
+  const [addSearch, setAddSearch] = useState('');
+  const addBtnRef = useRef<HTMLButtonElement>(null);
+
+  function saveAttr() {
+    if (!attrName.trim()) return;
+    setCustomAttrs(prev => [...prev, { icon: '📝', name: attrName.trim(), desc: attrDesc.trim(), protect: '', format: attrFormat }]);
+    setShowModal(false); setAttrName(''); setAttrDesc(''); setAttrFormat('Texto'); setAttrVerified(true);
+  }
+
+  const allAttrs = [...customAttrs, ...PEOPLE_ATTRS].filter(a =>
+    a.name.toLowerCase().includes(attrSearch.toLowerCase()) || a.desc.toLowerCase().includes(attrSearch.toLowerCase())
+  );
+
   const tabs = [
     { id: 'atributos'  as const, label: 'Atributos' },
     { id: 'segmentos'  as const, label: 'Segmentos' },
@@ -11945,7 +12145,7 @@ function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
               <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
                 Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
               </button>
-              {tab === 'atributos' && <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Crear atributo</button>}
+              {tab === 'atributos' && <button onClick={() => setShowModal(true)} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Crear atributo</button>}
             </div>
           </div>
           <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0 overflow-x-auto">
@@ -11958,6 +12158,71 @@ function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
               </button>
             ))}
           </div>
+
+          {/* Modal — Crear atributo */}
+          {showModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}>
+              <div className="bg-white rounded-[12px] shadow-xl w-[500px] max-w-[95vw] p-6 relative">
+                <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                </button>
+                <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-5">Crear un nuevo atributo de persona</h2>
+
+                <div className="mb-4">
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Formato</label>
+                  <div className="relative inline-block">
+                    <select value={attrFormat} onChange={e => setAttrFormat(e.target.value)}
+                      className="appearance-none border border-[#e9eae6] rounded-[8px] pl-3 pr-8 py-2 text-[13px] text-[#1a1a1a] bg-white focus:outline-none focus:border-[#3b59f6] cursor-pointer">
+                      {['Texto', 'Número', 'Booleano', 'Fecha', 'Lista', 'URL', 'Email'].map(f => <option key={f}>{f}</option>)}
+                    </select>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"><path d="M4 6l4 4 4-4"/></svg>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Nombre</label>
+                  <input
+                    value={attrName} onChange={e => setAttrName(e.target.value)}
+                    placeholder="Por ejemplo, tipo de plan"
+                    className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6]"
+                  />
+                  <p className="text-[12px] text-[#646462] mt-1.5">Este nombre podría aparecer en conversaciones con los clientes si alguna vez le pides al operador que recopile estos datos.</p>
+                </div>
+
+                <div className="mb-5">
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Descripción opcional</label>
+                  <input
+                    value={attrDesc} onChange={e => setAttrDesc(e.target.value)}
+                    placeholder="Por ejemplo, el color favorito del cliente"
+                    className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6]"
+                  />
+                </div>
+
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[13px] font-semibold text-[#1a1a1a]">Actualizaciones de atributos</span>
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9ca3af]"><path fillRule="evenodd" d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 018 6zm0-2a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd"/></svg>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <button onClick={() => setAttrVerified(v => !v)}
+                      style={{ width: 36, height: 20, borderRadius: 10, position: 'relative', flexShrink: 0, border: 'none', cursor: 'pointer', padding: 0, background: attrVerified ? '#f97316' : '#d1d5db', transition: 'background 0.2s', marginTop: 2 }}>
+                      <span style={{ position: 'absolute', top: 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s', left: attrVerified ? 18 : 2 }} />
+                    </button>
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#1a1a1a]">Requerir actualizaciones verificadas</p>
+                      <p className="text-[12px] text-[#646462] mt-0.5 leading-relaxed">Las escrituras a este atributo solo se aceptarán si provienen de una solicitud autenticada (a través de <span className="text-[#3b59f6]">API REST</span> o <span className="text-[#3b59f6]">Token web JSON en Messenger</span>). Las solicitudes no autenticadas serán ignoradas.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cancelar</button>
+                  <button onClick={saveAttr} className="px-5 py-2 text-[13px] font-semibold bg-[#1a1a1a] text-white rounded-full hover:bg-[#444]">Guardar</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto min-h-0">
             {tab === 'atributos' && <>
               <div className="m-6 bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-start gap-6 relative">
@@ -11972,21 +12237,22 @@ function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                 </div>
               </div>
               <div className="px-6 pb-6">
-                <input placeholder="🔍  Nombre del campo..." className="w-full max-w-[380px] border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] mb-3 focus:outline-none focus:border-[#3b59f6]" />
+                <input value={attrSearch} onChange={e => setAttrSearch(e.target.value)} placeholder="🔍  Nombre del campo..." className="w-full max-w-[380px] border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] mb-3 focus:outline-none focus:border-[#3b59f6]" />
                 <table className="w-full text-[13px]">
-                  <thead><tr className="border-b border-[#e9eae6]"><th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Nombre del atributo</th><th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Protecciones de atributos</th><th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Formato</th><th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Creado</th><th className="w-[40px]"></th></tr></thead>
+                  <thead><tr className="border-b border-[#e9eae6]">
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Nombre del atributo</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Protecciones de atributos</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Formato</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Creado</th>
+                    <th className="w-[40px]"></th>
+                  </tr></thead>
                   <tbody>
-                    {[
-                      { icon: '👥', name: 'Name', desc: "A person's full name", protect: 'Deshabilitado', format: 'Texto' },
-                      { icon: '🏢', name: 'Account', desc: 'The account that owns a lead or user in Intercom', protect: '', format: 'Cuenta' },
-                      { icon: '🏢', name: 'Account name', desc: 'The name of the account that owns a lead or user in Intercom', protect: '', format: 'Texto' },
-                      { icon: '👤', name: 'Owner', desc: 'The teammate that owns a lead or user in Intercom', protect: '', format: 'Compañero de equipo' },
-                    ].map(r => (
+                    {allAttrs.map(r => (
                       <tr key={r.name} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
                         <td className="px-4 py-3"><div className="flex items-start gap-2"><span>{r.icon}</span><div><p className="font-medium text-[#1a1a1a]">{r.name}</p><p className="text-[12px] text-[#646462]">{r.desc}</p></div></div></td>
                         <td className="px-4 py-3">{r.protect && <span className="bg-[#fef3c7] text-[#92400e] text-[11px] px-2 py-0.5 rounded-full font-medium">{r.protect}</span>}</td>
                         <td className="px-4 py-3 text-[#646462]">{r.format}</td>
-                        <td className="px-4 py-3 text-[#646462]">1 hora atrás</td>
+                        <td className="px-4 py-3 text-[#646462]">7 días atrás</td>
                         <td className="px-4 py-3"><button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M11 2l3 3-9 9-4 1 1-4 9-9z"/></svg></button></td>
                       </tr>
                     ))}
@@ -12019,35 +12285,89 @@ function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
               </div>
             )}
 
-            {tab === 'bot' && (
-              <div className="px-6 py-4 flex gap-6">
-                <div className="flex-1">
-                  <p className="text-[13px] text-[#646462] mb-2">Elige los datos que deseas usar para calificar a los clientes potenciales. Estos datos aparecerán en los perfiles de los clientes en Inbox, y también puedes recopilarlos con Automatización.</p>
-                  <a href="#" className="text-[13px] text-[#3b59f6] underline">Ver el Bot de Tareas de cualificación básica</a>
-                  <div className="mt-4 flex flex-col gap-2">
-                    {[
-                      ['Name', "A person's full name"],
-                      ['Email', 'The email address assigned to a user or lead'],
-                      ['Phone', "A person's phone number"],
-                      ['Company name', 'The name of a company'],
-                      ['Company size', 'The number of people employed in this company, expressed as a single number'],
-                      ['Company website', "The web address for the company's primary marketing site"],
-                      ['Company industry', "The category or domain this company belongs to e.g. 'ecommerce' or 'SaaS'"],
-                    ].map(([name, desc]) => (
-                      <div key={name} className="flex items-center justify-between py-2 px-3 border-b border-[#f3f3f1] text-[13px]">
-                        <div className="flex items-center gap-3"><span className="font-medium text-[#1a1a1a] w-[120px]">{name}</span><span className="text-[#646462] flex-1">{desc}</span></div>
-                        <button className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
-                      </div>
-                    ))}
+            {tab === 'bot' && (() => {
+              const USER_FIELDS = [
+                { name: 'Name', desc: "A person's full name" },
+                { name: 'Email', desc: 'The email address assigned to a user or lead' },
+                { name: 'Phone', desc: "A person's phone number" },
+              ];
+              const COMPANY_FIELDS = [
+                { name: 'Company name', desc: 'The name of a company' },
+                { name: 'Company size', desc: 'The number of people employed in this company, expressed as a single number' },
+                { name: 'Company website', desc: "The web address for the company's primary marketing site" },
+                { name: 'Company industry', desc: "The category or domain this company belongs to e.g. 'ecommerce' or 'SaaS'" },
+              ];
+              const filteredUser = USER_FIELDS.filter(f => !botFields.some(b => b.name === f.name) && f.name.toLowerCase().includes(addSearch.toLowerCase()));
+              const filteredCompany = COMPANY_FIELDS.filter(f => !botFields.some(b => b.name === f.name) && f.name.toLowerCase().includes(addSearch.toLowerCase()));
+              return (
+                <div className="px-6 py-4 flex gap-6 relative">
+                  <div className="flex-1">
+                    <p className="text-[13px] text-[#646462] mb-2">Elige los datos que deseas usar para calificar a los clientes potenciales. Estos datos aparecerán en los perfiles de los clientes en Inbox, y también puedes recopilarlos con Automatización.</p>
+                    <a href="#" className="text-[13px] text-[#3b59f6] underline">Ver el Bot de Tareas de cualificación básica</a>
+                    <div className="mt-4 flex flex-col">
+                      {botFields.map(f => (
+                        <div key={f.name} className="flex items-center justify-between py-2.5 px-0 border-b border-[#f3f3f1] text-[13px]">
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium text-[#1a1a1a] w-[130px]">{f.name}</span>
+                            <span className="text-[#646462]">{f.desc}</span>
+                          </div>
+                          <button onClick={() => setBotFields(prev => prev.filter(b => b.name !== f.name))} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#f3f3f1] ml-2 flex-shrink-0">
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="relative mt-4">
+                      <button ref={addBtnRef} onClick={() => { setShowAddPopover(v => !v); setAddSearch(''); }} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Agregar datos</button>
+                      {showAddPopover && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowAddPopover(false)} />
+                          <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[280px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(0,0,0,0.15)] border border-[#e9eae6] overflow-hidden">
+                            <div className="px-3 py-2 border-b border-[#f3f3f1]">
+                              <input autoFocus value={addSearch} onChange={e => setAddSearch(e.target.value)} placeholder="Search data..." className="w-full text-[13px] px-2 py-1.5 rounded-[6px] bg-[#f7f7f5] border border-transparent focus:outline-none focus:border-[#3b59f6] placeholder:text-[#aaa]" />
+                            </div>
+                            <div className="max-h-[280px] overflow-y-auto">
+                              {filteredUser.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-[#aaa] uppercase tracking-wide px-3 pt-2 pb-1">Datos del usuario</p>
+                                  {filteredUser.map(f => (
+                                    <button key={f.name} onClick={() => { setBotFields(prev => [...prev, f]); setShowAddPopover(false); setAddSearch(''); }} className="w-full text-left px-3 py-2 text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex flex-col gap-0.5">
+                                      <span className="font-medium">{f.name}</span>
+                                      <span className="text-[11px] text-[#aaa] line-clamp-1">{f.desc}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {filteredCompany.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-[#aaa] uppercase tracking-wide px-3 pt-2 pb-1">Datos de la empresa</p>
+                                  {filteredCompany.map(f => (
+                                    <button key={f.name} onClick={() => { setBotFields(prev => [...prev, f]); setShowAddPopover(false); setAddSearch(''); }} className="w-full text-left px-3 py-2 text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex flex-col gap-0.5">
+                                      <span className="font-medium">{f.name}</span>
+                                      <span className="text-[11px] text-[#aaa] line-clamp-1">{f.desc}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {filteredUser.length === 0 && filteredCompany.length === 0 && (
+                                <p className="text-[13px] text-[#aaa] px-3 py-3">No se encontraron datos</p>
+                              )}
+                            </div>
+                            <div className="border-t border-[#f3f3f1] px-3 py-2">
+                              <button className="text-[13px] text-[#3b59f6] hover:underline w-full text-left">+ Crear nuevos datos</button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-[#646462] mt-3">Cambiar esta configuración modificará los datos de calificación visibles en todos los perfiles de usuarios y leads.</p>
                   </div>
-                  <button className="mt-4 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Agregar datos</button>
-                  <p className="text-[12px] text-[#646462] mt-3">Cambiar esta configuración modificará los datos de calificación visibles en todos los perfiles de usuarios y leads.</p>
+                  <div className="w-[208px] flex-shrink-0 flex items-center justify-center">
+                    <img src={IMG_QUALIFICATION} alt="Vista previa del perfil de calificación" className="w-[208px] h-[299px]" data-node-id="1:37921" />
+                  </div>
                 </div>
-                <div className="w-[208px] flex-shrink-0 flex items-center justify-center">
-                  <img src={IMG_QUALIFICATION} alt="Vista previa del perfil de calificación" className="w-[208px] h-[299px]" data-node-id="1:37921" />
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {tab === 'eliminar' && (
               <div className="px-6 py-6">
@@ -32289,37 +32609,14 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
 
 // ─── AuthSettingsView ────────────────────────────────────────────────────────
 function AuthSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [googleOn, setGoogleOn] = useState(false);
-  const [samlOn, setSamlOn] = useState(false);
-  const [mfaOn, setMfaOn] = useState(false);
-  const [minLen, setMinLen] = useState(8);
-  const [requireUpper, setRequireUpper] = useState(true);
-  const [requireNumber, setRequireNumber] = useState(true);
-  const [requireSpecial, setRequireSpecial] = useState(false);
-  const [sessionTimeout, setSessionTimeout] = useState('8');
-  const [maxAttempts, setMaxAttempts] = useState('5');
-  const [lockoutMins, setLockoutMins] = useState('15');
-  const [ipRestrict, setIpRestrict] = useState(false);
-  const [ipList, setIpList] = useState('');
-  const [trustedDevices, setTrustedDevices] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-
-  const FAKE_SESSIONS = [
-    { id: '1', device: 'Chrome · macOS', ip: '85.32.14.201', location: 'Madrid, ES', last: 'Ahora mismo', current: true },
-    { id: '2', device: 'Safari · iPhone', ip: '85.32.14.202', location: 'Madrid, ES', last: 'Hace 2 horas', current: false },
-    { id: '3', device: 'Firefox · Windows', ip: '91.40.12.7', location: 'Barcelona, ES', last: 'Hace 3 días', current: false },
+  const [tokenDropOpen, setTokenDropOpen] = useState(false);
+  const TOKEN_OPTIONS = [
+    { label: 'Equipo de ventas',      icon: 'chat' },
+    { label: 'Sandbox de Salesforce', icon: 'chat' },
+    { label: 'HubSpot',               icon: 'spark' },
+    { label: 'Attio',                 icon: 'gear' },
+    { label: 'Personalizado',         icon: 'plus' },
   ];
-  const [sessions, setSessions] = useState(FAKE_SESSIONS);
-
-  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); }
-
-  async function handleSave() {
-    setSaving(true);
-    await new Promise(r => setTimeout(r, 700));
-    setSaving(false);
-    showToast('Configuración de seguridad guardada.');
-  }
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
@@ -32329,239 +32626,48 @@ function AuthSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[18px] font-bold text-[#1a1a1a]">Seguridad</h1>
-            <div className="flex items-center gap-3">
-              {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
-              <button onClick={handleSave} disabled={saving} className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50 transition-colors">
-                {saving ? 'Guardando…' : 'Guardar cambios'}
+            <h1 className="text-[18px] font-bold text-[#1a1a1a]">Tokens de autenticación</h1>
+            <div className="relative">
+              <button
+                onClick={() => setTokenDropOpen(o => !o)}
+                className="flex items-center gap-2 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#333] transition-colors"
+              >
+                + Agregar token
+                <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3"><path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
+              {tokenDropOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setTokenDropOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-[10px] shadow-xl z-20 overflow-hidden" style={{ minWidth: 220 }}>
+                    {TOKEN_OPTIONS.map(opt => (
+                      <button key={opt.label} onClick={() => setTokenDropOpen(false)}
+                        className="flex items-center gap-3 w-full px-4 py-2.5 text-[13px] text-[#1a1a1a] hover:bg-[#f5f5f4] transition-colors text-left">
+                        {opt.icon === 'chat' && <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-[#646462] flex-shrink-0"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H5.5L2 14V3z"/></svg>}
+                        {opt.icon === 'spark' && <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-[#646462] flex-shrink-0"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z"/></svg>}
+                        {opt.icon === 'gear' && <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-[#646462] flex-shrink-0"><path fillRule="evenodd" d="M7.4 1h1.2l.5 1.8a5 5 0 011.2.7l1.8-.5.8 1.4-1.3 1.3a5 5 0 010 1.6l1.3 1.3-.8 1.4-1.8-.5a5 5 0 01-1.2.7L8.6 11H7.4l-.5-1.8a5 5 0 01-1.2-.7l-1.8.5-.8-1.4 1.3-1.3a5 5 0 010-1.6L3.1 3.4l.8-1.4 1.8.5a5 5 0 011.2-.7L7.4 1zM8 6a2 2 0 100 4 2 2 0 000-4z" clipRule="evenodd"/></svg>}
+                        {opt.icon === 'plus' && <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-[#646462] flex-shrink-0"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>}
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="py-8 px-8 flex flex-col gap-4 w-full max-w-[800px]">
-
-              {/* ── Inicio de sesión ── */}
-              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mb-1">Inicio de sesión</h2>
-
-              <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between gap-4 p-5">
-                  <div>
-                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Google Sign-In</p>
-                    <p className="text-[12.5px] text-[#646462]">Permite iniciar sesión con cuentas de Google Workspace.</p>
-                  </div>
-                  <SettingsToggle checked={googleOn} onChange={setGoogleOn} />
-                </div>
-              </div>
-
-              <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between gap-4 p-5">
-                  <div>
-                    <p className="text-[14px] font-semibold text-[#1a1a1a]">SAML 2.0 SSO</p>
-                    <p className="text-[12.5px] text-[#646462]">Integra con Okta, Azure AD u otros proveedores de identidad SAML.</p>
-                  </div>
-                  <SettingsToggle checked={samlOn} onChange={setSamlOn} />
-                </div>
-                {samlOn && (
-                  <div className="border-t border-[#e9eae6] px-5 py-4 flex flex-col gap-3 bg-[#f8f8f7]">
-                    {[
-                      { key: 'ssoUrl', label: 'URL de inicio de sesión (SSO)', ph: 'https://your-idp.com/sso' },
-                      { key: 'issuer', label: 'URL del emisor del IdP', ph: 'https://your-idp.com' },
-                      { key: 'cert',   label: 'Certificado X.509', ph: '-----BEGIN CERTIFICATE-----' },
-                    ].map(f => (
-                      <div key={f.key}>
-                        <label className="block text-[12px] font-medium text-[#646462] mb-1">{f.label}</label>
-                        <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a]" placeholder={f.ph} />
-                      </div>
-                    ))}
-                    <div className="flex items-center gap-2 pt-1">
-                      <button className="px-4 py-2 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333]">Guardar configuración SAML</button>
-                      <button className="px-4 py-2 border border-[#e9eae6] text-[12.5px] font-medium text-[#646462] rounded-lg hover:bg-white">Probar conexión</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ── 2FA ── */}
-              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Autenticación de dos factores</h2>
-
-              <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between gap-4 p-5">
-                  <div>
-                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Exigir 2FA a todos los compañeros</p>
-                    <p className="text-[12.5px] text-[#646462]">Los compañeros que no hayan activado 2FA serán bloqueados al iniciar sesión.</p>
-                  </div>
-                  <SettingsToggle checked={mfaOn} onChange={setMfaOn} />
-                </div>
-                <div className="border-t border-[#e9eae6] flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Dispositivos de confianza</p>
-                    <p className="text-[12px] text-[#646462]">Permite a los compañeros marcar un dispositivo como de confianza para omitir 2FA durante 30 días.</p>
-                  </div>
-                  <SettingsToggle checked={trustedDevices} onChange={setTrustedDevices} />
-                </div>
-              </div>
-
-              {/* ── Contraseñas ── */}
-              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Política de contraseñas</h2>
-
-              <div className="border border-[#e9eae6] rounded-xl overflow-hidden divide-y divide-[#e9eae6]">
-                <div className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Longitud mínima</p>
-                    <p className="text-[12px] text-[#646462]">Número mínimo de caracteres requeridos.</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input type="number" min={6} max={64} value={minLen} onChange={e => setMinLen(+e.target.value)}
-                      className="w-16 border border-[#e9eae6] rounded-lg px-2 py-1.5 text-[13px] text-center focus:outline-none focus:border-[#1a1a1a]" />
-                    <span className="text-[12.5px] text-[#646462]">caracteres</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Requerir mayúsculas</p>
-                    <p className="text-[12px] text-[#646462]">Al menos una letra mayúscula en la contraseña.</p>
-                  </div>
-                  <SettingsToggle checked={requireUpper} onChange={setRequireUpper} />
-                </div>
-                <div className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Requerir números</p>
-                    <p className="text-[12px] text-[#646462]">Al menos un dígito numérico en la contraseña.</p>
-                  </div>
-                  <SettingsToggle checked={requireNumber} onChange={setRequireNumber} />
-                </div>
-                <div className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Requerir caracteres especiales</p>
-                    <p className="text-[12px] text-[#646462]">Al menos un carácter especial (!@#$%^&*).</p>
-                  </div>
-                  <SettingsToggle checked={requireSpecial} onChange={setRequireSpecial} />
-                </div>
-              </div>
-
-              {/* ── Sesiones ── */}
-              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Sesiones y bloqueo</h2>
-
-              <div className="border border-[#e9eae6] rounded-xl overflow-hidden divide-y divide-[#e9eae6]">
-                <div className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Tiempo de inactividad de sesión</p>
-                    <p className="text-[12px] text-[#646462]">Cierra la sesión automáticamente tras este período de inactividad.</p>
-                  </div>
-                  <div className="w-[180px]">
-                    <SettingsSelect
-                      value={sessionTimeout}
-                      onChange={setSessionTimeout}
-                      options={[
-                        { value: '1', label: '1 hora' },
-                        { value: '4', label: '4 horas' },
-                        { value: '8', label: '8 horas' },
-                        { value: '24', label: '24 horas' },
-                        { value: '72', label: '3 días' },
-                        { value: '168', label: '7 días' },
-                        { value: '0', label: 'Nunca' },
-                      ]}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Intentos máximos de inicio de sesión</p>
-                    <p className="text-[12px] text-[#646462]">Bloquea la cuenta temporalmente tras este número de intentos fallidos.</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input type="number" min={3} max={20} value={maxAttempts} onChange={e => setMaxAttempts(e.target.value)}
-                      className="w-16 border border-[#e9eae6] rounded-lg px-2 py-1.5 text-[13px] text-center focus:outline-none focus:border-[#1a1a1a]" />
-                    <span className="text-[12.5px] text-[#646462]">intentos</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p className="text-[13.5px] font-medium text-[#1a1a1a]">Duración del bloqueo</p>
-                    <p className="text-[12px] text-[#646462]">Tiempo que permanece bloqueada la cuenta tras superar el límite de intentos.</p>
-                  </div>
-                  <div className="w-[180px]">
-                    <SettingsSelect
-                      value={lockoutMins}
-                      onChange={setLockoutMins}
-                      options={[
-                        { value: '5', label: '5 minutos' },
-                        { value: '15', label: '15 minutos' },
-                        { value: '30', label: '30 minutos' },
-                        { value: '60', label: '1 hora' },
-                        { value: '1440', label: '24 horas' },
-                      ]}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Restricción IP ── */}
-              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Lista de IPs permitidas</h2>
-
-              <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between gap-4 p-5">
-                  <div>
-                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Restringir acceso por IP</p>
-                    <p className="text-[12.5px] text-[#646462]">Solo los compañeros que accedan desde las IPs autorizadas podrán iniciar sesión.</p>
-                  </div>
-                  <SettingsToggle checked={ipRestrict} onChange={setIpRestrict} />
-                </div>
-                {ipRestrict && (
-                  <div className="border-t border-[#e9eae6] px-5 py-4 bg-[#f8f8f7] flex flex-col gap-2">
-                    <label className="text-[12px] font-medium text-[#646462]">IPs o rangos CIDR permitidos (uno por línea)</label>
-                    <textarea
-                      rows={4}
-                      value={ipList}
-                      onChange={e => setIpList(e.target.value)}
-                      placeholder={'192.168.1.0/24\n10.0.0.1\n85.32.14.0/28'}
-                      className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] font-mono bg-white focus:outline-none focus:border-[#1a1a1a] resize-none"
-                    />
-                    <p className="text-[11.5px] text-[#f97316] flex items-center gap-1">
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current flex-shrink-0"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 3.5h1.5v5h-1.5v-5zm0 6h1.5v1.5h-1.5V10.5z"/></svg>
-                      Asegúrate de incluir tu IP actual antes de guardar para no bloquearte.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* ── Sesiones activas ── */}
-              <h2 className="text-[13px] font-bold text-[#a4a4a2] uppercase tracking-widest mt-2 mb-1">Sesiones activas</h2>
-
-              <div className="border border-[#e9eae6] rounded-xl overflow-hidden divide-y divide-[#e9eae6]">
-                {sessions.map(s => (
-                  <div key={s.id} className="flex items-center gap-3 px-5 py-3.5">
-                    <div className="w-8 h-8 rounded-full bg-[#f1f1ee] flex items-center justify-center flex-shrink-0">
-                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M13 2H3a1 1 0 00-1 1v8a1 1 0 001 1h4v1H5v1h6v-1H9v-1h4a1 1 0 001-1V3a1 1 0 00-1-1zm-1 8H4V4h8v6z"/></svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[13px] font-medium text-[#1a1a1a]">{s.device}</p>
-                        {s.current && <span className="px-1.5 py-0.5 rounded-full bg-[#f0fdf4] text-[10px] font-semibold text-[#15803d] border border-[#bbf7d0]">Sesión actual</span>}
-                      </div>
-                      <p className="text-[12px] text-[#646462]">{s.ip} · {s.location} · {s.last}</p>
-                    </div>
-                    {!s.current && (
-                      <button
-                        onClick={() => { setSessions(prev => prev.filter(x => x.id !== s.id)); showToast('Sesión cerrada correctamente.'); }}
-                        className="text-[12px] text-[#b91c1c] hover:underline flex-shrink-0"
-                      >
-                        Cerrar sesión
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <div className="px-5 py-3 flex justify-end">
-                  <button
-                    onClick={() => { setSessions(prev => prev.filter(s => s.current)); showToast('Todas las sesiones externas cerradas.'); }}
-                    className="text-[12.5px] font-medium text-[#b91c1c] hover:underline"
-                  >
-                    Cerrar todas las demás sesiones
-                  </button>
-                </div>
-              </div>
-
+          {/* Empty state */}
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
+            <svg viewBox="0 0 64 64" fill="none" className="w-16 h-16 opacity-20">
+              <path d="M32 8L58 54H6L32 8z" stroke="#1a1a1a" strokeWidth="3" strokeLinejoin="round"/>
+              <circle cx="32" cy="46" r="2.5" fill="#1a1a1a"/>
+              <path d="M32 28v12" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round"/>
+            </svg>
+            <div className="text-center">
+              <p className="text-[15px] font-semibold text-[#1a1a1a] mb-1">No tienes tokens de autenticación</p>
+              <p className="text-[13px] text-[#646462] max-w-[380px]">
+                Crea tokens para conectar de forma segura tus plataformas externas con Clain.
+                Haz clic en «Agregar token» para empezar.
+              </p>
             </div>
           </div>
         </div>
@@ -34901,3 +35007,5 @@ function PrototypeApp() {
     </div>
   );
 }
+
+
