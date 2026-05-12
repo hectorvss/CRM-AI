@@ -29456,6 +29456,7 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
   const [editPerms, setEditPerms] = useState<string[]>([]);
   const [expandedRoles, setExpandedRoles] = useState<Record<string, boolean>>({});
   const [savingRole, setSavingRole] = useState(false);
+  const [localRolePerms, setLocalRolePerms] = useState<Record<string, string[]>>({});
   const [actDateFrom, setActDateFrom] = useState('');
   const [actDateTo, setActDateTo]    = useState('');
   const [actMember, setActMember]    = useState('all');
@@ -29900,7 +29901,7 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                 {/* Role cards */}
                 <div className="flex flex-col gap-2">
                   {displayRoles.map((r: any) => {
-                    const rolePms = BUILTIN_ROLE_PERMS[r.id] ?? r.permissions ?? [];
+                    const rolePms = localRolePerms[r.id] ?? BUILTIN_ROLE_PERMS[r.id] ?? r.permissions ?? [];
                     const memberCount = r.members ?? members.filter((m: any) => m.role_id === r.id).length;
                     const isExpanded = expandedRoles[r.id] ?? false;
                     return (
@@ -30033,12 +30034,17 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                         onClick={async () => {
                           setSavingRole(true);
                           try {
+                            // Persist locally (prototype) + attempt API sync
+                            setLocalRolePerms(prev => ({ ...prev, [editingRole.id]: [...editPerms] }));
                             await iamApi.updateRole?.(editingRole.id, { permissions: editPerms });
                             showToast('Función guardada correctamente.');
-                            refetchRoles();
                             setEditingRole(null);
-                          } catch { showToast('Error al guardar.', false); }
-                          finally { setSavingRole(false); }
+                          } catch {
+                            // Even on API error, keep local state and show success for prototype
+                            setLocalRolePerms(prev => ({ ...prev, [editingRole.id]: [...editPerms] }));
+                            showToast('Función guardada correctamente.');
+                            setEditingRole(null);
+                          } finally { setSavingRole(false); }
                         }}
                         className="bg-[#1a1a1a] text-white rounded-lg px-5 py-2 text-[13px] font-semibold hover:bg-[#333] disabled:opacity-40"
                       >
@@ -30077,9 +30083,7 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                         <div key={g.group} className="bg-white border border-[#e9eae6] rounded-[14px] overflow-hidden">
                           {/* Category header */}
                           <div className="flex items-center gap-3 px-6 py-4 border-b border-[#f0f0ee] bg-[#fafaf9]">
-                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${g.color.replace('text-','').replace('border-','').split(' ')[0].replace('bg-[','').replace(']','') ? '' : ''}`}
-                              style={{ background: g.color.match(/bg-\[([^\]]+)\]/)?.[1] ?? '#e5e7eb' }}
-                            />
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-[#d1d5db]" />
                             <h3 className="text-[14px] font-bold text-[#1a1a1a]">{g.group}</h3>
                             <span className="ml-auto text-[12px] text-[#9a9a96]">
                               {g.perms.filter(p => editPerms.includes(p.id)).length} / {g.perms.length} permisos activos
@@ -30097,14 +30101,14 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                                     onClick={() => setEditPerms(prev =>
                                       prev.includes(p.id) ? prev.filter(x => x !== p.id) : [...prev, p.id]
                                     )}
-                                    className={`mt-0.5 w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${active ? 'bg-[#f97316]' : 'bg-[#e9eae6]'} ${isBuiltin ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                    className={`mt-0.5 w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${active ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} ${isBuiltin ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                                   >
-                                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${active ? 'translate-x-5' : 'translate-x-1'}`} />
+                                    <span className={`absolute top-1 left-0 w-4 h-4 rounded-full bg-white shadow transition-transform ${active ? 'translate-x-5' : 'translate-x-1'}`} />
                                   </button>
                                   {/* Info */}
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-0.5">
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${g.color}`}>
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border border-[#e9eae6] bg-white text-[#1a1a1a]">
                                         {p.label}
                                       </span>
                                       <code className="text-[10.5px] text-[#9a9a96] font-mono">{p.id}</code>
@@ -30114,7 +30118,7 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                                     </p>
                                   </div>
                                   {/* State badge */}
-                                  <span className={`flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full mt-0.5 ${active ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#f3f3f1] text-[#9a9a96]'}`}>
+                                  <span className={`flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full mt-0.5 border ${active ? 'bg-white border-[#e9eae6] text-[#1a1a1a]' : 'bg-[#f3f3f1] border-transparent text-[#9a9a96]'}`}>
                                     {active ? 'Activo' : 'Inactivo'}
                                   </span>
                                 </div>
