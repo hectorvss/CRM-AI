@@ -11054,8 +11054,8 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
             {tab === 'datos' && (
-              <div>
-                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+              <div className="flex flex-col gap-3">
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
                   <div className="flex-1">
                     <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Redacción de contenido</h3>
                     <p className="text-[13px] text-[#646462]">Redacte automáticamente los datos confidenciales en las conversaciones mediante reglas integradas y personalizadas. El contenido coincidente se reemplazará con asteriscos. <a href="#" className="text-[#3b59f6] underline">Más información</a>.</p>
@@ -11065,27 +11065,27 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <span className="text-[13px] text-[#1a1a1a]">Habilitar la redacción de contenido</span>
                   </div>
                 </div>
-                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
                   <div className="flex-1">
                     <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Notificaciones por correo electrónico</h3>
                     <p className="text-[13px] text-[#646462]">Esto incluirá el contenido de las conversaciones cuando los usuarios o leads reciban notificaciones de cualquier respuesta. <a href="#" className="text-[#3b59f6] underline">Más información</a></p>
                   </div>
-                  <div className="flex flex-col gap-2 flex-shrink-0 max-w-[400px]">
+                  <div className="flex flex-col gap-2 flex-shrink-0">
                     <div className="flex items-start gap-2">
                       <Toggle on={notifContent} onToggle={() => { setNotifContent(v => { saveToggle('notifContent', !v); return !v; }); }} />
-                      <span className="text-[13px] text-[#1a1a1a]">Incluya el contenido de la conversación en los correos electrónicos de notificación</span>
+                      <span className="text-[13px] text-[#1a1a1a]">Incluir el contenido de la conversación en las notificaciones</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <Toggle on={notifLeads} onToggle={() => { setNotifLeads(v => { saveToggle('notifLeads', !v); return !v; }); }} />
-                      <span className="text-[13px] text-[#1a1a1a]">Habilitar la identificación de correo electrónico para leads</span>
+                      <span className="text-[13px] text-[#1a1a1a]">Identificación por email para leads</span>
                     </div>
                   </div>
                 </div>
-                <div className="border border-[#e9eae6] rounded-[12px] p-5 mb-3">
+                <div className="border border-[#e9eae6] rounded-[12px] p-5">
                   <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Identificación del correo electrónico de leads</h3>
                   <p className="text-[13px] text-[#646462]">Si un lead hace clic en su sitio web desde un enlace de su correo electrónico, podemos personalizarlo en su aplicación y continuar conversando.</p>
                 </div>
-                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
                   <div className="flex-1">
                     <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Fusionar conversaciones entre diferentes usuarios</h3>
                     <p className="text-[13px] text-[#646462]">Combina las conversaciones de diferentes usuarios en un solo hilo. Esto ayuda a consolidar casos duplicados, pero puede plantear riesgos de seguridad y privacidad, ya que se fusionarán diferentes identidades de usuario. Úsalo con precaución y revisa antes de fusionar. <a href="#" className="text-[#3b59f6] underline">Más información</a></p>
@@ -11095,10 +11095,10 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <span className="text-[13px] text-[#1a1a1a]">Habilitar la fusión de conversaciones entre usuarios</span>
                   </div>
                 </div>
-                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
                   <div className="flex-1">
                     <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Fusión de leads no verificados en usuarios</h3>
-                    <p className="text-[13px] text-[#646462] mb-2">Fusiona leads y usuarios solo en función de la dirección de correo electrónico. Al activar esta opción, los leads se fusionarán con los usuarios, <strong>incluido todo el historial de conversaciones</strong>, cuando tengan la misma dirección de correo electrónico, incluso si no usan el mismo dispositivo o sesión. Nota: Intercom solo fusionará prospectos en usuarios para solicitudes que estén protegidas con verificación de identidad.</p>
+                    <p className="text-[13px] text-[#646462] mb-2">Fusiona leads y usuarios solo en función de la dirección de correo electrónico. Al activar esta opción, los leads se fusionarán con los usuarios, <strong>incluido todo el historial de conversaciones</strong>, cuando tengan la misma dirección de correo electrónico, incluso si no usan el mismo dispositivo o sesión. Nota: Clain solo fusionará prospectos en usuarios para solicitudes protegidas con verificación de identidad.</p>
                     <a href="#" className="text-[13px] text-[#3b59f6] underline">Más información</a>
                     <p className="text-[13px] mt-2"><a href="#" className="text-[#3b59f6] underline">Obtén más información sobre la fusión de usuarios principales</a></p>
                   </div>
@@ -11107,15 +11107,18 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <span className="text-[13px] text-[#1a1a1a]">Habilitar la fusión de leads no verificados en usuarios</span>
                   </div>
                 </div>
+                {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
               </div>
             )}
 
             {tab === 'messenger' && (
-              <div>
-                <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Seguridad de Messenger</h2>
-                <p className="text-[13px] text-[#646462] mb-2">La seguridad de Messenger evita que terceros se hagan pasar por tus usuarios conectados y vean sus conversaciones. Recomendamos a todos los clientes de Intercom que apliquen la seguridad de Messenger.</p>
-                <a href="#" className="text-[13px] text-[#3b59f6] underline mb-5 inline-block">📖 Más información sobre la seguridad de Messenger</a>
-                <div className="grid grid-cols-3 gap-4 mb-8 mt-4">
+              <div className="flex flex-col gap-4">
+                <div>
+                  <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Seguridad de Messenger</h2>
+                  <p className="text-[13px] text-[#646462] mb-2">La seguridad de Messenger evita que terceros se hagan pasar por tus usuarios conectados y vean sus conversaciones. Recomendamos a todos los clientes que apliquen la seguridad de Messenger.</p>
+                  <a href="#" className="text-[13px] text-[#3b59f6] underline inline-block">📖 Más información sobre la seguridad de Messenger</a>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
                   {[
                     { label: 'Mensajero web', icon: '🖥' },
                     { label: 'Mensajero iOS', icon: '📱' },
@@ -11132,8 +11135,9 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     </div>
                   ))}
                 </div>
-                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Claves secretas</h3>
-                <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444] mb-4">+ Crear nueva</button>
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Claves secretas</h3>
+                  <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444] mb-4">+ Crear nueva</button>
                 <table className="w-full text-[13px]">
                   <thead><tr className="border-b border-[#e9eae6]">
                     <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Nombre</th>
@@ -11152,12 +11156,13 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <td className="px-4 py-3"></td>
                   </tr></tbody>
                 </table>
+                </div>
               </div>
             )}
 
             {tab === 'archivos' && (
-              <div>
-                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+              <div className="flex flex-col gap-3">
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
                   <div className="flex-1">
                     <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Permitir archivos adjuntos</h3>
                     <p className="text-[13px] text-[#646462]">Los leads y los usuarios podrán adjuntar y enviar archivos .gif, .jpeg, .jpg, .mov, .mp4, .pdf, .png, .txt, .heic, .oga, .ogg y .dng.</p>
@@ -11167,7 +11172,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <span className="text-[13px] text-[#1a1a1a]">Permitir que los leads y los usuarios envíen archivos adjuntos</span>
                   </div>
                 </div>
-                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
                   <div className="flex-1">
                     <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Otros tipos de archivos</h3>
                     <p className="text-[13px] text-[#646462] mb-2">Permite que los leads y los usuarios adjunten y envíen otros tipos de archivos al enumerar la extensión para cada tipo a continuación. Para proteger tu cuenta, ciertos tipos de archivos están prohibidos.</p>
@@ -11183,7 +11188,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Tipos de entrada de Messenger</h3>
                     <p className="text-[13px] text-[#646462]">Controla a qué tipos de entrada tienen acceso los leads y los usuarios en messenger.</p>
                   </div>
-                  <div className="w-[280px] flex flex-col gap-2 flex-shrink-0">
+                  <div className="flex flex-col gap-2 flex-shrink-0">
                     {[
                       { key: 'camara' as const, label: 'Acceso a la cámara (SDK móvil)' },
                       { key: 'imagenes' as const, label: 'Imágenes y videos' },
@@ -11204,7 +11209,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
             )}
 
             {tab === 'workspace' && (
-              <div className="flex flex-col gap-4 max-w-[720px]">
+              <div className="flex flex-col gap-4">
                 <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Configuración del espacio de trabajo</h2>
                 {/* IP Restriction */}
                 <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
@@ -11212,7 +11217,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Restricción por IP</h3>
                     <p className="text-[13px] text-[#646462]">Limita el acceso al workspace solo a las direcciones IP que especifiques. Los compañeros de equipo fuera de esas IPs no podrán iniciar sesión.</p>
                   </div>
-                  <div className="flex-shrink-0 flex flex-col gap-2 w-[320px]">
+                  <div className="flex-1 flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <Toggle on={ipRestrict} onToggle={() => { setIpRestrict(v => { saveToggle('ipRestrict', !v); return !v; }); }} />
                       <span className="text-[13px] text-[#1a1a1a]">Habilitar restricción por IP</span>
@@ -11235,11 +11240,11 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
                     <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Gestión de sesiones</h3>
                     <p className="text-[13px] text-[#646462]">Cierra la sesión de todos los compañeros de equipo activos ahora mismo. Deberán volver a iniciar sesión para acceder al workspace.</p>
                   </div>
-                  <div className="flex-shrink-0 w-[200px]">
+                  <div className="flex-shrink-0">
                     <button
                       onClick={() => { setLogoutAll(true); setTimeout(() => setLogoutAll(false), 2000); showToast('Sesiones cerradas correctamente'); }}
                       disabled={logoutAll}
-                      className="w-full border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#b91c1c] hover:bg-[#fef2f2] disabled:opacity-50"
+                      className="border border-[#fca5a5] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#b91c1c] hover:bg-[#fef2f2] disabled:opacity-50 whitespace-nowrap"
                     >
                       {logoutAll ? 'Cerrando…' : 'Cerrar todas las sesiones'}
                     </button>
@@ -11258,7 +11263,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
               </div>
             )}
             {tab === 'auth' && (
-              <div className="flex flex-col gap-4 max-w-[720px]">
+              <div className="flex flex-col gap-4">
                 <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Verificación de identidad del cliente</h2>
                 <p className="text-[13px] text-[#646462]">La verificación de identidad garantiza que los usuarios identificados sean quienes dicen ser. Se implementa mediante un hash HMAC-SHA256 del user_id generado en tu servidor con la clave secreta.</p>
                 <a href="#" className="text-[13px] text-[#3b59f6] underline">📖 Documentación de verificación de identidad</a>
@@ -11307,7 +11312,7 @@ window.Clain('boot', {
               </div>
             )}
             {tab === 'estado' && (
-              <div className="flex flex-col gap-4 max-w-[720px]">
+              <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-[16px] font-semibold text-[#1a1a1a]">Comprobación de estado</h2>
                   <span className="flex items-center gap-1.5 text-[13px] font-medium text-[#16a34a]">
