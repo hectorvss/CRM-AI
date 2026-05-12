@@ -26074,93 +26074,143 @@ function WAHomeView() {
 // ── Clain Web Analytics — Activity view (Events / Sessions / Live) ───────────
 function WAActivityView() {
   type ActivityTab = 'events' | 'sessions' | 'live';
-  const [tab,             setTab]             = useState<ActivityTab>('events');
-  const [dateRange,       setDateRange]       = useState('Última hora');
-  const [showDatePicker,  setShowDatePicker]  = useState(false);
-  const [showEventPicker, setShowEventPicker] = useState(false);
-  const [filterInternal,  setFilterInternal]  = useState(false);
-  const [livePaused,      setLivePaused]      = useState(false);
-  const [eventSearch,     setEventSearch]     = useState('');
-  const dateRef  = useRef<HTMLButtonElement>(null);
-  const eventRef = useRef<HTMLButtonElement>(null);
+  const [tab,               setTab]               = useState<ActivityTab>('events');
+  const [dateRange,         setDateRange]         = useState('Última hora');
+  const [showDatePicker,    setShowDatePicker]    = useState(false);
+  const [showEventPicker,   setShowEventPicker]   = useState(false);
+  const [showPropFilter,    setShowPropFilter]    = useState(false);
+  const [showConfigCols,    setShowConfigCols]    = useState(false);
+  const [showExport,        setShowExport]        = useState(false);
+  const [showInsight,       setShowInsight]       = useState(false);
+  const [showViewDrop,      setShowViewDrop]      = useState(false);
+  const [filterInternal,    setFilterInternal]    = useState(false);
+  const [livePaused,        setLivePaused]        = useState(false);
+  const [eventSearch,       setEventSearch]       = useState('');
+  const [propSearch,        setPropSearch]        = useState('');
+  const [colSearch,         setColSearch]         = useState('');
+  const [propCat,           setPropCat]           = useState('Sugerencias');
+  const [colCat,            setColCat]            = useState('Propiedades de evento: 1');
+  const [visibleCols,       setVisibleCols]       = useState(['event', 'Person', 'Url / Screen', 'Librería', 'timestamp']);
+
+  const closeAll = () => {
+    setShowDatePicker(false); setShowEventPicker(false); setShowPropFilter(false);
+    setShowExport(false); setShowInsight(false); setShowViewDrop(false);
+  };
 
   const DATE_OPTIONS = [
-    'Hoy', 'Ayer', 'Última hora', 'Últimas 24 horas', 'Últimos 7 días',
-    'Últimos 14 días', 'Últimos 30 días', 'Últimos 90 días', 'Últimos 180 días',
-    'Semana pasada', 'Mes pasado', 'Esta semana', 'Este mes', 'Año hasta la fecha', 'Todo el tiempo',
+    'Hoy','Ayer','Última hora','Últimas 24 horas','Últimos 7 días',
+    'Últimos 14 días','Últimos 30 días','Últimos 90 días','Últimos 180 días',
+    'Semana pasada','Mes pasado','Esta semana','Este mes','Año hasta la fecha','Todo el tiempo',
   ];
 
-  // ── Shared button styles ──────────────────────────────────────────────────
-  const btnFilter = "flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors cursor-pointer select-none";
+  const PROP_CATS: { label: string; count?: number }[] = [
+    { label: 'Sugerencias' },
+    { label: 'Reciente: 0' },
+    { label: 'Anclado: 0' },
+    { label: 'URLs de página' },
+    { label: 'Pantallas' },
+    { label: 'Direcciones de email' },
+    { label: 'Propiedades de evento: 1', count: 1 },
+    { label: 'Propiedades de persona: 4', count: 4 },
+    { label: 'Indicadores de feature: 0' },
+    { label: 'Metadatos de evento: 5', count: 5 },
+    { label: 'Cohortes: 1', count: 1 },
+    { label: 'Elementos de autocaptura: 4', count: 4 },
+    { label: 'Expresión SQL' },
+  ];
 
-  // ── Column header cell ────────────────────────────────────────────────────
-  function ColHeader({ label }: { label: string }) {
+  const COL_CATS: { label: string; count?: number }[] = [
+    { label: 'Reciente: 0' },
+    { label: 'Anclado: 0' },
+    { label: 'Propiedades de evento: 1', count: 1 },
+    { label: 'Indicadores de feature: 0' },
+    { label: 'Propiedades de persona: 4', count: 4 },
+    { label: 'Propiedades de sesión: 37', count: 37 },
+    { label: 'Expresión SQL' },
+  ];
+
+  // ── Shared styles ─────────────────────────────────────────────────────────
+  const btnFilter = "flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors cursor-pointer select-none whitespace-nowrap";
+
+  function catPillCls(label: string, active: string) {
+    const isActive = label === active;
+    const hasCount = label.match(/:\s*([1-9]\d*)/);
+    if (isActive)  return "w-full text-left px-2.5 py-[5px] rounded-[6px] text-[12px] bg-[#3b59f6] text-white font-medium";
+    if (hasCount)  return "w-full text-left px-2.5 py-[5px] rounded-[6px] text-[12px] border border-[#3b59f6] text-[#3b59f6] hover:bg-[#eff2ff] transition-colors";
+    return "w-full text-left px-2.5 py-[5px] rounded-[6px] text-[12px] border border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors";
+  }
+
+  // ── Dropdown backdrop ─────────────────────────────────────────────────────
+  function Backdrop({ onClose }: { onClose: () => void }) {
+    return <div className="fixed inset-0 z-40" onClick={onClose} />;
+  }
+
+  // ── Column header ─────────────────────────────────────────────────────────
+  function ColHeader({ label, info }: { label: string; info?: boolean }) {
     return (
       <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide whitespace-nowrap border-b border-[#e9eae6]">
         <span className="flex items-center gap-1">
           {label}
-          <span className="text-[#c0c0be] font-normal">···</span>
+          {info
+            ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+            : <span className="text-[#c0c0be] font-normal normal-case tracking-normal">···</span>
+          }
         </span>
       </th>
     );
   }
 
-  // ── Empty state (events / sessions) ──────────────────────────────────────
-  function EmptyState() {
+  // ── Empty state ───────────────────────────────────────────────────────────
+  function EmptyState({ cols }: { cols: number }) {
     return (
-      <tr>
-        <td colSpan={10}>
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <svg viewBox="0 0 64 64" className="w-14 h-14 fill-[#c0c0be]">
-              <path d="M52 20H40v-4a8 8 0 00-16 0v4H12a4 4 0 00-4 4v28a4 4 0 004 4h40a4 4 0 004-4V24a4 4 0 00-4-4zm-24-4a4 4 0 018 0v4H28v-4zm-4 18h2v4h-2zm12 0h2v4h-2zm14 4v6H20v-6h4v2a2 2 0 004 0v-2h8v2a2 2 0 004 0v-2h4z"/>
-            </svg>
-            <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay eventos que coincidan con esta consulta</p>
-            <p className="text-[13px] text-[#9a9a98]">Cambia el rango de fechas, o elige otra acción, evento o desglose.</p>
-          </div>
-        </td>
-      </tr>
+      <tr><td colSpan={cols}>
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <svg viewBox="0 0 48 48" className="w-12 h-12 fill-[#d4d4d2]">
+            <path d="M38 14H28v-3a5 5 0 00-10 0v3H8a3 3 0 00-3 3v22a3 3 0 003 3h30a3 3 0 003-3V17a3 3 0 00-3-3zm-16-3a3 3 0 016 0v3H22v-3zm-5 16h2v3h-2zm8 0h2v3h-2zm11 3v4H16v-4h3v2a2 2 0 004 0v-2h6v2a2 2 0 004 0v-2h3z"/>
+          </svg>
+          <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay eventos que coincidan con esta consulta</p>
+          <p className="text-[13px] text-[#9a9a98]">Cambia el rango de fechas, o elige otra acción, evento o desglose.</p>
+        </div>
+      </td></tr>
     );
   }
 
-  // ── Live waiting state ────────────────────────────────────────────────────
   function WaitingState() {
     return (
-      <tr>
-        <td colSpan={4}>
-          <div className="flex flex-col items-center justify-center py-16 gap-4">
-            <div className="w-9 h-9 rounded-full border-[3px] border-[#e9eae6] border-t-[#646462] animate-spin"/>
-            <p className="text-[14px] font-semibold text-[#1a1a1a]">Esperando eventos...</p>
-          </div>
-        </td>
-      </tr>
+      <tr><td colSpan={4}>
+        <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <div className="w-9 h-9 rounded-full border-[3px] border-[#e9eae6] border-t-[#646462] animate-spin"/>
+          <p className="text-[14px] font-semibold text-[#1a1a1a]">Esperando eventos...</p>
+        </div>
+      </td></tr>
     );
   }
 
-  // ── Date picker dropdown ──────────────────────────────────────────────────
+  // ── Date range dropdown ───────────────────────────────────────────────────
   function DatePickerDropdown() {
     return (
       <>
-        <div className="fixed inset-0 z-40" onClick={() => setShowDatePicker(false)} />
-        <div className="absolute left-0 top-[calc(100%+4px)] z-50 w-[240px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(0,0,0,0.14)] border border-[#e9eae6] overflow-hidden py-1">
+        <Backdrop onClose={() => setShowDatePicker(false)} />
+        <div className="absolute left-0 top-[calc(100%+4px)] z-50 w-[240px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden py-1">
           {DATE_OPTIONS.map(opt => (
             <button key={opt} onClick={() => { setDateRange(opt); setShowDatePicker(false); }}
               className={`w-full text-left px-4 py-[7px] text-[13px] transition-colors ${dateRange === opt ? 'bg-[#f3f3f1] font-medium text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#f7f7f5]'}`}>
               {opt}
             </button>
           ))}
-          <div className="border-t border-[#f3f3f1] mt-1 px-4 py-2 flex items-center gap-2">
-            <span className="text-[12px] text-[#646462]">En los últimos</span>
-            <button className="w-6 h-6 rounded border border-[#e9eae6] text-[12px] flex items-center justify-center hover:bg-[#f7f7f5]">−</button>
-            <span className="text-[13px] font-medium w-5 text-center">1</span>
-            <button className="w-6 h-6 rounded border border-[#e9eae6] text-[12px] flex items-center justify-center hover:bg-[#f7f7f5]">+</button>
-            <select className="text-[12px] border border-[#e9eae6] rounded px-1.5 py-1 bg-white focus:outline-none focus:border-[#3b59f6]">
+          <div className="border-t border-[#e9eae6] mt-1 px-3 py-2 flex items-center gap-2">
+            <span className="text-[12px] text-[#646462] whitespace-nowrap">En los últimos</span>
+            <button className="w-6 h-6 rounded-[4px] border border-[#e9eae6] text-[13px] flex items-center justify-center hover:bg-[#f7f7f5]">−</button>
+            <span className="text-[13px] font-medium w-4 text-center">1</span>
+            <button className="w-6 h-6 rounded-[4px] border border-[#e9eae6] text-[13px] flex items-center justify-center hover:bg-[#f7f7f5]">+</button>
+            <select className="text-[12px] border border-[#e9eae6] rounded-[6px] px-1.5 py-1 bg-white focus:outline-none focus:border-[#3b59f6]">
               <option>horas</option><option>días</option><option>semanas</option>
             </select>
           </div>
-          <div className="border-t border-[#f3f3f1]">
-            <button className="w-full text-left px-4 py-[7px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5]">Desde fecha personalizada hasta ahora...</button>
-            <button className="w-full text-left px-4 py-[7px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5]">Rango de fechas fijo...</button>
-            <button className="w-full text-left px-4 py-[7px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5]">Ir a marca de tiempo</button>
+          <div className="border-t border-[#e9eae6]">
+            {['Desde fecha personalizada hasta ahora...','Rango de fechas fijo...','Ir a marca de tiempo'].map(o => (
+              <button key={o} className="w-full text-left px-4 py-[7px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5]">{o}</button>
+            ))}
           </div>
         </div>
       </>
@@ -26169,35 +26219,29 @@ function WAActivityView() {
 
   // ── Event selector dropdown ───────────────────────────────────────────────
   function EventSelectorDropdown() {
-    const CATS = ['Sugerencias', 'Reciente: 0', 'Anclado: 0', 'Eventos: 0'];
+    const ECATS = ['Sugerencias','Reciente: 0','Anclado: 0','Eventos: 0'];
     return (
       <>
-        <div className="fixed inset-0 z-40" onClick={() => setShowEventPicker(false)} />
-        <div className="absolute left-0 top-[calc(100%+4px)] z-50 w-[480px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(0,0,0,0.14)] border border-[#e9eae6] overflow-hidden">
-          <div className="px-3 py-2 border-b border-[#f3f3f1]">
-            <div className="flex items-center gap-2 bg-[#f7f7f5] rounded-[7px] px-3 py-1.5">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5">
-                <circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/>
-              </svg>
+        <Backdrop onClose={() => setShowEventPicker(false)} />
+        <div className="absolute left-0 top-[calc(100%+4px)] z-50 w-[480px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden">
+          <div className="px-3 py-2 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 bg-[#f7f7f5] rounded-[7px] px-3 py-1.5 border border-[#e9eae6]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/></svg>
               <input autoFocus value={eventSearch} onChange={e => setEventSearch(e.target.value)}
                 placeholder="Buscar sugerencias, recientes, anclados o eventos"
-                className="flex-1 text-[13px] bg-transparent focus:outline-none placeholder:text-[#9a9a98]" />
+                className="flex-1 text-[13px] bg-transparent focus:outline-none placeholder:text-[#9a9a98]"/>
             </div>
           </div>
-          <div className="flex" style={{ minHeight: 200 }}>
-            {/* Categories */}
-            <div className="w-[160px] border-r border-[#f3f3f1] py-2 flex-shrink-0">
-              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide px-3 pb-1">Categorías</p>
-              {CATS.map((c, i) => (
-                <button key={c} className={`w-full text-left px-3 py-[6px] text-[12px] font-medium transition-colors ${i === 0 ? 'text-[#3b59f6] hover:bg-[#eff2ff]' : 'text-[#3b59f6] hover:bg-[#eff2ff]'}`}>
-                  <span className="bg-[#eff2ff] text-[#3b59f6] px-2 py-0.5 rounded-full text-[11px]">{c}</span>
-                </button>
+          <div className="flex" style={{ minHeight: 180 }}>
+            <div className="w-[160px] border-r border-[#e9eae6] p-2 flex flex-col gap-1 flex-shrink-0">
+              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide px-1 pb-1">Categorías</p>
+              {ECATS.map(c => (
+                <button key={c} className={catPillCls(c, 'Sugerencias')}>{c}</button>
               ))}
             </div>
-            {/* Events panel */}
-            <div className="flex-1 py-2 px-3">
-              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide pb-2">Eventos</p>
-              <p className="text-[13px] text-[#9a9a98] mt-4 text-center">Sin eventos encontrados</p>
+            <div className="flex-1 p-4">
+              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-4">Eventos</p>
+              <p className="text-[13px] text-[#9a9a98] text-center mt-4">Sin eventos encontrados</p>
             </div>
           </div>
         </div>
@@ -26205,48 +26249,239 @@ function WAActivityView() {
     );
   }
 
-  // ── Tab-specific header icon ──────────────────────────────────────────────
-  function TabIcon() {
-    if (tab === 'events') return (
-      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
-        <circle cx="8" cy="8" r="5.5"/>
-        <path d="M8 5.5V8.5L10 10" strokeLinecap="round"/>
-      </svg>
+  // ── Property filters dropdown ─────────────────────────────────────────────
+  function PropertyFilterDropdown() {
+    return (
+      <>
+        <Backdrop onClose={() => setShowPropFilter(false)} />
+        <div className="absolute left-0 top-[calc(100%+4px)] z-50 w-[600px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden">
+          {/* Search */}
+          <div className="px-3 py-2 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 border border-[#e9eae6] rounded-[7px] px-3 py-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/></svg>
+              <input autoFocus value={propSearch} onChange={e => setPropSearch(e.target.value)}
+                placeholder="Buscar sugerencias, recientes, anclados, URLs, pantallas, emails, propiedades de evento..."
+                className="flex-1 text-[13px] bg-transparent focus:outline-none placeholder:text-[#9a9a98]"/>
+            </div>
+          </div>
+          {/* Two-panel */}
+          <div className="flex" style={{ minHeight: 300 }}>
+            {/* Categories */}
+            <div className="w-[190px] border-r border-[#e9eae6] p-2 flex flex-col gap-1 flex-shrink-0 overflow-y-auto" style={{ maxHeight: 360 }}>
+              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide px-1 pb-1">Categorías</p>
+              {PROP_CATS.map(c => (
+                <button key={c.label} onClick={() => setPropCat(c.label)} className={catPillCls(c.label, propCat)}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+            {/* Right panel */}
+            <div className="flex-1 p-4 overflow-y-auto" style={{ maxHeight: 360 }}>
+              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-4">Sugerencias</p>
+              <div className="flex flex-col items-center justify-center gap-3 mt-8">
+                <svg viewBox="0 0 32 32" className="w-8 h-8 fill-none stroke-[#c0c0be]" strokeWidth="1.5">
+                  <circle cx="14" cy="14" r="10"/><path d="M22 22l6 6" strokeLinecap="round"/>
+                </svg>
+                <p className="text-[13px] font-medium text-[#646462]">Comienza a buscar y sugeriremos filtros...</p>
+                <p className="text-[12px] text-[#9a9a98] italic">Prueba buscando un email, una URL o el nombre de una pantalla</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
     );
+  }
+
+  // ── Configure columns modal ───────────────────────────────────────────────
+  function ConfigColumnsModal() {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/30" onClick={() => setShowConfigCols(false)} />
+        <div className="relative bg-white rounded-[14px] shadow-[0_8px_40px_rgba(20,20,20,0.18)] border border-[#e9eae6] w-[600px] max-h-[85vh] flex flex-col" style={{ fontFamily: "'Inter', sans-serif" }}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Configurar columnas</h2>
+            <button onClick={() => setShowConfigCols(false)} className="w-7 h-7 flex items-center justify-center rounded-[6px] hover:bg-[#f3f3f1] text-[#646462] hover:text-[#1a1a1a] transition-colors">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {/* Visible columns */}
+            <p className="text-[11px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-3">
+              Columnas visibles ({visibleCols.length}) — arrastrar para reordenar
+            </p>
+            <div className="flex flex-col gap-1.5 mb-5">
+              {visibleCols.map((col, i) => (
+                <div key={col} className="flex items-center gap-3 px-3 py-2.5 rounded-[8px] bg-[#eff2ff] border border-[#c7d2fe]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#9a9a98] flex-shrink-0 cursor-grab">
+                    <rect x="3" y="3" width="2" height="2" rx="0.5"/><rect x="7" y="3" width="2" height="2" rx="0.5"/>
+                    <rect x="3" y="7" width="2" height="2" rx="0.5"/><rect x="7" y="7" width="2" height="2" rx="0.5"/>
+                    <rect x="3" y="11" width="2" height="2" rx="0.5"/><rect x="7" y="11" width="2" height="2" rx="0.5"/>
+                  </svg>
+                  <span className="flex-1 text-[13px] text-[#1a1a1a] font-medium">{col}</span>
+                  <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#dbeafe] text-[#646462] hover:text-[#1a1a1a] transition-colors">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M11 2l3 3-9 9-4 1 1-4 9-9z"/></svg>
+                  </button>
+                  <button onClick={() => setVisibleCols(prev => prev.filter((_, j) => j !== i))}
+                    className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#fee2e2] text-[#9a9a98] hover:text-[#ef4444] transition-colors">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Available columns */}
+            <p className="text-[11px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-2">Columnas disponibles</p>
+            <div className="border border-[#e9eae6] rounded-[8px] overflow-hidden mb-2">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/></svg>
+                <input value={colSearch} onChange={e => setColSearch(e.target.value)}
+                  placeholder="Buscar recientes, anclados, propiedades de evento, indicadores, propiedades de persona, sesiones"
+                  className="flex-1 text-[13px] focus:outline-none placeholder:text-[#9a9a98]"/>
+              </div>
+              <div className="flex" style={{ minHeight: 200 }}>
+                <div className="w-[170px] border-r border-[#e9eae6] p-2 flex flex-col gap-1 flex-shrink-0">
+                  <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide px-1 pb-1">Categorías</p>
+                  {COL_CATS.map(c => (
+                    <button key={c.label} onClick={() => setColCat(c.label)} className={catPillCls(c.label, colCat)}>
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex-1 p-3">
+                  <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-3">
+                    {colCat.toUpperCase()}
+                  </p>
+                  {colCat === 'Propiedades de evento: 1' && (
+                    <button className="flex items-center gap-2 w-full px-2 py-2 rounded-[6px] hover:bg-[#f7f7f5] text-[13px] text-[#1a1a1a]">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6]"><path d="M2 12h2V8H2v4zm3 0h2V5H5v7zm3 0h2V2H8v10zm3 0h2V6h-2v6z"/></svg>
+                      Bot operator
+                    </button>
+                  )}
+                  {colCat !== 'Propiedades de evento: 1' && (
+                    <p className="text-[12px] text-[#9a9a98] text-center mt-6">Sin resultados</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-6 py-4 border-t border-[#e9eae6] flex-shrink-0">
+            <button className="h-8 px-4 rounded-[6px] border border-[#e9eae6] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
+              Restablecer valores predeterminados
+            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowConfigCols(false)}
+                className="h-8 px-4 rounded-[6px] border border-[#e9eae6] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
+                Cerrar
+              </button>
+              <button onClick={() => setShowConfigCols(false)}
+                className="h-8 px-4 rounded-[6px] border border-[#3b59f6] text-[13px] text-[#3b59f6] font-medium hover:bg-[#eff2ff] transition-colors">
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Export dropdown ───────────────────────────────────────────────────────
+  function ExportDropdown() {
+    const opts = ['Exportar columnas actuales','Exportar todas las columnas','Copiar al portapapeles'];
+    return (
+      <>
+        <Backdrop onClose={() => setShowExport(false)} />
+        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-[220px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden py-1">
+          {opts.map(o => (
+            <button key={o} onClick={() => setShowExport(false)}
+              className="w-full flex items-center justify-between px-4 py-[8px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
+              {o}
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5">
+                <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  // ── Open as insight dropdown ──────────────────────────────────────────────
+  function InsightDropdown() {
+    return (
+      <>
+        <Backdrop onClose={() => setShowInsight(false)} />
+        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-[190px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden py-1">
+          <button onClick={() => setShowInsight(false)}
+            className="w-full text-left px-4 py-[8px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
+            Abrir en editor SQL
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  // ── View selector dropdown ────────────────────────────────────────────────
+  function ViewDropdown() {
+    return (
+      <>
+        <Backdrop onClose={() => setShowViewDrop(false)} />
+        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-[220px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden py-1">
+          <button className="w-full flex items-center gap-2 px-4 py-[8px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] font-medium">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6] flex-shrink-0"><path d="M13 4L6 11 3 8l-1 1 4 4 8-8z"/></svg>
+            Vista predeterminada de Clain
+          </button>
+          <div className="border-t border-[#e9eae6] my-0.5" />
+          <button className="w-full text-left px-4 py-[8px] text-[13px] text-[#646462] hover:bg-[#f7f7f5]">Mis vistas guardadas...</button>
+          <button className="w-full text-left px-4 py-[8px] text-[13px] text-[#3b59f6] hover:bg-[#eff2ff] font-medium">+ Crear nueva vista</button>
+        </div>
+      </>
+    );
+  }
+
+  // ── Tab icon ──────────────────────────────────────────────────────────────
+  function TabIcon() {
     if (tab === 'sessions') return (
       <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
-        <circle cx="8" cy="8" r="5.5"/>
-        <path d="M5.5 8a2.5 2.5 0 105 0 2.5 2.5 0 00-5 0z"/>
+        <circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2.5"/>
+      </svg>
+    );
+    if (tab === 'live') return (
+      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
+        <path d="M1 8c1-2 2.5-3 4-3s3 2 4 2 3-1 4-3" strokeLinecap="round"/>
+        <path d="M3.5 11c.8-1.5 2-2.5 3.5-2.5s2.7 1 3.5 2.5" strokeLinecap="round"/>
+        <circle cx="7.5" cy="12.5" r="1" fill="#1a1a1a" stroke="none"/>
       </svg>
     );
     return (
       <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
-        <path d="M1 8c1-2 2.5-3 4-3s3 2 4 2 3-1 4-3M1 11c1-2 2.5-3 4-3s3 2 4 2 3-1 4-3" strokeLinecap="round"/>
+        <circle cx="8" cy="8" r="5.5"/><path d="M8 5.5V8.5L10 10" strokeLinecap="round"/>
       </svg>
     );
   }
 
-  const headerTitle = tab === 'sessions' ? 'Explorar sesiones' : 'Actividad';
-  const headerSubtitle = tab === 'sessions'
+  const headerTitle   = tab === 'sessions' ? 'Explorar sesiones' : 'Actividad';
+  const headerSub     = tab === 'sessions'
     ? 'Un catálogo de todas las sesiones de usuario de tu app o sitio web.'
     : 'Explora tus eventos o ve eventos en tiempo real de tu app o sitio web.';
 
   return (
     <div className="flex-1 flex flex-col bg-[#f9f9f8] min-h-0 overflow-hidden">
 
-      {/* ── Tab bar ────────────────────────────────────────────────────────── */}
+      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
       <div className="flex items-center bg-white border-b border-[#e9eae6] px-4 flex-shrink-0">
         {([
           { id: 'events',   label: 'Eventos',  icon: (
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-              <circle cx="8" cy="8" r="5.5"/>
-              <path d="M8 5.5V8.5L10 10" strokeLinecap="round"/>
+              <circle cx="8" cy="8" r="5.5"/><path d="M8 5.5V8.5L10 10" strokeLinecap="round"/>
             </svg>
           )},
           { id: 'sessions', label: 'Sesiones', icon: (
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-              <circle cx="8" cy="8" r="5.5"/>
-              <circle cx="8" cy="8" r="2.5"/>
+              <circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2.5"/>
             </svg>
           )},
           { id: 'live',     label: 'En vivo',  icon: (
@@ -26257,21 +26492,20 @@ function WAActivityView() {
             </svg>
           )},
         ] as { id: string; label: string; icon: React.ReactNode }[]).map(t => (
-          <button key={t.id} onClick={() => setTab(t.id as ActivityTab)}
+          <button key={t.id} onClick={() => { setTab(t.id as ActivityTab); closeAll(); }}
             className={`flex items-center gap-1.5 px-4 py-3 text-[13px] font-medium border-b-2 transition-colors -mb-px ${
               tab === t.id
                 ? 'border-[#3b59f6] text-[#3b59f6]'
                 : 'border-transparent text-[#646462] hover:text-[#1a1a1a] hover:border-[#e9eae6]'
             }`}>
-            {t.icon}
-            {t.label}
+            {t.icon}{t.label}
           </button>
         ))}
       </div>
 
-      {/* ── Main content ───────────────────────────────────────────────────── */}
+      {/* ── Main content ─────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto p-3 min-h-0">
-        <div className="bg-white rounded-[12px] border border-[#e9eae6] overflow-hidden">
+        <div className="bg-white rounded-[12px] border border-[#e9eae6] overflow-visible">
 
           {/* Header */}
           <div className="px-5 pt-4 pb-3">
@@ -26285,72 +26519,55 @@ function WAActivityView() {
               </div>
               <div className="flex items-center gap-2">
                 <button className="flex items-center gap-2 h-8 px-3 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
-                    <circle cx="8" cy="8" r="5.5"/>
-                    <path d="M8 5.5V8.5L10 10" strokeLinecap="round"/>
-                  </svg>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5.5V8.5L10 10" strokeLinecap="round"/></svg>
                   Inicio rápido
                   <span className="bg-[#e88c30] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">ON</span>
                 </button>
                 <button className="w-8 h-8 flex items-center justify-center rounded-[6px] border border-[#e9eae6] hover:bg-[#f7f7f5] transition-colors text-[#646462]">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M8 3a1 1 0 110 2 1 1 0 010-2zm0 4a1 1 0 110 2 1 1 0 010-2zm0 4a1 1 0 110 2 1 1 0 010-2z"/></svg>
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M3 8h10" strokeLinecap="round"/></svg>
                 </button>
                 <button className="w-8 h-8 flex items-center justify-center rounded-[6px] border border-[#e9eae6] hover:bg-[#f7f7f5] transition-colors text-[#646462]">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5">
-                    <rect x="2" y="2" width="5" height="5" rx="1"/>
-                    <rect x="9" y="2" width="5" height="5" rx="1"/>
-                    <rect x="2" y="9" width="5" height="5" rx="1"/>
-                    <rect x="9" y="9" width="5" height="5" rx="1"/>
-                  </svg>
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
                 </button>
               </div>
             </div>
-            <p className="text-[13px] text-[#646462]">{headerSubtitle}</p>
+            <p className="text-[13px] text-[#646462]">{headerSub}</p>
           </div>
 
-          {/* ── Filters ──────────────────────────────────────────────────── */}
+          {/* ── Filters ─────────────────────────────────────────────────── */}
           {tab !== 'live' ? (
-            <div className="px-5 pb-3 flex flex-col gap-2 border-t border-[#f3f3f1]  pt-3">
+            <div className="px-5 pb-3 border-t border-[#f3f3f1] pt-3 flex flex-col gap-2">
               {/* Row 1 */}
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {/* Date range */}
+                  {/* Date */}
                   <div className="relative">
-                    <button ref={dateRef} onClick={() => { setShowDatePicker(v => !v); setShowEventPicker(false); }} className={btnFilter}>
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-                        <rect x="2" y="3" width="12" height="11" rx="1.5"/>
-                        <path d="M5 2v2M11 2v2M2 7h12" strokeLinecap="round"/>
-                      </svg>
+                    <button onClick={() => { closeAll(); setShowDatePicker(v => !v); }} className={btnFilter}>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12" strokeLinecap="round"/></svg>
                       {dateRange}
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5">
-                        <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
                     {showDatePicker && <DatePickerDropdown />}
                   </div>
-
-                  {/* Event selector */}
+                  {/* Event */}
                   <div className="relative">
-                    <button ref={eventRef} onClick={() => { setShowEventPicker(v => !v); setShowDatePicker(false); }} className={btnFilter}>
+                    <button onClick={() => { closeAll(); setShowEventPicker(v => !v); }} className={btnFilter}>
                       Seleccionar un evento
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5">
-                        <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
                     {showEventPicker && <EventSelectorDropdown />}
                   </div>
-
                   {/* Property filters */}
-                  <button className={btnFilter}>
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-                      <path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/>
-                    </svg>
-                    + Filtros de propiedad
-                  </button>
+                  <div className="relative">
+                    <button onClick={() => { closeAll(); setShowPropFilter(v => !v); }} className={btnFilter}>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/></svg>
+                      + Filtros de propiedad
+                    </button>
+                    {showPropFilter && <PropertyFilterDropdown />}
+                  </div>
                 </div>
-
-                <div className="flex items-center gap-3 flex-wrap">
-                  {/* Internal users toggle */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Toggle */}
                   <div className="flex items-center gap-2">
                     <span className="text-[12px] text-[#646462]">Filtrar usuarios internos</span>
                     <button onClick={() => setFilterInternal(v => !v)}
@@ -26358,59 +26575,50 @@ function WAActivityView() {
                       <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${filterInternal ? 'translate-x-[18px]' : 'translate-x-0.5'}`}/>
                     </button>
                   </div>
-                  {/* View selector (events only) */}
+                  {/* View dropdown */}
                   {tab === 'events' && (
-                    <button className={btnFilter}>
-                      Vista predeterminada
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5">
-                        <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
+                    <div className="relative">
+                      <button onClick={() => { closeAll(); setShowViewDrop(v => !v); }} className={btnFilter}>
+                        Vista predeterminada
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                      {showViewDrop && <ViewDropdown />}
+                    </div>
                   )}
                 </div>
               </div>
-
               {/* Row 2 */}
               <div className="flex items-center justify-between">
                 <button className={btnFilter}>
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-                    <path d="M13 8A5 5 0 103 8M3 5v3H6" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 8A5 5 0 103 8M3 5v3H6"/></svg>
                   Recargar
                 </button>
                 <div className="flex items-center gap-1">
-                  <button className={btnFilter}>
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-                      <path d="M2 4h12M2 8h8M2 12h5" strokeLinecap="round"/>
-                    </svg>
+                  <button onClick={() => { closeAll(); setShowConfigCols(true); }} className={btnFilter}>
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 4h12M2 8h8M2 12h5" strokeLinecap="round"/></svg>
                     Configurar columnas
                   </button>
-                  <div className="flex">
+                  {/* Export split button */}
+                  <div className="flex relative">
                     <button className={`${btnFilter} rounded-r-none border-r-0`}>
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M8 2v7M5 6l3 3 3-3M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1"/>
-                      </svg>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v7M5 6l3 3 3-3M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>
                       Exportar
                     </button>
-                    <button className={`${btnFilter} rounded-l-none px-2`}>
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5">
-                        <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
+                    <button onClick={() => { closeAll(); setShowExport(v => !v); }} className={`${btnFilter} rounded-l-none px-2`}>
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
+                    {showExport && <ExportDropdown />}
                   </div>
-                  <div className="flex">
+                  {/* Insight split button */}
+                  <div className="flex relative">
                     <button className={`${btnFilter} rounded-r-none border-r-0`}>
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-                        <path d="M2 3h12v10H2zM2 7h12" strokeLinecap="round"/>
-                        <path d="M7 3v10" strokeLinecap="round"/>
-                      </svg>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 7h12" strokeLinecap="round"/><path d="M7 3v10" strokeLinecap="round"/></svg>
                       Abrir como nuevo insight
                     </button>
-                    <button className={`${btnFilter} rounded-l-none px-2`}>
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5">
-                        <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
+                    <button onClick={() => { closeAll(); setShowInsight(v => !v); }} className={`${btnFilter} rounded-l-none px-2`}>
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
+                    {showInsight && <InsightDropdown />}
                   </div>
                 </div>
               </div>
@@ -26419,97 +26627,72 @@ function WAActivityView() {
             /* Live filters */
             <div className="px-5 pb-3 border-t border-[#f3f3f1] pt-3 flex items-center justify-end gap-2">
               <button className="w-8 h-8 flex items-center justify-center rounded-[6px] border border-[#e9eae6] hover:bg-[#f7f7f5] transition-colors text-[#646462]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M13 8A5 5 0 103 8M3 5v3H6"/>
-                </svg>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 8A5 5 0 103 8M3 5v3H6"/></svg>
               </button>
               <button className={btnFilter}>
                 Filtrar por evento
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5">
-                  <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
               <button className={btnFilter}>
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-                  <path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/>
-                </svg>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/></svg>
                 + Filtrar por propiedad
               </button>
-              <button onClick={() => setLivePaused(v => !v)}
-                className="flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
-                {livePaused ? (
-                  <>
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 3l9 5-9 5V3z"/></svg>
-                    Reanudar
-                  </>
-                ) : (
-                  <>
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg>
-                    Pausar
-                  </>
-                )}
+              <button onClick={() => setLivePaused(v => !v)} className={`${btnFilter} font-medium`}>
+                {livePaused
+                  ? <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 3l9 5-9 5V3z"/></svg>Reanudar</>
+                  : <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg>Pausar</>
+                }
               </button>
             </div>
           )}
 
-          {/* ── Table ────────────────────────────────────────────────────── */}
+          {/* ── Table ───────────────────────────────────────────────────── */}
           <div className="border-t border-[#e9eae6] overflow-x-auto">
             {tab === 'events' && (
               <table className="w-full text-[12px] min-w-[700px]">
-                <thead>
-                  <tr>
-                    <ColHeader label="Evento"/>
-                    <ColHeader label="Persona"/>
-                    <ColHeader label="URL / Pantalla"/>
-                    <ColHeader label="Librería"/>
-                    <ColHeader label="Tiempo"/>
-                  </tr>
-                </thead>
-                <tbody><EmptyState /></tbody>
+                <thead><tr>
+                  <ColHeader label="Evento"/><ColHeader label="Persona"/>
+                  <ColHeader label="URL / Pantalla"/><ColHeader label="Librería"/><ColHeader label="Tiempo"/>
+                </tr></thead>
+                <tbody><EmptyState cols={5}/></tbody>
               </table>
             )}
             {tab === 'sessions' && (
               <table className="w-full text-[12px] min-w-[900px]">
-                <thead>
-                  <tr>
-                    <ColHeader label="ID de sesión"/>
-                    <ColHeader label="ID Distinct"/>
-                    <ColHeader label="Hora inicio"/>
-                    <ColHeader label="Hora fin"/>
-                    <ColHeader label="Duración"/>
-                    <ColHeader label="URL de entrada"/>
-                    <ColHeader label="Páginas vistas"/>
-                    <ColHeader label="Rebote"/>
-                  </tr>
-                </thead>
-                <tbody><EmptyState /></tbody>
+                <thead><tr>
+                  <ColHeader label="ID de sesión"/><ColHeader label="ID Distinct"/>
+                  <ColHeader label="Hora inicio"/><ColHeader label="Hora fin"/>
+                  <ColHeader label="Duración"/><ColHeader label="URL de entrada"/>
+                  <ColHeader label="Páginas vistas"/><ColHeader label="Rebote"/>
+                </tr></thead>
+                <tbody><EmptyState cols={8}/></tbody>
               </table>
             )}
             {tab === 'live' && (
               <table className="w-full text-[12px] min-w-[600px]">
-                <thead>
-                  <tr>
-                    <ColHeader label="Evento"/>
-                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">
-                      <span className="flex items-center gap-1">
-                        ID Distinct de persona
-                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
-                      </span>
-                    </th>
-                    <ColHeader label="URL / Pantalla"/>
-                    <ColHeader label="Tiempo"/>
-                  </tr>
-                </thead>
+                <thead><tr>
+                  <ColHeader label="Evento"/>
+                  <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">
+                    <span className="flex items-center gap-1">
+                      ID Distinct de persona
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+                    </span>
+                  </th>
+                  <ColHeader label="URL / Pantalla"/><ColHeader label="Tiempo"/>
+                </tr></thead>
                 <tbody><WaitingState /></tbody>
               </table>
             )}
           </div>
-
         </div>
       </div>
+
+      {/* ── Configure columns modal (portal-like, outside card) ─────────── */}
+      {showConfigCols && <ConfigColumnsModal />}
     </div>
   );
 }
+
 
 // "En desarrollo" placeholder for non-home views
 function WADevContent({ title }: { title: string }) {
