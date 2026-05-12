@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // Unified prototype – Inbox + Contacts (connected screens)
 // Navigate via the left-nav icons. All assets from Figma CDN (7-day TTL).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -10,7 +10,7 @@ import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
-type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'billingPlans' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat' | 'audiences' | 'finSettings' | 'dataConversaciones';
+type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'billingPlans' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat' | 'audiences' | 'finSettings' | 'dataConversaciones' | 'clainHub' | 'webAnalytics';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -342,7 +342,7 @@ const IMG_FIN_SERVICE_AGENT  = "https://www.figma.com/api/mcp/asset/36ac43f1-c42
 const IMG_FIN_SALES_AGENT    = "https://www.figma.com/api/mcp/asset/56368a5b-952d-43c9-bef6-0f22824132ad";
 
 // ── Shared: Left Nav ──────────────────────────────────────────────────────────
-function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+function LeftNav({ view, onNavigate, onLogoClick }: { view: View; onNavigate: (v: View) => void; onLogoClick?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const isContacts = view === 'contacts' || view === 'allLeads';
   const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands' || view === 'billing' || view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels' || view === 'inboxTeam';
@@ -419,10 +419,19 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
       style={{ width: expanded ? 210 : 44 }}
     >
       <div className="flex flex-col gap-3">
-        {/* Header: the app logo (decorative — no nav action). Uses ICON_INBOX asset which
-            visually IS the app logo per user. Previously this was at position 2 of the rail. */}
+        {/* Header: the app logo — clicking it opens the Clain Platform Hub. */}
         <div className={`flex items-center ${expanded ? 'justify-between px-3' : 'justify-center'} h-9 flex-shrink-0`}>
-          <img src={ICON_INBOX} alt="" className="w-6 h-6" />
+          {onLogoClick ? (
+            <button
+              onClick={onLogoClick}
+              title="Plataforma Clain"
+              className="w-6 h-6 flex items-center justify-center hover:opacity-70 transition-opacity"
+            >
+              <img src={ICON_INBOX} alt="Clain" className="w-6 h-6" />
+            </button>
+          ) : (
+            <img src={ICON_INBOX} alt="" className="w-6 h-6" />
+          )}
           {expanded && (
             <span className="w-7 h-7 flex items-center justify-center" title="Pin">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -25620,6 +25629,371 @@ function FinRoleCard({
   );
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Clain Platform Hub — module launcher (same design language as FinAllRolesContent)
+// ─────────────────────────────────────────────────────────────────────────────
+const CLAIN_FAQS: { q: string; a: string }[] = [
+  { q: '¿Qué es Clain?', a: 'Clain es una plataforma modular de inteligencia de negocio que combina CRM, análisis web y más en una sola interfaz unificada.' },
+  { q: '¿Puedo usar los módulos de forma independiente?', a: 'Sí. Cada módulo funciona de forma autónoma pero se potencia al integrarse con los demás.' },
+  { q: '¿Se añadirán más módulos próximamente?', a: 'Efectivamente. Estamos trabajando en módulos de email marketing, automatización avanzada y análisis predictivo.' },
+  { q: '¿Mis datos están seguros entre módulos?', a: 'Sí. Todos los módulos comparten el mismo tenant y permisos de IAM, con cifrado en reposo y en tránsito.' },
+];
+
+function ClainHubView({ onNavigate }: { onNavigate: (v: View) => void }) {
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  return (
+    <div className="flex-1 overflow-y-auto min-h-0 bg-[#f3f3f1]">
+      <div className="max-w-[1021px] mx-auto px-14 pt-12 pb-16">
+        {/* Hero */}
+        <div className="flex flex-col items-center text-center">
+          <div className="w-8 h-8 mb-4 bg-[#1a1a1a] rounded-[8px] flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-5 h-5 fill-white"><path d="M8 1l1.4 3.6H13l-3.1 2.3 1.2 3.7L8 8.4l-3.1 2.2 1.2-3.7L3 4.6h3.6z"/></svg>
+          </div>
+          <h1 className="text-[40px] font-light tracking-[-1.2px] leading-[40px] text-[#1a1a1a] max-w-[440px]">
+            Tu plataforma para<br/>crecer más rápido
+          </h1>
+          <p className="text-[14px] text-[#646462] leading-[20px] mt-4 max-w-[520px]">
+            Clain reúne todas las herramientas que necesitas para entender, captar y retener clientes.{' '}
+            <a href="#" className="underline">Más información.</a>
+          </p>
+        </div>
+
+        {/* Module cards */}
+        <div className="mt-12 flex justify-center">
+          <div className="grid grid-cols-2 gap-4 w-[640px]">
+            <ClainModuleCard
+              image={IMG_FIN_SERVICE_AGENT}
+              iconColor="#1a1a1a"
+              iconKind="cx"
+              title="Clain Customer Experience"
+              tagline="Gestiona la relación con tus clientes"
+              bullets={[
+                'Bandeja de entrada unificada',
+                'Automatización con IA (Fin)',
+                'CRM de contactos y empresas',
+              ]}
+              onClick={() => onNavigate('inbox')}
+            />
+            <ClainModuleCard
+              image={IMG_FIN_SALES_AGENT}
+              iconColor="#3b59f6"
+              iconKind="analytics"
+              title="Clain Web Analytics"
+              tagline="Entiende el comportamiento de tus usuarios"
+              bullets={[
+                'Análisis de tráfico en tiempo real',
+                'Embudos y conversiones',
+                'Audiencias y segmentación',
+              ]}
+              onClick={() => onNavigate('webAnalytics')}
+            />
+          </div>
+        </div>
+
+        {/* More modules coming soon */}
+        <div className="mt-7 flex items-center justify-center">
+          <div className="w-[640px] flex items-center justify-center bg-white border border-[#e9eae6] rounded-[10px] py-4 px-6 gap-3">
+            <div className="relative w-12 h-6">
+              <span className="absolute left-0 top-0 w-6 h-6 rounded-[8px] bg-[#818F4A] border border-white" />
+              <span className="absolute left-3 top-0 w-6 h-6 rounded-[8px] bg-[#CE78BA] border border-white" />
+              <span className="absolute left-6 top-0 w-6 h-6 rounded-[8px] bg-[#DBDBD6] border border-white" />
+            </div>
+            <span className="text-[14px] font-semibold text-[#1a1a1a]">Más módulos próximamente.</span>
+          </div>
+        </div>
+
+        {/* FAQ */}
+        <div className="mt-20">
+          <h2 className="text-center text-[18px] font-bold text-[#1a1a1a] mb-6">Preguntas frecuentes</h2>
+          <div className="max-w-[560px] mx-auto flex flex-col gap-2">
+            {CLAIN_FAQS.map((f, i) => (
+              <FinFaqItem
+                key={i}
+                q={f.q}
+                a={f.a}
+                open={openFaq === i}
+                onToggle={() => setOpenFaq(openFaq === i ? null : i)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClainModuleCard({
+  image, iconColor, iconKind, title, tagline, bullets, onClick,
+}: {
+  image: string; iconColor: string; iconKind: 'cx' | 'analytics';
+  title: string; tagline: string; bullets: string[]; onClick: () => void;
+}) {
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden flex flex-col">
+      <div className="p-2">
+        <div className="rounded-[10px] overflow-hidden h-[166px]">
+          <img src={image} alt="" className="w-full h-full object-cover" />
+        </div>
+      </div>
+      <div className="px-4 pt-2 pb-4 flex flex-col">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="w-6 h-6 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: iconColor }}>
+            {iconKind === 'cx' ? (
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M8 2a3 3 0 100 6 3 3 0 000-6zM3.5 13c.5-2 2.3-3.5 4.5-3.5s4 1.5 4.5 3.5v.5h-9v-.5z"/></svg>
+            ) : (
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M2 2v12h12v-2H4V2H2zm3 4v6h2V6H5zm3-2v8h2V4H8zm3 3v5h2V7h-2z"/></svg>
+            )}
+          </span>
+          <span className="text-[18px] font-bold text-[#1a1a1a]">{title}</span>
+        </div>
+        <p className="text-[13px] text-[#646462] mb-3">{tagline}</p>
+        <ul className="flex flex-col gap-1.5 mb-5">
+          {bullets.map((b, i) => (
+            <li key={i} className="flex items-start gap-2 text-[13px] text-[#1a1a1a]">
+              <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-[#1a1a1a] flex-shrink-0" />
+              {b}
+            </li>
+          ))}
+        </ul>
+        <button
+          onClick={onClick}
+          className="h-9 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black transition-colors"
+        >
+          Comenzar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Clain Web Analytics — full app shell, same nav structure, all screens "En desarrollo"
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Clain Web Analytics — full app shell, identical nav + real sub-sidebars,
+// all content screens replaced with "En desarrollo".
+// ─────────────────────────────────────────────────────────────────────────────
+type WAView = 'waInbox' | 'waFin' | 'waKnowledge' | 'waReports' | 'waOutbound' | 'waContacts' | 'waSettings';
+
+// Left-rail nav — pixel-perfect copy of LeftNav (same assets, same hover-expand).
+function WALeftNav({
+  active, onSelect, onBackToHub,
+}: {
+  active: WAView; onSelect: (v: WAView) => void; onBackToHub: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const btnCls = (isActive: boolean) =>
+    `w-full h-9 flex items-center rounded-lg relative ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${
+      isActive
+        ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]'
+        : 'hover:bg-white/60'
+    }`;
+  function NavImg({ src, label, nav }: { src: string; label: string; nav: WAView }) {
+    return (
+      <button onClick={() => onSelect(nav)} title={label} className={btnCls(active === nav)}>
+        <img src={src} alt={label} className="w-4 h-4 flex-shrink-0" />
+        {expanded && <span className={`text-[13px] truncate ${active === nav ? 'font-semibold text-[#1a1a1a]' : 'font-medium text-[#1a1a1a]'}`}>{label}</span>}
+      </button>
+    );
+  }
+  return (
+    <div
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+      className={`fixed top-0 left-0 h-full flex flex-col pt-3 pb-2 bg-[#f3f3f1] rounded-tr-2xl rounded-br-2xl justify-between transition-[width,box-shadow] duration-150 z-50 ${expanded ? 'shadow-[4px_0px_24px_rgba(20,20,20,0.10)]' : ''}`}
+      style={{ width: expanded ? 210 : 44 }}
+    >
+      <div className="flex flex-col gap-3">
+        {/* Logo — same as LeftNav, click returns to hub */}
+        <div className={`flex items-center ${expanded ? 'justify-between px-3' : 'justify-center'} h-9 flex-shrink-0`}>
+          <button onClick={onBackToHub} title="Plataforma Clain" className="w-6 h-6 flex items-center justify-center hover:opacity-70 transition-opacity">
+            <img src={ICON_INBOX} alt="Clain" className="w-6 h-6" />
+          </button>
+          {expanded && (
+            <span className="text-[11px] font-semibold text-[#3b59f6] bg-[#eff2ff] px-2 py-0.5 rounded-full whitespace-nowrap">Analytics</span>
+          )}
+        </div>
+
+        <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'}`}>
+          {/* Back to hub — same thick-ring as SuperAgent */}
+          <button onClick={onBackToHub} title="Plataforma Clain" className={btnCls(false)}>
+            <svg viewBox="0 0 16 16" className="w-[18px] h-[18px] flex-shrink-0" fill="none">
+              <circle cx="8" cy="8" r="6.25" stroke="#1a1a1a" strokeWidth="2.75"/>
+              <circle cx="8" cy="8" r="1.75" fill="#1a1a1a"/>
+            </svg>
+            {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] truncate flex-1">Plataforma Clain</span>}
+          </button>
+          <div className={`${expanded ? 'mx-0.5' : 'mx-1'} h-px bg-[#e2e2e0] my-0.5`} />
+          {/* Same icon mapping as LeftNav */}
+          <NavImg src={ICON_FIN}       label="Inbox"            nav="waInbox" />
+          <NavImg src={ICON_KNOWLEDGE} label="Fin AI Agent"     nav="waFin" />
+          <NavImg src={ICON_REPORTS}   label="Conocimiento"     nav="waKnowledge" />
+          <NavImg src={ICON_OUTBOUND}  label="Informes"         nav="waReports" />
+          {/* Canales salientes — same inline SVG as LeftNav */}
+          <button onClick={() => onSelect('waOutbound')} title="Canales salientes" className={btnCls(active === 'waOutbound')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><path d="M14.5 1.5L1.5 6l5 1.5L8 13l3-7z"/></svg>
+            {expanded && <span className={`text-[13px] truncate ${active === 'waOutbound' ? 'font-semibold text-[#1a1a1a]' : 'font-medium text-[#1a1a1a]'}`}>Canales salientes</span>}
+          </button>
+          {/* Contactos — same inline SVG as LeftNav */}
+          <button onClick={() => onSelect('waContacts')} title="Contactos" className={btnCls(active === 'waContacts')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><circle cx="6" cy="5" r="2.5"/><path d="M1.8 12.5c.4-2 2.1-3.2 4.2-3.2s3.8 1.2 4.2 3.2v.5H1.8v-.5z"/><circle cx="11.5" cy="6" r="2"/><path d="M9.5 9.4c.6-.2 1.3-.3 2-.3 1.7 0 3 .9 3.4 2.5v.4H10.6c-.1-.9-.4-1.8-1.1-2.6z"/></svg>
+            {expanded && <span className={`text-[13px] truncate ${active === 'waContacts' ? 'font-semibold text-[#1a1a1a]' : 'font-medium text-[#1a1a1a]'}`}>Contactos</span>}
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom: Ajustes + Buscar + Upgrades — same as LeftNav */}
+      <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
+        <button onClick={() => onSelect('waSettings')} title="Configuración" className={btnCls(active === 'waSettings')}>
+          <img src={ICON_SETTINGS} alt="Configuración" className="w-4 h-4 flex-shrink-0" />
+          {expanded && <span className={`text-[13px] truncate ${active === 'waSettings' ? 'font-semibold text-[#1a1a1a]' : 'font-medium text-[#1a1a1a]'}`}>Configuración</span>}
+        </button>
+        <button title="Buscar" className={btnCls(false)}>
+          <img src={ICON_SEARCH} alt="Buscar" className="w-4 h-4 flex-shrink-0" />
+          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] truncate">Buscar</span>}
+        </button>
+        <button title="Actualizar" className={`${btnCls(false)} bg-[#1a1a1a] hover:bg-[#333] text-white`}>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white flex-shrink-0"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+          {expanded && <span className="text-[13px] font-semibold text-white truncate">Actualizar</span>}
+        </button>
+        <button title="Mi perfil" className={btnCls(false)}>
+          <img src={AVATAR_ME} alt="Perfil" className="w-4 h-4 flex-shrink-0 rounded-full" />
+          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] truncate">Mi perfil</span>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// "En desarrollo" block reused in every content pane.
+function WADevContent({ title }: { title: string }) {
+  return (
+    <div className="flex-1 flex items-center justify-center min-h-0">
+      <div className="flex flex-col items-center text-center max-w-[380px] gap-5">
+        <div className="w-16 h-16 rounded-2xl bg-[#eff2ff] border border-[#c7d2fe] flex items-center justify-center">
+          <svg viewBox="0 0 32 32" className="w-9 h-9 fill-[#3b59f6]"><path d="M4 4v24h24v-4H8V4H4zm5 8v12h4V12H9zm5-4v16h4V8h-4zm5 7v9h4v-9h-4z"/></svg>
+        </div>
+        <div>
+          <p className="text-[20px] font-bold text-[#1a1a1a] mb-2">{title}</p>
+          <p className="text-[14px] text-[#646462] leading-[22px]">
+            Este módulo está actualmente en desarrollo.<br/>
+            Próximamente podrás ver tus análisis web aquí.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 bg-[#eff2ff] text-[#3b59f6] text-[13px] font-medium px-4 py-2.5 rounded-full border border-[#c7d2fe]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round" stroke="currentColor" strokeWidth="1.5"/></svg>
+          Clain Web Analytics · En desarrollo
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
+  const [sub, setSub] = useState<WAView>('waInbox');
+  // Sub-view state for sidebar active items (stub — no real navigation)
+  const [inboxScope,   setInboxScope]   = useState<InboxScope>('unassigned');
+  const [finSub,       setFinSub]       = useState<FinSubView>('allRoles');
+  const [knowledgeSub, setKnowledgeSub] = useState<KnowledgeSubView>('fuentes');
+  const [reportsSub,   setReportsSub]   = useState<ReportsSubView>('overview');
+  const [outboundSub,  setOutboundSub]  = useState<OutboundSubView>('campaigns');
+
+  function renderSidebar() {
+    switch (sub) {
+      case 'waInbox':
+        return (
+          <InboxSidebar
+            active={inboxScope}
+            onScopeChange={setInboxScope}
+            counts={{}}
+            teams={[]}
+            teammates={[]}
+          />
+        );
+      case 'waFin':
+        return (
+          <FinSidebar
+            sub={finSub}
+            onSelect={setFinSub}
+          />
+        );
+      case 'waKnowledge':
+        return (
+          <KnowledgeSidebar
+            sub={knowledgeSub}
+            onSelect={setKnowledgeSub}
+            activeFolderId={null}
+            onSelectFolder={() => {}}
+            onCreateFolder={() => {}}
+            onEditFolder={() => {}}
+            onDeleteFolder={() => {}}
+            refreshKey={0}
+          />
+        );
+      case 'waReports':
+        return (
+          <ReportsSidebar
+            sub={reportsSub}
+            onSelect={setReportsSub}
+          />
+        );
+      case 'waOutbound':
+        return (
+          <OutboundSidebar
+            sub={outboundSub}
+            onSelect={setOutboundSub}
+          />
+        );
+      case 'waContacts':
+        return (
+          <ContactsSidebar
+            view={'contacts'}
+            onNavigate={() => {}}
+          />
+        );
+      case 'waSettings':
+        return (
+          <SettingsSidebar
+            view={'settings'}
+            onNavigate={() => {}}
+          />
+        );
+    }
+  }
+
+  const titles: Record<WAView, string> = {
+    waInbox:     'Inbox',
+    waFin:       'Fin AI Agent',
+    waKnowledge: 'Conocimiento',
+    waReports:   'Informes',
+    waOutbound:  'Canales salientes',
+    waContacts:  'Contactos',
+    waSettings:  'Configuración',
+  };
+
+  return (
+    <div className="flex bg-[#f3f3f1] overflow-hidden w-screen h-screen min-w-0" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <WALeftNav active={sub} onSelect={setSub} onBackToHub={onBackToHub} />
+      <div className="flex flex-1 min-w-0 pl-[44px] h-full">
+        <div className="flex flex-1 min-h-0 gap-2 p-2 min-w-0">
+          {/* Sub-sidebar — real CRM sidebar components */}
+          {renderSidebar()}
+          {/* Content — always "En desarrollo" */}
+          <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+              <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{titles[sub]}</h1>
+              <span className="text-[12px] text-[#3b59f6] font-semibold bg-[#eff2ff] px-2.5 py-1 rounded-full">Clain Web Analytics</span>
+            </div>
+            <WADevContent title={titles[sub]} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FinPlaceholderContent({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="flex-1 flex items-center justify-center min-h-0">
@@ -35776,7 +36150,7 @@ function readInitialViewFromUrl(): View {
     'people','companies','workspaceSecurity','workspaceMultilingual','workspaceHours',
     'workspaceBrands','workspaceGeneral','workspaceTeammates','billingPlans','billing','messenger',
     'email','phone','whatsapp','discord','sms',
-    'social','allChannels','dataConversaciones','inboxTeam','fin','knowledge','reports','outbound',
+    'social','allChannels','dataConversaciones','inboxTeam','fin','knowledge','reports','outbound','clainHub',
   ];
   return v && (known as string[]).includes(v) ? (v as View) : 'inbox';
 }
@@ -35874,7 +36248,16 @@ function PrototypeApp() {
       case 'callsLive':           return <CallsLiveView view={view} onNavigate={setView} />;
       case 'mcpServers':          return <McpServersView view={view} onNavigate={setView} />;
       case 'agentChat':           return <AgentChatView view={view} onNavigate={setView} currentCrmView="agentChat" />;
+      // ── Clain Platform ─────────────────────────────────────────────────────
+      case 'clainHub':    return <ClainHubView onNavigate={setView} />;
+      case 'webAnalytics': return <WebAnalyticsApp onBackToHub={() => setView('clainHub')} />;
     }
+  }
+
+  // webAnalytics is a fully self-contained app shell with its own nav —
+  // skip the outer LeftNav so it doesn't render twice.
+  if (view === 'webAnalytics') {
+    return <WebAnalyticsApp onBackToHub={() => setView('clainHub')} />;
   }
 
   return (
@@ -35883,8 +36266,9 @@ function PrototypeApp() {
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
       {/* LeftNav is fixed-positioned (always on top). pl-[44px] on the content
-          area reserves space for the collapsed 44px rail so content isn't hidden. */}
-      <LeftNav view={view} onNavigate={setView} />
+          area reserves space for the collapsed 44px rail so content isn't hidden.
+          onLogoClick navigates to the Clain Platform Hub. */}
+      <LeftNav view={view} onNavigate={setView} onLogoClick={() => setView('clainHub')} />
       <div className="flex flex-1 min-w-0 pl-[44px] h-full">
         {renderView()}
       </div>
