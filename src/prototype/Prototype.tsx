@@ -462,7 +462,7 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
       <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
         {/* Upgrade — lightning bolt button */}
         <button
-          onClick={() => onNavigate('billing')}
+          onClick={() => onNavigate('featuresComparison')}
           className={`w-full h-9 flex items-center rounded-lg ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${view === 'billing' || view === 'featuresComparison' ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"}`}
         >
           <svg viewBox="0 0 16 16" className="w-5 h-5 flex-shrink-0 fill-[#111]"><path d="M9.5 1 L4 9h4.5L6.5 15 13 7H8.5z"/></svg>
@@ -7430,8 +7430,9 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   const IcoTicketsS    = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="4" width="14" height="8" rx="1.5"/><path d="M4 8h1.5M7 8h1.5M10 8h1.5" stroke="white" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
   const IcoSLAS        = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" opacity="0.25"/><path d="M8 4v4l2.5 2.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>;
   const IcoFinS        = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>;
-  const IcoBuzonS      = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="4" width="14" height="9" rx="2" opacity="0.4"/><path d="M1 7l7 4 7-4" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>;
-  const IcoAutoS       = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 2H4.5a1.5 1.5 0 00-1.5 1.5V4M10 2h1.5A1.5 1.5 0 0113 3.5V4M10 14h1.5a1.5 1.5 0 001.5-1.5V12M6 14H4.5A1.5 1.5 0 013 12.5V12" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/><rect x="4" y="6" width="8" height="4" rx="1.2"/></svg>;
+  const IcoBuzonS      = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="3" width="14" height="10" rx="1.5" opacity="0.25"/><path d="M3.5 8.5l1.5-3.5 1.5 3.5M3.5 7.5h2.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/><path d="M8.5 5v4M10.5 5c.8 0 1.5.4 1.5 1.5s-.7 1.5-1.5 1.5H8.5M10.5 8h-2" stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round"/></svg>;
+  const IcoAudiencesS  = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5.5" cy="5" r="2.2"/><path d="M1 13c0-2.4 2-4.3 4.5-4.3S10 10.6 10 13H1z"/><circle cx="11.5" cy="5" r="1.8" opacity="0.5"/><path d="M10.2 13h4.3c0-2-1.6-3.5-3.8-3.8" opacity="0.5"/></svg>;
+  const IcoAutoS       = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M9 2L5 9h4l-2 5 6-7H9l2-5z"/></svg>;
   const IcoAppS        = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.2" opacity="0.8"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity="0.35"/></svg>;
   const IcoConnS       = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="2.5"/><circle cx="12" cy="8" r="2.5"/><path d="M6.5 8h3" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>;
   const IcoAuthS       = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="8" cy="10.5" r="1.2" fill="white"/></svg>;
@@ -7533,11 +7534,10 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
         <GroupRow icon={IcoAIGrp} label="IA y automatización" groupKey="ia" sectionActive={isIASection} />
         {openGroups.ia && (
           <div className="flex flex-col gap-0.5 pl-2">
-            <SubRow icon={IcoFinS}   label="Fin AI Agent"   nav={'fin'} />
-            <SubRow icon={IcoBuzonS} label="Buzón de IA"    nav={'aiInbox'} />
-            <SubRow icon={IcoAutoS}      label="Automatización"  nav={'automation'} />
-            <SubRow icon={IcoAIFeedbackS} label="Feedback de IA" nav={'aiFeedback'} />
-            <SubRow icon={IcoMaxS} label="Asistente Max" nav={'agentChat'} />
+            <SubRow icon={IcoFinS}        label="Fin AI Agent"   nav={'finSettings'} />
+            <SubRow icon={IcoAudiencesS}  label="Audiences"      nav={'audiences'} />
+            <SubRow icon={IcoBuzonS}      label="Buzón de IA"    nav={'aiInbox'} />
+            <SubRow icon={IcoAutoS}       label="Automatización"  nav={'automation'} />
           </div>
         )}
 
@@ -13006,8 +13006,8 @@ function FeaturesComparisonView({ view: _view, onNavigate }: { view: View; onNav
           <div style={{ ...gridStyle, padding: '0 64px' }}>
             <div style={{ padding: '16px 0' }} />
             {PLANS_FC.map((p, i) => (
-              <div key={p} style={{ padding: '16px 12px', textAlign: 'center', borderLeft: `1px solid ${LC.border}`, background: i === 3 ? '#111' : 'transparent' }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: i === 3 ? '#fff' : LC.text, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{p}</p>
+              <div key={p} style={{ padding: '16px 12px', textAlign: 'center', borderLeft: `1px solid ${LC.border}`, background: 'transparent' }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{p}</p>
               </div>
             ))}
           </div>
@@ -13021,7 +13021,7 @@ function FeaturesComparisonView({ view: _view, onNavigate }: { view: View; onNav
               <div style={{ ...gridStyle, borderBottom: `2px solid ${LC.text}`, paddingBottom: 8, marginBottom: 0 }}>
                 <p style={{ fontSize: 13, fontWeight: 800, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{section.title}</p>
                 {PLANS_FC.map((p, i) => (
-                  <div key={p} style={{ borderLeft: `1px solid ${LC.border}`, background: i === 3 ? '#111' : 'transparent' }} />
+                  <div key={p} style={{ borderLeft: `1px solid ${LC.border}`, background: 'transparent' }} />
                 ))}
               </div>
               {/* Rows */}
@@ -13029,7 +13029,7 @@ function FeaturesComparisonView({ view: _view, onNavigate }: { view: View; onNav
                 <div key={row.feature} style={{ ...gridStyle, borderBottom: `1px solid ${LC.border}`, background: ri % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.015)' }}>
                   <div style={{ padding: '12px 0', fontSize: 13, color: LC.text80 }}>{row.feature}</div>
                   {planKeys.map((k, i) => (
-                    <div key={k} style={{ padding: '12px', textAlign: 'center', borderLeft: `1px solid ${LC.border}`, background: i === 3 ? '#111' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div key={k} style={{ padding: '12px', textAlign: 'center', borderLeft: `1px solid ${LC.border}`, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <FcCell value={row[k]} />
                     </div>
                   ))}
