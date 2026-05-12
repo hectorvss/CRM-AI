@@ -7486,7 +7486,6 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoBrandsS}    label="Marcas"               nav={'workspaceBrands'} />
             <SubRow icon={IcoSecurityS}  label="Seguridad"            nav={'workspaceSecurity'} warn />
             <SubRow icon={IcoMultilingS} label="Multilingüe"          nav={'workspaceMultilingual'} />
-            <SubRow icon={IcoRolesS}     label="Roles personalizados"  nav={'customRoles'} />
           </div>
         )}
 
@@ -11708,9 +11707,20 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
                 <div className="w-[380px] flex-shrink-0">
                   <p className="text-[13px] font-medium text-[#1a1a1a] mb-1">Idioma predeterminado</p>
                   <p className="text-[12px] text-[#646462] mb-2">Seleccione el idioma predeterminado para la atención a clientes.</p>
-                  <select value={defaultLang} onChange={e => setDefaultLang(e.target.value)} className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] mb-3 bg-white">
-                    <option>English</option><option>Español</option><option>Français</option><option>Deutsch</option>
-                  </select>
+                  <div className="mb-3">
+                    <SettingsSelect
+                      value={defaultLang}
+                      onChange={setDefaultLang}
+                      options={[
+                        { value: 'English', label: 'English' },
+                        { value: 'Español', label: 'Español' },
+                        { value: 'Français', label: 'Français' },
+                        { value: 'Deutsch', label: 'Deutsch' },
+                        { value: 'Italiano', label: 'Italiano' },
+                        { value: 'Português', label: 'Português' },
+                      ]}
+                    />
+                  </div>
                   <p className="text-[13px] font-medium text-[#1a1a1a] mb-1">Idiomas adicionales</p>
                   <p className="text-[12px] text-[#646462] mb-2">Seleccione hasta dos idiomas adicionales.</p>
                   <button className="text-[13px] text-[#fa7938] font-medium">+ Agregar idioma</button>
@@ -11725,12 +11735,16 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
                   <a href="#" className="text-[13px] text-[#3b59f6] underline mt-2 inline-block">Consulta la lista completa de idiomas compatibles</a>
                 </div>
                 <div className="w-[380px] flex-shrink-0">
-                  <select value={supported} onChange={e => setSupported(e.target.value)} className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white focus:outline-none focus:border-[#1a1a1a]">
-                    <option>Todo</option>
-                    <option>Solo idiomas del área de trabajo</option>
-                    <option>Idiomas europeos</option>
-                    <option>Idiomas asiáticos</option>
-                  </select>
+                  <SettingsSelect
+                    value={supported}
+                    onChange={setSupported}
+                    options={[
+                      { value: 'Todo', label: 'Todo' },
+                      { value: 'Solo idiomas del área de trabajo', label: 'Solo idiomas del área de trabajo' },
+                      { value: 'Idiomas europeos', label: 'Idiomas europeos' },
+                      { value: 'Idiomas asiáticos', label: 'Idiomas asiáticos' },
+                    ]}
+                  />
                 </div>
               </div>
 
@@ -11741,21 +11755,17 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
                   <p className="text-[13px] text-[#646462]">Elige cómo deben sonar las traducciones de IA. Elige un tono que coincida con la voz de tu marca; esto se usará para traducir el mensaje de tu personal al cliente.</p>
                 </div>
                 <div className="flex-shrink-0 flex items-center gap-2">
-                  {([
-                    { id: 'amistoso' as const, label: 'Amistoso', icon: '👋' },
-                    { id: 'neutro'    as const, label: 'Neutro',   icon: '🎯' },
-                    { id: 'profesional' as const, label: 'Profesional', icon: '💼' },
-                  ] as const).map(opt => (
+                  {(['amistoso', 'neutro', 'profesional'] as const).map(tone => (
                     <button
-                      key={opt.id}
-                      onClick={() => setTranslationTone(opt.id)}
-                      className={`flex items-center gap-1.5 px-4 py-2 rounded-full border text-[13px] font-medium transition-colors ${
-                        translationTone === opt.id
+                      key={tone}
+                      onClick={() => setTranslationTone(tone)}
+                      className={`px-4 py-2 rounded-full border text-[13px] font-medium transition-colors capitalize ${
+                        translationTone === tone
                           ? 'border-[#1a1a1a] bg-[#1a1a1a] text-white'
                           : 'border-[#e9eae6] bg-white text-[#1a1a1a] hover:border-[#c8c9c4]'
                       }`}
                     >
-                      <span>{opt.icon}</span> {opt.label}
+                      {tone.charAt(0).toUpperCase() + tone.slice(1)}
                     </button>
                   ))}
                 </div>
@@ -28737,7 +28747,10 @@ function SettingsToggle({ checked, onChange }: { checked: boolean; onChange: (v:
       onClick={() => onChange(!checked)}
       className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-[#f97316]' : 'bg-[#d1d5db]'}`}
     >
-      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-1'}`} />
+      <span
+        className="absolute top-1 w-4 h-4 rounded-full bg-white shadow"
+        style={{ left: checked ? '20px' : '4px', transition: 'left 0.15s ease' }}
+      />
     </button>
   );
 }
@@ -28753,22 +28766,38 @@ function SettingsSelect({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  function openMenu() {
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+    setOpen(true);
+  }
+
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t)) return;
+      if (panelRef.current?.contains(t)) return;
+      setOpen(false);
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
+
   const selected = options.find(o => o.value === value);
   const h = compact ? 'h-7 px-2 text-[12px]' : 'h-9 px-3 text-[13px]';
   return (
-    <div ref={ref} className={`relative w-full ${className ?? ''}`}>
+    <div className={`relative w-full ${className ?? ''}`}>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => (open ? setOpen(false) : openMenu())}
         className={`w-full ${h} flex items-center justify-between gap-2 border rounded-lg bg-white hover:border-[#1a1a1a] transition-colors focus:outline-none ${open ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}
       >
         <span className={`truncate flex-1 text-left ${selected ? 'text-[#1a1a1a]' : 'text-[#a4a4a2]'}`}>
@@ -28777,7 +28806,11 @@ function SettingsSelect({
         <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
       </button>
       {open && (
-        <div className="absolute top-[calc(100%+4px)] left-0 w-full min-w-[160px] z-50 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 max-h-[240px] overflow-y-auto">
+        <div
+          ref={panelRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+          className="bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 max-h-[240px] overflow-y-auto"
+        >
           {options.map(opt => (
             <button
               key={opt.value}
@@ -29419,6 +29452,10 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null);
   const [newRoleName, setNewRoleName] = useState('');
   const [creatingRole, setCreatingRole] = useState(false);
+  const [editingRole, setEditingRole] = useState<any | null>(null);
+  const [editPerms, setEditPerms] = useState<string[]>([]);
+  const [expandedRoles, setExpandedRoles] = useState<Record<string, boolean>>({});
+  const [savingRole, setSavingRole] = useState(false);
   const [actDateFrom, setActDateFrom] = useState('');
   const [actDateTo, setActDateTo]    = useState('');
   const [actMember, setActMember]    = useState('all');
@@ -29836,74 +29873,273 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
 
             {/* ══ TAB: Funciones (Roles) ══ */}
             {tab === 'roles' && (
-              <div className="px-6 py-4 flex flex-col gap-4">
-                <div className="flex items-start justify-between">
+              <div className="px-6 py-5 flex flex-col gap-4">
+                {/* Header */}
+                <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Funciones del espacio de trabajo</p>
+                    <p className="text-[15px] font-bold text-[#1a1a1a]">Funciones del espacio de trabajo</p>
                     <p className="text-[12.5px] text-[#646462] mt-0.5">Define los permisos de cada función asignada a los compañeros de equipo.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
-                      className="border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12.5px] focus:outline-none focus:border-[#1a1a1a] w-[180px]"
-                      placeholder="Nombre de nueva función…"
+                      className="border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12.5px] focus:outline-none focus:border-[#1a1a1a] w-[200px]"
+                      placeholder="Nombre de nueva función"
                       value={newRoleName} onChange={e => setNewRoleName(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleCreateRole()}
                     />
                     <button
                       onClick={handleCreateRole}
                       disabled={!newRoleName.trim() || creatingRole}
-                      className="px-3 py-1.5 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50"
+                      className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50"
                     >
                       {creatingRole ? 'Creando…' : '+ Crear'}
                     </button>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3">
+                {/* Role cards */}
+                <div className="flex flex-col gap-2">
                   {displayRoles.map((r: any) => {
                     const rolePms = BUILTIN_ROLE_PERMS[r.id] ?? r.permissions ?? [];
                     const memberCount = r.members ?? members.filter((m: any) => m.role_id === r.id).length;
+                    const isExpanded = expandedRoles[r.id] ?? false;
                     return (
-                      <div key={r.id} className="border border-[#e9eae6] rounded-xl overflow-hidden hover:border-[#d1d5db] transition-colors">
-                        {/* Role header */}
-                        <div className="flex items-center gap-4 px-5 py-4 bg-white">
-                          <span className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold flex-shrink-0 ${r.color ?? roleColor(r.id)}`}>{r.name}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[12.5px] text-[#646462]">{r.desc ?? r.description ?? 'Función personalizada'}</p>
-                          </div>
+                      <div key={r.id} className="border border-[#e9eae6] rounded-[12px] overflow-hidden bg-white">
+                        {/* Card header row */}
+                        <div className="flex items-center gap-4 px-5 py-4">
+                          {/* Role badge */}
+                          <span className={`px-2.5 py-1 rounded-full text-[12px] font-semibold flex-shrink-0 min-w-[120px] text-center ${r.color ?? roleColor(r.id)}`}>
+                            {r.name}
+                          </span>
+                          {/* Description */}
+                          <p className="flex-1 text-[13px] text-[#646462] min-w-0">{r.desc ?? r.description ?? 'Función personalizada'}</p>
+                          {/* Right side */}
                           <div className="flex items-center gap-3 flex-shrink-0">
-                            <div className="flex items-center gap-1.5 text-[12px] text-[#646462]">
-                              <div className="w-5 h-5 rounded-full bg-[#e9eae6] flex items-center justify-center text-[10px] font-semibold">{memberCount}</div>
-                              miembro{memberCount !== 1 ? 's' : ''}
+                            {/* Member count */}
+                            <span className="text-[12px] text-[#9a9a96] bg-[#f3f3f1] px-2 py-0.5 rounded-full">
+                              {memberCount} miembro{memberCount !== 1 ? 's' : ''}
+                            </span>
+                            {/* Edit button — all roles */}
+                            <button
+                              onClick={() => { setEditingRole(r); setEditPerms([...rolePms]); }}
+                              className="border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4] transition-colors"
+                            >
+                              Editar
+                            </button>
+                            {/* Collapse arrow */}
+                            <button
+                              onClick={() => setExpandedRoles(s => ({ ...s, [r.id]: !s[r.id] }))}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f5f5f4] transition-colors"
+                            >
+                              <svg viewBox="0 0 16 16" className={`w-4 h-4 fill-[#646462] transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                                <path d="M4 6l4 4 4-4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                        {/* Collapsible permissions */}
+                        {isExpanded && (
+                          <div className="border-t border-[#f0f0ee] bg-[#fafaf9] px-5 py-4">
+                            <p className="text-[10px] font-semibold text-[#a4a4a2] uppercase tracking-wider mb-3">Permisos</p>
+                            <div className="flex flex-col gap-3">
+                              {ALL_PERMS_META.map(g => (
+                                <div key={g.group} className="flex items-start gap-3">
+                                  <span className="text-[11px] font-semibold text-[#646462] w-[110px] flex-shrink-0 pt-0.5">{g.group}</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {g.perms.map(p => {
+                                      const has = rolePms.includes(p.id);
+                                      return (
+                                        <span key={p.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${has ? g.color : 'bg-transparent text-[#d1d5db] border-[#e9eae6] opacity-40'}`}>
+                                          {has && <svg viewBox="0 0 8 8" className="w-2 h-2 fill-current flex-shrink-0"><path d="M1 4l2 2 4-4"/></svg>}
+                                          {p.label}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                            {!['owner','workspace_admin','supervisor','agent','viewer'].includes(r.id) && (
-                              <button className="text-[12px] text-[#646462] hover:text-[#3b59f6] border border-[#e9eae6] rounded-lg px-2.5 py-1 hover:border-[#3b59f6] transition-colors">
-                                Editar
-                              </button>
-                            )}
                           </div>
-                        </div>
-                        {/* Permission groups */}
-                        <div className="px-5 pb-4 bg-[#fafaf9] border-t border-[#f0f0ee]">
-                          <p className="text-[10px] font-semibold text-[#a4a4a2] uppercase tracking-wide pt-3 mb-2">Permisos</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {ALL_PERMS_META.flatMap(g => g.perms.map(p => ({ ...p, groupColor: g.color }))).map(p => {
-                              const has = rolePms.includes(p.id);
-                              return (
-                                <span key={p.id} className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-medium border transition-opacity ${has ? p.groupColor : 'bg-transparent text-[#d1d5db] border-[#e9eae6] opacity-40'}`}>
-                                  {has && <svg viewBox="0 0 8 8" className="w-2 h-2 mr-1 fill-current"><path d="M1 4l2 2 4-4"/></svg>}
-                                  {p.label}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               </div>
             )}
+
+            {/* ══ Full-screen role editor ══ */}
+            {editingRole && (() => {
+              const isBuiltin = ['owner','workspace_admin','supervisor','agent','viewer'].includes(editingRole.id);
+              const PERM_DESCRIPTIONS: Record<string, string> = {
+                'conversations:read':   'Ver todas las conversaciones del workspace, incluyendo mensajes, notas internas y archivos adjuntos.',
+                'conversations:write':  'Redactar y enviar respuestas a clientes en conversaciones abiertas.',
+                'conversations:assign': 'Reasignar conversaciones a otros compañeros de equipo o equipos.',
+                'conversations:close':  'Cerrar y resolver conversaciones. El historial permanece accesible.',
+                'conversations:delete': 'Eliminar permanentemente conversaciones y su historial. Acción irreversible.',
+                'contacts:read':        'Consultar perfiles de contacto: datos, historial de conversaciones y atributos personalizados.',
+                'contacts:write':       'Crear y modificar perfiles de contacto, atributos, etiquetas y notas.',
+                'contacts:delete':      'Eliminar contactos permanentemente del sistema. Acción irreversible.',
+                'contacts:export':      'Exportar listados de contactos y sus datos en formato CSV.',
+                'companies:read':       'Consultar perfiles de empresa: datos, contactos asociados y atributos.',
+                'companies:write':      'Crear y modificar empresas, sus atributos y relaciones con contactos.',
+                'reports:read':         'Acceder al panel de informes: métricas de conversaciones, CSAT, tiempos de respuesta.',
+                'reports:export':       'Exportar informes y datos de análisis en formato CSV o PDF.',
+                'settings:read':        'Ver la configuración del workspace: canales, integraciones, horarios y políticas.',
+                'settings:write':       'Modificar la configuración del workspace. Incluye canales, automatizaciones y políticas.',
+                'teammates:read':       'Ver la lista de compañeros de equipo, sus roles y estado de actividad.',
+                'teammates:invite':     'Enviar invitaciones a nuevos compañeros de equipo al workspace.',
+                'teammates:manage':     'Cambiar roles, desactivar cuentas y gestionar permisos de compañeros.',
+                'channels:read':        'Ver los canales configurados: email, chat, teléfono y sus ajustes básicos.',
+                'channels:write':       'Crear, configurar y desactivar canales de comunicación del workspace.',
+                'ai:read':              'Consultar el estado de Fin AI, conversaciones gestionadas y métricas de IA.',
+                'ai:configure':         'Configurar el comportamiento de Fin AI: fuentes de conocimiento, respuestas y audiencias.',
+                'ai:train':             'Entrenar a Fin AI con nuevas fuentes, aprobar sugerencias y gestionar el conocimiento base.',
+              };
+              return (
+                <div className="fixed inset-0 z-[100] bg-[#f3f3f1] flex flex-col">
+                  {/* Full-screen header */}
+                  <div className="bg-white border-b border-[#e9eae6] px-8 py-4 flex items-center justify-between flex-shrink-0">
+                    <div className="flex items-center gap-4">
+                      <button
+                        onClick={() => setEditingRole(null)}
+                        className="flex items-center gap-1.5 text-[13px] text-[#646462] hover:text-[#1a1a1a] transition-colors"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M10.78 2.22a.75.75 0 00-1.06 0L4.47 7.47a.75.75 0 000 1.06l5.25 5.25a.75.75 0 001.06-1.06L6.06 8l4.72-4.72a.75.75 0 000-1.06z"/></svg>
+                        Volver a funciones
+                      </button>
+                      <div className="w-px h-5 bg-[#e9eae6]" />
+                      <div className="flex items-center gap-3">
+                        <span className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${editingRole.color ?? roleColor(editingRole.id)}`}>
+                          {editingRole.name}
+                        </span>
+                        <div>
+                          <p className="text-[14px] font-bold text-[#1a1a1a]">Editar función</p>
+                          <p className="text-[12px] text-[#646462]">{editingRole.desc ?? editingRole.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {isBuiltin && (
+                        <span className="text-[12px] text-[#9a9a96] bg-[#f3f3f1] border border-[#e9eae6] rounded-full px-3 py-1">
+                          Función integrada — los permisos base no se pueden modificar
+                        </span>
+                      )}
+                      <button onClick={() => setEditingRole(null)} className="border border-[#e9eae6] rounded-lg px-4 py-2 text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">
+                        Cancelar
+                      </button>
+                      <button
+                        disabled={savingRole || isBuiltin}
+                        onClick={async () => {
+                          setSavingRole(true);
+                          try {
+                            await iamApi.updateRole?.(editingRole.id, { permissions: editPerms });
+                            showToast('Función guardada correctamente.');
+                            refetchRoles();
+                            setEditingRole(null);
+                          } catch { showToast('Error al guardar.', false); }
+                          finally { setSavingRole(false); }
+                        }}
+                        className="bg-[#1a1a1a] text-white rounded-lg px-5 py-2 text-[13px] font-semibold hover:bg-[#333] disabled:opacity-40"
+                      >
+                        {savingRole ? 'Guardando…' : 'Guardar cambios'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  <div className="flex-1 overflow-y-auto min-h-0 p-8">
+                    <div className="max-w-[900px] mx-auto flex flex-col gap-5">
+
+                      {/* Role name + description (editable for custom roles) */}
+                      {!isBuiltin && (
+                        <div className="bg-white border border-[#e9eae6] rounded-[14px] p-6 flex gap-6">
+                          <div className="w-[220px] flex-shrink-0">
+                            <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Nombre y descripción</h3>
+                            <p className="text-[12px] text-[#646462] leading-[1.5]">El nombre identifica la función en los menús de asignación y en el perfil de cada compañero.</p>
+                          </div>
+                          <div className="flex-1 flex flex-col gap-3">
+                            <input
+                              className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                              defaultValue={editingRole.name}
+                            />
+                            <input
+                              className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] text-[#646462]"
+                              placeholder="Descripción de la función…"
+                              defaultValue={editingRole.desc ?? editingRole.description ?? ''}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Permission categories */}
+                      {ALL_PERMS_META.map(g => (
+                        <div key={g.group} className="bg-white border border-[#e9eae6] rounded-[14px] overflow-hidden">
+                          {/* Category header */}
+                          <div className="flex items-center gap-3 px-6 py-4 border-b border-[#f0f0ee] bg-[#fafaf9]">
+                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${g.color.replace('text-','').replace('border-','').split(' ')[0].replace('bg-[','').replace(']','') ? '' : ''}`}
+                              style={{ background: g.color.match(/bg-\[([^\]]+)\]/)?.[1] ?? '#e5e7eb' }}
+                            />
+                            <h3 className="text-[14px] font-bold text-[#1a1a1a]">{g.group}</h3>
+                            <span className="ml-auto text-[12px] text-[#9a9a96]">
+                              {g.perms.filter(p => editPerms.includes(p.id)).length} / {g.perms.length} permisos activos
+                            </span>
+                          </div>
+                          {/* Permissions list */}
+                          <div className="divide-y divide-[#f5f5f3]">
+                            {g.perms.map(p => {
+                              const active = editPerms.includes(p.id);
+                              return (
+                                <div key={p.id} className={`flex items-start gap-5 px-6 py-4 transition-colors ${active ? '' : 'opacity-60'}`}>
+                                  {/* Toggle */}
+                                  <button
+                                    disabled={isBuiltin}
+                                    onClick={() => setEditPerms(prev =>
+                                      prev.includes(p.id) ? prev.filter(x => x !== p.id) : [...prev, p.id]
+                                    )}
+                                    className={`mt-0.5 w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${active ? 'bg-[#f97316]' : 'bg-[#e9eae6]'} ${isBuiltin ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                  >
+                                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${active ? 'translate-x-5' : 'translate-x-1'}`} />
+                                  </button>
+                                  {/* Info */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${g.color}`}>
+                                        {p.label}
+                                      </span>
+                                      <code className="text-[10.5px] text-[#9a9a96] font-mono">{p.id}</code>
+                                    </div>
+                                    <p className="text-[12.5px] text-[#646462] leading-[1.5]">
+                                      {PERM_DESCRIPTIONS[p.id] ?? 'Sin descripción disponible.'}
+                                    </p>
+                                  </div>
+                                  {/* State badge */}
+                                  <span className={`flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full mt-0.5 ${active ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#f3f3f1] text-[#9a9a96]'}`}>
+                                    {active ? 'Activo' : 'Inactivo'}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Danger zone — only for custom roles */}
+                      {!isBuiltin && (
+                        <div className="bg-white border border-[#fca5a5] rounded-[14px] p-6">
+                          <h3 className="text-[14px] font-bold text-[#b91c1c] mb-1">Zona de peligro</h3>
+                          <p className="text-[12.5px] text-[#646462] mb-4">Al eliminar esta función, los compañeros asignados perderán sus permisos. Esta acción es irreversible.</p>
+                          <button className="border border-[#fca5a5] rounded-lg px-4 py-2 text-[13px] font-medium text-[#b91c1c] hover:bg-[#fef2f2] transition-colors">
+                            Eliminar función
+                          </button>
+                        </div>
+                      )}
+
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ══ TAB: SCIM ══ */}
             {tab === 'scim' && (
