@@ -13672,7 +13672,7 @@ function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v:
 
             {/* ══ TAB: General ══ */}
             {tab === 'general' && (
-              <div className="p-6 flex flex-col gap-0 max-w-[820px]">
+              <div className="p-6 flex flex-col gap-0">
 
                 {/* Promo banner */}
                 {!promoDismissed && (
@@ -13843,7 +13843,7 @@ function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v:
 
             {/* ══ TAB: Personalizado ══ */}
             {tab === 'personalizado' && (
-              <div className="p-6 flex flex-col gap-4 max-w-[820px]">
+              <div className="p-6 flex flex-col gap-4">
 
                 {/* Promo card */}
                 <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
