@@ -8706,24 +8706,29 @@ function SecurityView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
 
 // ── NotificationsView ────────────────────────────────────────────────────────
 
-const NOTIF_ROWS: { label: string; desk: boolean; mobile: boolean; email: boolean }[] = [
-  { label: "Actividad en todas las conversaciones sin asignar",                                    desk: false, mobile: true,  email: false },
-  { label: "Actividad en todo lo asignado a ti",                                                   desk: false, mobile: true,  email: true  },
-  { label: "Actividad en cualquiera de tus equipos",                                               desk: false, mobile: true,  email: false },
-  { label: "Actividad en conversaciones asignadas a otros equipos o compañeros de equipo",         desk: false, mobile: true,  email: false },
-  { label: "Cualquier mención de ti en una conversación",                                          desk: false, mobile: true,  email: true  },
-  { label: "Actividad en las conversaciones iniciadas a partir de mensajes que enviaste",           desk: false, mobile: true,  email: false },
-  { label: "Nuevas conversaciones con leads y usuarios de tu propiedad",                           desk: false, mobile: true,  email: false },
+const NOTIF_ROWS_DEFAULT: { label: string; desk: boolean; mobile: boolean; email: boolean }[] = [
+  { label: "Actividad en todas las conversaciones sin asignar",                               desk: false, mobile: true,  email: false },
+  { label: "Actividad en todo lo asignado a ti",                                              desk: false, mobile: true,  email: true  },
+  { label: "Actividad en cualquiera de tus equipos",                                          desk: false, mobile: true,  email: false },
+  { label: "Actividad en conversaciones asignadas a otros equipos o compañeros de equipo",    desk: false, mobile: true,  email: false },
+  { label: "Cualquier mención de ti en una conversación",                                     desk: false, mobile: true,  email: true  },
+  { label: "Actividad en las conversaciones iniciadas a partir de mensajes que enviaste",     desk: false, mobile: true,  email: false },
+  { label: "Nuevas conversaciones con leads y usuarios de tu propiedad",                      desk: false, mobile: true,  email: false },
 ];
 
-function NotifCheck({ checked }: { checked: boolean }) {
+function NotifCheck({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
-    <span className={`inline-flex w-[13px] h-[13px] rounded-sm border flex-shrink-0 items-center justify-center ${
-      checked ? 'bg-[#3b59f6] border-[#3b59f6]' : 'border-[#ccc] bg-white'
-    }`}>
+    <span
+      role="checkbox"
+      aria-checked={checked}
+      onClick={onChange}
+      className={`inline-flex w-[14px] h-[14px] rounded-[3px] border flex-shrink-0 items-center justify-center cursor-pointer transition-colors ${
+        checked ? 'bg-[#3b59f6] border-[#3b59f6]' : 'border-[#c9cac7] bg-white hover:border-[#9a9a98]'
+      }`}
+    >
       {checked && (
-        <svg viewBox="0 0 10 8" className="w-2 h-2 fill-white">
-          <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+        <svg viewBox="0 0 10 8" className="w-[9px] h-[7px]">
+          <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
         </svg>
       )}
     </span>
@@ -8731,119 +8736,214 @@ function NotifCheck({ checked }: { checked: boolean }) {
 }
 
 function NotificationsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  type NotifRow = { label: string; desk: boolean; mobile: boolean; email: boolean };
+  const [rows, setRows] = useState<NotifRow[]>(NOTIF_ROWS_DEFAULT.map(r => ({ ...r })));
+  const [siteVisit, setSiteVisit] = useState<{ desk: boolean; mobile: boolean; email: boolean }>({ desk: false, mobile: true, email: false });
+  const [siteVisitMode, setSiteVisitMode] = useState<'any' | 'specific'>('any');
+  const [urlFilter, setUrlFilter] = useState('');
+  const [browserChecks, setBrowserChecks] = useState<Record<string, boolean>>({
+    'Asignado a ti': false,
+    'Sin asignar': false,
+    'Asignado a cualquiera de tus equipos': false,
+  });
+  const [savedToast, setSavedToast] = useState(false);
+
+  const toggleRow = (i: number, col: 'desk' | 'mobile' | 'email') => {
+    setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [col]: !r[col] } : r));
+  };
+  const toggleSiteVisit = (col: 'desk' | 'mobile' | 'email') => {
+    setSiteVisit(prev => ({ ...prev, [col]: !prev[col] }));
+  };
+  const toggleBrowser = (label: string) => {
+    setBrowserChecks(prev => ({ ...prev, [label]: !prev[label] }));
+  };
+  const handleSave = () => {
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 2500);
+  };
+
+  const COL_W = 'w-[130px] flex-shrink-0';
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden relative">
+
+          {/* Save toast */}
+          {savedToast && (
+            <div className="absolute top-4 right-4 z-10 bg-[#1a1a1a] text-white text-[13px] font-medium rounded-[8px] px-4 py-2.5 shadow-lg flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none flex-shrink-0"><path d="M3 8l3.5 3.5L13 4" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Preferencias guardadas
+            </div>
+          )}
+
           {/* Header */}
           <div className="flex items-center justify-between px-6 border-b border-[#e9eae6] h-[64px] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Tus preferencias de notificaciones</h1>
+            <h1 className="text-[18px] font-bold text-[#1a1a1a]">Tus preferencias de notificaciones</h1>
             <div className="flex items-center gap-3">
-              <a className="text-[13px] text-[#4f52cc] flex items-center gap-1 cursor-pointer">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current opacity-60"><path d="M3.5 10.5a.5.5 0 01-.354-.854l7-7a.5.5 0 01.707.707l-7 7A.5.5 0 013.5 10.5z"/><path d="M10.5 3.5h-4a.5.5 0 010-1h5a.5.5 0 01.5.5v5a.5.5 0 01-1 0v-4z"/></svg>
+              <a className="text-[13px] text-[#4f52cc] flex items-center gap-1 cursor-pointer hover:opacity-70">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M3 13L13 3M9 3h4v4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 Política de privacidad
               </a>
-              <button className="bg-[#222] text-white text-[13px] font-semibold rounded-full px-4 py-[6px] hover:bg-[#444]">Guardar</button>
+              <button
+                onClick={handleSave}
+                className="bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-full px-4 py-[6px] hover:bg-[#444] transition-colors"
+              >
+                Guardar
+              </button>
             </div>
           </div>
+
           {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="px-8 py-4">
-              <p className="text-[13px] text-[#1a1a1a] mb-4">Recibe notificaciones sobre la actividad de las conversaciones en todos tus espacios de trabajo:</p>
-              {/* Column headers */}
-              <div className="flex border border-[#e9eae6] rounded-t-[8px] overflow-hidden mb-0">
-                <div className="flex-1 border-r border-[#e9eae6] px-6 py-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] opacity-70"><rect x="1" y="2" width="14" height="10" rx="1.5" stroke="#1a1a1a" strokeWidth="1.5" fill="none"/><path d="M5 14h6M8 12v2" stroke="#1a1a1a" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                    <span className="text-[13px] font-semibold text-[#1a1a1a]">Escritorio</span>
-                  </div>
-                  <span className="text-[12px] text-[#646462]">Un banner en la esquina de la pantalla</span>
+            <div className="px-7 py-5">
+              <p className="text-[13px] text-[#646462] mb-5 leading-[1.5]">
+                Recibe notificaciones sobre la actividad de las conversaciones en todos tus espacios de trabajo:
+              </p>
+
+              {/* Table */}
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+
+                {/* Column header row */}
+                <div className="flex items-stretch bg-[#fafaf8] border-b border-[#e9eae6]">
+                  <div className="flex-1 px-5 py-3" />
+                  {([
+                    { icon: <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4"><rect x="1" y="2" width="14" height="10" rx="1.5" stroke="#1a1a1a" strokeWidth="1.4"/><path d="M5 14h6M8 12v2" stroke="#1a1a1a" strokeWidth="1.4" strokeLinecap="round"/></svg>, label: 'Escritorio', sub: 'Banner en pantalla' },
+                    { icon: <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4"><rect x="4" y="1" width="8" height="13" rx="1.5" stroke="#1a1a1a" strokeWidth="1.4"/><circle cx="8" cy="12" r="0.7" fill="#1a1a1a"/></svg>, label: 'Móvil', sub: 'Push en el teléfono' },
+                    { icon: <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4"><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="#1a1a1a" strokeWidth="1.4"/><path d="M1 6l7 4 7-4" stroke="#1a1a1a" strokeWidth="1.4"/></svg>, label: 'Email', sub: 'En tu buzón' },
+                  ] as const).map(col => (
+                    <div key={col.label} className={`${COL_W} px-3 py-3 border-l border-[#e9eae6] flex flex-col gap-0.5`}>
+                      <div className="flex items-center gap-1.5">
+                        {col.icon}
+                        <span className="text-[12px] font-semibold text-[#1a1a1a]">{col.label}</span>
+                      </div>
+                      <span className="text-[11px] text-[#9a9a98]">{col.sub}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex-1 border-r border-[#e9eae6] px-6 py-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="4" y="1" width="8" height="13" rx="1.5"/><circle cx="8" cy="12" r="0.5" fill="#1a1a1a"/></svg>
-                    <span className="text-[13px] font-semibold text-[#1a1a1a]">Dispositivo móvil</span>
+
+                {/* Regular rows */}
+                {rows.map((row, i) => (
+                  <div key={i} className="flex items-center border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafaf8] transition-colors">
+                    <div className="flex-1 px-5 py-3.5">
+                      <span className="text-[13px] text-[#1a1a1a] leading-[1.4]">{row.label}</span>
+                    </div>
+                    {(['desk', 'mobile', 'email'] as const).map(col => (
+                      <div key={col} className={`${COL_W} border-l border-[#e9eae6] flex items-center justify-center py-3.5`}>
+                        <NotifCheck checked={row[col]} onChange={() => toggleRow(i, col)} />
+                      </div>
+                    ))}
                   </div>
-                  <span className="text-[12px] text-[#646462]">Una notificación en tu teléfono</span>
-                </div>
-                <div className="flex-1 px-6 py-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6l7 4 7-4"/></svg>
-                    <span className="text-[13px] font-semibold text-[#1a1a1a]">Correo electrónico</span>
+                ))}
+
+                {/* Site-visit row with radio sub-options */}
+                <div className="flex items-start border-t border-[#e9eae6] hover:bg-[#fafaf8] transition-colors">
+                  <div className="flex-1 px-5 py-3.5 flex flex-col gap-2">
+                    <span className="text-[13px] text-[#1a1a1a] leading-[1.4]">
+                      Los leads de cuentas que posees vuelven a visitar tu sitio web
+                    </span>
+                    <div className="flex flex-col gap-1.5 pl-0.5">
+                      <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a]">
+                        <input
+                          type="radio"
+                          checked={siteVisitMode === 'any'}
+                          onChange={() => setSiteVisitMode('any')}
+                          className="accent-[#3b59f6] cursor-pointer"
+                        />
+                        visita cualquier página
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a] flex-wrap">
+                        <input
+                          type="radio"
+                          checked={siteVisitMode === 'specific'}
+                          onChange={() => setSiteVisitMode('specific')}
+                          className="accent-[#3b59f6] cursor-pointer"
+                        />
+                        visita una página específica y
+                        <span className="border border-[#c5c7ff] rounded-[4px] px-2 py-0.5 text-[12px] text-[#4f52cc] bg-[#f0f0ff]">la URL contiene</span>
+                        {siteVisitMode === 'specific' && (
+                          <input
+                            type="text"
+                            value={urlFilter}
+                            onChange={e => setUrlFilter(e.target.value)}
+                            placeholder="ejemplo.com/precios"
+                            className="border border-[#e9eae6] rounded-[5px] px-2 py-0.5 text-[12px] text-[#1a1a1a] outline-none focus:border-[#3b59f6] w-[160px]"
+                          />
+                        )}
+                      </label>
+                    </div>
                   </div>
-                  <span className="text-[12px] text-[#646462]">Conversaciones enviadas a tu buzón</span>
+                  {(['desk', 'mobile', 'email'] as const).map(col => (
+                    <div key={col} className={`${COL_W} border-l border-[#e9eae6] flex items-center justify-center py-3.5`}>
+                      <NotifCheck checked={siteVisit[col]} onChange={() => toggleSiteVisit(col)} />
+                    </div>
+                  ))}
                 </div>
               </div>
-              {/* Notification rows */}
-              {NOTIF_ROWS.map((row, i) => (
-                <div key={i} className="flex items-center border-x border-b border-[#e9eae6] px-6 py-4 gap-4">
-                  <span className="flex-1 text-[13px] text-[#1a1a1a]">{row.label}</span>
-                  <div className="flex items-center gap-[80px] flex-shrink-0">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <NotifCheck checked={row.desk} />
-                      <span className="text-[13px] text-[#1a1a1a]">Escritorio</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <NotifCheck checked={row.mobile} />
-                      <span className="text-[13px] text-[#1a1a1a]">Dispositivo móvil</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <NotifCheck checked={row.email} />
-                      <span className="text-[13px] text-[#1a1a1a]">Correo electrónico</span>
-                    </label>
-                  </div>
-                </div>
-              ))}
-              {/* Row 8 — with radio sub-options */}
-              <div className="flex border-x border-b border-[#e9eae6] rounded-b-[8px] px-6 py-4 gap-4">
-                <div className="flex-1 flex flex-col gap-2">
-                  <span className="text-[13px] text-[#1a1a1a]">Los leads de cuentas que posees vuelven a visitar tu sitio web</span>
-                  <div className="flex flex-col gap-1 mt-1 ml-0">
-                    <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a]">
-                      <input type="radio" name="site_visit" defaultChecked className="accent-[#3b59f6]" />
-                      visita cualquier página
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a]">
-                      <input type="radio" name="site_visit" className="accent-[#3b59f6]" />
-                      visita una página específica y
-                      <span className="ml-1 border border-[#e9eae6] rounded px-2 py-0.5 text-[12px] text-[#4f52cc] bg-[#f5f5ff]">la URL contiene</span>
-                    </label>
-                  </div>
-                </div>
-                <div className="flex items-start gap-[80px] flex-shrink-0 pt-0.5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <NotifCheck checked={false} />
-                    <span className="text-[13px] text-[#1a1a1a]">Escritorio</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <NotifCheck checked={true} />
-                    <span className="text-[13px] text-[#1a1a1a]">Dispositivo móvil</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <NotifCheck checked={false} />
-                    <span className="text-[13px] text-[#1a1a1a]">Correo electrónico</span>
-                  </label>
-                </div>
-              </div>
-              {/* Browser notifications section */}
+
+              {/* Browser notifications */}
               <div className="mt-8">
-                <h2 className="text-[17px] font-semibold text-[#1a1a1a] mb-1">Notificaciones del navegador</h2>
-                <p className="text-[13px] text-[#646462] mb-3">Vincula tu pestaña cuando haya nueva actividad en estas conversaciones. Verás estos cambios al actualizar la página.</p>
-                <div className="flex flex-col gap-2">
-                  {["Asignado a ti", "Sin asignar", "Asignado a cualquiera de tus equipos"].map(label => (
-                    <label key={label} className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a]">
-                      <NotifCheck checked={false} />
-                      {label}
+                <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Notificaciones del navegador</h2>
+                <p className="text-[13px] text-[#646462] mb-4 leading-[1.5]">
+                  Actualiza el título de la pestaña cuando haya nueva actividad en estas conversaciones. Los cambios se aplican al recargar la página.
+                </p>
+                <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                  {Object.keys(browserChecks).map((label, i, arr) => (
+                    <label
+                      key={label}
+                      className={`flex items-center gap-3 px-5 py-3.5 cursor-pointer hover:bg-[#fafaf8] transition-colors ${i < arr.length - 1 ? 'border-b border-[#e9eae6]' : ''}`}
+                    >
+                      <NotifCheck checked={browserChecks[label]} onChange={() => toggleBrowser(label)} />
+                      <span className="text-[13px] text-[#1a1a1a]">{label}</span>
                     </label>
                   ))}
                 </div>
+              </div>
+
+              {/* Email digest section */}
+              <div className="mt-8 mb-6">
+                <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Resumen por correo electrónico</h2>
+                <p className="text-[13px] text-[#646462] mb-4 leading-[1.5]">
+                  Recibe un resumen periódico con la actividad pendiente de tus conversaciones.
+                </p>
+                <EmailDigestSection />
               </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function EmailDigestSection() {
+  const [freq, setFreq] = useState<'never' | 'daily' | 'weekly'>('daily');
+  const options: { value: typeof freq; label: string; desc: string }[] = [
+    { value: 'never',  label: 'Nunca',    desc: 'No recibir resúmenes por correo' },
+    { value: 'daily',  label: 'Diario',   desc: 'Un resumen cada día laborable' },
+    { value: 'weekly', label: 'Semanal',  desc: 'Un resumen cada lunes' },
+  ];
+  return (
+    <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+      {options.map((opt, i, arr) => (
+        <label
+          key={opt.value}
+          className={`flex items-center gap-3 px-5 py-3.5 cursor-pointer hover:bg-[#fafaf8] transition-colors ${i < arr.length - 1 ? 'border-b border-[#e9eae6]' : ''}`}
+        >
+          <input
+            type="radio"
+            checked={freq === opt.value}
+            onChange={() => setFreq(opt.value)}
+            className="accent-[#3b59f6] cursor-pointer w-4 h-4 flex-shrink-0"
+          />
+          <div className="flex flex-col gap-0">
+            <span className="text-[13px] font-medium text-[#1a1a1a]">{opt.label}</span>
+            <span className="text-[12px] text-[#646462]">{opt.desc}</span>
+          </div>
+        </label>
+      ))}
     </div>
   );
 }
