@@ -10,7 +10,7 @@ import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
-type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'billingPlans' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat' | 'audiences' | 'finSettings';
+type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'billingPlans' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat' | 'audiences' | 'finSettings' | 'dataConversaciones';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -7326,7 +7326,7 @@ const PERSONAL_SUB: { label: string; nav: View | null }[] = [
 ];
 
 function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies' || view === 'customObjects' || view === 'topics' || view === 'customFilters' || view === 'emailTemplates';
+  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies' || view === 'customObjects' || view === 'topics' || view === 'dataConversaciones' || view === 'customFilters' || view === 'emailTemplates';
   const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'inboxTeam' || view === 'cannedResponses' || view === 'callsLive';
   const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin' || view === 'finSettings' || view === 'aiFeedback' || view === 'agentChat' || view === 'audiences';
   const isIntegSection = view === 'appStore' || view === 'connectors' || view === 'auth';
@@ -7557,7 +7557,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoLabelsS}    label="Etiquetas"                     nav={'labels'} />
             <SubRow icon={IcoPeopleS}    label="Personas"                      nav={'people'} />
             <SubRow icon={IcoCompaniesS} label="Empresas"                      nav={'companies'} />
-            <SubRow icon={IcoConvS}      label="Conversaciones"                nav={'settings'} />
+            <SubRow icon={IcoConvS}      label="Conversaciones"                nav={'dataConversaciones'} />
             <SubRow icon={IcoCustomS}    label="Objetos personalizados"        nav={'customObjects'} />
             <SubRow icon={IcoImportsS}   label="Importaciones y exportaciones" nav={'imports'} />
             <SubRow icon={IcoTopicsS}    label="Temas"                         nav={'topics'} />
@@ -7595,6 +7595,215 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoMultilingS} label="Multilingüe"            nav={'multilingual'} />
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+// ── DataConversacionesView ─────────────────────────────────────────────────────
+
+const CONV_ROWS = [
+  { name: "Sentiment",  created: "7 días atrás", visible: "Todos", required: "No" },
+  { name: "Urgency",    created: "7 días atrás", visible: "Todos", required: "No" },
+  { name: "Complexity", created: "7 días atrás", visible: "Todos", required: "No" },
+  { name: "Sentiment",  created: "5 días atrás", visible: "Todos", required: "No" },
+];
+
+function DataConversacionesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [showPanel, setShowPanel] = useState(false);
+  const [convTab, setConvTab] = useState<'general' | 'condiciones'>('general');
+  const [convFormat, setConvFormat] = useState('Texto');
+  const [convName, setConvName] = useState('');
+  const [convDesc, setConvDesc] = useState('');
+  const [convMultiline, setConvMultiline] = useState(false);
+  const [convLimitVisible, setConvLimitVisible] = useState(false);
+  const [convRequired, setConvRequired] = useState(false);
+  const [rows, setRows] = useState(CONV_ROWS);
+
+  function handleSave() {
+    if (!convName.trim()) return;
+    setRows(prev => [...prev, { name: convName.trim(), created: 'ahora', visible: 'Todos', required: convRequired ? 'Sí' : 'No' }]);
+    setShowPanel(false);
+    setConvName(''); setConvDesc(''); setConvFormat('Texto'); setConvMultiline(false); setConvLimitVisible(false); setConvRequired(false);
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex min-h-0 overflow-hidden">
+          {/* Main table area */}
+          <div className="flex flex-col flex-1 min-w-0">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <h1 className="text-[20px] font-bold text-[#1a1a1a]">Conversaciones</h1>
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                  Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                </button>
+                <button onClick={() => { setShowPanel(true); setConvTab('general'); }} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Crear atributo</button>
+              </div>
+            </div>
+
+            {/* Filter row */}
+            <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
+              <div className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[5px] text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f5f5f4] cursor-pointer">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><path d="M2.5 2.5h11a.5.5 0 01.4.8L9.5 9v4.5L6.5 12V9L2.1 3.3a.5.5 0 01.4-.8z"/></svg>
+                <span>Type is cualquiera</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="flex items-center text-[12px] font-medium text-[#646462] px-4 border-b border-[#e9eae6]" style={{ height: 36 }}>
+                <div className="w-[48px] flex-shrink-0" />
+                <div className="flex-1 min-w-0">Nombre</div>
+                <div className="w-[160px] flex-shrink-0">Tipo</div>
+                <div className="w-[100px] flex-shrink-0">Creado</div>
+                <div className="w-[120px] flex-shrink-0">Visible para</div>
+                <div className="w-[100px] flex-shrink-0">Obligatorio</div>
+                <div className="w-[80px] flex-shrink-0">Condiciones</div>
+                <div className="w-[48px] flex-shrink-0" />
+              </div>
+              {rows.map((row, idx) => (
+                <div key={idx} className="flex items-center px-4 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] cursor-pointer border-b border-[#f3f3f1]" style={{ height: 64 }}>
+                  <div className="w-[48px] flex-shrink-0 flex items-center justify-center opacity-30">
+                    <svg width="12" height="16" viewBox="0 0 12 16" fill="none">
+                      <circle cx="3.5" cy="3.5" r="1.2" fill="#1a1a1a"/><circle cx="3.5" cy="8" r="1.2" fill="#1a1a1a"/><circle cx="3.5" cy="12.5" r="1.2" fill="#1a1a1a"/>
+                      <circle cx="8.5" cy="3.5" r="1.2" fill="#1a1a1a"/><circle cx="8.5" cy="8" r="1.2" fill="#1a1a1a"/><circle cx="8.5" cy="12.5" r="1.2" fill="#1a1a1a"/>
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0 font-semibold">{row.name}</div>
+                  <div className="w-[160px] flex-shrink-0">
+                    <span className="inline-flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full pl-2 pr-3 py-1 text-[12px]">
+                      <svg viewBox="0 0 14 14" className="w-3 h-3 fill-[#646462]"><path d="M7 1l1.4 3.8H12L9 7l1 3.5L7 8.5 4 10.5 5 7 2 4.8h3.6z"/></svg>
+                      Atributo de Fin
+                    </span>
+                  </div>
+                  <div className="w-[100px] flex-shrink-0 text-[#646462]">{row.created}</div>
+                  <div className="w-[120px] flex-shrink-0 text-[#646462]">{row.visible}</div>
+                  <div className="w-[100px] flex-shrink-0 text-[#646462]">{row.required}</div>
+                  <div className="w-[80px] flex-shrink-0">
+                    <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 14 14" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><path d="M2 4h10M4 7h6M6 10h2" strokeLinecap="round"/></svg>
+                    </button>
+                  </div>
+                  <div className="w-[48px] flex-shrink-0 flex justify-end">
+                    <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 14 14" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="7" cy="2.5" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="7" cy="11.5" r="1.2"/></svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right panel — Crear atributo */}
+          {showPanel && (
+            <div className="w-[560px] flex-shrink-0 border-l border-[#e9eae6] flex flex-col">
+              {/* Panel header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Crear un nuevo atributo</h2>
+                <div className="flex items-center gap-2">
+                  <button onClick={handleSave} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[6px] text-[13px] font-semibold hover:bg-[#444]">Guardar</button>
+                  <button onClick={() => setShowPanel(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                  </button>
+                </div>
+              </div>
+              {/* Tabs */}
+              <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+                {(['general', 'condiciones'] as const).map(t => (
+                  <button key={t} onClick={() => setConvTab(t)}
+                    className={`px-1 pb-3 pt-3 mr-5 text-[13px] font-medium border-b-2 -mb-px capitalize transition-colors ${convTab === t ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+              {/* Panel body */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+                {convTab === 'general' && (
+                  <>
+                    {/* Formato */}
+                    <div>
+                      <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Formato</label>
+                      <div className="flex items-center gap-4">
+                        <div className="relative inline-block">
+                          <div className="flex items-center gap-1.5 border border-[#e9eae6] rounded-[8px] pl-2.5 pr-8 py-2 text-[13px] text-[#1a1a1a] bg-white cursor-pointer min-w-[130px]">
+                            <span className="text-[11px] font-bold text-[#1a1a1a] bg-[#f3f3f1] rounded px-1 py-0.5">Aa</span>
+                            <select value={convFormat} onChange={e => setConvFormat(e.target.value)}
+                              className="appearance-none bg-transparent border-none text-[13px] text-[#1a1a1a] focus:outline-none cursor-pointer flex-1">
+                              {['Texto', 'Número', 'Booleano', 'Fecha', 'Lista', 'URL', 'Email'].map(f => <option key={f}>{f}</option>)}
+                            </select>
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"><path d="M4 6l4 4 4-4"/></svg>
+                          </div>
+                        </div>
+                        <label className="flex items-center gap-2 text-[13px] text-[#1a1a1a] cursor-pointer">
+                          <input type="checkbox" checked={convMultiline} onChange={e => setConvMultiline(e.target.checked)} className="w-3.5 h-3.5 accent-[#fa7938]" />
+                          Multilínea
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Nombre */}
+                    <div>
+                      <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Nombre</label>
+                      <input value={convName} onChange={e => setConvName(e.target.value)}
+                        placeholder="por ejemplo, Tipo"
+                        className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6]" />
+                      <p className="text-[12px] text-[#646462] mt-1.5 leading-relaxed">Este nombre es visible para los clientes si decides automatizar la colección de datos para ello, por ejemplo, a través de un flujo de trabajo.</p>
+                    </div>
+
+                    {/* Descripción */}
+                    <div>
+                      <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Descripción</label>
+                      <textarea value={convDesc} onChange={e => setConvDesc(e.target.value)}
+                        placeholder="por ejemplo, Tipo de conversación"
+                        rows={3}
+                        className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6] resize-none" />
+                      <p className="text-[12px] text-[#646462] mt-1">{255 - convDesc.length} characters remaining</p>
+                    </div>
+
+                    {/* Limitar la visibilidad */}
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Limitar la visibilidad</p>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setConvLimitVisible(v => !v)}
+                          style={{ width: 36, height: 20, borderRadius: 10, position: 'relative', flexShrink: 0, border: 'none', cursor: 'pointer', padding: 0, background: convLimitVisible ? '#f97316' : '#d1d5db', transition: 'background 0.2s' }}>
+                          <span style={{ position: 'absolute', top: 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s', left: convLimitVisible ? 18 : 2 }} />
+                        </button>
+                        <span className="text-[13px] text-[#646462]">Visible solo para las conversaciones asignadas a equipos específicos.</span>
+                      </div>
+                    </div>
+
+                    {/* Atributo obligatorio */}
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Atributo obligatorio</p>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setConvRequired(v => !v)}
+                          style={{ width: 36, height: 20, borderRadius: 10, position: 'relative', flexShrink: 0, border: 'none', cursor: 'pointer', padding: 0, background: convRequired ? '#f97316' : '#d1d5db', transition: 'background 0.2s' }}>
+                          <span style={{ position: 'absolute', top: 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s', left: convRequired ? 18 : 2 }} />
+                        </button>
+                        <span className="text-[13px] text-[#646462]">Un miembro del equipo deberá completar esto antes de cerrar una conversación</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {convTab === 'condiciones' && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <svg viewBox="0 0 40 40" className="w-10 h-10 fill-none stroke-[#ccc]" strokeWidth="1.5"><path d="M8 10h24M12 20h16M16 30h8" strokeLinecap="round"/></svg>
+                    <p className="text-[13px] text-[#646462]">No hay condiciones configuradas</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -8013,6 +8222,7 @@ function SettingsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
 
 const IMPORT_TABS = [
   "Importar desde Zendesk",
+  "Importar desde Intercom",
   "Importar CSV",
   "Importar desde Mixpanel",
   "Importar desde Mailchimp",
@@ -8066,6 +8276,77 @@ function ImportsZendeskTab() {
             {[
               "Guía de importación",
               "Importar artículos desde Zendesk",
+            ].map((label) => (
+              <div
+                key={label}
+                className="flex-1 bg-[#f8f8f7] border border-[#e9eae6] rounded-[6px] p-[21px] flex items-center gap-3 cursor-pointer hover:bg-[#f3f3f1]"
+              >
+                <img src={ICON_IMPORTS_BOOK} alt="" className="w-10 h-10 flex-shrink-0" />
+                <span className="flex-1 text-[14px] font-medium text-[#1a1a1a]">{label}</span>
+                <img src={ICON_IMPORTS_LINK} alt="" className="w-4 h-4 opacity-50 flex-shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportsIntercomTab() {
+  return (
+    <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
+      <div className="max-w-[756px] mx-auto flex flex-col gap-6">
+        {/* Main form card */}
+        <div className="border border-[#e9eae6] rounded-[6px] px-[21px] py-[20px] bg-white flex flex-col gap-4">
+          <h2 className="text-[18px] font-semibold text-[#1a1a1a]">
+            Importar desde Intercom de forma gratuita
+          </h2>
+          <p className="text-[14px] text-[#1a1a1a] leading-[1.5]">
+            Importa tus conversaciones, contactos y datos de empresa desde Intercom a Clain.
+            Solo tienes que conectar tu cuenta de Intercom a continuación para empezar.
+            Tus datos se migrarán de forma segura y sin pérdida de información.
+          </p>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-[14px] font-semibold text-[#1a1a1a]">Token de acceso de Intercom</span>
+            <input
+              type="text"
+              placeholder="Pega aquí tu token de acceso"
+              className="border border-[#e9eae6] rounded-[6px] px-[13px] py-[8px] text-[14px] text-[#1a1a1a] placeholder-[#646462] outline-none focus:border-[#1a1a1a] w-full font-mono"
+            />
+            <span className="text-[12px] text-[#646462]">
+              Puedes obtener tu token en{' '}
+              <a href="#" className="text-[#e35712] underline hover:opacity-80">
+                Intercom Developer Hub
+              </a>
+              {' '}→ Tu aplicación → Autenticación.
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button className="bg-[#f8f8f7] rounded-full px-[12px] py-[8px] text-[14px] font-semibold text-[#81817e] hover:bg-[#efefed]">
+              Conectar
+            </button>
+            <button className="flex items-center gap-1.5 bg-[#f8f8f7] rounded-full px-[12px] py-[8px] text-[14px] font-semibold text-[#81817e] hover:bg-[#efefed]">
+              <span>Configurar importación</span>
+              <img src={ICON_CHEVRON} alt="" className="w-3.5 h-3.5 opacity-50" />
+            </button>
+          </div>
+
+          <p className="text-[14px] text-[#646462] leading-[1.5]">
+            La importación puede tardar varios días en completarse, dependiendo de la cantidad
+            de datos. Te notificaremos cuando esté lista.
+          </p>
+        </div>
+
+        {/* Resources section */}
+        <div className="flex flex-col gap-3">
+          <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Más recursos</h3>
+          <div className="flex gap-4">
+            {[
+              "Guía de migración desde Intercom",
+              "Importar contactos desde Intercom",
             ].map((label) => (
               <div
                 key={label}
@@ -8181,25 +8462,26 @@ function ImportsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v:
 
           {/* Tab content */}
           {activeTab === 0 && <ImportsZendeskTab />}
-          {activeTab === 1 && (
-            <ImportsEmptyTab
-              description="Importar datos de un archivo CSV a Intercom."
-              btnLabel="Importar"
-            />
-          )}
+          {activeTab === 1 && <ImportsIntercomTab />}
           {activeTab === 2 && (
             <ImportsEmptyTab
-              description="Importa datos de tu cuenta de Mixpanel a Intercom."
-              btnLabel="Conectar con Mixpanel"
+              description="Importar datos de un archivo CSV a Clain."
+              btnLabel="Importar"
             />
           )}
           {activeTab === 3 && (
             <ImportsEmptyTab
-              description="Importa datos de tu lista de correo de Mailchimp a Intercom. Vamos a obtener el nombre y la dirección de correo electrónico de las personas."
+              description="Importa datos de tu cuenta de Mixpanel a Clain."
+              btnLabel="Conectar con Mixpanel"
+            />
+          )}
+          {activeTab === 4 && (
+            <ImportsEmptyTab
+              description="Importa datos de tu lista de correo de Mailchimp a Clain. Vamos a obtener el nombre y la dirección de correo electrónico de las personas."
               btnLabel="Conectar con Mailchimp"
             />
           )}
-          {activeTab === 4 && <ImportsExportTab />}
+          {activeTab === 5 && <ImportsExportTab />}
         </div>
       </div>
     </div>
@@ -34893,7 +35175,7 @@ function readInitialViewFromUrl(): View {
     'people','companies','workspaceSecurity','workspaceMultilingual','workspaceHours',
     'workspaceBrands','workspaceGeneral','workspaceTeammates','billingPlans','billing','messenger',
     'email','phone','whatsapp','discord','sms',
-    'social','allChannels','inboxTeam','fin','knowledge','reports','outbound',
+    'social','allChannels','dataConversaciones','inboxTeam','fin','knowledge','reports','outbound',
   ];
   return v && (known as string[]).includes(v) ? (v as View) : 'inbox';
 }
@@ -34949,6 +35231,7 @@ function PrototypeApp() {
       case 'automation':     return <AutomationView view={view} onNavigate={setView} />;
       case 'appStore':       return <AppStoreView view={view} onNavigate={setView} />;
       case 'connectors':     return <ConnectorsView view={view} onNavigate={setView} />;
+      case 'dataConversaciones': return <DataConversacionesView view={view} onNavigate={setView} />;
       case 'labels':         return <LabelsView view={view} onNavigate={setView} />;
       case 'people':         return <PeopleView view={view} onNavigate={setView} />;
       case 'companies':      return <EmpresasView view={view} onNavigate={setView} />;
