@@ -27650,27 +27650,49 @@ function IconLibraryGalleryV2() {
 }
 
 // ─── WorkspaceGeneralView ────────────────────────────────────────────────────
+function SettingsToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      role="switch" aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-[#f97316]' : 'bg-[#d1d5db]'}`}
+    >
+      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-1'}`} />
+    </button>
+  );
+}
+
 function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
   const [name, setName]         = useState('');
-  const [slug, setSlug]         = useState('');
-  const [timezone, setTimezone] = useState('(UTC+01:00) Europa/Madrid');
-  const [language, setLanguage] = useState('Español');
+  const [timezone, setTimezone] = useState('Europe/Madrid');
   const [saving, setSaving]     = useState(false);
   const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null);
+  const [companiesEnabled, setCompaniesEnabled]       = useState(true);
+  const [lockCompanyAttrs, setLockCompanyAttrs]       = useState(false);
+  const [testWorkspace, setTestWorkspace]             = useState(false);
+  const [showAttribution, setShowAttribution]         = useState(true);
+  const [disableTeamMentions, setDisableTeamMentions] = useState(false);
+  const [deleteConfirm, setDeleteConfirm]             = useState('');
+  const [appId, setAppId]                             = useState('');
+  const [copied, setCopied]                           = useState(false);
 
   useEffect(() => {
     if (!ws) return;
     const w = ws as any;
     setName(w.name ?? '');
-    setSlug(w.slug ?? '');
-    if (w.settings?.timezone) setTimezone(w.settings.timezone);
-    if (w.settings?.language) setLanguage(w.settings.language);
+    setAppId(w.id ?? w.slug ?? '');
+    const s = w.settings ?? {};
+    if (s.timezone) setTimezone(s.timezone);
+    if (s.companiesEnabled !== undefined) setCompaniesEnabled(Boolean(s.companiesEnabled));
+    if (s.lockCompanyAttrs !== undefined) setLockCompanyAttrs(Boolean(s.lockCompanyAttrs));
+    if (s.showAttribution !== undefined) setShowAttribution(Boolean(s.showAttribution));
+    if (s.disableTeamMentions !== undefined) setDisableTeamMentions(Boolean(s.disableTeamMentions));
   }, [ws]);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   }
 
   async function handleSave() {
@@ -27678,33 +27700,42 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
     setSaving(true);
     try {
       const wsId = (ws as any)?.id ?? '';
-      await workspacesApi.update(wsId, { name: name.trim(), slug: slug.trim() });
-      await workspacesApi.updateSettings(wsId, { timezone, language });
+      await workspacesApi.update(wsId, { name: name.trim() });
+      await workspacesApi.updateSettings(wsId, {
+        timezone,
+        companiesEnabled,
+        lockCompanyAttrs,
+        showAttribution,
+        disableTeamMentions,
+      });
       showToast('Ajustes guardados correctamente.');
     } catch (e: any) {
-      showToast(e?.message ?? 'Error al guardar. Inténtalo de nuevo.', false);
+      showToast(e?.message ?? 'Error al guardar.', false);
     } finally {
       setSaving(false);
     }
   }
 
+  async function handleToggleSave(key: string, value: boolean) {
+    try {
+      const wsId = (ws as any)?.id ?? '';
+      await workspacesApi.updateSettings(wsId, { [key]: value });
+    } catch { /* non-fatal */ }
+  }
+
+  function handleCopyAppId() {
+    navigator.clipboard.writeText(appId).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   const TIMEZONES = [
-    '(UTC-12:00) Línea Internacional de Fecha',
-    '(UTC-08:00) América/Los_Ángeles',
-    '(UTC-06:00) América/Ciudad_de_México',
-    '(UTC-05:00) América/Nueva_York',
-    '(UTC-03:00) América/Buenos_Aires',
-    '(UTC+00:00) UTC / Londres',
-    '(UTC+01:00) Europa/Madrid',
-    '(UTC+01:00) Europa/París',
-    '(UTC+02:00) Europa/Atenas',
-    '(UTC+03:00) Europa/Moscú',
-    '(UTC+05:30) Asia/Calcuta',
-    '(UTC+08:00) Asia/Shanghái',
-    '(UTC+09:00) Asia/Tokio',
-    '(UTC+10:00) Australia/Sídney',
+    'Pacific/Honolulu','America/Los_Angeles','America/Denver','America/Chicago',
+    'America/New_York','America/Sao_Paulo','UTC','Europe/London','Europe/Madrid',
+    'Europe/Paris','Europe/Berlin','Europe/Athens','Europe/Moscow',
+    'Asia/Dubai','Asia/Kolkata','Asia/Bangkok','Asia/Shanghai','Asia/Tokyo',
+    'Australia/Sydney',
   ];
-  const LANGUAGES = ['Español', 'English', 'Français', 'Deutsch', 'Português', 'Italiano', 'Русский', '日本語', '中文'];
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
@@ -27712,74 +27743,168 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {/* Sticky header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[18px] font-bold text-[#1a1a1a]">General</h1>
+            <div className="flex items-center gap-3">
+              {toast && (
+                <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>
+                  {toast.ok ? '✓' : '✕'} {toast.msg}
+                </span>
+              )}
+              <button
+                onClick={handleSave} disabled={saving}
+                className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50 transition-colors"
+              >
+                {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-[640px] mx-auto py-10 px-6 flex flex-col gap-8">
-              <div>
-                <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">General</h1>
-                <p className="text-[13.5px] text-[#646462]">Ajustes generales del espacio de trabajo.</p>
+            <div className="max-w-[700px] mx-auto py-8 px-6 flex flex-col gap-0">
+
+              {/* ── Nombre y zona horaria ── */}
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden mb-4">
+                <div className="flex items-start gap-6 p-5">
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Nombre y zona horaria del espacio de trabajo</p>
+                    <p className="text-[12.5px] text-[#646462]">La zona horaria afecta a las funciones que dependen de la hora.</p>
+                  </div>
+                  <div className="w-[280px] flex flex-col gap-3">
+                    <div>
+                      <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre</label>
+                      <input
+                        className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6] transition-colors"
+                        value={name} onChange={e => setName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[12px] font-medium text-[#646462] mb-1">ID de aplicación</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          readOnly
+                          className="flex-1 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#646462] bg-[#f8f8f7] focus:outline-none cursor-default"
+                          value={appId}
+                        />
+                        <button
+                          onClick={handleCopyAppId}
+                          className="px-3 py-2 text-[12px] font-medium text-[#3b59f6] hover:text-[#2a45d4] border border-[#e9eae6] rounded-lg hover:bg-[#f0f2ff] transition-colors whitespace-nowrap"
+                        >
+                          {copied ? 'Copiado' : 'Copiar'}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[12px] font-medium text-[#646462] mb-1">Zona horaria</label>
+                      <select
+                        value={timezone} onChange={e => setTimezone(e.target.value)}
+                        className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6] bg-white"
+                      >
+                        {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#e9eae6]">
-                <div className="px-5 py-4">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Nombre del espacio de trabajo</p>
-                  <input
-                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a]"
-                    value={name} onChange={e => setName(e.target.value)}
-                  />
-                  <p className="text-[12px] text-[#646462] mt-1">Visible para todos los compañeros.</p>
-                </div>
-                <div className="px-5 py-4">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Identificador (slug)</p>
-                  <input
-                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a]"
-                    value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                  />
-                  <p className="text-[12px] text-[#646462] mt-1">URL única: app.clain.com/a/apps/<span className="font-medium text-[#1a1a1a]">{slug || '[slug]'}</span></p>
-                </div>
-                <div className="px-5 py-4">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Zona horaria</p>
-                  <select
-                    value={timezone} onChange={e => setTimezone(e.target.value)}
-                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] bg-white"
-                  >
-                    {TIMEZONES.map(tz => <option key={tz}>{tz}</option>)}
-                  </select>
-                </div>
-                <div className="px-5 py-4">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Idioma del espacio de trabajo</p>
-                  <select
-                    value={language} onChange={e => setLanguage(e.target.value)}
-                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] bg-white"
-                  >
-                    {LANGUAGES.map(l => <option key={l}>{l}</option>)}
-                  </select>
+              {/* ── Empresas ── */}
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden mb-4">
+                <div className="flex items-start gap-6 p-5">
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Empresas</p>
+                    <p className="text-[12.5px] text-[#646462] mb-2">Trata a todos los usuarios como individuos, pero esta función agrupa a todos los usuarios de una misma empresa.</p>
+                    <a href="#" className="text-[12px] text-[#3b59f6] hover:underline flex items-center gap-1" onClick={e => e.preventDefault()}>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M2 2h5v2H4v8h8v-3h2v5H2V2zm7 0h5v5h-2V4.41l-5.3 5.3-1.41-1.41L12.59 3H9V1z"/></svg>
+                      ¿Cómo funcionan las funciones de empresa?
+                    </a>
+                  </div>
+                  <div className="flex flex-col gap-4 min-w-[260px]">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[13px] text-[#1a1a1a]">Habilitar funciones relacionadas con la empresa</span>
+                      <SettingsToggle checked={companiesEnabled} onChange={v => { setCompaniesEnabled(v); handleToggleSave('companiesEnabled', v); }} />
+                    </div>
+                    <div className={`flex items-center justify-between gap-3 transition-opacity ${companiesEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                      <span className="text-[13px] text-[#1a1a1a]">Impedir las actualizaciones de atributos de la empresa en Messenger</span>
+                      <SettingsToggle checked={lockCompanyAttrs} onChange={v => { setLockCompanyAttrs(v); handleToggleSave('lockCompanyAttrs', v); }} />
+                    </div>
+                    {companiesEnabled && lockCompanyAttrs && (
+                      <p className="text-[11.5px] text-[#646462]">Habilitar esto evitará la manipulación de los datos. Los flujos de trabajo aún se pueden usar para recopilar datos de atributos de los clientes.</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3">
-                {toast && (
-                  <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>
-                    {toast.ok ? '✓' : '✕'} {toast.msg}
-                  </span>
-                )}
-                <button
-                  onClick={handleSave} disabled={saving}
-                  className="px-5 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50"
-                >
-                  {saving ? 'Guardando…' : 'Guardar cambios'}
-                </button>
+              {/* ── Espacio de trabajo de prueba ── */}
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden mb-4">
+                <div className="flex items-start gap-6 p-5">
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Espacio de trabajo de prueba</p>
+                    <p className="text-[12.5px] text-[#646462] mb-2">Experimenta con funciones e integraciones en un entorno sin riesgos. Prueba y configura los cambios sin afectar tus ajustes.</p>
+                    <a href="#" className="text-[12px] text-[#3b59f6] hover:underline flex items-center gap-1" onClick={e => e.preventDefault()}>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M2 2h5v2H4v8h8v-3h2v5H2V2zm7 0h5v5h-2V4.41l-5.3 5.3-1.41-1.41L12.59 3H9V1z"/></svg>
+                      Cómo configurar un espacio de trabajo de prueba
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-3 min-w-[260px]">
+                    <SettingsToggle checked={testWorkspace} onChange={v => setTestWorkspace(v)} />
+                    <span className="text-[13px] text-[#1a1a1a]">Habilitar un espacio de trabajo de prueba</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-white border border-[#fca5a5] rounded-xl p-5">
-                <h2 className="text-[14px] font-bold text-[#b91c1c] mb-2">Zona de peligro</h2>
-                <p className="text-[13px] text-[#646462] mb-3">Eliminar este espacio de trabajo borrará todos los datos permanentemente.</p>
-                <button
-                  onClick={() => { if (window.confirm('¿Seguro que quieres eliminar este espacio de trabajo? Esta acción es irreversible.')) showToast('Solicitud enviada. Un administrador confirmará la eliminación.', false); }}
-                  className="px-4 py-2 border border-[#fca5a5] text-[#b91c1c] text-[13px] font-semibold rounded-lg hover:bg-[#fef2f2]"
-                >
-                  Eliminar espacio de trabajo
-                </button>
+              {/* ── Eliminar espacio de trabajo ── */}
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden mb-4">
+                <div className="flex items-start gap-6 p-5">
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Eliminar espacio de trabajo</p>
+                    <p className="text-[12.5px] text-[#646462]">Para eliminar este espacio de trabajo, ingresa tu nombre completo y confirma la eliminación. El espacio de trabajo se eliminará en un plazo de 14 días tras la confirmación.</p>
+                  </div>
+                  <div className="flex items-center gap-2 min-w-[260px]">
+                    <input
+                      className="flex-1 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#b91c1c] transition-colors"
+                      placeholder="Ingresa tu nombre completo"
+                      value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)}
+                    />
+                    <button
+                      disabled={!deleteConfirm.trim()}
+                      onClick={() => { if (window.confirm('¿Confirmas la eliminación del espacio de trabajo? Esta acción es irreversible.')) { showToast('Solicitud enviada. Se procesará en 14 días.', false); setDeleteConfirm(''); } }}
+                      className="px-3 py-2 text-[13px] font-medium border border-[#e9eae6] rounded-lg text-[#646462] hover:border-[#fca5a5] hover:text-[#b91c1c] disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                    >
+                      Confirmar eliminación
+                    </button>
+                  </div>
+                </div>
               </div>
+
+              {/* ── Mensaje de atribución ── */}
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden mb-4">
+                <div className="flex items-start gap-6 p-5">
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Mensaje de atribución de Clain</p>
+                    <p className="text-[12.5px] text-[#646462]">Al habilitar esto, se añade un mensaje de atribución sutil en la parte inferior de tu Messenger y correos electrónicos.</p>
+                  </div>
+                  <div className="flex items-center gap-3 min-w-[260px]">
+                    <SettingsToggle checked={showAttribution} onChange={v => { setShowAttribution(v); handleToggleSave('showAttribution', v); }} />
+                    <span className="text-[13px] text-[#1a1a1a]">Muestra el mensaje de atribución de Clain</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Menciones del equipo ── */}
+              <div className="border border-[#e9eae6] rounded-xl overflow-hidden mb-4">
+                <div className="flex items-start gap-6 p-5">
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Menciones del equipo</p>
+                    <p className="text-[12.5px] text-[#646462]">Controle si los compañeros de equipo pueden @mencionar equipos en notas y conversaciones internas sobre folios de atención.</p>
+                  </div>
+                  <div className="flex items-center gap-3 min-w-[260px]">
+                    <SettingsToggle checked={disableTeamMentions} onChange={v => { setDisableTeamMentions(v); handleToggleSave('disableTeamMentions', v); }} />
+                    <span className="text-[13px] text-[#1a1a1a]">Deshabilitar menciones del equipo en las notas</span>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -27789,27 +27914,67 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
 }
 
 // ─── WorkspaceTeammatesView ──────────────────────────────────────────────────
+type TeammatesTab = 'teammates' | 'invited' | 'roles' | 'scim' | 'activity';
+
 function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const { data: membersRaw, loading, refetch } = useApi(() => iamApi.members(), [], []);
-  const { data: rolesRaw } = useApi(() => iamApi.roles(), [], []);
-  const [search, setSearch] = useState('');
+  const { data: rolesRaw,   refetch: refetchRoles } = useApi(() => iamApi.roles(), [], []);
+  const { data: auditRaw,   loading: auditLoading } = useApi(() => auditApi.workspaceAll(), [], []);
+
+  const [tab, setTab]               = useState<TeammatesTab>('teammates');
+  const [search, setSearch]         = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterSeat, setFilterSeat] = useState('all');
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName]   = useState('');
+  const [inviteEmails, setInviteEmails] = useState('');
   const [inviteRoleId, setInviteRoleId] = useState('');
-  const [inviting, setInviting] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [inviting, setInviting]     = useState(false);
+  const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [actDateFrom, setActDateFrom] = useState('');
+  const [actDateTo, setActDateTo]    = useState('');
+  const [memberMenuId, setMemberMenuId] = useState<string | null>(null);
 
   const members: any[] = Array.isArray(membersRaw) ? membersRaw : [];
   const roles: any[]   = Array.isArray(rolesRaw)   ? rolesRaw   : [];
-  const rows = members.filter(m => !search || `${m.name ?? ''} ${m.email ?? ''}`.toLowerCase().includes(search.toLowerCase()));
+  const auditEvents: any[] = Array.isArray(auditRaw) ? auditRaw : [];
 
-  const ROLE_COLORS: Record<string, string> = {
-    admin:  'bg-[#fef9c3] text-[#854d0e]',
-    owner:  'bg-[#ede9fe] text-[#6d28d9]',
-    agent:  'bg-[#f0fdf4] text-[#15803d]',
-    viewer: 'bg-[#f0f9ff] text-[#0369a1]',
-  };
+  // Built-in role definitions shown when no custom roles exist
+  const BUILTIN_ROLES = [
+    { id: 'owner',           name: 'Owner (Propietario)',    desc: 'Acceso completo a todo el espacio de trabajo, incluyendo facturación.', color: 'bg-[#ede9fe] text-[#6d28d9]', members: members.filter(m => m.role_id === 'owner').length },
+    { id: 'workspace_admin', name: 'Workspace Admin',        desc: 'Administrar compañeros, integraciones y configuración del workspace.', color: 'bg-[#fef9c3] text-[#854d0e]', members: members.filter(m => m.role_id === 'workspace_admin').length },
+    { id: 'supervisor',      name: 'Supervisor',             desc: 'Ver todos los casos, asignar y gestionar el equipo de soporte.', color: 'bg-[#fff7ed] text-[#c2410c]', members: members.filter(m => m.role_id === 'supervisor').length },
+    { id: 'agent',           name: 'Agente',                 desc: 'Gestionar y responder casos asignados. Acceso limitado a ajustes.', color: 'bg-[#f0fdf4] text-[#15803d]', members: members.filter(m => m.role_id === 'agent').length },
+    { id: 'viewer',          name: 'Viewer (Solo lectura)',  desc: 'Consultar información sin poder modificar datos.', color: 'bg-[#f0f9ff] text-[#0369a1]', members: members.filter(m => m.role_id === 'viewer').length },
+  ];
+
+  const displayRoles = roles.length > 0 ? roles : BUILTIN_ROLES;
+
+  function roleLabel(roleId: string) {
+    return displayRoles.find(r => r.id === roleId)?.name ?? roleId ?? '—';
+  }
+  function roleColor(roleId: string) {
+    const map: Record<string, string> = {
+      owner: 'bg-[#ede9fe] text-[#6d28d9]',
+      workspace_admin: 'bg-[#fef9c3] text-[#854d0e]',
+      supervisor: 'bg-[#fff7ed] text-[#c2410c]',
+      agent: 'bg-[#f0fdf4] text-[#15803d]',
+      viewer: 'bg-[#f0f9ff] text-[#0369a1]',
+    };
+    return map[roleId] ?? 'bg-[#f1f1ee] text-[#646462]';
+  }
+
+  const activeMembers  = members.filter(m => m.status !== 'inactive');
+  const pendingMembers = members.filter(m => m.status === 'pending' || m.status === 'invited');
+
+  const filteredMembers = activeMembers.filter(m => {
+    const q = search.toLowerCase();
+    const matchQ = !q || `${m.name ?? ''} ${m.email ?? ''}`.toLowerCase().includes(q);
+    const matchStatus = filterStatus === 'all' || m.status === filterStatus;
+    const matchSeat = filterSeat === 'all' || (m.seat_type ?? 'full') === filterSeat;
+    return matchQ && matchStatus && matchSeat;
+  });
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -27817,15 +27982,16 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
   }
 
   async function handleInvite() {
-    if (!inviteEmail.trim()) { showToast('Introduce un correo.', false); return; }
+    const emails = inviteEmails.split(/[\n,\s]+/).map(e => e.trim()).filter(Boolean);
+    if (emails.length === 0) { showToast('Introduce al menos un correo.', false); return; }
     const roleId = inviteRoleId || roles[0]?.id || 'agent';
     setInviting(true);
     try {
-      await iamApi.inviteMember({ email: inviteEmail.trim(), name: inviteName.trim() || undefined, role_id: roleId });
+      await Promise.all(emails.map(email => iamApi.inviteMember({ email, role_id: roleId })));
       setInviteOpen(false);
-      setInviteEmail(''); setInviteName(''); setInviteRoleId('');
+      setInviteEmails(''); setInviteRoleId('');
       refetch();
-      showToast(`Invitación enviada a ${inviteEmail.trim()}.`);
+      showToast(emails.length === 1 ? `Invitación enviada a ${emails[0]}.` : `${emails.length} invitaciones enviadas.`);
     } catch (e: any) {
       showToast(e?.message ?? 'Error al enviar la invitación.', false);
     } finally {
@@ -27843,16 +28009,73 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
     }
   }
 
-  async function handleRemove(memberId: string, name: string) {
-    if (!window.confirm(`¿Eliminar a ${name} del espacio de trabajo?`)) return;
+  async function handleDeactivate(memberId: string, memberName: string) {
+    if (!window.confirm(`¿Desactivar a ${memberName}? Perderá acceso al espacio de trabajo.`)) return;
     try {
       await iamApi.updateMember(memberId, { status: 'inactive' });
       refetch();
-      showToast(`${name} eliminado del espacio de trabajo.`);
+      showToast(`${memberName} desactivado.`);
     } catch {
-      showToast('Error al eliminar al miembro.', false);
+      showToast('Error al desactivar al miembro.', false);
+    }
+    setMemberMenuId(null);
+  }
+
+  async function handleTransferOwnership(memberId: string, memberName: string) {
+    if (!window.confirm(`¿Transferir la propiedad a ${memberName}? Perderás los permisos de propietario.`)) return;
+    try {
+      await iamApi.transferOwnership(memberId);
+      refetch();
+      showToast(`Propiedad transferida a ${memberName}.`);
+    } catch {
+      showToast('Error al transferir la propiedad.', false);
+    }
+    setMemberMenuId(null);
+  }
+
+  async function handleResendInvite(email: string, roleId: string) {
+    try {
+      await iamApi.resendInvite({ email, role_id: roleId || 'agent' });
+      showToast(`Invitación reenviada a ${email}.`);
+    } catch {
+      showToast('Error al reenviar.', false);
     }
   }
+
+  async function handleCreateRole() {
+    if (!newRoleName.trim()) return;
+    setCreatingRole(true);
+    try {
+      await iamApi.createRole({ name: newRoleName.trim(), permissions: [] });
+      setNewRoleName('');
+      refetchRoles();
+      showToast('Rol creado correctamente.');
+    } catch (e: any) {
+      showToast(e?.message ?? 'Error al crear el rol.', false);
+    } finally {
+      setCreatingRole(false);
+    }
+  }
+
+  function exportCSV() {
+    const rows = [
+      ['Nombre', 'Correo', 'Estado', 'Rol', 'Plaza', '2FA'],
+      ...filteredMembers.map(m => [m.name ?? '', m.email ?? '', m.status ?? '', roleLabel(m.role_id), m.seat_type ?? 'full', m.mfa_enabled ? 'Sí' : 'No']),
+    ];
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'compañeros.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const TABS: { id: TeammatesTab; label: string }[] = [
+    { id: 'teammates', label: 'Compañeros de equipo' },
+    { id: 'invited',   label: 'Invitado' },
+    { id: 'roles',     label: 'Funciones' },
+    { id: 'scim',      label: 'Aprovisionamiento de SCIM' },
+    { id: 'activity',  label: 'Registros de actividad' },
+  ];
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
@@ -27860,135 +28083,458 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Compañeros de equipo</h1>
-                  <p className="text-[13.5px] text-[#646462]">Gestiona los miembros y sus roles.</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
-                  <button onClick={() => setInviteOpen(true)} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">+ Invitar</button>
-                </div>
-              </div>
 
-              <div className="relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a4a4a2]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
-                <input className="w-full pl-9 pr-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Buscar compañero…" value={search} onChange={e => setSearch(e.target.value)} />
-              </div>
-
-              {loading ? (
-                <div className="h-40 flex items-center justify-center text-[13px] text-[#a4a4a2]">Cargando…</div>
-              ) : (
-                <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
-                  <table className="w-full text-[13px]">
-                    <thead className="bg-[#f8f8f7]">
-                      <tr>
-                        {['Nombre', 'Correo', 'Rol', 'Último acceso', ''].map(h => (
-                          <th key={h} className="text-left px-4 py-2.5 font-semibold text-[#646462] border-b border-[#e9eae6]">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#e9eae6]">
-                      {rows.length === 0 ? (
-                        <tr><td colSpan={5} className="text-center py-10 text-[#a4a4a2]">Sin resultados</td></tr>
-                      ) : rows.map((m: any) => (
-                        <tr key={m.id ?? m.email} className="hover:bg-[#f8f8f7]">
-                          <td className="px-4 py-3 font-medium text-[#1a1a1a]">
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-[#e9eae6] flex items-center justify-center text-[11px] font-semibold text-[#646462] flex-shrink-0">
-                                {(m.name || m.email || '?')[0].toUpperCase()}
-                              </div>
-                              {m.name ?? '—'}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-[#646462]">{m.email ?? '—'}</td>
-                          <td className="px-4 py-3">
-                            {roles.length > 0 ? (
-                              <select
-                                value={m.role_id || m.role || ''}
-                                onChange={e => handleRoleChange(m.id, e.target.value)}
-                                className="border border-[#e9eae6] rounded px-2 py-0.5 text-[12px] bg-white focus:outline-none focus:border-[#1a1a1a]"
-                              >
-                                {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                              </select>
-                            ) : (
-                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${ROLE_COLORS[m.role] ?? 'bg-[#f1f1ee] text-[#646462]'}`}>
-                                {m.role ?? 'agente'}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-[#a4a4a2]">{m.last_seen ? new Date(m.last_seen).toLocaleDateString('es') : '—'}</td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() => handleRemove(m.id, m.name || m.email)}
-                              className="text-[12px] text-[#646462] hover:text-[#b91c1c] border border-[#e9eae6] hover:border-[#fca5a5] rounded px-2 py-0.5 transition-colors"
-                            >
-                              Eliminar
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+          {/* ── Header ── */}
+          <div className="flex items-center justify-between px-6 pt-6 pb-0 flex-shrink-0">
+            <div>
+              <h1 className="text-[18px] font-bold text-[#1a1a1a]">Compañeros de equipo</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              {toast && <span className={`text-[13px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
+              {tab === 'teammates' && (
+                <>
+                  <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-[12.5px] font-medium text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7] transition-colors">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 10.5L4.5 7H7V2h2v5h2.5L8 10.5zM2 13h12v-2h1.5v3.5H.5V11H2v2z"/></svg>
+                    Exportar CSV
+                  </button>
+                  <button onClick={() => setInviteOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333] transition-colors">
+                    + Nuevo compañero de equipo
+                  </button>
+                </>
+              )}
+              {tab === 'invited' && (
+                <button onClick={() => setInviteOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333] transition-colors">
+                  + Invitar compañero
+                </button>
               )}
             </div>
+          </div>
+
+          {/* ── Tabs ── */}
+          <div className="flex items-center gap-0 px-6 border-b border-[#e9eae6] mt-4 flex-shrink-0">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`px-3 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap ${tab === t.id ? 'border-[#f97316] text-[#f97316]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}
+              >
+                {t.label}
+                {t.id === 'teammates' && activeMembers.length > 0 && (
+                  <span className="ml-1.5 text-[11px] font-semibold bg-[#f1f1ee] text-[#646462] rounded-full px-1.5 py-0.5">{activeMembers.length}</span>
+                )}
+                {t.id === 'invited' && pendingMembers.length > 0 && (
+                  <span className="ml-1.5 text-[11px] font-semibold bg-[#fef3c7] text-[#92400e] rounded-full px-1.5 py-0.5">{pendingMembers.length}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto min-h-0">
+
+            {/* ══ TAB: Compañeros de equipo ══ */}
+            {tab === 'teammates' && (
+              <div className="px-6 py-4 flex flex-col gap-4">
+                {/* Filter bar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative flex-1 min-w-[180px]">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a4a4a2]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+                    <input
+                      className="w-full pl-8 pr-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12.5px] focus:outline-none focus:border-[#1a1a1a] transition-colors"
+                      placeholder="Buscar compañeros de equipo…"
+                      value={search} onChange={e => setSearch(e.target.value)}
+                    />
+                  </div>
+                  <select
+                    value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                    className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a] text-[#646462]"
+                  >
+                    <option value="all">El estado es Cualquiera</option>
+                    <option value="active">Activo</option>
+                    <option value="away">Ausente</option>
+                  </select>
+                  <select
+                    value={filterSeat} onChange={e => setFilterSeat(e.target.value)}
+                    className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a] text-[#646462]"
+                  >
+                    <option value="all">La plaza es Cualquiera</option>
+                    <option value="full">FULL</option>
+                    <option value="limited">LIMITED</option>
+                  </select>
+                  <span className="text-[12.5px] text-[#646462] ml-1">{filteredMembers.length} compañero{filteredMembers.length !== 1 ? 's' : ''} de equipo</span>
+                </div>
+
+                {loading ? (
+                  <div className="h-40 flex items-center justify-center text-[13px] text-[#a4a4a2]">Cargando…</div>
+                ) : (
+                  <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+                    <table className="w-full text-[12.5px]">
+                      <thead className="bg-[#f8f8f7]">
+                        <tr>
+                          {[
+                            { label: 'Nombre', w: '' },
+                            { label: 'Estado', w: 'w-[90px]' },
+                            { label: 'Plaza', w: 'w-[80px]' },
+                            { label: 'Acceso a Copilot', w: 'w-[130px]' },
+                            { label: 'Permisos', w: 'w-[130px]' },
+                            { label: 'Equipos', w: 'w-[80px]' },
+                            { label: '2fa', w: 'w-[80px]' },
+                            { label: '', w: 'w-[40px]' },
+                          ].map(h => (
+                            <th key={h.label} className={`text-left px-3 py-2.5 font-semibold text-[#646462] border-b border-[#e9eae6] ${h.w}`}>{h.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e9eae6]">
+                        {filteredMembers.length === 0 ? (
+                          <tr><td colSpan={8} className="text-center py-12 text-[#a4a4a2]">
+                            {search ? 'Sin resultados para tu búsqueda.' : 'No hay compañeros de equipo activos.'}
+                          </td></tr>
+                        ) : filteredMembers.map((m: any) => (
+                          <tr key={m.id ?? m.email} className="hover:bg-[#f8f8f7] group">
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-2.5">
+                                <div className="relative">
+                                  <div className="w-7 h-7 rounded-full bg-[#e9eae6] flex items-center justify-center text-[11px] font-semibold text-[#646462] flex-shrink-0">
+                                    {(m.name || m.email || '?')[0].toUpperCase()}
+                                  </div>
+                                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border-2 border-white" />
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-[#1a1a1a] leading-tight">{m.name ?? '—'}</p>
+                                  <p className="text-[11.5px] text-[#a4a4a2]">{m.email ?? ''}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#f0fdf4] text-[#15803d] border border-[#bbf7d0]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
+                                Activo
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className="text-[11.5px] font-bold text-[#646462]">{(m.seat_type ?? 'FULL').toUpperCase()}</span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <select
+                                value={m.copilot_access ?? 'unlimited'}
+                                onChange={e => handleRoleChange(m.id, m.role_id)} // simplified - real implementation would update copilot_access
+                                className="border border-[#e9eae6] rounded-md px-1.5 py-0.5 text-[12px] bg-white focus:outline-none focus:border-[#1a1a1a] w-full"
+                              >
+                                <option value="unlimited">Ilimitado</option>
+                                <option value="limited">Limitado</option>
+                                <option value="none">Sin acceso</option>
+                              </select>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <select
+                                value={m.role_id || ''}
+                                onChange={e => handleRoleChange(m.id, e.target.value)}
+                                className="border border-[#e9eae6] rounded-md px-1.5 py-0.5 text-[12px] bg-white focus:outline-none focus:border-[#1a1a1a] w-full"
+                              >
+                                {displayRoles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-3 py-2.5 text-[#646462]">—</td>
+                            <td className="px-3 py-2.5">
+                              <span className={`text-[11.5px] font-medium ${m.mfa_enabled ? 'text-[#16a34a]' : 'text-[#a4a4a2]'}`}>
+                                {m.mfa_enabled ? 'Activo' : 'Deshabilitado'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right relative">
+                              <button
+                                onClick={() => setMemberMenuId(memberMenuId === m.id ? null : m.id)}
+                                className="p-1 rounded hover:bg-[#f1f1ee] text-[#646462] opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>
+                              </button>
+                              {memberMenuId === m.id && (
+                                <div className="absolute right-6 top-8 z-20 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1 min-w-[180px]" onClick={e => e.stopPropagation()}>
+                                  <button onClick={() => handleTransferOwnership(m.id, m.name ?? m.email)} className="w-full text-left px-3 py-2 text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Transferir propiedad</button>
+                                  <div className="border-t border-[#e9eae6] my-1" />
+                                  <button onClick={() => handleDeactivate(m.id, m.name ?? m.email)} className="w-full text-left px-3 py-2 text-[12.5px] text-[#b91c1c] hover:bg-[#fef2f2]">Desactivar acceso</button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ══ TAB: Invitado ══ */}
+            {tab === 'invited' && (
+              <div className="px-6 py-4 flex flex-col gap-4">
+                {pendingMembers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3">
+                    <div className="w-12 h-12 rounded-full bg-[#f1f1ee] flex items-center justify-center">
+                      <svg viewBox="0 0 24 24" className="w-6 h-6 text-[#a4a4a2] fill-current"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+                    </div>
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay invitaciones pendientes</p>
+                    <p className="text-[13px] text-[#646462]">Las invitaciones enviadas aparecerán aquí hasta que sean aceptadas.</p>
+                    <button onClick={() => setInviteOpen(true)} className="mt-2 px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">+ Agregar nuevos compañeros de equipo</button>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+                    <table className="w-full text-[12.5px]">
+                      <thead className="bg-[#f8f8f7]">
+                        <tr>
+                          {['Correo', 'Rol', 'Invitado', ''].map(h => (
+                            <th key={h} className="text-left px-4 py-2.5 font-semibold text-[#646462] border-b border-[#e9eae6]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e9eae6]">
+                        {pendingMembers.map((m: any) => (
+                          <tr key={m.id} className="hover:bg-[#f8f8f7]">
+                            <td className="px-4 py-3 text-[#1a1a1a] font-medium">{m.email ?? '—'}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${roleColor(m.role_id)}`}>{roleLabel(m.role_id)}</span>
+                            </td>
+                            <td className="px-4 py-3 text-[#a4a4a2]">{m.joined_at ? new Date(m.joined_at).toLocaleDateString('es') : '—'}</td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => handleResendInvite(m.email, m.role_id)}
+                                className="text-[12px] text-[#3b59f6] hover:underline"
+                              >
+                                Reenviar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ══ TAB: Funciones (Roles) ══ */}
+            {tab === 'roles' && (
+              <div className="px-6 py-4 flex flex-col gap-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Funciones del espacio de trabajo</p>
+                    <p className="text-[12.5px] text-[#646462] mt-0.5">Define los permisos de cada función asignada a los compañeros de equipo.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[12.5px] focus:outline-none focus:border-[#1a1a1a] w-[180px]"
+                      placeholder="Nombre de nueva función…"
+                      value={newRoleName} onChange={e => setNewRoleName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleCreateRole()}
+                    />
+                    <button
+                      onClick={handleCreateRole}
+                      disabled={!newRoleName.trim() || creatingRole}
+                      className="px-3 py-1.5 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50"
+                    >
+                      {creatingRole ? 'Creando…' : '+ Crear'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {displayRoles.map((r: any) => (
+                    <div key={r.id} className="border border-[#e9eae6] rounded-xl p-4 flex items-center gap-4 hover:bg-[#f8f8f7] transition-colors">
+                      <span className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold flex-shrink-0 ${r.color ?? roleColor(r.id)}`}>{r.name}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12.5px] text-[#646462] truncate">{r.desc ?? r.description ?? 'Función personalizada'}</p>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-[12px] text-[#a4a4a2]">{r.members ?? members.filter(m => m.role_id === r.id).length} miembro{(r.members ?? members.filter(m => m.role_id === r.id).length) !== 1 ? 's' : ''}</span>
+                        {!['owner','workspace_admin','supervisor','agent','viewer'].includes(r.id) && (
+                          <button className="text-[12px] text-[#646462] hover:text-[#3b59f6] border border-[#e9eae6] rounded-lg px-2 py-0.5 hover:border-[#3b59f6] transition-colors">
+                            Editar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ══ TAB: SCIM ══ */}
+            {tab === 'scim' && (
+              <div className="px-6 py-4 max-w-[600px]">
+                <div className="flex flex-col gap-6">
+                  <div>
+                    <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Aprovisionamiento de SCIM</p>
+                    <p className="text-[12.5px] text-[#646462]">Sincroniza usuarios y grupos automáticamente desde tu proveedor de identidad (Okta, Azure AD, etc.).</p>
+                  </div>
+                  <div className="border border-[#e9eae6] rounded-xl p-5 flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[13.5px] font-semibold text-[#1a1a1a]">URL base de SCIM</p>
+                        <p className="text-[12px] text-[#646462] mt-0.5">Usa esta URL en tu IdP para configurar SCIM.</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="text-[11.5px] bg-[#f1f1ee] px-2 py-1 rounded text-[#646462]">https://api.clain.ai/scim/v2</code>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText('https://api.clain.ai/scim/v2'); showToast('URL copiada.'); }}
+                          className="text-[12px] text-[#3b59f6] hover:underline"
+                        >Copiar</button>
+                      </div>
+                    </div>
+                    <div className="border-t border-[#e9eae6] pt-4">
+                      <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-2">Token de portador</p>
+                      <div className="flex items-center gap-2">
+                        <input readOnly className="flex-1 border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] bg-[#f8f8f7] text-[#a4a4a2] font-mono" value="••••••••••••••••••••••••••••••" />
+                        <button className="px-3 py-2 text-[12.5px] font-medium text-[#1a1a1a] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7]">Regenerar</button>
+                      </div>
+                      <p className="text-[11.5px] text-[#a4a4a2] mt-1">El token solo se muestra una vez al generarlo. Guárdalo en un lugar seguro.</p>
+                    </div>
+                  </div>
+                  <div className="border border-[#fde68a] bg-[#fffbeb] rounded-xl p-4">
+                    <p className="text-[13px] font-semibold text-[#92400e] mb-1">Disponible en Plan Growth o superior</p>
+                    <p className="text-[12px] text-[#b45309]">El aprovisionamiento SCIM requiere un plan Growth o Enterprise. Actualiza tu suscripción para habilitarlo.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ══ TAB: Registros de actividad ══ */}
+            {tab === 'activity' && (
+              <div className="px-6 py-4 flex flex-col gap-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5 border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#a4a4a2]"><path d="M5 2H2a1 1 0 00-1 1v11a1 1 0 001 1h12a1 1 0 001-1V3a1 1 0 00-1-1h-3V1H5v1zm0 2h6v1H5V4zM2 5h1v9H2V5zm11 0h1v9h-1V5zM4 7h8v1H4V7zm0 2h8v1H4V9zm0 2h8v1H4v-1z"/></svg>
+                    Filtrar por
+                  </div>
+                  <input
+                    type="date" value={actDateFrom} onChange={e => setActDateFrom(e.target.value)}
+                    className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] focus:outline-none focus:border-[#1a1a1a]"
+                  />
+                  <span className="text-[12px] text-[#a4a4a2]">—</span>
+                  <input
+                    type="date" value={actDateTo} onChange={e => setActDateTo(e.target.value)}
+                    className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] focus:outline-none focus:border-[#1a1a1a]"
+                  />
+                  <select className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] bg-white focus:outline-none text-[#646462]">
+                    <option>Todos los compañeros de equipo</option>
+                    {activeMembers.map(m => <option key={m.id}>{m.name ?? m.email}</option>)}
+                  </select>
+                  <select className="border border-[#e9eae6] rounded-lg px-2.5 py-1.5 text-[12.5px] bg-white focus:outline-none text-[#646462]">
+                    <option>Toda la actividad</option>
+                    <option>Inicio de sesión</option>
+                    <option>Cambio de rol</option>
+                    <option>Invitación enviada</option>
+                    <option>Ajustes modificados</option>
+                  </select>
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 text-[12.5px] font-medium text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7] ml-auto">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 10.5L4.5 7H7V2h2v5h2.5L8 10.5zM2 13h12v-2h1.5v3.5H.5V11H2v2z"/></svg>
+                    Descargar CSV
+                  </button>
+                </div>
+
+                {auditLoading ? (
+                  <div className="h-40 flex items-center justify-center text-[13px] text-[#a4a4a2]">Cargando registros…</div>
+                ) : (
+                  <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+                    <table className="w-full text-[12.5px]">
+                      <thead className="bg-[#f8f8f7]">
+                        <tr>
+                          {['Tipo de actividad', 'Compañero', 'Detalles', 'Fecha', 'IP'].map(h => (
+                            <th key={h} className="text-left px-4 py-2.5 font-semibold text-[#646462] border-b border-[#e9eae6]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e9eae6]">
+                        {auditEvents.length === 0 ? (
+                          <tr><td colSpan={5} className="text-center py-12 text-[#a4a4a2]">No hay registros de actividad en el periodo seleccionado.</td></tr>
+                        ) : auditEvents.slice(0, 50).map((ev: any, i) => (
+                          <tr key={ev.id ?? i} className="hover:bg-[#f8f8f7]">
+                            <td className="px-4 py-3 text-[#1a1a1a] font-medium">{ev.action?.replace(/_/g, ' ') ?? ev.event_type ?? '—'}</td>
+                            <td className="px-4 py-3 text-[#646462]">{ev.actor_id ?? ev.user_id ?? '—'}</td>
+                            <td className="px-4 py-3 text-[#646462] max-w-[260px] truncate">{ev.description ?? JSON.stringify(ev.metadata ?? {}).slice(0, 60)}</td>
+                            <td className="px-4 py-3 text-[#a4a4a2] whitespace-nowrap">{ev.occurred_at ? new Date(ev.occurred_at).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+                            <td className="px-4 py-3 text-[#a4a4a2] font-mono">{ev.ip_address ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Invite modal */}
+      {/* ── Invite modal ── */}
       {inviteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setInviteOpen(false)}>
-          <div className="bg-white rounded-2xl p-6 w-[420px] shadow-xl flex flex-col gap-4" onClick={e => e.stopPropagation()}>
-            <div>
-              <h2 className="text-[16px] font-bold text-[#1a1a1a]">Invitar compañero de equipo</h2>
-              <p className="text-[13px] text-[#646462] mt-0.5">Se enviará un correo de invitación.</p>
-            </div>
-            <div className="flex flex-col gap-3">
-              <div>
-                <label className="block text-[12px] font-medium text-[#646462] mb-1">Correo electrónico *</label>
-                <input
-                  autoFocus
-                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-                  placeholder="correo@empresa.com"
-                  value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre (opcional)</label>
-                <input
-                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-                  placeholder="Nombre del compañero"
-                  value={inviteName} onChange={e => setInviteName(e.target.value)}
-                />
-              </div>
-              {roles.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-xl w-[460px] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Modal header */}
+            <div className="px-6 pt-5 pb-4 border-b border-[#e9eae6]">
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-[12px] font-medium text-[#646462] mb-1">Rol</label>
-                  <select
-                    value={inviteRoleId || roles[0]?.id || ''}
-                    onChange={e => setInviteRoleId(e.target.value)}
-                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a]">Invitar a un miembro de equipo</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setInviteOpen(false)} className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">Cancelar</button>
+                  <button
+                    onClick={handleInvite} disabled={inviting || !inviteEmails.trim()}
+                    className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50"
                   >
-                    {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    {inviting ? 'Enviando…' : 'Continuar y establecer permisos'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-5 flex flex-col gap-5">
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Invitar a nuevos miembros de equipo</label>
+                <p className="text-[12px] text-[#646462] mb-2">Puedes invitar a varios miembros de equipo separándolos con una coma, un espacio o una nueva línea.</p>
+                <textarea
+                  autoFocus
+                  className="w-full border border-[#e9eae6] rounded-xl px-4 py-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] resize-none"
+                  rows={4}
+                  placeholder="Ingresa las direcciones de correo electrónico de tus compañeros de equipo"
+                  value={inviteEmails} onChange={e => setInviteEmails(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Configurar sus bandejas de entrada <span className="font-normal text-[#646462]">Opcional</span></label>
+                <p className="text-[12px] text-[#646462] mb-3">Elija a qué bandejas de entrada deberían agregarse sus miembros del equipo.</p>
+                <div className="flex flex-col gap-2">
+                  <div>
+                    <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-1">PRINCIPAL</p>
+                    <select className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a]">
+                      <option value="">Seleccionar bandejas de entrada</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-1">SECUNDARIA</p>
+                    <select className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#1a1a1a]">
+                      <option value="">Seleccionar bandejas de entrada</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              {displayRoles.length > 0 && (
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-2">Función</label>
+                  <select
+                    value={inviteRoleId || displayRoles[0]?.id || ''}
+                    onChange={e => setInviteRoleId(e.target.value)}
+                    className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12.5px] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  >
+                    {displayRoles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
                 </div>
               )}
             </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <button onClick={() => setInviteOpen(false)} className="px-4 py-2 text-[13px] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7]">Cancelar</button>
-              <button
-                onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}
-                className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50"
-              >
-                {inviting ? 'Enviando…' : 'Enviar invitación'}
-              </button>
-            </div>
           </div>
         </div>
+      )}
+
+      {/* Close menu on outside click */}
+      {memberMenuId && (
+        <div className="fixed inset-0 z-10" onClick={() => setMemberMenuId(null)} />
       )}
     </div>
   );
