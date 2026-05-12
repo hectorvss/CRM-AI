@@ -10,7 +10,7 @@ import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
-type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat';
+type View = 'superAgent' | 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter' | 'featuresComparison' | 'cannedResponses' | 'customFilters' | 'emailTemplates' | 'customRoles' | 'aiFeedback' | 'callsLive' | 'mcpServers' | 'agentChat' | 'finSettings';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -7305,7 +7305,7 @@ const SETTINGS_NAV_BOTTOM = [
 ];
 
 const IA_SUB: { label: string; nav: View | null }[] = [
-  { label: "Fin AI Agent",   nav: 'fin' },
+  { label: "Fin AI Agent",   nav: 'finSettings' },
   { label: "Buzón de IA",    nav: 'aiInbox' },
   { label: "Automatización", nav: 'automation' },
 ];
@@ -7328,7 +7328,7 @@ const PERSONAL_SUB: { label: string; nav: View | null }[] = [
 function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies' || view === 'customObjects' || view === 'topics' || view === 'customFilters' || view === 'emailTemplates';
   const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'inboxTeam' || view === 'cannedResponses' || view === 'callsLive';
-  const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin' || view === 'aiFeedback' || view === 'agentChat';
+  const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin' || view === 'finSettings' || view === 'aiFeedback' || view === 'agentChat';
   const isIntegSection = view === 'appStore' || view === 'connectors' || view === 'auth' || view === 'developer' || view === 'mcpServers';
   const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands' || view === 'workspaceGeneral' || view === 'workspaceTeammates' || view === 'customRoles';
   const isSuscripcionSection = view === 'billing';
@@ -12166,206 +12166,302 @@ function BillingPlanCard({ plan, billing, current, isLaunch }: { plan: typeof PL
   );
 }
 
-function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [billing, setBilling] = useState<'monthly' | 'annual'>('annual');
-  const [selectedPack, setSelectedPack] = useState('pack-20k');
-  // Launch-pricing toggle: when on, all plans show their 73%-off launch rate
-  // until 31 dic 2026. Independent from monthly/annual billing cadence.
-  const [isLaunch, setIsLaunch] = useState(false);
+function BillingView({ view: _view, onNavigate: _onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'subscription' | 'invoices' | 'payment'>('subscription');
+  const [billingEmail, setBillingEmail] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+
   const { data: sub } = useApi(() => billingApi.subscription('org_default'), [], null);
-  const currentPlan = sub?.planId ?? sub?.plan_id ?? sub?.plan?.name ?? 'growth';
+  const { data: usageRaw } = useApi(() => billingApi.usage(), [], null);
+  const { data: ledgerRaw, loading: ledgerLoading } = useApi(() => billingApi.ledger('org_default'), [], null);
+
+  const ledger: any[] = Array.isArray(ledgerRaw) ? ledgerRaw : [];
+
+  const planName: string = sub?.planName ?? sub?.plan_name ?? sub?.plan?.name ?? sub?.planId ?? sub?.plan_id ?? 'Advanced';
+  const planStatus: string = sub?.status ?? 'trialing';
+  const trialEnd: string | null = sub?.trialEnd ?? sub?.trial_end ?? null;
+  const periodEnd: string | null = sub?.currentPeriodEnd ?? sub?.current_period_end ?? null;
+  const cancelAtPeriodEnd: boolean = sub?.cancelAtPeriodEnd ?? sub?.cancel_at_period_end ?? false;
+  const monthlyAmount: number = sub?.amountCents ?? sub?.amount_cents ?? sub?.amount ?? 0;
+  const currency: string = (sub?.currency ?? 'usd').toUpperCase();
+  const companyName: string = sub?.companyName ?? sub?.company_name ?? sub?.metadata?.companyName ?? 'Acme';
+  const billingEmailFromSub: string = sub?.billingEmail ?? sub?.billing_email ?? usageRaw?.billingEmail ?? '';
+  const cardBrand: string = sub?.cardBrand ?? sub?.card_brand ?? sub?.paymentMethod?.brand ?? '';
+  const cardLast4: string = sub?.cardLast4 ?? sub?.card_last4 ?? sub?.paymentMethod?.last4 ?? '';
+  const billingAddress: string = sub?.billingAddress ?? sub?.billing_address ?? sub?.address ?? '';
+  const addons: any[] = Array.isArray(sub?.addons) ? sub.addons : Array.isArray(sub?.add_ons) ? sub.add_ons : [];
+  const isTrialing: boolean = planStatus === 'trialing';
+  const displayDate: string | null = isTrialing ? trialEnd : periodEnd;
+
+  useEffect(() => {
+    if (billingEmailFromSub && !billingEmail) setBillingEmail(billingEmailFromSub);
+  }, [billingEmailFromSub]);
+
+  function fmtDate(iso: string | null): string {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return iso; }
+  }
+  function fmtAmount(cents: number, cur = currency): string {
+    return cur === 'EUR' ? `€${(cents/100).toFixed(2)}` : `${cur} ${(cents/100).toFixed(2)}`;
+  }
+
+  async function openPortal() {
+    setPortalLoading(true);
+    try {
+      const r = await billingApi.portalSession('org_default', { returnUrl: window.location.href });
+      if (r?.url) window.open(r.url, '_blank');
+    } catch { /* ignore */ } finally { setPortalLoading(false); }
+  }
+
+  const ACC = '#f76b1c';
+
+  const TABS = [
+    { id: 'subscription', label: 'Suscripción' },
+    { id: 'invoices',     label: 'Facturas' },
+    { id: 'payment',      label: 'Detalles de pago' },
+  ] as const;
+
+  /* ── small icon helpers ── */
+  const IcoCard = () => <svg viewBox="0 0 20 20" className="w-4 h-4 fill-[#6b7280] flex-shrink-0"><path d="M2 4a1 1 0 011-1h14a1 1 0 011 1v2H2V4zM2 8h16v8a1 1 0 01-1 1H3a1 1 0 01-1-1V8z"/></svg>;
+  const IcoBuild = () => <svg viewBox="0 0 20 20" className="w-4 h-4 fill-[#6b7280] flex-shrink-0"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clipRule="evenodd"/></svg>;
+  const IcoCal = () => <svg viewBox="0 0 20 20" className="w-4 h-4 fill-[#6b7280] flex-shrink-0"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zM4 8h12v8H4V8z" clipRule="evenodd"/></svg>;
+  const IcoInfo = () => <svg viewBox="0 0 20 20" className="w-4 h-4 fill-[#9ca3af] flex-shrink-0 mt-0.5"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd"/></svg>;
+  const IcoBook = () => <svg viewBox="0 0 20 20" className="w-4 h-4 fill-[#6b7280]"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/></svg>;
 
   return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden" style={{ background: LC.bg }}>
-      <TrialBanner />
-      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
-        {/* Hero */}
-        <div style={{ borderBottom: `1px solid ${LC.border}`, padding: '48px 64px 40px', position: 'relative' }}>
-          <LandingCornerDots />
-          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 12 }}>Facturación &amp; Planes</p>
-          <h1 style={{ fontSize: 36, fontWeight: 800, color: LC.text, marginBottom: 12, lineHeight: '1.15' }}>
-            El plan perfecto<br />para tu equipo
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden bg-white">
+
+      {/* ── Header ── */}
+      <div className="flex-shrink-0 px-8 pt-6 pb-0 border-b border-[#e5e7eb]">
+        <div className="flex items-center justify-between mb-5">
+          <h1 className="text-[18px] font-bold text-[#111827] flex items-center gap-2">
+            <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1.5" y="1.5" width="17" height="17" rx="2"/><path d="M1.5 7h17"/></svg>
+            Facturación
           </h1>
-          <p style={{ fontSize: 15, color: LC.text60, marginBottom: 32, maxWidth: 480 }}>
-            Empieza gratis y escala cuando lo necesites. Sin contratos, sin sorpresas.
-          </p>
-          {/* Billing toggle + launch-price tab */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ display: 'inline-flex', border: `1px solid ${LC.border}`, background: LC.bg2, padding: 3 }}>
-              {(['monthly', 'annual'] as const).map(b => (
-                <button key={b} onClick={() => setBilling(b)}
-                  style={{ padding: '6px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: billing === b ? '#fff' : 'transparent', color: billing === b ? LC.text : LC.text60, boxShadow: billing === b ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}
-                >
-                  {b === 'monthly' ? 'Mensual' : 'Anual'}{b === 'annual' ? ' (-15%)' : ''}
-                </button>
-              ))}
-            </div>
-            {/* Square launch-price tab — sits next to the monthly/annual toggle */}
-            <button
-              onClick={() => setIsLaunch(v => !v)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 10,
-                padding: '8px 16px',
-                border: `1px solid ${isLaunch ? LC.accent : LC.border}`,
-                background: isLaunch ? LC.accent : '#fff',
-                color: isLaunch ? '#fff' : LC.text,
-                cursor: 'pointer',
-              }}
-            >
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Precio lanzamiento</span>
-              <span style={{ width: 3, height: 3, borderRadius: '50%', background: isLaunch ? '#fff' : LC.text }} />
-              <span style={{ fontSize: 13 }}>Hasta 31 dic 2026</span>
-              <span style={{ width: 3, height: 3, borderRadius: '50%', background: isLaunch ? '#fff' : LC.text }} />
-              <span style={{ fontSize: 13, fontWeight: 700 }}>Ahorra 73%</span>
+          <div className="flex items-center gap-4">
+            <button className="flex items-center gap-1.5 text-[13px] text-[#374151] hover:text-[#111827] transition-colors">
+              <IcoBook />
+              Aprender
             </button>
+            <button className="text-[13px] text-[#374151] hover:text-[#111827] transition-colors">Deja un comentario</button>
           </div>
         </div>
+        <div className="flex gap-0">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors"
+              style={{ borderBottomColor: tab === t.id ? ACC : 'transparent', color: tab === t.id ? '#111827' : '#6b7280' }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        {/* Plans grid */}
-        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
-          <div style={{ display: 'flex', gap: 0, border: `1px solid ${LC.border}` }}>
-            {PLANS.map((plan, i) => (
-              <Fragment key={plan.id}>
-                {i > 0 && <div style={{ width: 1, background: LC.border, flexShrink: 0 }} />}
-                <BillingPlanCard plan={plan} billing={billing} current={currentPlan} isLaunch={isLaunch} />
-              </Fragment>
-            ))}
-            {/* Business column — same 3-section structure as BillingPlanCard */}
-            <div style={{ width: 1, background: LC.border, flexShrink: 0 }} />
-            <div style={{ position: 'relative', border: 'none', background: LC.bg, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <LandingCornerDots color={LC.border} />
-              {/* ① Fixed-height info block — matches BillingPlanCard height:268 */}
-              <div style={{ height: 268, padding: '24px 24px 0', display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${LC.border}` }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{BUSINESS_PLAN.name}</p>
-                <p style={{ fontSize: 12, color: LC.text, marginBottom: 6 }}>{BUSINESS_PLAN.subtitle}</p>
-                <p style={{ fontSize: 12, color: LC.text60, lineHeight: '1.5', marginBottom: 0, flex: 1 }}>{BUSINESS_PLAN.desc}</p>
-                <div style={{ marginTop: 'auto', paddingBottom: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>Precio</span>
-                      <span style={{ fontSize: 15, color: LC.text60 }}>por contrato</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                      <span style={{ fontSize: 36, fontWeight: 800, color: LC.text, letterSpacing: '-0.6px', lineHeight: 1 }}>Custom</span>
-                      <span style={{ fontSize: 12, color: LC.text80 }}>negociado</span>
-                    </div>
-                  </div>
-                </div>
+      {/* ── Scrollable content ── */}
+      <div className="flex-1 overflow-y-auto bg-white" style={{ minHeight: 0 }}>
+
+        {/* ═══ TAB: Suscripción ═══ */}
+        {tab === 'subscription' && (
+          <div className="px-8 py-7 max-w-[860px]">
+
+            {/* Summary row */}
+            <div className="flex items-start justify-between pb-6 mb-6 border-b border-[#e5e7eb]">
+              <div>
+                <h2 className="text-[16px] font-semibold text-[#111827]">
+                  {isTrialing ? 'Prueba gratuita' : planName}
+                </h2>
+                <p className="text-[13px] text-[#6b7280] mt-1">
+                  {isTrialing
+                    ? `Fecha de finalización de la prueba: ${fmtDate(displayDate)}`
+                    : cancelAtPeriodEnd
+                      ? `Cancela el: ${fmtDate(displayDate)}`
+                      : `Próxima renovación: ${fmtDate(displayDate)}`}
+                </p>
               </div>
-              {/* ② CTA — same fixed height as BillingPlanCard */}
-              <div style={{ height: 68, padding: '12px 24px', display: 'flex', alignItems: 'center', borderBottom: `1px solid ${LC.border}` }}>
-                <button style={{ width: '100%', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${LC.accent}`, background: LC.accent, color: '#fff' }}>
-                  Hablar con ventas
+              <span className="text-[20px] font-bold text-[#111827]">
+                {monthlyAmount > 0 ? fmtAmount(monthlyAmount) : `${currency} 0.00`}
+              </span>
+            </div>
+
+            {/* Plan card */}
+            <div className="border border-[#e5e7eb] rounded-lg mb-4">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-[#e5e7eb]">
+                <span className="text-[14px] font-semibold text-[#111827]">Plan</span>
+                <button className="flex items-center gap-1.5 text-[13px] text-[#374151] hover:text-[#111827] border border-[#e5e7eb] rounded-md px-3 py-1.5 transition-colors">
+                  <svg viewBox="0 0 20 20" className="w-3.5 h-3.5 fill-[#6b7280]"><path fillRule="evenodd" d="M3 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h8a1 1 0 100-2H3z" clipRule="evenodd"/></svg>
+                  Ver funciones incluidas
                 </button>
               </div>
-              {/* ③ Features */}
-              <div style={{ padding: '20px 24px 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <p style={{ fontSize: 10, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 18 }}>{BUSINESS_PLAN.featuresLabel}</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {BUSINESS_PLAN.features.map(f => <LandingBullet key={f}>{f}</LandingBullet>)}
+              <div className="px-5 py-4">
+                <div className="flex items-center gap-3 flex-wrap mb-3">
+                  <span className="text-[14px] font-semibold text-[#111827] capitalize">{planName}</span>
+                  {isTrialing && (
+                    <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#eff6ff] text-[#2563eb]">
+                      Prueba De {planName}
+                    </span>
+                  )}
+                  <button onClick={openPortal} disabled={portalLoading}
+                    className="flex items-center gap-1.5 text-[13px] text-[#374151] hover:text-[#111827] transition-colors disabled:opacity-50">
+                    <svg viewBox="0 0 20 20" className="w-3.5 h-3.5 fill-[#6b7280]"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/></svg>
+                    {portalLoading ? 'Abriendo…' : 'Cambiar plan'}
+                  </button>
                 </div>
+                <p className="text-[12px] text-[#6b7280] flex items-start gap-1.5">
+                  <IcoInfo />
+                  Los cambios de plazas pueden tardar hasta 24 horas en reflejarse aquí.
+                </p>
               </div>
             </div>
-          </div>
 
-          {/* Features comparison link */}
-          <div style={{ marginTop: 20, textAlign: 'center' }}>
-            <button
-              onClick={() => onNavigate('featuresComparison')}
-              style={{ fontSize: 13, color: LC.accent, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: 600 }}
-            >
-              Ver comparación completa de funciones →
-            </button>
-          </div>
-        </div>
-
-        {/* AI Credits — selector + detail (real packs €79 / €249 / €549 / flexible) */}
-        <BillingCreditsBlock selectedPack={selectedPack} setSelectedPack={setSelectedPack} currentPlan={currentPlan} />
-
-        {/* ── Seats — full width ───────────────────────────────────────────────── */}
-        <div style={{ borderBottom: `1px solid ${LC.border}` }}>
-          {/* Section header */}
-          <div style={{ padding: '32px 64px 0' }}>
-            <p style={{ fontSize: 20, fontWeight: 800, color: LC.text, marginBottom: 6 }}>Puestos adicionales</p>
-            <p style={{ fontSize: 13, color: LC.text60, lineHeight: '1.7', maxWidth: 680, marginBottom: 28 }}>
-              Cada plan incluye puestos de base. Añade más en cualquier momento — la facturación <strong style={{ color: LC.text }}>se prorratea automáticamente</strong> hasta tu próxima fecha de renovación. Los puestos Lite (solo lectura) son <strong style={{ color: LC.text }}>gratuitos e ilimitados</strong> en todos los planes.
-            </p>
-          </div>
-          {/* Table */}
-          <div style={{ borderTop: `1px solid ${LC.border}` }}>
-            {/* Header row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr', padding: '0 64px', background: LC.bg2, borderBottom: `1px solid ${LC.border}` }}>
-              {['Plan', 'Puestos incluidos', 'Precio / puesto extra', 'Colaboradores Lite', ''].map((h, i) => (
-                <div key={h + i} style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</div>
+            {/* Complementos */}
+            <div className="border border-[#e5e7eb] rounded-lg">
+              <div className="px-5 py-3 border-b border-[#e5e7eb]">
+                <span className="text-[14px] font-semibold text-[#111827]">Complementos</span>
+              </div>
+              {(addons.length > 0 ? addons.map((a: any) => ({ name: a.name ?? a.id, status: a.status })) : [
+                { name: 'Asistencia proactiva Plus', status: 'trialing' },
+                { name: 'Fin AI Copilot',            status: 'trialing' },
+                { name: 'Pro',                       status: 'trialing' },
+              ]).map((item, i, arr) => (
+                <div key={item.name} className={`flex items-center gap-3 px-5 py-3 ${i < arr.length - 1 ? 'border-b border-[#f3f4f6]' : ''}`}>
+                  <span className="text-[13px] text-[#111827]">{item.name}</span>
+                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#eff6ff] text-[#2563eb]">
+                    {item.status === 'trialing' || isTrialing ? 'Prueba' : 'Activo'}
+                  </span>
+                </div>
               ))}
             </div>
-            {[
-              { id: 'starter',  name: 'Starter',  seats: 3,    extraPrice: '€25 / mes',     note: 'Empieza desde aquí' },
-              { id: 'growth',   name: 'Growth',   seats: 8,    extraPrice: '€22 / mes',     note: 'Más popular' },
-              { id: 'scale',    name: 'Scale',    seats: 20,   extraPrice: '€19 / mes',     note: 'Para equipos grandes' },
-              { id: 'business', name: 'Business', seats: null, extraPrice: 'Personalizado', note: 'Habla con ventas' },
-            ].map(row => {
-              const isCurrent = currentPlan.toLowerCase().includes(row.id);
-              return (
-                <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr', padding: '0 64px', borderBottom: `1px solid ${LC.border}`, background: isCurrent ? LC.bg2 : 'transparent' }}>
-                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 14, fontWeight: isCurrent ? 700 : 500, color: LC.text }}>{row.name}</span>
-                    {isCurrent && <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: LC.accent, padding: '2px 7px', letterSpacing: '0.04em' }}>ACTUAL</span>}
-                  </div>
-                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: LC.text }}>{row.seats != null ? `${row.seats} puestos` : 'Personalizado'}</span>
-                  </div>
-                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 400, color: isCurrent ? LC.accent : LC.text }}>{row.extraPrice}</span>
-                  </div>
-                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: LC.text }}>Ilimitados · Gratis</span>
-                  </div>
-                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                    {isCurrent ? (
-                      <button style={{ height: 34, padding: '0 16px', fontSize: 12, fontWeight: 600, background: LC.text, color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        Añadir puesto
-                      </button>
-                    ) : (
-                      <button onClick={() => onNavigate('billing')} style={{ height: 34, padding: '0 16px', fontSize: 12, fontWeight: 600, background: 'transparent', color: LC.text60, border: `1px solid ${LC.border}`, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        Cambiar a {row.name}
-                      </button>
-                    )}
-                  </div>
+
+          </div>
+        )}
+
+        {/* ═══ TAB: Facturas ═══ */}
+        {tab === 'invoices' && (
+          <div className="px-8 py-7">
+            <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+              <div className="grid bg-[#f9fafb] border-b border-[#e5e7eb] px-5 py-2.5"
+                style={{ gridTemplateColumns: '1fr 140px 150px 110px 60px' }}>
+                {['Descripción', 'Fecha', 'Importe', 'Estado', ''].map(h => (
+                  <div key={h} className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-wider">{h}</div>
+                ))}
+              </div>
+              {ledgerLoading ? (
+                <div className="py-12 text-center text-[13px] text-[#9ca3af]">Cargando facturas…</div>
+              ) : ledger.length === 0 ? (
+                <div className="py-16 text-center">
+                  <p className="text-[14px] font-semibold text-[#111827] mb-1">Sin facturas todavía</p>
+                  <p className="text-[13px] text-[#9ca3af]">Las facturas aparecerán aquí cuando se genere la primera.</p>
                 </div>
-              );
-            })}
+              ) : ledger.map((inv: any, idx: number) => {
+                const invStatus = inv.status ?? inv.type ?? 'paid';
+                const IS: Record<string, { bg: string; text: string; label: string }> = {
+                  paid: { bg: '#f0fdf4', text: '#16a34a', label: 'Pagada' },
+                  open: { bg: '#fefce8', text: '#a16207', label: 'Pendiente' },
+                  draft:{ bg: '#f9fafb', text: '#6b7280', label: 'Borrador' },
+                  void: { bg: '#f9fafb', text: '#6b7280', label: 'Anulada' },
+                };
+                const is = IS[invStatus] ?? IS.paid;
+                const desc = inv.description ?? inv.desc ?? `Factura #${idx + 1}`;
+                const invDate = inv.date ?? inv.createdAt ?? inv.created_at ?? null;
+                const invAmount = inv.amountCents ?? inv.amount_cents ?? inv.amount ?? 0;
+                const invCur = (inv.currency ?? currency).toUpperCase();
+                const invUrl = inv.invoicePdf ?? inv.invoice_pdf ?? inv.receiptUrl ?? inv.receipt_url ?? inv.url ?? null;
+                return (
+                  <div key={inv.id ?? idx}
+                    className={`grid items-center px-5 py-3.5 hover:bg-[#f9fafb] transition-colors ${idx > 0 ? 'border-t border-[#e5e7eb]' : ''}`}
+                    style={{ gridTemplateColumns: '1fr 140px 150px 110px 60px' }}>
+                    <div className="text-[13px] text-[#111827] font-medium truncate pr-4">{desc}</div>
+                    <div className="text-[13px] text-[#6b7280]">{fmtDate(invDate)}</div>
+                    <div className="text-[13px] font-semibold text-[#111827]">{invAmount ? fmtAmount(invAmount, invCur) : '—'}</div>
+                    <div><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: is.bg, color: is.text }}>{is.label}</span></div>
+                    <div className="flex justify-end">{invUrl && <a href={invUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] font-semibold hover:underline" style={{ color: ACC }}>PDF</a>}</div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div style={{ padding: '16px 64px 32px' }}>
-            <p style={{ fontSize: 12, color: LC.text60 }}>
-              * El precio por puesto extra se aplica al puesto adicional por encima del límite incluido en tu plan. Se prorratea desde el momento de la activación.
+        )}
+
+        {/* ═══ TAB: Detalles de pago ═══ */}
+        {tab === 'payment' && (
+          <div className="px-8 py-7 max-w-[860px]">
+
+            {/* Pago */}
+            <h2 className="text-[15px] font-semibold text-[#111827] mb-4">Pago</h2>
+            <div className="flex flex-col gap-3 mb-8">
+              <div className="flex items-center gap-2 text-[13px]">
+                <IcoCal />
+                <span className="font-semibold text-[#111827]">Fecha de facturación:</span>
+                <span className="text-[#374151]">5th de cada mes</span>
+              </div>
+              <div className="flex items-center gap-2 text-[13px] flex-wrap">
+                <IcoCard />
+                <span className="font-semibold text-[#111827]">Facturado a:</span>
+                <span className="text-[#374151]">
+                  {cardBrand ? `${cardBrand} terminada en ${cardLast4}` : 'no se agregó una tarjeta de crédito'}
+                </span>
+                <button onClick={openPortal} className="font-medium hover:underline" style={{ color: ACC }}>
+                  {cardBrand ? 'Editar tarjeta' : 'Agregar tarjeta'}
+                </button>
+              </div>
+              <div className="flex items-center gap-2 text-[13px] flex-wrap">
+                <IcoBuild />
+                <span className="font-semibold text-[#111827]">Ubicación de la empresa:</span>
+                <span className="text-[#374151]">
+                  {billingAddress || 'no se agregó la dirección de la empresa'}
+                </span>
+                <button onClick={openPortal} className="font-medium hover:underline" style={{ color: ACC }}>
+                  {billingAddress ? 'Editar dirección' : 'Agregar dirección de la empresa'}
+                </button>
+              </div>
+              <div className="flex items-center gap-2 text-[13px] flex-wrap">
+                <IcoBuild />
+                <span className="font-semibold text-[#111827]">Nombre de la empresa:</span>
+                <span className="text-[#374151]">{companyName}</span>
+                <button onClick={openPortal} className="font-medium hover:underline" style={{ color: ACC }}>
+                  Editar nombre de la empresa
+                </button>
+              </div>
+            </div>
+
+            <div className="border-t border-[#e5e7eb] mb-8" />
+
+            {/* Contactos de facturación */}
+            <h2 className="text-[15px] font-semibold text-[#111827] mb-2">Contactos de facturación</h2>
+            <p className="text-[13px] text-[#374151] mb-3 flex items-start gap-1.5">
+              Envía facturas, excedentes y otros mensajes relacionados con la facturación a la siguiente lista:
+              <IcoInfo />
             </p>
-          </div>
-        </div>
+            <div className="border border-[#d1d5db] rounded-md p-3 mb-2 flex flex-wrap gap-2 items-start min-h-[80px]">
+              {billingEmailFromSub && (
+                <span className="bg-[#f3f4f6] text-[#374151] text-[13px] px-2 py-1 rounded">{billingEmailFromSub}</span>
+              )}
+              <input
+                type="email"
+                value={billingEmail === billingEmailFromSub ? '' : billingEmail}
+                onChange={e => setBillingEmail(e.target.value)}
+                placeholder="Ingresa una dirección de correo electrónico"
+                className="flex-1 min-w-[220px] text-[13px] outline-none text-[#374151] placeholder-[#9ca3af] bg-transparent"
+              />
+            </div>
+            <p className="text-[12px] text-[#6b7280] mb-4">
+              Puedes agregar varias direcciones de correo electrónico separándolas con una coma o un espacio.
+            </p>
+            <button
+              onClick={async () => { setSavingEmail(true); await new Promise(r => setTimeout(r, 700)); setSavingEmail(false); }}
+              disabled={savingEmail}
+              className="h-9 px-4 text-[13px] font-medium border border-[#d1d5db] rounded-md text-[#374151] hover:bg-[#f9fafb] disabled:opacity-50 transition-colors">
+              {savingEmail ? 'Guardando…' : 'Guardar'}
+            </button>
 
-        {/* FAQs — full width */}
-        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 24 }}>Preguntas frecuentes</p>
-          <div>
-            {FAQS.map(f => <BillingFaqItem key={f.q} q={f.q} a={f.a} />)}
-            <div style={{ borderTop: `1px solid ${LC.border}` }} />
           </div>
-        </div>
+        )}
 
-        {/* Final CTA */}
-        <div style={{ padding: '48px 64px', position: 'relative', textAlign: 'center' }}>
-          <LandingCornerDots />
-          <p style={{ fontSize: 24, fontWeight: 800, color: LC.text, marginBottom: 12 }}>¿Tienes preguntas?</p>
-          <p style={{ fontSize: 14, color: LC.text60, marginBottom: 24 }}>Nuestro equipo está disponible para ayudarte a elegir el plan adecuado.</p>
-          <button style={{ padding: '12px 32px', fontSize: 14, fontWeight: 700, background: LC.accent, color: '#fff', border: 'none', cursor: 'pointer' }}>
-            Hablar con ventas
-          </button>
-        </div>
       </div>
     </div>
   );
 }
-
 // ── FeaturesComparisonView ────────────────────────────────────────────────────
 
 const FEATURE_SECTIONS = [
@@ -27900,6 +27996,439 @@ function FinMonitoresContent() {
   );
 }
 
+// ─── Fin AI · Settings page (Intercom-style accordion) ───────────────────────
+function FinAiSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  // Settings state
+  const [finName, setFinName] = useState('Fin');
+  const [showAiLabel, setShowAiLabel] = useState(false);
+  const [resolutionBtn, setResolutionBtn] = useState<'helped' | 'answered' | 'thats_it' | 'emoji'>('helped');
+  const [realTimeTrans, setRealTimeTrans] = useState(true);
+  const [defaultLang, setDefaultLang] = useState('English');
+  const [showDraftedByAi, setShowDraftedByAi] = useState(true);
+  const [preventDmarc, setPreventDmarc] = useState(true);
+  const [pronounFormality, setPronounFormality] = useState<'auto' | 'informal' | 'formal'>('auto');
+  const [pronounOpen, setPronounOpen] = useState(false);
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function toggleSection(id: string) {
+    setExpanded(s => s === id ? null : id);
+  }
+
+  const LANGUAGES = ['English', 'Español', 'Français', 'Deutsch', 'Português', 'Italiano', 'Nederlands'];
+  const PRONOUNS: { value: 'auto' | 'informal' | 'formal'; label: string }[] = [
+    { value: 'auto', label: 'Dejar que Fin decida' },
+    { value: 'informal', label: 'Informal' },
+    { value: 'formal', label: 'Formal' },
+  ];
+
+  // Inline toggle helper
+  function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
+    return (
+      <button
+        type="button"
+        onClick={onChange}
+        className={`mt-0.5 w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${on ? 'bg-[#f97316]' : 'bg-[#d4d4d2]'}`}
+      >
+        <span className={`absolute top-0.5 left-0 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
+      </button>
+    );
+  }
+
+  // Accordion row
+  function AccRow({
+    id, icon, title, desc, rightAction, children,
+  }: {
+    id: string;
+    icon: React.ReactNode;
+    title: string;
+    desc: string;
+    rightAction?: React.ReactNode;
+    children?: React.ReactNode;
+  }) {
+    const isExp = expanded === id && !!children;
+    return (
+      <div className={`rounded-[8px] border overflow-hidden transition-all ${isExp ? 'border-[#f97316]' : 'border-[#e9eae6]'}`}>
+        <button
+          type="button"
+          className="w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-[#fafaf8] transition-colors"
+          onClick={() => { if (children) toggleSection(id); }}
+        >
+          <span className="w-5 h-5 flex items-center justify-center mt-0.5 flex-shrink-0 text-[#646462]">{icon}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-0.5">{title}</p>
+            <p className="text-[12.5px] text-[#646462] leading-[1.5]">{desc}</p>
+          </div>
+          {rightAction && <div className="flex-shrink-0 ml-2">{rightAction}</div>}
+          {children && (
+            <svg viewBox="0 0 16 16" className={`w-4 h-4 mt-1 flex-shrink-0 ml-1 transition-transform ${isExp ? 'rotate-180' : ''}`}>
+              <path d="M4 6l4 4 4-4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
+          )}
+        </button>
+        {isExp && (
+          <div className="border-t border-[#f0f0ee] px-5 py-5">
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden relative">
+
+          {/* Toast */}
+          {toast && (
+            <div className={`absolute top-4 right-4 z-50 px-4 py-2.5 rounded-[8px] text-[13px] font-medium shadow-lg transition-all ${toast.ok ? 'bg-[#1a1a1a] text-white' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              {toast.msg}
+            </div>
+          )}
+
+          {/* Header */}
+          <div className="flex items-center gap-2.5 px-6 h-14 border-b border-[#e9eae6] flex-shrink-0">
+            <svg viewBox="0 0 20 20" className="w-5 h-5 flex-shrink-0">
+              <rect x="2" y="2" width="16" height="16" rx="3" fill="#1a1a1a"/>
+              <path d="M10 6.5a3.5 3.5 0 00-3.5 3.5v.5a3.5 3.5 0 007 0V10A3.5 3.5 0 0010 6.5z" fill="white"/>
+            </svg>
+            <h1 className="text-[16px] font-bold text-[#1a1a1a]">Fin AI Agent</h1>
+          </div>
+
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto min-h-0 px-8 py-6 flex flex-col gap-7">
+
+            {/* ── USO ── */}
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-3">Uso</p>
+              <div className="flex flex-col gap-2">
+                {/* Alertas y límites */}
+                <AccRow
+                  id="alertas"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M8.982 1.566a1.13 1.13 0 00-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5a.905.905 0 01.9.995l-.35 3.507a.552.552 0 01-1.1 0L7.1 5.995A.905.905 0 018 5zm.002 6a1 1 0 110 2 1 1 0 010-2z"/></svg>}
+                  title="Alertas y límites"
+                  desc="Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto."
+                >
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[8px] p-4">
+                      <p className="text-[13px] font-semibold text-[#92400e] mb-1">En período de prueba</p>
+                      <p className="text-[12.5px] text-[#b45309]">Fin es gratuito durante los 14 días de prueba. Al finalizar, podrás configurar alertas de uso y límites de gasto desde esta sección.</p>
+                    </div>
+                    <button type="button" onClick={() => toggleSection('alertas')} className="w-fit text-[12.5px] text-[#646462] hover:text-[#1a1a1a] font-medium">Cerrar</button>
+                  </div>
+                </AccRow>
+
+                {/* Supervisar el uso */}
+                <div className="rounded-[8px] border border-[#e9eae6] flex items-center gap-3 px-5 py-4">
+                  <span className="w-5 h-5 flex items-center justify-center flex-shrink-0 text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M1.5 13.5v-3h2v3h-2zm3.5 0V8h2v5.5H5zm3.5 0V5h2v8.5H8.5zm3.5 0V2h2v11.5H12z"/></svg>
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-0.5">Supervisar el uso</p>
+                    <p className="text-[12.5px] text-[#646462]">Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo.</p>
+                  </div>
+                  <button type="button" onClick={() => showToast('Redirigiendo a uso y facturación…')} className="flex items-center gap-1 text-[13px] text-[#646462] hover:text-[#1a1a1a] font-medium whitespace-nowrap flex-shrink-0">
+                    Ver uso
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M6.72 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L10.44 8 6.72 4.28a.75.75 0 010-1.06z"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ── PERSONALIZACIÓN ── */}
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-3">Personalización</p>
+              <div className="flex flex-col gap-2">
+
+                {/* La identidad de Fin */}
+                <AccRow
+                  id="identidad"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><circle cx="8" cy="5.5" r="2.5"/><path d="M2.5 13.5c0-3.04 2.46-5.5 5.5-5.5s5.5 2.46 5.5 5.5H2.5z"/></svg>}
+                  title="La identidad de Fin"
+                  desc="Administra el nombre y avatar que verán tus clientes."
+                >
+                  <div className="flex flex-col gap-4">
+                    {/* Gestionar marcas */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-[12.5px] text-[#646462]">Establezca la identidad del agente de IA para cada marca</p>
+                      <button type="button" onClick={() => onNavigate('workspaceBrands')} className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#1a1a1a] hover:underline flex-shrink-0">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M9.5 3.5H3a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h9a.5.5 0 00.5-.5V6.5h-1.5v5.5H3.5v-8H9.5V3.5zm1 0v-1H13a.5.5 0 01.5.5v2.5H12V4.56l-4.72 4.72-1.06-1.06L10.94 3.5H10.5z"/></svg>
+                        Gestionar marcas
+                      </button>
+                    </div>
+                    {/* Brand card */}
+                    <div className="border border-[#e9eae6] rounded-[8px] p-4 flex items-center gap-4">
+                      <div>
+                        <p className="text-[11px] font-semibold text-[#646462] mb-2">Acme</p>
+                        <div className="flex items-start gap-3">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-[10px] text-[#646462]">☀ Claro</span>
+                            <div className="w-12 h-12 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-center">
+                              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#1a1a1a]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                            </div>
+                            <button type="button" className="text-[10px] text-[#646462] hover:text-[#1a1a1a]">✏</button>
+                          </div>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-[10px] text-[#646462]">☾ Oscuro</span>
+                            <div className="w-12 h-12 rounded-[8px] border border-[#e9eae6] bg-[#1a1a1a] flex items-center justify-center">
+                              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                            </div>
+                            <button type="button" className="text-[10px] text-[#646462] hover:text-[#1a1a1a]">✏</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex-1 flex items-center gap-3">
+                        <label className="text-[12.5px] font-medium text-[#1a1a1a] whitespace-nowrap">Nombre</label>
+                        <input
+                          value={finName}
+                          onChange={e => setFinName(e.target.value)}
+                          className="flex-1 border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                        />
+                      </div>
+                      <span className="text-[12px] text-[#646462] font-medium whitespace-nowrap">Predeterminado</span>
+                    </div>
+                    {/* Show AI label toggle */}
+                    <div className="flex items-start gap-3">
+                      <Toggle on={showAiLabel} onChange={() => setShowAiLabel(s => !s)} />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a]">Mostrar la etiqueta de AI Agent en Messenger</p>
+                        <p className="text-[12px] text-[#646462]">Se muestra después del nombre de Fin para cada marca.</p>
+                      </div>
+                    </div>
+                    {/* Save / Cancel */}
+                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#f0f0ee]">
+                      <button type="button" onClick={() => toggleSection('identidad')} className="text-[12.5px] text-[#646462] hover:text-[#1a1a1a] font-medium px-3 py-1.5">Cancelar</button>
+                      <button
+                        type="button"
+                        onClick={() => { showToast('Identidad de Fin guardada.'); toggleSection('identidad'); }}
+                        className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#1a1a1a] px-3 py-1.5 border border-[#e9eae6] rounded-[6px] hover:bg-[#f8f8f7]"
+                      >
+                        <svg viewBox="0 0 12 12" className="w-3 h-3 fill-current"><path d="M1 6l3.5 3.5 7-7" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Guardar
+                      </button>
+                    </div>
+                  </div>
+                </AccRow>
+
+                {/* Botones de respuesta de Fin */}
+                <AccRow
+                  id="botones"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M14.5 2h-13A1.5 1.5 0 000 3.5v7A1.5 1.5 0 001.5 12H5v2.5l3-2.5h6.5A1.5 1.5 0 0016 10.5v-7A1.5 1.5 0 0014.5 2zM2 6.5h4v1H2v-1zm0-2h8v1H2v-1zm10 5H2v-1h10v1z"/></svg>}
+                  title="Botones de respuesta de Fin"
+                  desc="Elija cómo Fin formula las opciones que les presenta a sus clientes. Disponible en SMS."
+                >
+                  <div className="flex gap-6">
+                    {/* Options */}
+                    <div className="flex-1 flex flex-col gap-3">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a]">Texto del botón de resolución</p>
+                      <p className="text-[12px] text-[#646462]">Elige el texto para el botón que finaliza una conversación cuando se ha respondido a la pregunta de un cliente.</p>
+                      {([
+                        { val: 'helped', label: 'That helped 🔥', pill: true },
+                        { val: 'answered', label: 'That answered my question', pill: true },
+                        { val: 'thats_it', label: "That's it", pill: true },
+                        { val: 'emoji', label: '🔥', pill: false },
+                      ] as const).map(opt => (
+                        <label key={opt.val} className="flex items-center gap-2.5 cursor-pointer" onClick={() => setResolutionBtn(opt.val)}>
+                          <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${resolutionBtn === opt.val ? 'border-[#f97316]' : 'border-[#d4d4d2]'}`}>
+                            {resolutionBtn === opt.val && <div className="w-2 h-2 rounded-full bg-[#f97316]" />}
+                          </div>
+                          <span className={`px-3 py-1 text-[13px] text-[#1a1a1a] border border-[#e9eae6] ${opt.pill ? 'rounded-full' : 'rounded-[6px]'}`}>{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {/* Live preview */}
+                    <div className="w-[220px] flex-shrink-0 bg-[#f3f3f1] rounded-[10px] p-3 flex flex-col gap-2">
+                      <div className="flex items-center gap-2 bg-white rounded-[8px] px-3 py-2 shadow-sm">
+                        <div className="w-6 h-6 rounded-full bg-[#1a1a1a] flex items-center justify-center flex-shrink-0">
+                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium text-[#1a1a1a]">Hi 👋 How can I help you?</p>
+                          <p className="text-[9px] text-[#9a9a96]">Fin · 1 sem</p>
+                        </div>
+                      </div>
+                      <button type="button" className="text-left border border-[#e9eae6] bg-white rounded-[6px] px-3 py-1.5 text-[10px] text-[#1a1a1a]">
+                        {resolutionBtn === 'helped' ? 'That helped 🔥' : resolutionBtn === 'answered' ? 'That answered my question' : resolutionBtn === 'thats_it' ? "That's it" : '🔥'}
+                      </button>
+                      <button type="button" className="text-left border border-[#e9eae6] bg-white rounded-[6px] px-3 py-1.5 text-[10px] text-[#1a1a1a]">Chat with a product expert</button>
+                      <button type="button" className="text-left border border-[#e9eae6] bg-white rounded-[6px] px-3 py-1.5 text-[10px] text-[#1a1a1a]">Learn more about Intercom</button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 pt-3 mt-2 border-t border-[#f0f0ee]">
+                    <button type="button" onClick={() => toggleSection('botones')} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                  </div>
+                </AccRow>
+
+                {/* Soporte multilingüe de Fin */}
+                <AccRow
+                  id="multilingual"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M2 5h7V4H2v1zm0 2.5h7v-1H2v1zM0 13l3-3h4.5A1.5 1.5 0 009 8.5v-5A1.5 1.5 0 007.5 2h-6A1.5 1.5 0 000 3.5v9.5zm10.5-9.5A1.5 1.5 0 0112 2h4.5A1.5 1.5 0 0118 3.5v5A1.5 1.5 0 0116.5 10H13l-2 2.5V10H12V3.5z" clipRule="evenodd" fillRule="evenodd"/></svg>}
+                  title="Soporte multilingüe de Fin"
+                  desc="Controla los idiomas en los que responderá Fin."
+                >
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1.5">Idiomas compatibles</p>
+                      <p className="text-[12.5px] text-[#646462] leading-relaxed">
+                        Fin detectará y responderá automáticamente a los clientes en todos los idiomas admitidos.{' '}
+                        <a href="#" className="text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Consulta la lista completa de idiomas compatibles</a>
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <Toggle on={realTimeTrans} onChange={() => setRealTimeTrans(s => !s)} />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Traducción en tiempo real</p>
+                        <p className="text-[12px] text-[#646462] mb-2">Si Fin no encuentra contenido de asistencia relevante en el idioma del cliente, traducirá el contenido del idioma seleccionado a continuación:</p>
+                        {realTimeTrans && (
+                          <select
+                            value={defaultLang}
+                            onChange={e => setDefaultLang(e.target.value)}
+                            className="border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[12.5px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                          >
+                            {LANGUAGES.map(l => <option key={l}>{l}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 pt-3 border-t border-[#f0f0ee]">
+                      <button type="button" onClick={() => toggleSection('multilingual')} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                      <a href="#" className="flex items-center gap-1 text-[12.5px] text-[#3b59f6] hover:underline font-medium" onClick={e => e.preventDefault()}>📖 Fin multilingüe</a>
+                      <a href="#" className="flex items-center gap-1 text-[12.5px] text-[#3b59f6] hover:underline font-medium" onClick={e => e.preventDefault()}>💡 Dar opinión</a>
+                    </div>
+                  </div>
+                </AccRow>
+
+                {/* Respuestas de correo electrónico de Fin */}
+                <AccRow
+                  id="email"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm2-1a1 1 0 00-1 1v.217l7 4.2 7-4.2V4a1 1 0 00-1-1H2zm13 2.383l-4.758 2.855L15 11.114V5.383zm-.034 6.878L9.271 8.82 8 9.583 6.728 8.82l-5.694 3.44A1 1 0 002 13h12a1 1 0 00.966-.739zM1 11.114l4.758-2.876L1 5.383v5.731z"/></svg>}
+                  title="Respuestas de correo electrónico de Fin"
+                  desc="Controla cómo Fin responde a los correos electrónicos de tus clientes"
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-start gap-3">
+                      <Toggle on={showDraftedByAi} onChange={() => setShowDraftedByAi(s => !s)} />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Mostrar "Redactado por IA" en el pie de página del correo electrónico</p>
+                        <p className="text-[12px] text-[#646462] leading-relaxed">
+                          Agrega un mensaje sutil en el pie de página como, "Redactado por IA", para informar a los clientes que Fin escribió el correo electrónico. Algunas leyes establecen este requisito.{' '}
+                          <a href="#" className="text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Más información.</a>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <Toggle on={preventDmarc} onChange={() => setPreventDmarc(s => !s)} />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Evita que Fin procese correos electrónicos que no pasen la autenticación (DMARC)</p>
+                        <p className="text-[12px] text-[#646462] leading-relaxed">
+                          Fin no se involucrará en conversaciones donde el remitente no pueda autenticarse.{' '}
+                          <a href="#" className="text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Más información.</a>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 pt-3 border-t border-[#f0f0ee]">
+                      <button type="button" onClick={() => { showToast('Guardado correctamente.'); toggleSection('email'); }} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                    </div>
+                  </div>
+                </AccRow>
+
+                {/* Formalidad de los pronombres en Fin */}
+                <AccRow
+                  id="pronouns"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M14 1H2a1 1 0 00-1 1v11.5L4 11h10a1 1 0 001-1V2a1 1 0 00-1-1zM4.5 6h7v1h-7V6zm0-2h7v1h-7V4zm3.5 4h3.5v1H8v-1z"/></svg>}
+                  title="Formalidad de los pronombres en Fin"
+                  desc="Elige pronombres formales o informales (para todos los idiomas que correspondan)"
+                >
+                  <div className="flex flex-col gap-4">
+                    {/* Dropdown */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setPronounOpen(s => !s)}
+                        className="flex items-center gap-2 border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] text-[#1a1a1a] hover:border-[#1a1a1a] min-w-[220px]"
+                      >
+                        <span className="flex-1 text-left">{PRONOUNS.find(p => p.value === pronounFormality)?.label}</span>
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none flex-shrink-0">
+                          <path d="M4 6l4 4 4-4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                      {pronounOpen && (
+                        <div className="absolute top-full left-0 mt-1 bg-white border border-[#e9eae6] rounded-[8px] shadow-lg z-20 min-w-[220px] py-1">
+                          {PRONOUNS.map(p => (
+                            <button
+                              key={p.value}
+                              type="button"
+                              onClick={() => { setPronounFormality(p.value); setPronounOpen(false); }}
+                              className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] text-left"
+                            >
+                              {p.label}
+                              {pronounFormality === p.value && (
+                                <svg viewBox="0 0 12 12" className="w-3 h-3 flex-shrink-0 fill-none">
+                                  <path d="M1 6l3 3 7-7" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[12.5px] text-[#646462] leading-relaxed">
+                      Fin seguirá el mismo registro lingüístico del usuario, de modo que si éste utiliza "du" o "tú", Fin responderá con pronombres informales. Si el usuario utiliza "Sie" o "usted", Fin responde en consecuencia.{' '}
+                      <a href="#" className="text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Los pronombres en Fin</a>
+                    </p>
+                    <div className="flex items-center gap-3 pt-3 border-t border-[#f0f0ee]">
+                      <button type="button" onClick={() => { showToast('Guardado correctamente.'); toggleSection('pronouns'); }} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                    </div>
+                  </div>
+                </AccRow>
+              </div>
+            </div>
+
+            {/* ── AJUSTES DE AUTOMATIZACIÓN ADICIONALES ── */}
+            <div>
+              <p className="text-[11px] font-semibold text-[#9a9a96] uppercase tracking-wider mb-3">Ajustes de automatización adicionales</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => showToast('Abriendo configuración de personalidad de Fin…')}
+                  className="text-left border border-[#e9eae6] rounded-[10px] p-4 hover:border-[#1a1a1a] transition-colors group"
+                >
+                  <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-1">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#646462] inline mr-1.5 -mt-0.5"><path d="M12.5 1a1 1 0 011 1v1h1a.5.5 0 010 1h-1v1a1 1 0 01-2 0V4h-1a.5.5 0 010-1h1V2a1 1 0 011-1zm-8 2a2 2 0 100 4 2 2 0 000-4zm0 1a1 1 0 110 2 1 1 0 010-2zM1.5 9h11a.5.5 0 01.5.5v1a.5.5 0 01-.5.5H12v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2H1.5a.5.5 0 01-.5-.5v-1A.5.5 0 011.5 9z"/></svg>
+                    Personaliza la personalidad de Fin →
+                  </p>
+                  <p className="text-[12px] text-[#646462]">Elige la identidad, el tono de voz y la longitud de la respuesta de Fin</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => showToast('Abriendo Inbox del bot…')}
+                  className="text-left border border-[#e9eae6] rounded-[10px] p-4 hover:border-[#1a1a1a] transition-colors group"
+                >
+                  <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-1">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#646462] inline mr-1.5 -mt-0.5"><path d="M0 4.5A1.5 1.5 0 011.5 3h13A1.5 1.5 0 0116 4.5v7A1.5 1.5 0 0114.5 13h-13A1.5 1.5 0 010 11.5v-7zm1.5-.5a.5.5 0 00-.5.5v6.5h4V10h5v1h4V4.5a.5.5 0 00-.5-.5H1.5z"/></svg>
+                    Activar el Inbox del bot →
+                  </p>
+                  <p className="text-[12px] text-[#646462]">Mantén las conversaciones de Fin en un buzón independiente para una experiencia más enfocada para los compañeros de equipo</p>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Fin · Ajustes generales ────────────────────────────────────────────────
 function FinSettingsContent() {
   return (
@@ -32919,6 +33448,7 @@ function PrototypeApp() {
       case 'social':         return <SocialChannelsView view={view} onNavigate={setView} />;
       case 'allChannels':    return <AllChannelsView view={view} onNavigate={setView} />;
       case 'inboxTeam':      return <InboxTeamView view={view} onNavigate={setView} />;
+      case 'finSettings':    return <FinAiSettingsView view={view} onNavigate={setView} />;
       case 'fin':            return <FinAiView />;
       case 'knowledge':return <KnowledgeView />;
       case 'reports':  return <ReportsView />;
