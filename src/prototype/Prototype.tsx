@@ -43,9 +43,9 @@ const IMG_CHANNELS_ALL     = "http://localhost:3845/assets/1db4722d06d0ece26352d
 const IMG_DISCORD_ILLO     = "http://localhost:3845/assets/e25c01bf4ae888185fc2c494120173b16fb88dc8.png";
 const IMG_FACEBOOK_BANNER  = "http://localhost:3845/assets/ff55606a7cb338b7b3782780552d97213eeffd34.png";
 const IMG_INSTAGRAM_BANNER = "http://localhost:3845/assets/adf19f0a72d29719d45fcf27040a591f21c327b1.png";
-// Horario de atención (1-96065) — using full URL since FIGMA_CDN const is declared later
-const IMG_OFFICE_HOURS_BANNER = "https://www.figma.com/api/mcp/asset/4ce970fe-a9db-4084-ab3a-0658acc43c07";
-const IMG_OFFICE_HOURS_FIN_AI = "https://www.figma.com/api/mcp/asset/6cf6adf2-9cc9-4fbf-a7ca-fb1832331ac7";
+// Horario de atención — permanent inline SVGs (clock / sparkle)
+const IMG_OFFICE_HOURS_BANNER = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>')}`;
+const IMG_OFFICE_HOURS_FIN_AI = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>')}`;
 // Chat support floating icon (1:55751 mask, used in all settings screens)
 const IMG_CHAT_SUPPORT_MASK = "http://localhost:3845/assets/7d6b74634c1449d020cbc1db43f39966f662badb.svg";
 // Fin Deploy hero images (audit pass 9 — replaced hand-coded mockups with real Figma assets)
@@ -273,73 +273,91 @@ const SVG_CONN_LINEAR      = "http://localhost:3845/assets/ca75e281bbd6e32675df9
 const SVG_CONN_SHOPIFY     = "http://localhost:3845/assets/8536a444ce92ea293aedfcb5be0df93a17a90a2e.svg";
 const SVG_CONN_USAGE       = "http://localhost:3845/assets/c6a7642954882aa9ac8f79803b287640af9ec4cb.svg";
 
-const ICON_INBOX      = "https://www.figma.com/api/mcp/asset/210fe23a-321b-4e1f-8a00-dce6a7ba2224";
-const ICON_FIN        = "https://www.figma.com/api/mcp/asset/570eff6a-8bff-4de1-8840-e6b108abdaef";
-const ICON_KNOWLEDGE  = "https://www.figma.com/api/mcp/asset/39d9a7c0-cb9e-4d44-ab69-82d4a69df5ec";
-const ICON_REPORTS    = "https://www.figma.com/api/mcp/asset/eb0b09a0-b9cb-47d5-a21b-1b8e674f7a07";
-const ICON_OUTBOUND   = "https://www.figma.com/api/mcp/asset/4943ae31-0a7f-4f9e-b7f1-531cb824672b";
-const ICON_CONTACTS   = "https://www.figma.com/api/mcp/asset/ac85e608-1800-4a92-888b-a0736c0ad1cb";
-const ICON_SETUP      = "https://www.figma.com/api/mcp/asset/03ddd5ca-ae84-45f0-b396-13623cda163d";
-const ICON_SEARCH     = "https://www.figma.com/api/mcp/asset/157d21c6-472b-4644-b914-342f6f402379";
-const ICON_SETTINGS   = "https://www.figma.com/api/mcp/asset/0c20b532-867a-4850-94e0-76c877557291";
-const AVATAR_ME       = "https://www.figma.com/api/mcp/asset/fdbcb0bb-66a3-46e8-8cef-98ab237005fb";
-const ICON_SEARCH2    = "https://www.figma.com/api/mcp/asset/7ae31e0e-7c64-4d74-88eb-26fec615c318";
-const ICON_MENTION    = "https://www.figma.com/api/mcp/asset/5cdb4ac9-f6f6-429c-9e37-1b69d5354f61";
-const ICON_CREATED    = "https://www.figma.com/api/mcp/asset/6d8fae1a-f24a-4f06-b7f6-e9a13607c786";
-const ICON_ALL        = "https://www.figma.com/api/mcp/asset/a8ea4e88-c431-466f-aeaa-409fbd2d279b";
-const ICON_UNASSIGNED = "https://www.figma.com/api/mcp/asset/d4ce9938-4911-4591-b203-51c5e9f5e29a";
-const ICON_SPAM       = "https://www.figma.com/api/mcp/asset/670c2105-4750-43a3-92ca-4a987cd622b9";
-const ICON_DASHBOARD  = "https://www.figma.com/api/mcp/asset/52a63b14-d63b-40b9-ac9e-c938980a6422";
-const ICON_FIN_SVC    = "https://www.figma.com/api/mcp/asset/a6fd2023-c8b4-4e74-ba64-68f8d2ead3eb";
-const ICON_RESOLVED   = "https://www.figma.com/api/mcp/asset/b3e474e4-d852-436a-851e-ac6b02f7a31e";
-const ICON_ESCALATED  = "https://www.figma.com/api/mcp/asset/3378a1db-91fb-4b6c-ad65-90f00593a553";
-const ICON_PENDING    = "https://www.figma.com/api/mcp/asset/dce15ce7-404d-42aa-8379-335096edcd6d";
-const ICON_MESSENGER  = "https://www.figma.com/api/mcp/asset/58cb798a-ce4d-44df-b7a5-810ba9c4b86f";
-const ICON_EMAIL2     = "https://www.figma.com/api/mcp/asset/d5136408-62d4-4975-a210-37e8ef5fd8f8";
-const ICON_WHATSAPP2  = "https://www.figma.com/api/mcp/asset/9b827e1b-1423-4423-8fa2-384c229ddaee";
-const ICON_PHONE2     = "https://www.figma.com/api/mcp/asset/9d438d3d-3f29-4cdc-9f7b-dc978c121c27";
-const ICON_TICKETS    = "https://www.figma.com/api/mcp/asset/1920c81c-1015-4c31-ba53-88064a8b4b07";
-const ICON_MANAGE     = "https://www.figma.com/api/mcp/asset/db6eb72f-0b7e-4dfc-a3f8-fa9575c751bf";
-const ICON_PLUS       = "https://www.figma.com/api/mcp/asset/ec56a3b5-5680-4188-b2a6-79d8a7f39557";
-const ICON_CHEVRON    = "https://www.figma.com/api/mcp/asset/9840147a-dd4b-40b5-86c8-666ae1fec2be";
-const ICON_FILTER     = "https://www.figma.com/api/mcp/asset/fa2f16b4-f842-4096-9371-1423c279eaf7";
-const ICON_SORT       = "https://www.figma.com/api/mcp/asset/e18e5357-7864-43c2-8a2f-46d5aad4d937";
+// ── Permanent inline-SVG icons — base64-encoded, never expire ─────────────────
+// Bold lucide-style paths (stroke-width 2, linecap round, 24×24 viewBox)
+const _i = (inner: string, sw = 2, col = '#1a1a1a') =>
+  `data:image/svg+xml;base64,${btoa(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
+  )}`;
+const _if = (inner: string, col = '#1a1a1a') =>
+  `data:image/svg+xml;base64,${btoa(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${col}" stroke="none">${inner}</svg>`
+  )}`;
+
+// App logo (top-left rail, shown at 24 px) — rounded rect + two lines (Intercom-style)
+const ICON_INBOX      = _i('<rect x="3" y="3" width="18" height="18" rx="5"/><path d="M8 10h8M8 14h5"/>', 2.25);
+// ── Nav icons (bold, prominent) ───────────────────────────────────────────────
+// ICON_FIN  → used for Inbox nav item  → message tray / inbox icon
+const ICON_FIN        = _i('<polyline points="22 13 16 13 14 16 10 16 8 13 2 13"/><path d="M5.45 5.11L2 13v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-7.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>');
+// ICON_KNOWLEDGE → used for Fin AI nav → sparkle star
+const ICON_KNOWLEDGE  = _i('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>');
+// ICON_REPORTS → used for Knowledge nav → open book
+const ICON_REPORTS    = _i('<path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>');
+// ICON_OUTBOUND → used for Reports nav → bar chart
+const ICON_OUTBOUND   = _i('<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>');
+// ── Other standalone icons ────────────────────────────────────────────────────
+const ICON_CONTACTS   = _i('<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>');
+const ICON_SETUP      = _i('<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>');
+const ICON_SEARCH     = _i('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>');
+const ICON_SETTINGS   = _i('<circle cx="12" cy="12" r="3"/><path d="M12 1v3m0 16v3M4.22 4.22l2.12 2.12m11.32 11.32l2.12 2.12M1 12h3m16 0h3M4.22 19.78l2.12-2.12m11.32-11.32l2.12-2.12"/>');
+const AVATAR_ME       = _i('<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>');
+const ICON_SEARCH2    = _i('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>');
+const ICON_MENTION    = _i('<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94"/>');
+const ICON_CREATED    = _i('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>');
+const ICON_ALL        = _i('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>');
+const ICON_UNASSIGNED = _i('<path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="18" y1="8" x2="23" y2="13"/><line x1="23" y1="8" x2="18" y2="13"/>');
+const ICON_SPAM       = _i('<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>');
+const ICON_DASHBOARD  = _i('<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>');
+const ICON_FIN_SVC    = _i('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>');
+const ICON_RESOLVED   = _i('<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>');
+const ICON_ESCALATED  = _i('<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>');
+const ICON_PENDING    = _i('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>');
+const ICON_MESSENGER  = _i('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><circle cx="8" cy="11" r="1" fill="#1a1a1a" stroke="none"/><circle cx="12" cy="11" r="1" fill="#1a1a1a" stroke="none"/><circle cx="16" cy="11" r="1" fill="#1a1a1a" stroke="none"/>');
+const ICON_EMAIL2     = _i('<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/>');
+const ICON_WHATSAPP2  = _i('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>');
+const ICON_PHONE2     = _i('<path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 .85h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16z"/>');
+const ICON_TICKETS    = _i('<path d="M2 9a3 3 0 010-6h20a3 3 0 010 6"/><path d="M2 15a3 3 0 000 6h20a3 3 0 000-6"/><path d="M6 9v6M18 9v6"/>');
+const ICON_MANAGE     = _i('<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>');
+const ICON_PLUS       = _i('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>');
+const ICON_CHEVRON    = _i('<polyline points="9 18 15 12 9 6"/>');
+const ICON_FILTER     = _i('<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>');
+const ICON_SORT       = _i('<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>');
 
 // Contacts-only icons
-const ICON_PERSONAS   = "https://www.figma.com/api/mcp/asset/9944ae63-0c70-40e0-a9c4-d91a3113c832";
-const ICON_BACK       = "https://www.figma.com/api/mcp/asset/7dc3bd9c-a229-4a26-b8e9-f08d905b4a47";
-const ICON_LEARN      = "https://www.figma.com/api/mcp/asset/33253a6c-8a27-43f1-bc06-f9148e9032c6";
-const ICON_NEW_USER   = "https://www.figma.com/api/mcp/asset/7fa3313c-824f-4246-b2fe-0c4f34180fcf";
-const ICON_BULLET_1   = "https://www.figma.com/api/mcp/asset/9d0a580a-7c6e-4fe1-8318-746ec83f4737";
-const ICON_BULLET_2   = "https://www.figma.com/api/mcp/asset/751ec081-7354-4359-bec0-73ce5e1d3390";
-const ICON_BULLET_3   = "https://www.figma.com/api/mcp/asset/5b02e022-8147-4a69-94bf-162a04fcc08e";
-const ICON_BULLET_4   = "https://www.figma.com/api/mcp/asset/19e88eef-a848-4b2c-8e39-722bd297d0a1";
-const IMG_ILLUSTRATION = "https://www.figma.com/api/mcp/asset/47dae20e-791e-4f5e-a746-2149e4c4ff84";
-const ICON_CLOSE      = "https://www.figma.com/api/mcp/asset/d8062253-7355-45d3-aeb0-c11e1433034b";
-const ICON_MSG        = "https://www.figma.com/api/mcp/asset/5e9fa183-e5d4-4784-9632-1c8129c585eb";
-const ICON_TAG        = "https://www.figma.com/api/mcp/asset/672fd307-8130-4af8-b8bc-a6c4f962f18e";
+const ICON_PERSONAS   = _i('<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>');
+const ICON_BACK       = _i('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>');
+const ICON_LEARN      = _i('<path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>');
+const ICON_NEW_USER   = _i('<path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>');
+const ICON_BULLET_1   = _if('<circle cx="12" cy="12" r="5"/>');
+const ICON_BULLET_2   = _if('<rect x="8" y="8" width="8" height="8" rx="1"/>');
+const ICON_BULLET_3   = _if('<polygon points="12 5 19 19 5 19"/>');
+const ICON_BULLET_4   = _if('<polygon points="12 2 22 22 2 22"/>');
+const IMG_ILLUSTRATION = _i('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>');
+const ICON_CLOSE      = _i('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>');
+const ICON_MSG        = _i('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>');
+const ICON_TAG        = _i('<path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>');
 
 // Imports view icons
-const ICON_IMPORTS_BOOK = "https://www.figma.com/api/mcp/asset/178d55cb-4ebc-49fb-9baa-a49414740a8b";
-const ICON_IMPORTS_LINK = "https://www.figma.com/api/mcp/asset/f1221654-f82e-48c1-b815-c76b92533d41";
+const ICON_IMPORTS_BOOK = _i('<path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>');
+const ICON_IMPORTS_LINK = _i('<path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>');
 
-// All leads view icons (from Figma node 1-129614)
-const IMG_ILLUSTRATION_LEADS = "https://www.figma.com/api/mcp/asset/9992260d-fc93-45da-8041-9bf492e2a91e";
-const ICON_BULLET_BOOK       = "https://www.figma.com/api/mcp/asset/ade3351e-410d-49bc-a239-4761e066cfd1";
-const ICON_BULLET_LINK       = "https://www.figma.com/api/mcp/asset/5d719730-7650-470e-b0aa-05bdda0aaa75";
-const ICON_LEADS_CHIP        = "https://www.figma.com/api/mcp/asset/4ae1f85e-c01e-492a-9d98-e38d78a18fd5";
-const ICON_ADD_FILTER        = "https://www.figma.com/api/mcp/asset/5ad40e54-9835-4f98-8a23-34acbdd98f50";
-const ICON_MSG_LEADS         = "https://www.figma.com/api/mcp/asset/eaa1e146-6d33-4f6a-a98f-64d387704809";
-const ICON_VIEW_COLS         = "https://www.figma.com/api/mcp/asset/b51e7d69-dce1-476a-a20c-b1fde9362e56";
-const ICON_VIEW_GRID         = "https://www.figma.com/api/mcp/asset/eb711871-a7d7-4820-b23b-15f2f95a5b45";
-const ICON_VIEW_LIST         = "https://www.figma.com/api/mcp/asset/9924fb9d-460f-41ea-bd60-3ab95a56d81a";
-const ICON_INFO              = "https://www.figma.com/api/mcp/asset/fad4bccf-740b-4bc6-a4d4-3de338b2f2ff";
-const ICON_EMPTY_STATE       = "https://www.figma.com/api/mcp/asset/29703bc6-2e1c-4a25-9fd1-6d65c5544121";
+// All leads view icons
+const IMG_ILLUSTRATION_LEADS = _i('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>');
+const ICON_BULLET_BOOK       = _i('<path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>');
+const ICON_BULLET_LINK       = _i('<path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>');
+const ICON_LEADS_CHIP        = _i('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>');
+const ICON_ADD_FILTER        = _i('<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/><line x1="19" y1="15" x2="19" y2="21"/><line x1="16" y1="18" x2="22" y2="18"/>');
+const ICON_MSG_LEADS         = _i('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>');
+const ICON_VIEW_COLS         = _i('<rect x="3" y="3" width="6" height="18" rx="1"/><rect x="12" y="3" width="6" height="18" rx="1"/>');
+const ICON_VIEW_GRID         = _i('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>');
+const ICON_VIEW_LIST         = _i('<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>');
+const ICON_INFO              = _i('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>');
+const ICON_EMPTY_STATE       = _i('<polyline points="22 13 16 13 14 16 10 16 8 13 2 13"/><path d="M5.45 5.11L2 13v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-7.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>');
 
-// Fin AI Agent assets (Figma node 1:807 — /automation/fin-ai-agent/all-roles)
-const IMG_FIN_LOGO_MARK      = "https://www.figma.com/api/mcp/asset/1d80b781-d725-4789-9a61-46ffed02ecee";
-const IMG_FIN_SERVICE_AGENT  = "https://www.figma.com/api/mcp/asset/36ac43f1-c422-4789-b550-06e1166f033a";
-const IMG_FIN_SALES_AGENT    = "https://www.figma.com/api/mcp/asset/56368a5b-952d-43c9-bef6-0f22824132ad";
+// Fin AI Agent assets
+const IMG_FIN_LOGO_MARK     = _i('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>');
+const IMG_FIN_SERVICE_AGENT = _i('<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M8 8V6a4 4 0 018 0v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>');
+const IMG_FIN_SALES_AGENT   = _i('<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><path d="M15 3l1.5 1.5L20 1"/>');
 
 // ── Shared: Left Nav ──────────────────────────────────────────────────────────
 function LeftNav({ view, onNavigate, onLogoClick }: { view: View; onNavigate: (v: View) => void; onLogoClick?: () => void }) {
@@ -26033,7 +26051,7 @@ function WALeftNav({
       <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
         {/* Configuración */}
         <NavItem nav="waSettings" label="Configuración" icon={
-          <img src={ICON_SETTINGS} alt="Configuración" className="w-4 h-4 flex-shrink-0" />
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M3.2 12.8l1-1M11.8 4.2l1-1"/></svg>
         }/>
 
         {/* Exportaciones */}
@@ -26043,23 +26061,23 @@ function WALeftNav({
           </svg>
         }/>
 
-        {/* Estado */}
+        {/* Estado (Health) con badge verde */}
         <NavItem nav="waHealth" label="Estado" icon={
-          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-[#1a1a1a]">
-            <path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/>
-          </svg>
+          <div className="relative flex-shrink-0">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M2 8h3l2-5 3 10 2-5h2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#16a34a] rounded-full border border-white flex items-center justify-center">
+              <svg viewBox="0 0 8 8" className="w-1.5 h-1.5"><path d="M1 4l2 2 4-4" stroke="white" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </span>
+          </div>
         }/>
 
-        {/* Buscar */}
-        <button title="Buscar" className={btnCls(false)}>
-          <img src={ICON_SEARCH} alt="Buscar" className="w-4 h-4 flex-shrink-0" />
-          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] truncate">Buscar</span>}
-        </button>
-
-        {/* Actualizar */}
-        <button title="Actualizar" className={`${btnCls(false)} bg-[#1a1a1a] hover:bg-[#333] text-white`}>
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white flex-shrink-0"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
-          {expanded && <span className="text-[13px] font-semibold text-white truncate">Actualizar</span>}
+        {/* Ayuda */}
+        <button title="Ayuda" className={`${btnCls(false)} justify-between`}>
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.3a2 2 0 113 1.7c-.8.5-1 1-1 1.5" strokeLinecap="round"/><circle cx="8" cy="12" r=".5" fill="#1a1a1a"/></svg>
+            {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] truncate">Ayuda</span>}
+          </div>
+          {expanded && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>}
         </button>
 
         {/* Perfil */}
@@ -26839,6 +26857,2262 @@ function WAActivityView() {
 }
 
 
+// ── Clain mascot SVG (replaces PostHog hedgehog in onboarding cards) ─────────
+function ClainMascot({ size = 72, variant = 'default' }: { size?: number; variant?: 'default' | 'reading' | 'suit' }) {
+  // Simple friendly robot mascot in Clain blue palette
+  const s = size;
+  if (variant === 'reading') return (
+    <svg viewBox="0 0 80 80" width={s} height={s} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="40" cy="60" rx="24" ry="14" fill="#c7d2fe"/>
+      <rect x="20" y="24" width="40" height="32" rx="12" fill="#eff2ff"/>
+      <rect x="20" y="24" width="40" height="32" rx="12" stroke="#c7d2fe" strokeWidth="1.5"/>
+      <circle cx="32" cy="38" r="3" fill="#3b59f6"/>
+      <circle cx="48" cy="38" r="3" fill="#3b59f6"/>
+      <path d="M33 46 Q40 50 47 46" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+      <rect x="26" y="54" width="28" height="10" rx="3" fill="#e0e7ff"/>
+      <path d="M30 59h20M30 62h14" stroke="#a5b4fc" strokeWidth="1.2" strokeLinecap="round"/>
+      <path d="M40 14 L36 24 L44 24z" fill="#c7d2fe"/>
+    </svg>
+  );
+  if (variant === 'suit') return (
+    <svg viewBox="0 0 80 80" width={s} height={s} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="40" cy="60" rx="22" ry="14" fill="#1e3a8a"/>
+      <rect x="22" y="22" width="36" height="30" rx="10" fill="#eff2ff"/>
+      <rect x="22" y="22" width="36" height="30" rx="10" stroke="#c7d2fe" strokeWidth="1.5"/>
+      <circle cx="33" cy="36" r="2.5" fill="#3b59f6"/>
+      <circle cx="47" cy="36" r="2.5" fill="#3b59f6"/>
+      <path d="M34 44 Q40 48 46 44" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+      <rect x="30" y="52" width="20" height="20" rx="4" fill="#1e3a8a"/>
+      <path d="M37 52 L40 58 L43 52" fill="#eff2ff"/>
+      <rect x="38" y="58" width="4" height="10" rx="1" fill="#c7d2fe"/>
+      <path d="M38 13 Q40 8 42 13" stroke="#c7d2fe" strokeWidth="2" strokeLinecap="round" fill="none"/>
+    </svg>
+  );
+  // default
+  return (
+    <svg viewBox="0 0 80 80" width={s} height={s} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="40" cy="62" rx="24" ry="13" fill="#c7d2fe"/>
+      <rect x="18" y="22" width="44" height="34" rx="14" fill="#eff2ff"/>
+      <rect x="18" y="22" width="44" height="34" rx="14" stroke="#c7d2fe" strokeWidth="1.5"/>
+      <circle cx="31" cy="38" r="3.5" fill="#3b59f6"/>
+      <circle cx="49" cy="38" r="3.5" fill="#3b59f6"/>
+      <circle cx="32" cy="37" r="1" fill="white"/>
+      <circle cx="50" cy="37" r="1" fill="white"/>
+      <path d="M33 46 Q40 51 47 46" stroke="#3b59f6" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+      <path d="M40 12 L36 22 L44 22z" fill="#c7d2fe"/>
+      <ellipse cx="29" cy="63" rx="8" ry="5" fill="#a5b4fc"/>
+      <ellipse cx="51" cy="63" rx="8" ry="5" fill="#a5b4fc"/>
+    </svg>
+  );
+}
+
+// ── WADataPersonsGroupsView — Personas/Cohortes/Grupos tabbed view ────────────
+function WADataPersonsGroupsView({
+  dataSub,
+  onDataSubChange,
+}: {
+  dataSub: WADataSubView;
+  onDataSubChange: (s: WADataSubView) => void;
+}) {
+  const tab = dataSub === 'waDataCohorts' ? 'cohorts' : dataSub === 'waDataGroups' ? 'groups' : 'persons';
+  const setTab = (t: string) =>
+    onDataSubChange(t === 'cohorts' ? 'waDataCohorts' : t === 'groups' ? 'waDataGroups' : 'waDataPersons');
+
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(true);
+  const [personSearch, setPersonSearch] = useState('');
+  const [cohortSearch, setCohortSearch] = useState('');
+  const [cohortType, setCohortType] = useState('Todos');
+  const [cohortCreatedBy, setCohortCreatedBy] = useState('Cualquier usuario');
+  const [showCohortTypeMenu, setShowCohortTypeMenu] = useState(false);
+  const [showCreatedByMenu, setShowCreatedByMenu] = useState(false);
+  const [showPersonConfigCols, setShowPersonConfigCols] = useState(false);
+
+  const TABS = [
+    { key: 'persons', label: 'Personas' },
+    { key: 'cohorts', label: 'Cohortes' },
+    { key: 'groups',  label: 'Grupos'   },
+  ];
+
+  const SAMPLE_COHORTS = [
+    { name: 'Usuarios internos / Test', desc: 'Personas que son miembros internos del equipo o usuarios de prueba. Usado para filtrar el tráfico interno de analytics.', users: 0, createdBy: '', created: 'hace 4 días', lastCalc: 'hace 10 min' },
+  ];
+
+  // ── Personas tab ───────────────────────────────────────────────────────────
+  function PersonsContent() {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* Header row */}
+        <div className="flex items-start justify-between px-6 py-4 flex-shrink-0">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><circle cx="8" cy="5" r="3"/><path d="M2.5 13c.5-2.5 2.8-4 5.5-4s5 1.5 5.5 4v.5h-11V13z"/></svg>
+              <span className="text-[18px] font-bold text-[#1a1a1a]">Personas</span>
+              <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a98]"><path d="M12 4L4 12M4 4l8 8" stroke="#9a9a98" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
+              </button>
+            </div>
+            <p className="text-[13px] text-[#646462]">Un catálogo de todas las personas detrás de tus eventos</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+              Inicio rápido
+              <span className="text-[10px] font-semibold bg-[#eff2ff] text-[#3b59f6] px-1.5 py-0.5 rounded-full">5</span>
+            </button>
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><path d="M2 8h12M8 2l6 6-6 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Feedback
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] text-[#3b59f6]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="px-6 pb-3 flex-shrink-0">
+          <div className="flex items-center gap-2 bg-white border border-[#e9eae6] rounded-[8px] px-3 h-9 w-full">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98] flex-shrink-0" strokeWidth="1.5">
+              <circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/>
+            </svg>
+            <input
+              value={personSearch}
+              onChange={e => setPersonSearch(e.target.value)}
+              placeholder="Buscar por nombre, email, ID de persona o Distinct ID"
+              className="flex-1 text-[13px] bg-transparent outline-none text-[#1a1a1a] placeholder-[#9a9a98]"
+            />
+          </div>
+        </div>
+
+        {/* Action row */}
+        <div className="flex items-center justify-between px-6 pb-3 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5">
+                <path d="M14 8A6 6 0 102 8M2 5v3H5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Recargar
+            </button>
+            <span className="text-[12px] text-[#646462]">Total: <strong>0</strong> personas</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/></svg>
+              Configurar columnas
+            </button>
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v7M5 6l3 3 3-3M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>
+              Exportar
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><path d="M9 11.5h5M11.5 9v5" strokeLinecap="round"/></svg>
+              Ver como nuevo insight
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-auto min-h-0 border-t border-[#e9eae6]">
+          <table className="w-full text-[13px] border-collapse">
+            <thead className="sticky top-0 z-10 bg-[#f8f8f7]">
+              <tr className="border-b border-[#e9eae6]">
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">PERSONA <span className="text-[#c0c0be]">···</span></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">ID <span className="text-[#c0c0be]">···</span></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">PRIMERA VEZ VISTO <span className="text-[#c0c0be]">···</span></div>
+                </th>
+                <th className="w-10 px-4 py-2.5">
+                  <span className="text-[#c0c0be]">···</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colSpan={4} className="py-20">
+                  <div className="flex flex-col items-center gap-3">
+                    <svg viewBox="0 0 40 40" className="w-12 h-12 fill-[#d4d4d2]">
+                      <rect x="4" y="8" width="32" height="24" rx="3"/>
+                      <rect x="10" y="4" width="20" height="8" rx="2" fill="#e9eae6"/>
+                    </svg>
+                    <p className="text-[14px] font-medium text-[#1a1a1a]">No existen personas porque no se han ingestado eventos</p>
+                    <p className="text-[13px] text-[#646462]">
+                      Ve al{' '}
+                      <button className="text-[#3b59f6] hover:underline font-medium">flujo de incorporación</button>
+                      {' '}para empezar
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Cohortes tab ───────────────────────────────────────────────────────────
+  function CohortsContent() {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 overflow-auto">
+        {/* Header row */}
+        <div className="flex items-start justify-between px-6 py-4 flex-shrink-0">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><circle cx="5" cy="6" r="2.5"/><circle cx="11" cy="6" r="2.5"/><path d="M0 13c.4-2 2-3 5-3s4.6 1 5 3H0z"/><path d="M6 13c.4-2 2-3 5-3s4.6 1 5 3h-10z"/></svg>
+              <span className="text-[18px] font-bold text-[#1a1a1a]">Cohortes</span>
+              <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+              </button>
+            </div>
+            <p className="text-[13px] text-[#646462]">Un catálogo de personas identificadas y tus cohortes creadas.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+              Inicio rápido
+              <span className="text-[10px] font-semibold bg-[#eff2ff] text-[#3b59f6] px-1.5 py-0.5 rounded-full">5</span>
+            </button>
+            <button className="h-8 px-3 rounded-[8px] bg-[#3b59f6] text-white text-[12px] font-semibold hover:bg-[#2d46e0] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Nueva cohorte
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] text-[#3b59f6]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Welcome banner */}
+        {showWelcomeBanner && (
+          <div className="mx-6 mb-4 rounded-[12px] border border-[#e9eae6] bg-[#fafaf9] p-5 flex items-center gap-6 relative flex-shrink-0">
+            <button
+              onClick={() => setShowWelcomeBanner(false)}
+              className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded hover:bg-[#e9eae6]"
+            >
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+            </button>
+            <ClainMascot size={88} variant="reading" />
+            <div className="flex flex-col gap-3">
+              <h3 className="text-[17px] font-bold text-[#1a1a1a]">¡Bienvenido a Cohortes!</h3>
+              <p className="text-[13px] text-[#646462] leading-[20px] max-w-[420px]">
+                Usa las cohortes para agrupar personas, como usuarios que usaron tu app la semana pasada,
+                o personas que vieron la página de registro pero no convirtieron.<br/>
+                Tu equipo ya está usando Cohortes. Puedes ver qué están haciendo o empezar tú mismo.
+              </p>
+              <div className="flex items-center gap-3">
+                <button className="h-8 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff] flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Crear cohorte
+                </button>
+                <button className="h-8 px-3 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1.5">
+                  Saber más
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M9 3V1.5M13 9h1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Search + filters */}
+        <div className="px-6 pb-3 flex items-center gap-3 flex-shrink-0">
+          <div className="flex items-center gap-2 bg-white border border-[#e9eae6] rounded-[8px] px-3 h-8 w-64">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98] flex-shrink-0" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/></svg>
+            <input value={cohortSearch} onChange={e => setCohortSearch(e.target.value)} placeholder="Buscar cohortes" className="flex-1 text-[13px] bg-transparent outline-none text-[#1a1a1a] placeholder-[#9a9a98]"/>
+          </div>
+          <div className="flex-1"/>
+          {/* Type filter */}
+          <div className="relative">
+            <button onClick={() => setShowCohortTypeMenu(v => !v)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <span className="text-[#9a9a98]">Tipo</span>{cohortType}
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            {showCohortTypeMenu && (
+              <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-20 py-1">
+                {['Todos', 'Estático', 'Dinámico'].map(opt => (
+                  <button key={opt} onClick={() => { setCohortType(opt); setShowCohortTypeMenu(false); }} className={`w-full h-8 px-3 text-left text-[13px] flex items-center gap-2 hover:bg-[#f3f3f1] ${cohortType === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                    {cohortType === opt && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Created by filter */}
+          <div className="relative">
+            <button onClick={() => setShowCreatedByMenu(v => !v)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <span className="text-[#9a9a98]">Creado por</span>{cohortCreatedBy}
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            {showCreatedByMenu && (
+              <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-20 py-1">
+                {['Cualquier usuario', 'Yo', 'Hector García'].map(opt => (
+                  <button key={opt} onClick={() => { setCohortCreatedBy(opt); setShowCreatedByMenu(false); }} className={`w-full h-8 px-3 text-left text-[13px] flex items-center gap-2 hover:bg-[#f3f3f1] ${cohortCreatedBy === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                    {cohortCreatedBy === opt && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Cohorts table */}
+        <div className="border-t border-[#e9eae6] flex-1">
+          <table className="w-full text-[13px] border-collapse">
+            <thead className="bg-[#f8f8f7]">
+              <tr className="border-b border-[#e9eae6]">
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">NOMBRE <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#c0c0be]"><path d="M8 3l3 5H5zM8 13l-3-5h6z"/></svg></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">USUARIOS EN COHORTE <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#c0c0be]"><path d="M8 3l3 5H5zM8 13l-3-5h6z"/></svg></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">CREADO POR <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#c0c0be]"><path d="M8 3l3 5H5zM8 13l-3-5h6z"/></svg></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">CREADO <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#c0c0be]"><path d="M8 3l3 5H5zM8 13l-3-5h6z"/></svg></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">ÚLTIMO CÁLCULO <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg></div>
+                </th>
+                <th className="w-10 px-4 py-2.5"/>
+              </tr>
+            </thead>
+            <tbody>
+              {SAMPLE_COHORTS.map((c, i) => (
+                <tr key={i} className="border-b border-[#f0f0ee] hover:bg-[#fafaf9] cursor-pointer group">
+                  <td className="px-4 py-3 align-middle">
+                    <div className="font-semibold text-[#1a1a1a]">{c.name}</div>
+                    <div className="text-[12px] text-[#3b59f6] mt-0.5 max-w-[360px] truncate">{c.desc}</div>
+                  </td>
+                  <td className="px-4 py-3 align-middle text-center font-mono text-[13px]">{c.users}</td>
+                  <td className="px-4 py-3 align-middle text-[#9a9a98]">{c.createdBy || '—'}</td>
+                  <td className="px-4 py-3 align-middle text-[12px] text-[#9a9a98]">{c.created}</td>
+                  <td className="px-4 py-3 align-middle text-[12px] text-[#9a9a98]">{c.lastCalc}</td>
+                  <td className="px-4 py-3 align-middle">
+                    <button className="w-6 h-6 rounded flex items-center justify-center hover:bg-[#e9eae6] opacity-0 group-hover:opacity-100">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="3" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="8" cy="13" r="1.25"/></svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Grupos tab ─────────────────────────────────────────────────────────────
+  function GroupsContent() {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* Header row */}
+        <div className="flex items-start justify-between px-6 py-4 flex-shrink-0">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><circle cx="5" cy="6" r="2.5"/><circle cx="11" cy="6" r="2.5"/><path d="M0 13c.4-2 2-3 5-3s4.6 1 5 3H0z"/><path d="M6 13c.4-2 2-3 5-3s4.6 1 5 3h-10z"/></svg>
+              <span className="text-[18px] font-bold text-[#1a1a1a]">Grupos</span>
+              <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] text-[#3b59f6]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <p className="px-6 pb-4 text-[13px] text-[#646462] flex-shrink-0 max-w-[700px]">
+          Asocia eventos con un grupo o entidad —como una empresa, comunidad o proyecto. Analízalos como si los hubiera enviado esa entidad. Ideal para B2B, marketplaces y más.
+        </p>
+
+        {/* Upgrade card */}
+        <div className="mx-6 rounded-[12px] border border-dashed border-[#c7d2fe] bg-[#fafbff] p-10 flex flex-col items-center text-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-[#eff2ff] flex items-center justify-center">
+            <svg viewBox="0 0 24 24" className="w-7 h-7 fill-[#3b59f6]">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-[17px] font-bold text-[#1a1a1a] mb-2">Analítica de grupos</h3>
+            <p className="text-[13px] text-[#646462] leading-[20px] max-w-[440px]">
+              Asocia eventos con un grupo —como una empresa, comunidad o proyecto— y analízalos en ese contexto.
+            </p>
+            <p className="text-[12px] text-[#9a9a98] mt-2">Esta función está disponible en el plan Enterprise de Clain.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="h-9 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff]">
+              Actualizar plan
+            </button>
+            <button className="h-9 px-4 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
+              Saber más
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M9 3V1.5M13 9h1.5" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-white rounded-[12px] border border-[#e9eae6] min-h-0 overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex items-center gap-0 px-4 border-b border-[#e9eae6] flex-shrink-0 bg-[#f8f8f7]">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`h-11 px-4 text-[13px] font-medium border-b-2 transition-colors ${
+              tab === t.key
+                ? 'border-[#3b59f6] text-[#3b59f6] font-semibold'
+                : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'persons'  && <PersonsContent />}
+      {tab === 'cohorts'  && <CohortsContent />}
+      {tab === 'groups'   && <GroupsContent />}
+    </div>
+  );
+}
+
+// ── WADataAnnotationsView ─────────────────────────────────────────────────────
+function WADataAnnotationsView() {
+  const [showModal, setShowModal] = useState(false);
+  const [annotContent, setAnnotContent] = useState('');
+  const [annotTab, setAnnotTab] = useState<'write' | 'preview'>('write');
+  const [scopeFilter, setScopeFilter] = useState('Cualquiera');
+  const [showScopeMenu, setShowScopeMenu] = useState(false);
+  const [annotScope, setAnnotScope] = useState('Proyecto');
+  const [showScopeModalMenu, setShowScopeModalMenu] = useState(false);
+  const [annotDate, setAnnotDate] = useState('12 may 2026 13:52');
+  const MAX_CHARS = 400;
+
+  return (
+    <div className="flex-1 flex flex-col bg-white rounded-[12px] border border-[#e9eae6] min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-start justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M3 2h10a1 1 0 011 1v7a1 1 0 01-1 1H6.5L4 13.5V11H3a1 1 0 01-1-1V3a1 1 0 011-1z" strokeLinejoin="round"/></svg>
+            <span className="text-[18px] font-bold text-[#1a1a1a]">Anotaciones</span>
+            <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+            </button>
+          </div>
+          <p className="text-[13px] text-[#646462] max-w-[560px]">Las anotaciones te permiten marcar cuándo ocurrieron ciertos cambios para que puedas ver fácilmente cómo impactaron en tus métricas.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+            Inicio rápido
+            <span className="text-[10px] font-semibold bg-[#eff2ff] text-[#3b59f6] px-1.5 py-0.5 rounded-full">5</span>
+          </button>
+          <button onClick={() => setShowModal(true)} className="h-8 px-3 rounded-[8px] bg-[#3b59f6] text-white text-[12px] font-semibold hover:bg-[#2d46e0] flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Nueva anotación
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] text-[#3b59f6]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Scope filter row */}
+      <div className="flex items-center justify-end px-6 py-3 flex-shrink-0">
+        <div className="relative flex items-center gap-2">
+          <span className="text-[12px] text-[#646462]">Ámbito:</span>
+          <button onClick={() => setShowScopeMenu(v => !v)} className="h-7 px-3 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+            {scopeFilter}
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          {showScopeMenu && (
+            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-20 py-1">
+              {['Cualquiera', 'Proyecto', 'Personal'].map(opt => (
+                <button key={opt} onClick={() => { setScopeFilter(opt); setShowScopeMenu(false); }} className={`w-full h-8 px-3 text-left text-[13px] flex items-center gap-2 hover:bg-[#f3f3f1] ${scopeFilter === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                  {scopeFilter === opt && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Empty state card */}
+      <div className="flex-1 px-6 pb-6 flex flex-col min-h-0">
+        <div className="flex-1 rounded-[12px] border border-dashed border-[#c7d2fe] bg-[#fafbff] flex items-center justify-center">
+          <div className="flex items-center gap-10 px-8">
+            <ClainMascot size={100} variant="suit" />
+            <div className="flex flex-col gap-4">
+              <h3 className="text-[18px] font-bold text-[#1a1a1a]">Crea tu primera anotación</h3>
+              <p className="text-[13px] text-[#646462] leading-[20px] max-w-[360px]">
+                Las anotaciones te permiten marcar cuándo ocurrieron ciertos cambios para que puedas
+                ver fácilmente cómo impactaron en tus métricas.
+              </p>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setShowModal(true)} className="h-9 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff] flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Crear anotación
+                </button>
+                <button className="h-9 px-4 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
+                  Saber más
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M9 3V1.5M13 9h1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── New annotation modal ──────────────────────────────────────────── */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowModal(false)}/>
+          {/* Modal */}
+          <div className="relative bg-white rounded-[16px] shadow-[0px_20px_60px_rgba(20,20,20,0.20)] w-[520px] flex flex-col overflow-hidden">
+            {/* Modal header */}
+            <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-[#e9eae6]">
+              <div>
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Nueva anotación</h2>
+                <p className="text-[12px] text-[#9a9a98] mt-0.5">Usa las anotaciones para comentar sobre insights y dashboards</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="w-7 h-7 flex items-center justify-center rounded-[6px] hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="px-6 py-5 flex flex-col gap-4">
+              {/* Date + Scope row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-semibold text-[#1a1a1a] flex items-center gap-1">
+                    Fecha y hora (UTC
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#3b59f6]" strokeWidth="1.5"><path d="M10 2H14V6M14 2L8 8M3 6V3h3M3 3l6 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    )
+                  </label>
+                  <button className="h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-left text-[#1a1a1a] hover:border-[#3b59f6] flex items-center justify-between">
+                    <span>{annotDate}</span>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-semibold text-[#1a1a1a]">Ámbito</label>
+                  <div className="relative">
+                    <button onClick={() => setShowScopeModalMenu(v => !v)} className="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-left text-[#1a1a1a] hover:border-[#3b59f6] flex items-center justify-between">
+                      <span>{annotScope}</span>
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+                    </button>
+                    {showScopeModalMenu && (
+                      <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-10 py-1">
+                        {['Proyecto', 'Personal'].map(opt => (
+                          <button key={opt} onClick={() => { setAnnotScope(opt); setShowScopeModalMenu(false); }} className={`w-full h-8 px-3 text-left text-[13px] flex items-center gap-2 hover:bg-[#f3f3f1] ${annotScope === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                            {annotScope === opt && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[12px] font-semibold text-[#1a1a1a]">Contenido</label>
+                {/* Write/Preview tabs */}
+                <div className="flex border-b border-[#e9eae6] mb-2">
+                  {(['write', 'preview'] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setAnnotTab(t)}
+                      className={`h-8 px-3 text-[12px] font-medium border-b-2 transition-colors ${annotTab === t ? 'border-[#3b59f6] text-[#3b59f6]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}
+                    >
+                      {t === 'write' ? 'Escribir' : 'Vista previa'}
+                    </button>
+                  ))}
+                </div>
+
+                {annotTab === 'write' ? (
+                  <div className="border border-[#e9eae6] rounded-[8px] overflow-hidden">
+                    <textarea
+                      value={annotContent}
+                      onChange={e => setAnnotContent(e.target.value.slice(0, MAX_CHARS))}
+                      placeholder="¿De qué trata esta anotación?"
+                      rows={4}
+                      className="w-full px-3 pt-3 text-[13px] text-[#1a1a1a] placeholder-[#9a9a98] bg-transparent outline-none resize-none"
+                    />
+                    <div className="flex items-center justify-between px-3 py-2 border-t border-[#e9eae6]">
+                      <div className="flex items-center gap-2">
+                        <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#f3f3f1]">
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#9a9a98]"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 8h6M7 6v4" stroke="white" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                        </button>
+                        <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#f3f3f1]">
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#9a9a98]"><circle cx="8" cy="8" r="5.5"/><path d="M6 8c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2M8 6V4.5M8 11.5V10" stroke="#9a9a98" fill="none" strokeWidth="1" strokeLinecap="round"/></svg>
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a98]"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M3 6h10M3 9h7M8 6v-2.5" stroke="white" strokeWidth="1" strokeLinecap="round"/></svg>
+                        <span className="text-[11px] font-mono text-[#9a9a98]">{annotContent.length} / {MAX_CHARS}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="min-h-[120px] border border-[#e9eae6] rounded-[8px] px-3 py-3">
+                    {annotContent
+                      ? <p className="text-[13px] text-[#1a1a1a] whitespace-pre-wrap">{annotContent}</p>
+                      : <p className="text-[13px] text-[#9a9a98] italic">Sin contenido aún</p>
+                    }
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#e9eae6]">
+              <button onClick={() => setShowModal(false)} className="h-9 px-4 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5]">
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setShowModal(false); setAnnotContent(''); setAnnotTab('write'); }}
+                className="h-9 px-4 rounded-[8px] bg-[#3b59f6] text-white text-[13px] font-semibold hover:bg-[#2d46e0]"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ── WADataModelsView — empty state, opens SQL editor on "Crear vista" ─────────
+function WADataModelsView({ onOpenSqlEditor }: { onOpenSqlEditor: () => void }) {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M2 6h12M6 6v8" strokeLinecap="round"/></svg>
+          <span className="text-[18px] font-bold text-[#1a1a1a]">Modelos</span>
+          <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={onOpenSqlEditor} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+            Crear vista
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] text-[#3b59f6]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Subtitle */}
+      <p className="px-6 py-3 text-[13px] text-[#646462] flex-shrink-0">
+        Crea y gestiona vistas y vistas materializadas para transformar y organizar tus datos.
+      </p>
+
+      {/* Empty state */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-4">
+        <p className="text-[16px] font-semibold text-[#1a1a1a]">No se encontraron vistas</p>
+        <p className="text-[13px] text-[#9a9a98] text-center max-w-[340px]">
+          Crea tu primera vista para transformar y organizar las tablas de tu data warehouse.
+        </p>
+        <button
+          onClick={onOpenSqlEditor}
+          className="h-9 px-4 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5]"
+        >
+          Crear vista
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── WADataSQLQueryView — full SQL IDE ─────────────────────────────────────────
+function WADataSQLQueryView({ onClose }: { onClose: () => void }) {
+  const [sqlContent, setSqlContent] = useState('');
+  const [showRunMenu, setShowRunMenu] = useState(false);
+  const [showSourceMenu, setShowSourceMenu] = useState(false);
+  const [showQuickStart, setShowQuickStart] = useState(false);
+  const [showVarsMenu, setShowVarsMenu] = useState(false);
+  const [showFiltersMenu, setShowFiltersMenu] = useState(false);
+  const [activeResultTab, setActiveResultTab] = useState<'results' | 'viz'>('results');
+  const [expandedPosthog, setExpandedPosthog] = useState(true);
+  const [expandedSystem, setExpandedSystem] = useState(false);
+  const [showDataSourceCard, setShowDataSourceCard] = useState(true);
+  const [selectedSource, setSelectedSource] = useState('Clain (ClickHouse)');
+  const [showSidebarLeft, setShowSidebarLeft] = useState(true);
+  const [qsCategory, setQsCategory] = useState('Analítica de producto');
+  const [showQsCategoryMenu, setShowQsCategoryMenu] = useState(false);
+
+  const QS_ITEMS = [
+    { label: 'Ingestar tu primer evento', done: false, section: 'CONFIGURACIÓN DE CLAIN' },
+    { label: 'Crear tu primer insight', done: false, section: 'PRIMEROS PASOS' },
+    { label: 'Crear tu primer dashboard', done: false, section: null },
+    { label: 'Crear un insight de tendencias', done: false, section: 'MÁS OPCIONES' },
+    { label: 'Crear un insight de embudo', done: false, section: null },
+    { label: 'Explorar análisis de retención', done: false, section: null },
+    { label: 'Explorar rutas de usuario', done: false, section: null },
+    { label: 'Explorar stickiness', done: false, section: null },
+    { label: 'Explorar análisis de ciclo de vida', done: false, section: null },
+    { label: 'Rastrear eventos personalizados', done: false, section: null },
+    { label: 'Definir acciones', done: false, section: null },
+    { label: 'Crear una cohorte de usuarios', done: false, section: null },
+  ];
+
+  const closeAll = () => {
+    setShowRunMenu(false);
+    setShowSourceMenu(false);
+    setShowVarsMenu(false);
+    setShowFiltersMenu(false);
+    setShowQsCategoryMenu(false);
+  };
+
+  const lineCount = Math.max(20, (sqlContent.match(/\n/g) || []).length + 2);
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white" onClick={() => closeAll()}>
+      {/* ── Tab bar ──────────────────────────────────────────────────────── */}
+      <div className="flex items-center bg-[#f8f8f7] border-b border-[#e9eae6] pl-2 h-9 flex-shrink-0 gap-0.5">
+        <div className="flex items-center gap-1.5 h-7 px-3 bg-white rounded-t-[6px] border border-[#e9eae6] border-b-white text-[12px] font-medium text-[#1a1a1a] -mb-px">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M2 6h12M6 6v8" strokeLinecap="round"/></svg>
+          Consulta SQL
+          <button onClick={onClose} className="w-4 h-4 flex items-center justify-center rounded hover:bg-[#e9eae6] flex-shrink-0">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M11 5L5 11M5 5l6 6"/></svg>
+          </button>
+        </div>
+        <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+        </button>
+      </div>
+
+      {/* ── Main header ──────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M2 6h12M6 6v8" strokeLinecap="round"/></svg>
+        <span className="text-[15px] font-semibold text-[#1a1a1a] flex-1">Nueva consulta SQL</span>
+        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+          Inicio rápido
+          <span className="text-[10px] font-semibold bg-[#eff2ff] text-[#3b59f6] px-1.5 py-0.5 rounded-full">5</span>
+        </button>
+        <div className="flex items-center border border-[#e9eae6] rounded-[8px] overflow-hidden">
+          <button className="h-8 px-3 text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] bg-white">
+            Guardar como insight
+          </button>
+          <div className="w-px h-5 bg-[#e9eae6]"/>
+          <button className="h-8 w-7 flex items-center justify-center hover:bg-[#f7f7f5] bg-white">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+        <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M8 2a1.5 1.5 0 011.5 1.5v.5a5.5 5.5 0 012.5 4.3v2.2l1 1.5H3l1-1.5V8.3a5.5 5.5 0 012.5-4.3v-.5A1.5 1.5 0 018 2zm-1 11h2a1 1 0 01-2 0z" strokeLinejoin="round" fill="none"/></svg>
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); setShowQuickStart(v => !v); }}
+          className={`w-8 h-8 flex items-center justify-center rounded-[8px] border transition-colors ${showQuickStart ? 'bg-[#eff2ff] border-[#c7d2fe]' : 'bg-white border-[#e9eae6] hover:bg-[#f7f7f5]'}`}
+        >
+          <svg viewBox="0 0 16 16" className={`w-4 h-4 fill-[#646462] ${showQuickStart ? 'fill-[#3b59f6]' : ''}`}><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+        </button>
+      </div>
+
+      {/* ── Body ─────────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+
+        {/* ── Left sidebar ──────────────────────────────────────────────── */}
+        {showSidebarLeft && (
+          <div className="w-[265px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col min-h-0 overflow-hidden bg-[#fafaf9]">
+            {/* Source selector */}
+            <div className="px-2 py-2 border-b border-[#e9eae6] relative" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => setShowSourceMenu(v => !v)}
+                className="w-full h-8 px-2 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] flex items-center gap-2 hover:border-[#c5c5c2]"
+              >
+                {/* Clain icon (multi-color) */}
+                <div className="w-4 h-4 rounded-[3px] bg-[#3b59f6] flex-shrink-0 flex items-center justify-center">
+                  <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-white"><path d="M1 1v8h8V7H3V1H1z"/></svg>
+                </div>
+                <span className="flex-1 text-left truncate">{selectedSource}</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+              </button>
+              {showSourceMenu && (
+                <div className="absolute left-2 top-full mt-1 w-[248px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-30 py-1">
+                  <div className="flex items-center gap-2 px-3 h-9 hover:bg-[#f3f3f1] cursor-pointer" onClick={() => { setSelectedSource('Clain (ClickHouse)'); setShowSourceMenu(false); }}>
+                    <div className="w-4 h-4 rounded-[3px] bg-[#3b59f6] flex-shrink-0 flex items-center justify-center"><svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-white"><path d="M1 1v8h8V7H3V1H1z"/></svg></div>
+                    <span className="text-[13px] text-[#1a1a1a]">Clain (ClickHouse)</span>
+                    {selectedSource === 'Clain (ClickHouse)' && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6] ml-auto"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                  </div>
+                  <div className="h-px bg-[#e9eae6] mx-3 my-1"/>
+                  <div className="flex items-center gap-2 px-3 h-9 hover:bg-[#f3f3f1] cursor-pointer text-[13px] text-[#646462]" onClick={() => setShowSourceMenu(false)}>
+                    Configurar fuentes
+                  </div>
+                  <div className="flex items-center gap-2 px-3 h-9 hover:bg-[#f3f3f1] cursor-pointer text-[13px] text-[#3b59f6] font-medium" onClick={() => setShowSourceMenu(false)}>
+                    + Añadir conexión postgres directa
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Search */}
+            <div className="px-2 py-1.5 border-b border-[#e9eae6]">
+              <div className="flex items-center gap-2 bg-white border border-[#e9eae6] rounded-[6px] px-2 h-7">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a98] flex-shrink-0" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/></svg>
+                <input placeholder="Buscar almacén de Clain" className="flex-1 text-[12px] bg-transparent outline-none text-[#1a1a1a] placeholder-[#9a9a98]"/>
+              </div>
+            </div>
+
+            {/* Tree */}
+            <div className="flex-1 overflow-y-auto px-2 py-2 flex flex-col gap-1 min-h-0">
+              {/* Sources section */}
+              <div className="flex items-center justify-between h-6 px-1">
+                <span className="text-[11px] font-semibold text-[#9a9a98] uppercase tracking-wide">Fuentes</span>
+                <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a98]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                </button>
+              </div>
+
+              {/* PostHog/Clain source */}
+              <div>
+                <button
+                  onClick={() => setExpandedPosthog(v => !v)}
+                  className="w-full h-7 px-1 flex items-center gap-1.5 rounded hover:bg-[#e9eae6] text-[12px] text-[#1a1a1a]"
+                >
+                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${expandedPosthog ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                  <div className="w-4 h-4 rounded-[3px] bg-[#3b59f6] flex-shrink-0 flex items-center justify-center"><svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-white"><path d="M1 1v8h8V7H3V1H1z"/></svg></div>
+                  <span>Clain</span>
+                </button>
+                {expandedPosthog && (
+                  <div className="pl-7 flex flex-col gap-0.5 mt-0.5">
+                    {['events', 'groups', 'persons', 'sessions'].map(t => (
+                      <button key={t} className="h-6 flex items-center gap-1.5 px-1 rounded hover:bg-[#e9eae6] text-[12px] text-[#1a1a1a] w-full">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.3"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M2 6h12M6 6v8" strokeLinecap="round"/></svg>
+                        <span>{t}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* System */}
+              <div>
+                <button
+                  onClick={() => setExpandedSystem(v => !v)}
+                  className="w-full h-7 px-1 flex items-center gap-1.5 rounded hover:bg-[#e9eae6] text-[12px] text-[#1a1a1a]"
+                >
+                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${expandedSystem ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.3"><path d="M8 1.5C4.41 1.5 1.5 4.41 1.5 8S4.41 14.5 8 14.5 14.5 11.59 14.5 8 11.59 1.5 8 1.5zm3.9 5l-.5 2.5-2.5.5-.5-2.5 2.5-.5z" fill="none"/><circle cx="8" cy="8" r="1.5"/></svg>
+                  <span>Sistema</span>
+                </button>
+              </div>
+
+              {/* Views */}
+              <div className="mt-1">
+                <div className="flex items-center gap-1.5 h-6 px-1">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><path d="M2 4h12v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4zm4-2h4v2H6z" strokeLinejoin="round"/></svg>
+                  <span className="text-[12px] text-[#1a1a1a] font-medium">Vistas</span>
+                </div>
+                <div className="pl-7 py-0.5 text-[11px] text-[#9a9a98] flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#c0c0be]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/></svg>
+                  Carpeta vacía
+                </div>
+              </div>
+
+              {/* Managed Views */}
+              <div>
+                <div className="flex items-center gap-1.5 h-6 px-1">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><path d="M2 4h12v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4zm4-2h4v2H6z" strokeLinejoin="round"/></svg>
+                  <span className="text-[12px] text-[#1a1a1a] font-medium">Vistas gestionadas</span>
+                </div>
+                <div className="pl-7 py-0.5 text-[11px] text-[#9a9a98] flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#c0c0be]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/></svg>
+                  Carpeta vacía
+                </div>
+              </div>
+            </div>
+
+            {/* Data source card */}
+            {showDataSourceCard && (
+              <div className="mx-2 mb-2 rounded-[10px] border border-[#e9eae6] bg-white p-3 flex-shrink-0 relative">
+                <button onClick={() => setShowDataSourceCard(false)} className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M11 5L5 11M5 5l6 6"/></svg>
+                </button>
+                {/* DB icons */}
+                <div className="flex items-center gap-1.5 mb-2">
+                  <div className="w-8 h-8 rounded-[6px] border border-[#e9eae6] bg-[#f8f8f7] flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
+                      <ellipse cx="12" cy="6" rx="8" ry="3" fill="#336791"/>
+                      <path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6" fill="#336791" opacity=".7"/>
+                      <path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" fill="#336791" opacity=".5"/>
+                    </svg>
+                  </div>
+                  <div className="w-8 h-8 rounded-[6px] border border-[#e9eae6] bg-[#f8f8f7] flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
+                      <rect width="24" height="24" rx="4" fill="#00A0D2"/>
+                      <path d="M12 4L4 12l8 8 8-8z" fill="white" opacity=".9"/>
+                    </svg>
+                  </div>
+                  <div className="w-8 h-8 rounded-[6px] border border-[#e9eae6] bg-[#f8f8f7] flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" className="w-5 h-5">
+                      <path d="M12 2L4 6v12l8 4 8-4V6z" fill="#4285F4"/>
+                      <path d="M12 2v22M4 6l8 4 8-4" stroke="white" strokeWidth="1" opacity=".5" fill="none"/>
+                    </svg>
+                  </div>
+                </div>
+                <p className="text-[11px] font-semibold text-[#1a1a1a] mb-1">Sin fuentes de data warehouse conectadas</p>
+                <p className="text-[10px] text-[#9a9a98] leading-[14px] mb-2">
+                  Importa datos de fuentes externas como Postgres, Stripe u otras bases de datos para enriquecer tu analítica.
+                </p>
+                <button className="w-full h-7 rounded-[6px] border border-[#e9eae6] text-[11px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] bg-white">
+                  Añadir fuente de datos
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Main editor area ──────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Editor toolbar */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6] flex-shrink-0" onClick={e => e.stopPropagation()}>
+            {/* Collapse sidebar */}
+            <button onClick={() => setShowSidebarLeft(v=>!v)} className="w-7 h-7 flex items-center justify-center rounded-[6px] hover:bg-[#e9eae6]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+            </button>
+
+            {/* Run button + dropdown */}
+            <div className="relative flex items-center">
+              <button className="h-8 pl-3 pr-2 rounded-l-[8px] bg-[#3b59f6] text-white text-[12px] font-semibold hover:bg-[#2d46e0] flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M5 3l8 5-8 5V3z"/></svg>
+                Ejecutar
+              </button>
+              <button
+                onClick={() => setShowRunMenu(v => !v)}
+                className="h-8 w-7 flex items-center justify-center rounded-r-[8px] bg-[#3b59f6] text-white hover:bg-[#2d46e0] border-l border-[#2d46e0]"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z"/></svg>
+              </button>
+              {showRunMenu && (
+                <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-30 py-1">
+                  <button className="w-full h-9 px-3 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f3f3f1] flex items-center justify-between">
+                    <span>Ejecutar en cursor</span>
+                    <kbd className="text-[11px] text-[#9a9a98] font-mono">⌘↵</kbd>
+                  </button>
+                  <button className="w-full h-9 px-3 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f3f3f1] flex items-center justify-between">
+                    <span>Ejecutar subconsulta interna en cursor</span>
+                    <kbd className="text-[11px] text-[#9a9a98] font-mono">⌘⇧↵</kbd>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="w-px h-5 bg-[#e9eae6]"/>
+
+            {/* Variables */}
+            <div className="relative">
+              <button onClick={() => setShowVarsMenu(v=>!v)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 7l-2 1.5L5 10M11 7l2 1.5L11 10M8 6.5l-1 3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Variables
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+              </button>
+              {showVarsMenu && (
+                <div className="absolute left-0 top-full mt-1 w-52 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-30 py-2 px-3">
+                  <p className="text-[12px] text-[#9a9a98]">Añade variables de plantilla usando {'{{'} variable {'}}'}  en tu SQL.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Filters */}
+            <div className="relative">
+              <button onClick={() => setShowFiltersMenu(v=>!v)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/></svg>
+                Filtros
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+              </button>
+            </div>
+
+            <div className="flex-1"/>
+
+            {/* Fix errors with AI */}
+            <button className="h-8 px-3 rounded-[8px] text-[12px] font-medium text-[#3b59f6] hover:bg-[#eff2ff] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+              Corregir errores con IA
+            </button>
+          </div>
+
+          {/* SQL Editor */}
+          <div className="flex-1 flex min-h-0 overflow-hidden relative font-mono">
+            {/* Line numbers */}
+            <div className="w-10 flex-shrink-0 pt-2 text-right pr-2 text-[12px] text-[#9a9a98] select-none overflow-hidden border-r border-[#e9eae6] bg-[#f8f8f7]">
+              {Array.from({ length: lineCount }).map((_, i) => (
+                <div key={i} className="leading-[21px]">{i + 1}</div>
+              ))}
+            </div>
+            {/* Editor */}
+            <textarea
+              value={sqlContent}
+              onChange={e => setSqlContent(e.target.value)}
+              spellCheck={false}
+              className="flex-1 px-3 pt-2 resize-none bg-white text-[#1a1a1a] font-mono text-[13px] leading-[21px] outline-none overflow-auto"
+              placeholder=""
+            />
+          </div>
+
+          {/* ── Results pane ──────────────────────────────────────────── */}
+          <div className="h-56 flex-shrink-0 border-t border-[#e9eae6] flex flex-col overflow-hidden">
+            {/* Results toolbar */}
+            <div className="flex items-center px-3 py-1.5 border-b border-[#e9eae6] flex-shrink-0 gap-3">
+              <button onClick={() => setShowSidebarLeft(v=>!v)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+              </button>
+              {/* Results/Visualization tabs */}
+              {(['results','viz'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setActiveResultTab(t === 'results' ? 'results' : 'viz')}
+                  className={`flex items-center gap-1.5 h-7 px-1 text-[13px] font-medium border-b-2 transition-colors ${
+                    activeResultTab === (t === 'results' ? 'results' : 'viz')
+                      ? 'border-[#3b59f6] text-[#3b59f6]'
+                      : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                  }`}
+                >
+                  {t === 'results' ? (
+                    <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 6h12M6 6v8" strokeLinecap="round"/></svg>Resultados</>
+                  ) : (
+                    <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current opacity-70"><path d="M2 13h2V9H2v4zm3 0h2V6H5v7zm3 0h2V3H8v10zm3 0h2V7h-2v6z"/></svg>Visualización</>
+                  )}
+                </button>
+              ))}
+              <div className="flex-1"/>
+              {/* Action icons */}
+              <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M6 3V1.5M10 3V1.5M3 6h10" strokeLinecap="round"/></svg>
+              </button>
+              <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v7M5 6l3 3 3-3M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>
+              </button>
+              <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><path d="M10 2H14V6M14 2L8 8M3 6V3h3M3 3l6 6" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+
+            {/* Results body */}
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-[12px] text-[#9a9a98] text-center max-w-[480px] leading-[18px]">
+                Los resultados de la consulta aparecerán aquí. Pulsa{' '}
+                <kbd className="text-[11px] bg-[#f3f3f1] border border-[#e9eae6] rounded px-1 font-mono">Ctrl↵</kbd>
+                {' '}para ejecutar la consulta en tu cursor. Separa varias sentencias con{' '}
+                <code className="font-mono text-[#1a1a1a]">;</code>
+                {' '}para ejecutarlas de forma independiente.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Quick start right panel ───────────────────────────────────── */}
+        {showQuickStart && (
+          <div className="w-[260px] flex-shrink-0 border-l border-[#e9eae6] flex flex-col overflow-hidden bg-white" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+              <span className="text-[12px] font-semibold text-[#1a1a1a] flex-1">Inicio rápido</span>
+              {/* Category selector */}
+              <div className="relative">
+                <button onClick={() => setShowQsCategoryMenu(v=>!v)} className="h-6 px-2 rounded-[4px] border border-[#e9eae6] text-[11px] text-[#1a1a1a] flex items-center gap-1 hover:bg-[#f3f3f1]">
+                  {qsCategory.length > 16 ? qsCategory.slice(0,16)+'…' : qsCategory}
+                  <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {showQsCategoryMenu && (
+                  <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-[#e9eae6] rounded-[8px] shadow-[0px_4px_12px_rgba(20,20,20,0.10)] z-20 py-1">
+                    {['Analítica de producto', 'Web analytics', 'Datos'].map(opt => (
+                      <button key={opt} onClick={() => { setQsCategory(opt); setShowQsCategoryMenu(false); }} className={`w-full h-8 px-3 text-left text-[12px] hover:bg-[#f3f3f1] flex items-center gap-2 ${qsCategory === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                        {qsCategory === opt && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#3b59f6]"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <span className="text-[11px] font-mono text-[#9a9a98]">0/12</span>
+            </div>
+
+            {/* Checklist */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-1">
+              {QS_ITEMS.map((item, i) => (
+                <div key={i}>
+                  {item.section && (
+                    <div className="flex items-center justify-between mt-3 mb-1.5 first:mt-0">
+                      <span className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide">{item.section}</span>
+                      {item.section === 'MÁS OPCIONES' && (
+                        <button className="text-[11px] text-[#3b59f6] hover:underline">Saltar todo</button>
+                      )}
+                    </div>
+                  )}
+                  <div className={`flex items-center gap-2 py-1 ${i > 0 ? 'opacity-50' : ''}`}>
+                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${item.done ? 'border-[#3b59f6] bg-[#3b59f6]' : 'border-[#c0c0be]'}`}>
+                      {item.done && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                    </div>
+                    <span className="text-[12px] text-[#1a1a1a]">{item.label}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-[#e9eae6] flex-shrink-0">
+              <button onClick={() => setShowQuickStart(false)} className="text-[12px] font-medium text-[#646462] hover:text-[#1a1a1a]">
+                Minimizar
+              </button>
+              <button className="text-[12px] font-medium text-[#3b59f6] hover:underline flex items-center gap-1">
+                Ver docs
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M10 2H14V6M14 2L8 8M3 6V3h3M3 3l6 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ── WADataDestinationsView ────────────────────────────────────────────────────
+function WADataDestinationsView() {
+  type DestTab = 'all' | 'history';
+  const [tab, setTab] = useState<DestTab>('all');
+  const [selected, setSelected] = useState<string | null>(null);
+  const [newSearch, setNewSearch] = useState('');
+  const [includeAllProps, setIncludeAllProps] = useState(false);
+  const [destOn, setDestOn] = useState(true);
+  const [filterInternal, setFilterInternal] = useState(true);
+  const [matchers, setMatchers] = useState(['Identificar', 'Establecer propiedades de persona']);
+  const [propMappings, setPropMappings] = useState([
+    { k: 'name', v: "{f'{person.properties.first_name} {person.properties.last_name}' == ' ' ? null : f'{person.properties..." },
+    { k: 'phone', v: '{person.properties.phone}' },
+    { k: 'last_seen_at', v: '{toUnixTimestamp(event.timestamp)}' },
+  ]);
+  const [customMappings, setCustomMappings] = useState<{k:string;v:string}[]>([]);
+
+  type DestTemplate = {
+    key: string; name: string; desc: string;
+    badge?: 'Beta' | 'Experimental';
+    logo: React.ReactNode;
+  };
+
+  const templates: DestTemplate[] = [
+    { key:'activecampaign', name:'ActiveCampaign', badge:'Beta', desc:'Crea un nuevo contacto en ActiveCampaign cuando se dispara un evento.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#356AE6"/><path d="M8 22l8-14 4 7 3-4 5 7H8z" fill="white"/></svg> },
+    { key:'airtable', name:'Airtable', badge:'Beta', desc:'Crea registros en Airtable.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#18BFFF"/><path d="M7 12l9-4 9 4-9 4-9-4z" fill="white"/><path d="M16 16l9-4v8l-9 4V16z" fill="#FCB400"/><path d="M7 12v8l8 4v-8l-8-4z" fill="white" opacity=".7"/></svg> },
+    { key:'attio', name:'Attio', badge:'Beta', desc:'Crea y actualiza contactos en Attio.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M8 22l8-14 8 14H8zm8-10l4 7H12l4-7z" fill="white"/></svg> },
+    { key:'avo', name:'Avo', badge:'Beta', desc:'Envía eventos a Avo.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#CC3BE7"/><path d="M10 24l6-16 6 16H10zm6-11l3 8H13l3-8z" fill="white"/></svg> },
+    { key:'awskinesis', name:'AWS Kinesis', badge:'Beta', desc:'Envía datos a un stream de AWS Kinesis.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#8C4FFF"/><path d="M10 16a6 6 0 016-6v3a3 3 0 100 6v3a6 6 0 01-6-6z" fill="white"/><path d="M16 10a6 6 0 016 6h-3a3 3 0 10-3 3v3a6 6 0 010-12z" fill="white" opacity=".5"/></svg> },
+    { key:'azureblob', name:'Azure Blob Storage', badge:'Beta', desc:'Exportación por lotes a Azure Blob Storage.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#0078D4"/><path d="M7 23l7-12 4 7-3 2 5 3H7zm9-12l5 12h-4l-5-9 4-3z" fill="white"/></svg> },
+    { key:'bigquery', name:'BigQuery', desc:'Exportación por lotes a BigQuery.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#fff" stroke="#e9eae6"/><path d="M16 4l9 5.2v10.4L16 25 7 19.6V9.2L16 4z" fill="#4285F4"/><path d="M16 4v21l9-5.4V9.2L16 4z" fill="#1967D2"/><circle cx="16" cy="19" r="3.5" fill="white"/></svg> },
+    { key:'braze', name:'Braze', badge:'Beta', desc:'Envía eventos a Braze.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M9 9h8.5a5.5 5.5 0 010 11H9V9zm3 3v5h5.5a2.5 2.5 0 000-5H12z" fill="white"/><circle cx="9" cy="23" r="2" fill="#09B3AF"/></svg> },
+    { key:'brevo', name:'Brevo', desc:'Actualiza contactos en Brevo.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#0092FF"/><path d="M9 9h9a5 5 0 012.5 9.3A5 5 0 0117 27H9V9zm3 3v4.5h6a2 2 0 000-4.5H12zm0 7v4.5h5a2 2 0 000-4.5H12z" fill="white"/></svg> },
+    { key:'clearbit', name:'Clearbit', badge:'Beta', desc:'Enriquece datos de personas con la API de Clearbit.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#3F72F8"/><path d="M16 8a8 8 0 100 16A8 8 0 0016 8zm0 3a5 5 0 110 10A5 5 0 0116 11zm0 2a3 3 0 100 6 3 3 0 000-6z" fill="white"/></svg> },
+    { key:'customerio', name:'Customer.io', desc:'Identifica o rastrea eventos en Customer.io.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#F6C244"/><path d="M16 8a8 8 0 100 16 8 8 0 000-16zm0 13a5 5 0 110-10 5 5 0 010 10z" fill="#1a1a1a"/><circle cx="16" cy="16" r="2" fill="#1a1a1a"/><rect x="22" y="13" width="3" height="6" rx="1.5" fill="#1a1a1a"/></svg> },
+    { key:'databricks', name:'Databricks', badge:'Beta', desc:'Exportación por lotes a Databricks.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF3621"/><path d="M16 5l11 6v5l-11 6-11-6V11l11-6zm0 3L8 12l8 4 8-4-8-4zm-9 6v3l9 5 9-5v-3l-9 5-9-5z" fill="white"/></svg> },
+    { key:'discord', name:'Discord', desc:'Envía un mensaje a un canal de Discord.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#5865F2"/><path d="M22 10.5s-2.5-.9-5-1c-.2.5-.5 1-.7 1.5-1-.1-2-.1-3 0-.2-.5-.5-1-.7-1.5-2.5.1-5 1-5 1-3 5.2-3.8 10.3-3.5 14.2 2 1.5 4.8 2.3 4.8 2.3l1-1.5c-.8-.3-1.6-.7-2.2-1.2l.5-.5c2.4 1.3 5.3 1.3 7.8 0l.5.5c-.7.5-1.5.9-2.3 1.2l1 1.5s2.8-.8 4.8-2.3c.3-4-.4-9-3-14.2z" fill="white"/><circle cx="13" cy="19" r="1.5" fill="#5865F2"/><circle cx="19" cy="19" r="1.5" fill="#5865F2"/></svg> },
+    { key:'hubspot', name:'HubSpot', desc:'Sincroniza contactos y eventos con HubSpot CRM.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF7A59"/><path d="M18 11.5V8.7a1.5 1.5 0 001-1.4v-.05a1.5 1.5 0 00-3 0v.05a1.5 1.5 0 001 1.4v2.8A6 6 0 0011 17.5a6 6 0 1011.5 0A6 6 0 0018 11.5zm-1.5 9a3.5 3.5 0 110-7 3.5 3.5 0 010 7z" fill="white"/></svg> },
+    { key:'intercom', name:'Intercom', desc:'Actualiza contactos en Intercom.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1F8DED"/><path d="M10 11h12M10 15h12M10 19h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg> },
+    { key:'klaviyo', name:'Klaviyo', desc:'Actualiza un contacto en Klaviyo.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#000"/><path d="M8 8h5v9.5L20 8h6l-8 11 8 13h-6l-7-11.5V32H8V8z" fill="white"/></svg> },
+    { key:'mixpanel', name:'Mixpanel', desc:'Exporta eventos a Mixpanel.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#7856FF"/><path d="M7 24l4.5-8 4 6 3.5-5L23 24H7z" fill="white"/></svg> },
+    { key:'postgres', name:'Postgres', desc:'Exporta eventos a una base de datos PostgreSQL.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#336791"/><path d="M16 5c-5 0-9 4-9 9 0 3.8 2.3 7 5.6 8.4 0-.5 0-1.1.02-1.6-2.78.6-3.36-1.2-3.36-1.2-.45-1.15-1.1-1.46-1.1-1.46-.9-.62.07-.6.07-.6 1 .07 1.52 1.03 1.52 1.03.88 1.52 2.33 1.08 2.9.83.09-.64.35-1.08.63-1.33-2.2-.25-4.52-1.1-4.52-4.92 0-1.09.38-1.97 1.02-2.67-.1-.25-.44-1.26.1-2.63 0 0 .84-.27 2.75 1.03a9.5 9.5 0 012.5-.34c.85.01 1.7.11 2.5.34 1.9-1.3 2.74-1.03 2.74-1.03.54 1.37.2 2.38.1 2.63.64.7 1.02 1.58 1.02 2.67 0 3.82-2.33 4.66-4.54 4.9.36.31.67.93.67 1.87 0 1.35-.01 2.43-.01 2.76 0 .27.18.58.68.48A9 9 0 0025 14c0-5-4-9-9-9z" fill="white"/></svg> },
+    { key:'redshift', name:'Redshift', desc:'Exportación por lotes a Redshift.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#232F3E"/><ellipse cx="16" cy="11" rx="7" ry="3" fill="#A166FF"/><path d="M9 11v10c0 1.66 3.13 3 7 3s7-1.34 7-3V11" fill="#6229BF"/><ellipse cx="16" cy="16" rx="7" ry="3" fill="#8C4FFF"/></svg> },
+    { key:'rudderstack', name:'RudderStack', badge:'Beta', desc:'Envía datos a RudderStack.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1F2937"/><path d="M8 10h9a5 5 0 010 10H8V10zm3 3v4h6a2 2 0 000-4h-6z" fill="#E83F6F"/><circle cx="22" cy="22" r="3" fill="#E83F6F"/></svg> },
+    { key:'s3', name:'S3', desc:'Exportación por lotes a S3.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#232F3E"/><path d="M16 6l7 3.5V22.5L16 26 9 22.5V9.5L16 6z" fill="#E25444"/><path d="M16 6v20l7-3.5V9.5L16 6z" fill="#BF2E22"/></svg> },
+    { key:'salesforce_create', name:'Salesforce', badge:'Beta', desc:'Crea objetos en Salesforce.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#00A1E0"/><path d="M13 10.5a4 4 0 017.7-1.5A3.5 3.5 0 1122.5 16H10a3 3 0 010-6c.18 0 .35.01.52.04A4 4 0 0113 10.5z" fill="white"/></svg> },
+    { key:'salesforce_update', name:'Salesforce', badge:'Beta', desc:'Actualiza objetos en Salesforce.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#00A1E0"/><path d="M13 10.5a4 4 0 017.7-1.5A3.5 3.5 0 1122.5 16H10a3 3 0 010-6c.18 0 .35.01.52.04A4 4 0 0113 10.5z" fill="white"/></svg> },
+    { key:'segment', name:'Segment', desc:'Reenvía eventos hacia o desde Segment.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#52BD95"/><path d="M23 13H9a1 1 0 000 2h14a1 1 0 000-2zM21 17H9a1 1 0 000 2h12a1 1 0 000-2zM21 21H8a1 1 0 000 2h13a1 1 0 000-2z" fill="white"/></svg> },
+    { key:'sendgrid', name:'Sendgrid', badge:'Beta', desc:'Actualiza contactos de marketing en Sendgrid.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1A82E2"/><path d="M8 8h7v7H8zM17 8h7v7h-7zM8 17h7v7H8z" fill="white" opacity=".5"/><path d="M17 17h7v7h-7z" fill="white"/></svg> },
+    { key:'slack', name:'Slack', desc:'Envía un mensaje a un canal de Slack.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#611f69"/><path d="M13 8a2 2 0 11-2 2V8h2zm0 0V6a2 2 0 114 0v2h-4z" fill="#E01E5A"/><path d="M17 13a2 2 0 112 2h-2v-2zm0 0h2a2 2 0 110 4h-2v-4z" fill="#36C5F0"/><path d="M12 17a2 2 0 11-4 0h4zm0 0v2a2 2 0 11-4 0v-2h4z" fill="#2EB67D"/><path d="M17 17a2 2 0 112-2v2h-2zm0 0h-4a2 2 0 110-4h4v4z" fill="#ECB22E"/></svg> },
+    { key:'snapchat', name:'Snapchat Pixel', badge:'Experimental', desc:'Rastrea cómo los usuarios de Snapchat interactúan con tu web.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FFFC00"/><path d="M16 6c-2.8 0-5 2.2-5 5 0 .6.1 1.2.3 1.7-.5.3-1.1.3-1.5.3-.4 0-.8.3-.8.8 0 .5.4.8.9.9.8.1 1.9.6 2.5 1.3-.1.3-.3.5-.6.7-1.2.8-3 .8-3 1.4 0 .5.8.7 2 .9.1.3.2.7.4 1.1-.5.1-1.1.4-1.1.8 0 .4.5.5 1.2.5.8 0 1.7.6 2.7.6 1.3 0 2.3-.7 3-.7.7 0 1.7.7 3 .7 1 0 1.9-.6 2.7-.6.7 0 1.2-.1 1.2-.5 0-.4-.6-.7-1.1-.8.2-.4.3-.8.4-1.1 1.2-.2 2-.4 2-.9 0-.6-1.8-.6-3-1.4-.3-.2-.5-.4-.6-.7.6-.7 1.7-1.2 2.5-1.3.5-.1.9-.4.9-.9 0-.5-.4-.8-.8-.8-.4 0-1 0-1.5-.3.2-.5.3-1.1.3-1.7 0-2.8-2.2-5-5-5z" fill="#1A1A1A"/></svg> },
+    { key:'snowflake', name:'Snowflake', desc:'Exportación por lotes a Snowflake.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#29B5E8"/><path d="M16 5v22M6 10.5l10 5.5-10 5.5M26 10.5l-10 5.5 10 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+    { key:'stripe', name:'Stripe', desc:'Sincroniza eventos de pago con Stripe.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#635BFF"/><path d="M18.5 14.5c0-.8.7-1.1 1.8-1.1 1.6 0 3.6.5 5.2 1.4v-5c-1.7-.7-3.5-1-5.2-1-4.3 0-7.2 2.2-7.2 5.9 0 5.7 7.9 4.8 7.9 7.3 0 1-.8 1.3-2 1.3-1.7 0-3.9-.7-5.6-1.7v5.1c1.9.8 3.8 1.1 5.6 1.1 4.4 0 7.4-2.2 7.4-5.9-.1-6.2-7.9-5.1-7.9-7.4z" fill="white"/></svg> },
+    { key:'tiktok', name:'TikTok Pixel', badge:'Experimental', desc:'Rastrea cómo los usuarios de TikTok interactúan con tu web.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#010101"/><path d="M20 7h-3v12.5a2.5 2.5 0 11-2.5-2.5c.28 0 .55.04.8.12V14a6 6 0 101.7 11.8V16.2A8.5 8.5 0 0020 17V14a5.5 5.5 0 01-3-.88V7H20z" fill="white"/></svg> },
+    { key:'userlist', name:'Userlist', badge:'Beta', desc:'Envía datos de usuario, empresa y evento a Userlist.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><circle cx="16" cy="12" r="4" fill="white"/><path d="M8 24c.5-4 3.5-6 8-6s7.5 2 8 6H8z" fill="white"/></svg> },
+    { key:'zapier', name:'Zapier', desc:'Dispara Zaps de Zapier basados en eventos de Clain.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF4A00"/><path d="M16 6l2 8h8l-6.5 4.5 2.5 8.5L16 22l-6 5 2.5-8.5L6 14h8l2-8z" fill="white"/></svg> },
+    { key:'zendesk', name:'Zendesk', badge:'Beta', desc:'Actualiza contactos en Zendesk.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#03363D"/><path d="M15 9a6 6 0 010 12H9L15 9z" fill="#03363D" stroke="white" strokeWidth="1.5"/><path d="M17 23a6 6 0 010-12h6L17 23z" fill="white"/></svg> },
+  ];
+
+  const filteredTemplates = templates.filter(t =>
+    newSearch === '' || t.name.toLowerCase().includes(newSearch.toLowerCase())
+  );
+
+  // ── RIGHT-PANEL config per destination ───────────────────────────────────────
+  function renderRightConfig(key: string) {
+    const dest = templates.find(t => t.key === key)!;
+
+    const field = (label: string, value: string, help?: string, locked?: boolean) => (
+      <div key={label}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <label className="text-[13px] font-semibold text-[#1a1a1a]">{label}</label>
+          {locked && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12 7H4V5a4 4 0 118 0v2zM3 8h10v7H3V8z"/></svg>}
+        </div>
+        <textarea defaultValue={value} rows={1}
+          className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6] resize-none font-mono"/>
+        {help && <p className="text-[11px] text-[#646462] mt-1 leading-relaxed">{help}</p>}
+      </div>
+    );
+
+    const mappingRows = (rows: {k:string;v:string}[], onAdd: () => void, help?: string) => (
+      <div>
+        <button className="flex items-center gap-1.5 text-[12px] text-[#1a1a1a] font-semibold border border-[#e9eae6] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1] mb-3">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Incluir propiedades de un objeto completo
+        </button>
+        <div className="space-y-2">
+          {rows.map((row, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input defaultValue={row.k} className="flex-1 h-8 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+              <textarea defaultValue={row.v} rows={1} className="flex-[2] px-2.5 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6] resize-none font-mono"/>
+              <button className="flex-shrink-0 p-1 text-[#646462] hover:text-[#1a1a1a]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+        <button onClick={onAdd} className="mt-2 flex items-center gap-1.5 text-[12px] text-[#1a1a1a] font-semibold border border-[#e9eae6] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1]">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Añadir entrada
+        </button>
+        {help && <p className="text-[11px] text-[#646462] mt-2">{help}</p>}
+      </div>
+    );
+
+    const editSourceTesting = () => (
+      <>
+        <div className="border-t border-[#e9eae6] pt-5">
+          <div className="flex items-start justify-between gap-4">
+            <div><h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-1">Editar fuente</h3>
+            <p className="text-[12px] text-[#646462]">Haz clic aquí para editar el código fuente de la función</p></div>
+            <button className="flex-shrink-0 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Editar código fuente</button>
+          </div>
+        </div>
+        <div className="border-t border-[#e9eae6] pt-5">
+          <div className="flex items-start justify-between gap-4">
+            <div><h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-1">Pruebas</h3>
+            <p className="text-[12px] text-[#646462]">Haz clic aquí para probar tu función con un evento de ejemplo</p></div>
+            <button className="flex-shrink-0 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Iniciar prueba</button>
+          </div>
+        </div>
+        <div className="border-t border-[#e9eae6] pt-4">
+          <button className="h-9 px-5 bg-[#e8572a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#c9451e]">Crear y activar</button>
+        </div>
+      </>
+    );
+
+    switch (key) {
+      case 'slack': return (<div className="space-y-5">{field('URL del Webhook','','Consulta cómo generar una URL de Webhook en https://api.slack.com/messaging/webhooks')}{field('Canal','#mi-canal','El canal de Slack al que enviar el mensaje.')}{field('Contenido del mensaje',"{person.name} desencadenó el evento: '{event.event}'")}{editSourceTesting()}</div>);
+      case 'discord': return (<div className="space-y-5">{field('URL del Webhook','','Consulta https://support.discord.com/hc/en-us/articles/228383668 para generar una URL de Webhook.')}{field('Contenido',"**{person.name}** desencadenó el evento: '{event.event}'")}{editSourceTesting()}</div>);
+      case 'activecampaign': return (
+        <div className="space-y-5">
+          {field('Nombre de cuenta','','Generalmente tiene la forma .activehosted.com')}
+          {field('Tu API Key de ActiveCampaign','','Consulta la documentación en https://help.activecampaign.com',true)}
+          {field('Email del usuario','{person.properties.email}','Dónde encontrar el email del contacto.')}
+          {field('Nombre del usuario','{person.properties.firstName}','Dónde encontrar el nombre del contacto.')}
+          {field('Apellido del usuario','{person.properties.lastName}')}
+          {field('Número de teléfono','{person.properties.phone}')}
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Campos adicionales de persona</h3>
+            {mappingRows([{k:'1',v:'{person.properties.company}'},{k:'2',v:'{person.properties.website}'}],()=>{},'Mapea valores a campos de persona de ActiveCampaign. (fieldId:value)')}
+          </div>
+          {editSourceTesting()}
+        </div>
+      );
+      case 'intercom': return (
+        <div className="space-y-5">
+          <div><label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Cuenta de Intercom</label>
+            <select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#646462] bg-white outline-none focus:border-[#3b59f6]"><option>Elegir conexión de Intercom</option></select>
+          </div>
+          {field('Email del usuario','{person.properties.email}')}
+          <div className="flex items-center gap-2">
+            <button onClick={()=>setIncludeAllProps(s=>!s)} className={`relative w-9 h-[18px] rounded-full transition-colors ${includeAllProps?'bg-[#e8572a]':'bg-[#d1d1cf]'}`}><span className={`absolute top-[1px] w-4 h-4 bg-white rounded-full shadow transition-transform ${includeAllProps?'translate-x-[18px]':'translate-x-[1px]'}`}/></button>
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Incluir todas las propiedades como atributos</span><span className="text-[11px] text-[#646462]">→ Alternar</span>
+          </div>
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Mapeo de propiedades predeterminado <span className="font-normal text-[#646462]">(opcional)</span></h3>
+            {mappingRows(propMappings,()=>setPropMappings(m=>[...m,{k:'',v:''}]),'Mapea propiedades de Intercom y sus valores.')}
+          </div>
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Mapeo de propiedades personalizadas <span className="font-normal text-[#646462]">(opcional)</span></h3>
+            {mappingRows(customMappings,()=>setCustomMappings(m=>[...m,{k:'',v:''}]),'Mapea propiedades personalizadas y sus valores.')}
+          </div>
+          {editSourceTesting()}
+        </div>
+      );
+      case 'klaviyo': return (
+        <div className="space-y-5">
+          {field('Klaviyo Private API Key','','Puedes crear una Private API Key en los ajustes de la cuenta (https://www.klaviyo.com/settings/account/api-keys)',true)}
+          {field('Email del usuario','{person.properties.email}')}
+          {field('ID externo','{person.id}','Un identificador único para asociar perfiles de Klaviyo con perfiles en un sistema externo.')}
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Propiedades personalizadas <span className="font-normal text-[#646462]">(opcional)</span></h3>
+            {mappingRows([{k:'title',v:'{person.properties.title}'},{k:'last_name',v:'{person.properties.lastname}'},{k:'first_name',v:'{person.properties.firstname}'},{k:'organization',v:'{person.properties.organization}'},{k:'phone_number',v:'{person.properties.phone}'}],()=>{},'Mapea propiedades personalizadas y sus valores.')}
+          </div>
+          {editSourceTesting()}
+        </div>
+      );
+      case 'postgres': case 'redshift': return (
+        <div className="space-y-5">
+          {field('Host', key==='redshift'?'mi-cluster.redshift.amazonaws.com':'localhost')}
+          {field('Puerto', key==='redshift'?'5439':'5432')}
+          {field('Base de datos','mi_base_datos')}{field('Schema','public')}
+          {field('Usuario','')}{field('Contraseña','',undefined,true)}
+          {editSourceTesting()}
+        </div>
+      );
+      case 'snowflake': return (<div className="space-y-5">{field('Account Identifier','orgname-accountname')}{field('Warehouse','COMPUTE_WH')}{field('Base de datos','CLAIN_DB')}{field('Schema','PUBLIC')}{field('Usuario','')}{field('Contraseña','',undefined,true)}{editSourceTesting()}</div>);
+      case 's3': return (<div className="space-y-5">{field('Bucket','mi-bucket-clain')}<div><label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Región</label><select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"><option>us-east-1</option><option>eu-west-1</option><option>ap-southeast-1</option></select></div>{field('Prefijo','clain/events/')}{field('Access Key ID','',undefined,true)}{field('Secret Access Key','',undefined,true)}{editSourceTesting()}</div>);
+      case 'salesforce_create': case 'salesforce_update': return (
+        <div className="space-y-5">
+          {field('URL de instancia','https://tu-instancia.my.salesforce.com')}
+          {field('Client ID','',undefined,true)}{field('Client Secret','',undefined,true)}
+          <div><label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Tipo de objeto</label><select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"><option>Contact</option><option>Lead</option><option>Account</option></select></div>
+          {key==='salesforce_update'&&field('Campo de coincidencia','Email')}
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Mapeo de campos</h3>{mappingRows([{k:'Email',v:'{person.properties.email}'},{k:'FirstName',v:'{person.properties.first_name}'},{k:'LastName',v:'{person.properties.last_name}'}],()=>{})}</div>
+          {editSourceTesting()}
+        </div>
+      );
+      default: return (<div className="space-y-5">{field('API Key','',undefined,true)}{editSourceTesting()}</div>);
+    }
+  }
+
+  // ── DETAIL VIEW ──────────────────────────────────────────────────────────────
+  if (selected) {
+    const dest = templates.find(t => t.key === selected)!;
+    return (
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-5 h-12 bg-white border-b border-[#e9eae6]">
+          <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {dest.logo}
+            <span className="text-[15px] font-bold text-[#1a1a1a]">{dest.name}</span>
+            {dest.badge && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${dest.badge==='Beta'?'text-[#7856FF] border-[#c4b5fd]':'text-[#d97706] border-[#fcd34d]'}`}>{dest.badge}</span>}
+            <button className="p-1 text-[#646462] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z" strokeLinejoin="round"/></svg></button>
+            <button onClick={() => setSelected(null)} className="p-1 text-[#646462] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg></button>
+          </div>
+          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+          <button className="h-8 px-3.5 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]">Crear y activar</button>
+        </div>
+        {/* Subtitle */}
+        <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-[#e9eae6]">
+          <p className="text-[12px] text-[#646462] flex items-center gap-1">{dest.desc}<svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current text-[#646462]" strokeWidth="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z" strokeLinejoin="round"/></svg></p>
+        </div>
+        {/* Body: 2 col */}
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* LEFT */}
+          <div className="w-[390px] flex-shrink-0 overflow-y-auto border-r border-[#e9eae6] bg-white">
+            <div className="p-5 space-y-4">
+              {/* Status */}
+              <div className="border border-[#e9eae6] rounded-xl p-4">
+                <h3 className="text-[13px] font-bold text-[#1a1a1a] mb-3">Estado</h3>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-[#1a1a1a]">Activar destino</span>
+                  <button onClick={()=>setDestOn(s=>!s)} className={`relative w-10 h-5 rounded-full transition-colors ${destOn?'bg-[#e8572a]':'bg-[#d1d1cf]'}`}><span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${destOn?'translate-x-5':'translate-x-0.5'}`}/></button>
+                </div>
+              </div>
+              {/* Filters */}
+              <div className="border border-[#e9eae6] rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-1.5"><h3 className="text-[13px] font-bold text-[#1a1a1a]">Filtros</h3><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></div>
+                <div className="flex items-center justify-between py-1 border-b border-[#f3f3f1]">
+                  <div className="flex items-center gap-2 text-[12px] text-[#1a1a1a]">Filtrar usuarios internos y de prueba<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></div>
+                  <button onClick={()=>setFilterInternal(s=>!s)} className={`relative w-9 h-[18px] rounded-full transition-colors ${filterInternal?'bg-[#e8572a]':'bg-[#d1d1cf]'}`}><span className={`absolute top-[1px] w-4 h-4 bg-white rounded-full shadow transition-transform ${filterInternal?'translate-x-[18px]':'translate-x-[1px]'}`}/></button>
+                </div>
+                <button className="flex items-center gap-1.5 text-[12px] font-semibold border border-[#e9eae6] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Filtro</button>
+              </div>
+              {/* Match events */}
+              <div className="border border-[#e9eae6] rounded-xl p-4 space-y-3">
+                <h3 className="text-[13px] font-bold text-[#1a1a1a]">Eventos y acciones coincidentes</h3>
+                <p className="text-[11px] text-[#646462]">Si se configura, el destino solo se ejecutará si el evento coincide con <span className="font-semibold text-[#1a1a1a]">alguno</span> de los siguientes.</p>
+                <div className="space-y-2">
+                  {matchers.map((m,i)=>(
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded bg-[#f3f3f1] flex items-center justify-center flex-shrink-0"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c.4-2.5 2.5-4 5-4s4.6 1.5 5 4H3z"/></svg></div>
+                      <select value={m} onChange={e=>setMatchers(ms=>ms.map((v,j)=>j===i?e.target.value:v))} className="flex-1 h-8 px-2 border border-[#e9eae6] rounded-lg text-[12px] bg-white outline-none focus:border-[#3b59f6]">
+                        <option>Identificar</option><option>Establecer propiedades de persona</option><option>Evento de página</option><option>Alias</option><option>Grupo</option>
+                      </select>
+                      <button className="p-1 text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 5h12M5 5V3h6v2M6 8v4M10 8v4" strokeLinecap="round"/></svg></button>
+                      <button className="p-1 text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><circle cx="3" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="13" cy="8" r="1"/></svg></button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={()=>setMatchers(ms=>[...ms,'Evento de página'])} className="flex items-center gap-1.5 text-[12px] font-semibold border border-[#e9eae6] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir coincidencia de eventos</button>
+              </div>
+              {/* Trigger */}
+              <div className="border border-[#e9eae6] rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-1.5"><h3 className="text-[13px] font-bold text-[#1a1a1a]">Opciones de disparo</h3><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></div>
+                <select className="w-full h-8 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] bg-white outline-none focus:border-[#3b59f6]"><option>Ejecutar siempre</option><option>Ejecutar una vez por persona</option></select>
+              </div>
+              {/* Matching events */}
+              <div className="border border-[#e9eae6] rounded-xl p-4 space-y-3">
+                <h3 className="text-[13px] font-bold text-[#1a1a1a]">Eventos coincidentes</h3>
+                <p className="text-[12px] text-[#3b59f6]">Este destino habría disparado <span className="font-bold">0 veces</span> en los últimos 7 días.</p>
+                <p className="text-[12px] text-[#646462]">1</p>
+                <button className="w-full h-8 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Mostrar eventos coincidentes</button>
+              </div>
+            </div>
+          </div>
+          {/* RIGHT */}
+          <div className="flex-1 overflow-y-auto bg-white">
+            <div className="p-6 max-w-2xl space-y-5">
+              {renderRightConfig(selected)}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── MAIN LIST VIEW ───────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white rounded-[12px] border border-[#e9eae6] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 h-12 border-b border-[#e9eae6] flex-shrink-0">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 2v9M5 8l3 3 3-3" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 13h10" strokeLinecap="round"/></svg>
+        <span className="text-[16px] font-bold text-[#1a1a1a] flex-1">Destinos</span>
+        <button className="h-8 px-3.5 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e] flex items-center gap-1.5">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Nueva conexión
+        </button>
+      </div>
+
+      {/* Subtitle */}
+      <div className="flex-shrink-0 px-5 py-2.5 border-b border-[#e9eae6]">
+        <p className="text-[12px] text-[#1a1a1a]">Los destinos te permiten enviar tus datos a sistemas externos en tiempo real.</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex-shrink-0 flex items-center px-5 border-b border-[#e9eae6]">
+        {([['all','Todos los destinos'],['history','Historial']] as const).map(([k,label])=>(
+          <button key={k} onClick={()=>setTab(k)}
+            className={`h-10 px-1 mr-5 text-[13px] font-medium border-b-2 -mb-px transition-colors ${tab===k?'border-[#e8572a] text-[#1a1a1a]':'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {/* Empty state for existing destinations */}
+        <div className="border border-dashed border-[#c8c8c4] mx-5 mt-4 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-8 px-8 py-8">
+            <div className="flex-shrink-0">{ClainMascot({ size: 110, variant: 'suit' })}</div>
+            <div>
+              <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-2">Crea tu primera conexión</h2>
+              <p className="text-[13px] text-[#646462] leading-relaxed mb-4">Los destinos te permiten enviar tus datos a sistemas externos.</p>
+              <div className="flex items-center gap-3">
+                <button className="flex items-center gap-1.5 h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[13px] font-semibold rounded-lg hover:bg-[#fff5f2]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Nueva conexión
+                </button>
+                <button className="flex items-center gap-1.5 h-8 px-4 border border-[#e9eae6] text-[#1a1a1a] text-[13px] font-semibold rounded-lg hover:bg-[#f3f3f1]">
+                  Saber más
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Existing destinations table */}
+        <div className="mx-5 mt-4">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1 max-w-xs">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+              <input type="text" placeholder="Buscar..." className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+            <button className="text-[12px] text-[#646462] hover:text-[#1a1a1a]">¿No encuentras lo que buscas?</button>
+            <div className="flex-1"/>
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-[#646462]">Creado por:</span>
+              <select className="h-7 px-2 border border-[#e9eae6] rounded-lg text-[12px] bg-white outline-none"><option>Cualquier usuario</option></select>
+            </div>
+            <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">Mostrar pausados</button>
+          </div>
+        </div>
+
+        <div className="mx-5 mt-2 border border-[#e9eae6] rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+              {['Nombre','Creado por','Actualizado','Últimos 7 días','Estado'].map((col,i)=>(
+                <th key={col} className={`text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide ${i===0?'w-[35%]':''}`}>
+                  <span className="flex items-center gap-1">{col}{i!==4&&<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>}</span>
+                </th>
+              ))}
+            </tr></thead>
+            <tbody><tr><td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462]">No se encontraron destinos</td></tr></tbody>
+          </table>
+        </div>
+
+        {/* Create a new destination section */}
+        <div className="mx-5 mt-6 mb-4">
+          <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">Crear nueva conexión</h3>
+          <div className="flex items-center gap-4 mb-3">
+            <div className="relative">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+              <input type="text" placeholder="Buscar..." value={newSearch} onChange={e=>setNewSearch(e.target.value)} className="h-8 pl-8 pr-3 w-48 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+            <button className="text-[12px] text-[#646462] hover:text-[#1a1a1a]">¿No encuentras lo que buscas?</button>
+          </div>
+          <div className="border border-[#e9eae6] rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                  <span className="flex items-center gap-1">Nombre<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg></span>
+                </th>
+              </tr></thead>
+              <tbody>
+                {filteredTemplates.map((t, idx) => (
+                  <tr key={t.key} className={`hover:bg-[#fafafa] ${idx<filteredTemplates.length-1?'border-b border-[#f3f3f1]':''}`}>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-3">
+                        {t.logo}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-[14px] font-semibold text-[#1a1a1a]">{t.name}</span>
+                            {t.badge && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${t.badge==='Beta'?'text-[#7856FF] border-[#c4b5fd]':'text-[#d97706] border-[#fcd34d]'}`}>{t.badge}</span>}
+                          </div>
+                          <p className="text-[12px] text-[#646462] truncate">{t.desc}</p>
+                        </div>
+                        <button
+                          onClick={() => setSelected(t.key)}
+                          className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 border border-[#e8572a] rounded-lg text-[12px] font-semibold text-[#e8572a] hover:bg-[#fff5f2]"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                          Crear
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredTemplates.length===0&&<tr><td className="px-4 py-8 text-center text-[13px] text-[#646462]">No se encontraron destinos</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+// ── WADataIngestionWarningsView ───────────────────────────────────────────────
+function WADataIngestionWarningsView() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-5 h-11 bg-white border-b border-[#e9eae6]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M8 2L1.5 13h13L8 2z" strokeLinejoin="round"/><path d="M8 6v3.5M8 11v.5" strokeLinecap="round"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Advertencias de ingesta de eventos</span>
+        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+          Quick start
+        </button>
+      </div>
+      {/* Subtitle */}
+      <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-[#e9eae6]">
+        <p className="text-[12px] text-[#1a1a1a]">Advertencias relacionadas con la ingesta de datos de los últimos 30 días.</p>
+      </div>
+
+      {/* Search */}
+      <div className="flex-shrink-0 px-5 py-3 bg-white border-b border-[#e9eae6]">
+        <div className="relative">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-3 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input
+            type="text"
+            placeholder="Prueba pegando un ID de persona o sesión, o un tipo de advertencia de ingesta"
+            className="w-full h-9 pl-9 pr-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"
+          />
+        </div>
+      </div>
+
+      {/* Table header */}
+      <div className="flex-shrink-0 bg-white border-b border-[#e9eae6]">
+        <div className="flex items-center px-5 h-9 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+          <div className="flex-[3]">Advertencia</div>
+          <div className="flex-[4]">Gráfico</div>
+          <div className="flex-[1] flex items-center gap-1">
+            Eventos
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+          </div>
+          <div className="flex-[2] flex items-center gap-1 justify-end">
+            Última vez visto
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 11L5 7h6l-3 4z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      {/* "No entries" row */}
+      <div className="flex-shrink-0 bg-white border-b border-[#e9eae6] px-5 py-2.5">
+        <span className="text-[13px] text-[#646462]">Sin entradas</span>
+      </div>
+
+      {/* Empty state */}
+      <div className="flex-1 flex items-center justify-center bg-[#fafaf9] border border-dashed border-[#c8c8c4] mx-5 my-4 rounded-xl">
+        <div className="flex items-center gap-8 max-w-xl">
+          {/* Clain reading mascot */}
+          <div className="flex-shrink-0">
+            {ClainMascot({ size: 120, variant: 'reading' })}
+          </div>
+          <div>
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-2">No hay advertencias de ingesta</h2>
+            <p className="text-[13px] text-[#646462] leading-relaxed mb-4">
+              ¡Genial! No has tenido advertencias de ingesta en los últimos 30 días. Si detectamos algún problema con tus datos, los mostraremos aquí.
+            </p>
+            <button className="flex items-center gap-1.5 h-8 px-3.5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+              Saber más
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── WADataSourcesView ─────────────────────────────────────────────────────────
+function WADataSourcesView() {
+  type SourcesView = 'list' | 'picker' | 'config';
+  const [view, setView] = useState<SourcesView>('list');
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [configStep, setConfigStep] = useState(1);
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  type SourceItem = {
+    key: string; name: string;
+    badge?: 'Beta' | 'Experimental';
+    authType: 'apikey' | 'oauth' | 'direct';
+    desc: string; syncDesc: string;
+    logo: React.ReactNode;
+    scopes?: string[];
+  };
+
+  const sources: SourceItem[] = [
+    {
+      key: 'attio', name: 'Attio', authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de Attio con el data warehouse de Clain.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M8 22l8-14 8 14H8zm8-10l4 7H12l4-7z" fill="white"/></svg>,
+      scopes: ['object_configuration:read - Leer configuraciones de objetos', 'record_permission:read - Leer permisos de registros', 'record:read - Leer registros (empresas, personas, deals, usuarios, espacios de trabajo)', 'list_entry:read - Leer entradas de listas', 'note:read - Leer notas', 'task:read - Leer tareas', 'user_management:read - Leer miembros del espacio de trabajo'],
+    },
+    {
+      key: 'azure', name: 'Azure', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu almacenamiento de Azure Blob directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#0078D4"/><path d="M7 23l7-12 4 7-3 2 5 3H7zm9-12l5 12h-4l-5-9 4-3z" fill="white"/></svg>,
+    },
+    {
+      key: 'bigquery', name: 'BigQuery', authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de Google BigQuery con el data warehouse de Clain.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#fff" stroke="#e9eae6"/><path d="M16 4l9 5.2v10.4L16 25 7 19.6V9.2L16 4z" fill="#4285F4"/><path d="M16 4v21l9-5.4V9.2L16 4z" fill="#1967D2"/><circle cx="16" cy="19" r="3.5" fill="white"/></svg>,
+    },
+    {
+      key: 'bingads', name: 'Bing Ads', badge: 'Beta' as const, authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu cuenta de Microsoft Advertising para sincronizar datos de campañas.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#008272"/><path d="M9 6l3 1 9 11-4 3-8-5V6zm3 1v8l7 4-7-9-0-.5v-2.5z" fill="white"/><path d="M12 7l3 2v6l7 4-3 3-7-4V9l0-2z" fill="white" opacity=".7"/></svg>,
+    },
+    {
+      key: 'buildbetter', name: 'BuildBetter', badge: 'Beta' as const, authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de llamadas y transcripciones de BuildBetter.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#7C3AED"/><path d="M8 8h16v3H8zm0 6h16v3H8zm0 6h12v3H8z" fill="white"/></svg>,
+    },
+    {
+      key: 'chargebee', name: 'Chargebee', authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de facturación y suscripciones de Chargebee.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF3300"/><path d="M16 6a10 10 0 110 20A10 10 0 0116 6zm0 3a7 7 0 100 14A7 7 0 0016 9zm0 3a4 4 0 110 8 4 4 0 010-8z" fill="white"/></svg>,
+    },
+    {
+      key: 'clerk', name: 'Clerk', badge: 'Beta' as const, authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de usuarios y sesiones de Clerk Auth.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#6C47FF"/><circle cx="16" cy="12" r="4" fill="white"/><path d="M9 24c.5-4 3.5-6 7-6s6.5 2 7 6H9z" fill="white"/></svg>,
+    },
+    {
+      key: 'clickhouse', name: 'ClickHouse', badge: 'Beta' as const, authType: 'direct',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu instancia de ClickHouse directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FFCC00"/><rect x="7" y="7" width="3" height="18" rx="1.5" fill="#1a1a1a"/><rect x="12" y="7" width="3" height="18" rx="1.5" fill="#1a1a1a"/><rect x="17" y="7" width="3" height="18" rx="1.5" fill="#1a1a1a"/><rect x="22" y="13" width="3" height="12" rx="1.5" fill="#1a1a1a"/></svg>,
+    },
+    {
+      key: 'cloudflare', name: 'Cloudflare R2', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu bucket de Cloudflare R2 directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#F38020"/><path d="M22 19.5c.3-1 .2-2-.3-2.8-.4-.6-1-.9-1.8-.9h-.2c-.2-1.5-1.5-2.8-3.2-2.8-1.2 0-2.2.7-2.8 1.7-.3-.1-.6-.2-1-.2-1.4 0-2.5 1.1-2.5 2.5 0 .2 0 .4.1.5H10c-1.1 0-2 .9-2 2s.9 2 2 2h12c.8 0 1.5-.5 1.8-1.3.1-.2.2-.5.2-.7z" fill="white"/></svg>,
+    },
+    {
+      key: 'convex', name: 'Convex', badge: 'Beta' as const, authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de tu backend de Convex.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#EE342F"/><path d="M7 16c0-5 4-9 9-9s9 4 9 9c0 3-1.5 5.6-3.7 7.2L19 22c1.5-1.3 2.5-3.2 2.5-5.5a6.5 6.5 0 00-11-4.7" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
+    },
+    {
+      key: 'dolt', name: 'Dolt', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu base de datos Dolt directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><circle cx="12" cy="10" r="3" fill="white"/><circle cx="12" cy="22" r="3" fill="white"/><circle cx="22" cy="10" r="3" fill="white"/><path d="M12 13v6M12 10h10M22 13v6a3 3 0 01-3 3h-4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>,
+    },
+    {
+      key: 'github', name: 'GitHub', badge: 'Beta' as const, authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu organización de GitHub para sincronizar issues, PRs, y más.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M16 5C9.9 5 5 10 5 16.2c0 4.9 3.2 9.1 7.6 10.6.6.1.8-.2.8-.6v-2.1c-3.2.7-3.9-1.5-3.9-1.5-.5-1.4-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 1.7 2.6 1.2 3.3.9.1-.7.4-1.2.7-1.5-2.5-.3-5.1-1.3-5.1-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 015.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.2 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.2 11.2 0 0027 16.2C27 10 22.1 5 16 5z" fill="white"/></svg>,
+    },
+    {
+      key: 'googleads', name: 'Google Ads', badge: 'Beta' as const, authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu cuenta de Google Ads para sincronizar datos de campañas.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#fff" stroke="#e9eae6"/><path d="M6 21.5l5.5-10L16 19l-3 2.5H6z" fill="#FBBC04"/><path d="M11.5 11.5L17 21.5h9l-5.5-10h-9z" fill="#4285F4"/><circle cx="22" cy="21.5" r="3.5" fill="#34A853"/></svg>,
+    },
+    {
+      key: 'gcs', name: 'Google Cloud Storage', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu bucket de Google Cloud Storage directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#fff" stroke="#e9eae6"/><path d="M16 6l9 5v10l-9 5-9-5V11l9-5z" fill="#4285F4" opacity=".2"/><path d="M16 6v20M7 11l9 5 9-5M16 16v10" stroke="#4285F4" strokeWidth="1.5" fill="none"/></svg>,
+    },
+    {
+      key: 'hubspot', name: 'HubSpot', authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu cuenta de HubSpot CRM para sincronizar contactos, deals y más.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF7A59"/><path d="M18 11.5V8.7a1.5 1.5 0 001-1.4v-.05a1.5 1.5 0 00-3 0v.05a1.5 1.5 0 001 1.4v2.8A6 6 0 0011 17.5a6 6 0 1011.5 0A6 6 0 0018 11.5zm-1.5 9a3.5 3.5 0 110-7 3.5 3.5 0 010 7z" fill="white"/></svg>,
+    },
+    {
+      key: 'linear', name: 'Linear', authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu espacio de trabajo de Linear para sincronizar issues, proyectos, equipos y más.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M7 20L20 7l1 1L8 21l-1-1zM7 24l13-13 2 2L9 26l-2-2zM13 26l7-7 4 4-7 7-4-4z" fill="white"/></svg>,
+    },
+    {
+      key: 'mysql', name: 'MySQL', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu base de datos MySQL directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#4479A1"/><path d="M8 21c3-5 5-8 8-10 2 3 3 6 4 10H8z" fill="white"/><path d="M16 11c1 1 2 3 4 4v6" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>,
+    },
+    {
+      key: 'postgres', name: 'Postgres', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu base de datos PostgreSQL directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#336791"/><path d="M16 5c-5 0-9 4-9 9 0 3.8 2.3 7 5.6 8.4-.01-.5 0-1.1.02-1.6-2.78.6-3.36-1.2-3.36-1.2-.45-1.15-1.1-1.46-1.1-1.46-.9-.62.07-.6.07-.6 1 .07 1.52 1.03 1.52 1.03.88 1.52 2.33 1.08 2.9.83.09-.64.35-1.08.63-1.33-2.2-.25-4.52-1.1-4.52-4.92 0-1.09.38-1.97 1.02-2.67-.1-.25-.44-1.26.1-2.63 0 0 .84-.27 2.75 1.03a9.5 9.5 0 012.5-.34c.85.01 1.7.11 2.5.34 1.9-1.3 2.74-1.03 2.74-1.03.54 1.37.2 2.38.1 2.63.64.7 1.02 1.58 1.02 2.67 0 3.82-2.33 4.66-4.54 4.9.36.31.67.93.67 1.87 0 1.35-.01 2.43-.01 2.76 0 .27.18.58.68.48A9 9 0 0025 14c0-5-4-9-9-9z" fill="white"/></svg>,
+    },
+    {
+      key: 's3', name: 'S3', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu bucket de Amazon S3 directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#232F3E"/><path d="M16 6l7 3.5V22.5L16 26 9 22.5V9.5L16 6z" fill="#E25444"/><path d="M16 6v20l7-3.5V9.5L16 6z" fill="#BF2E22"/></svg>,
+    },
+    {
+      key: 'salesforce', name: 'Salesforce', authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu organización de Salesforce para sincronizar contactos, leads y oportunidades.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#00A1E0"/><path d="M13 10.5a4 4 0 017.7-1.5A3.5 3.5 0 1122.5 16H10a3 3 0 010-6c.18 0 .35.01.52.04A4 4 0 0113 10.5z" fill="white"/></svg>,
+    },
+    {
+      key: 'snowflake', name: 'Snowflake', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu data warehouse de Snowflake directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#29B5E8"/><path d="M16 5v22M6 10.5l10 5.5-10 5.5M26 10.5l-10 5.5 10 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+    },
+    {
+      key: 'stripe', name: 'Stripe', authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de pagos, clientes y suscripciones de Stripe.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#635BFF"/><path d="M18.5 14.5c0-.8.7-1.1 1.8-1.1 1.6 0 3.6.5 5.2 1.4v-5c-1.7-.7-3.5-1-5.2-1-4.3 0-7.2 2.2-7.2 5.9 0 5.7 7.9 4.8 7.9 7.3 0 1-.8 1.3-2 1.3-1.7 0-3.9-.7-5.6-1.7v5.1c1.9.8 3.8 1.1 5.6 1.1 4.4 0 7.4-2.2 7.4-5.9-.1-6.2-7.9-5.1-7.9-7.4z" fill="white"/></svg>,
+    },
+    {
+      key: 'zendesk', name: 'Zendesk', authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu cuenta de Zendesk para sincronizar tickets, usuarios y organizaciones.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#03363D"/><path d="M15 9a6 6 0 010 12H9L15 9z" fill="#03363D" stroke="white" strokeWidth="1.5"/><path d="M17 23a6 6 0 010-12h6L17 23z" fill="white"/></svg>,
+    },
+  ];
+
+  const filteredSources = sources.filter(s =>
+    pickerSearch === '' || s.name.toLowerCase().includes(pickerSearch.toLowerCase())
+  );
+
+  const currentSource = sources.find(s => s.key === selectedSource);
+
+  // ── Source config view ─────────────────────────────────────────────────────
+  if (view === 'config' && currentSource) {
+    const isOAuth = currentSource.authType === 'oauth';
+    const isDirect = currentSource.authType === 'direct';
+
+    return (
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-5 h-11 bg-white border-b border-[#e9eae6]">
+          <button onClick={() => { setView('picker'); setConfigStep(1); }} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <div className="flex items-center gap-2 flex-1">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M5 8c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3" strokeLinecap="round"/></svg>
+            <span className="text-[15px] font-bold text-[#1a1a1a]">Nueva fuente de datos</span>
+          </div>
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+          <button onClick={() => { setView('list'); setSelectedSource(null); setConfigStep(1); }} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#646462] hover:bg-[#f3f3f1]">
+            Cancelar
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto bg-white">
+          <div className="max-w-2xl px-8">
+            {/* Source header */}
+            <div className="flex items-center gap-3 pt-6 pb-4">
+              {currentSource.logo}
+              <div>
+                <h2 className="text-[18px] font-bold text-[#1a1a1a]">Vincular tu fuente de datos</h2>
+                <p className="text-[13px] text-[#646462]">{currentSource.syncDesc}</p>
+              </div>
+            </div>
+
+            {/* Info banner */}
+            <div className="mb-5 flex items-center gap-2.5 bg-[#f3f4f6] border border-[#e5e7eb] rounded-lg px-4 py-2.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#6b7280] flex-shrink-0"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              <p className="text-[12px] text-[#374151] flex-1">
+                Sincroniza todos tus datos históricos desde cualquier nueva fuente gratis durante los primeros 7 días (límite de 100M filas para el plan gratuito)
+              </p>
+              <button className="flex-shrink-0 h-6 px-2.5 border border-[#e8572a] text-[#e8572a] text-[11px] font-semibold rounded hover:bg-[#fff5f2] bg-white">
+                Saber más
+              </button>
+            </div>
+
+            <div className="pb-8 space-y-5">
+              {/* Source-specific intro text */}
+              {isOAuth ? (
+                <div>
+                  <p className="text-[13px] text-[#1a1a1a]">
+                    Conecta tu{' '}
+                    <span className="text-[#3b59f6] underline cursor-pointer">espacio de trabajo de {currentSource.name}</span>
+                    {' '}para sincronizar {currentSource.key === 'github' ? 'issues, proyectos, equipos' : currentSource.key === 'linear' ? 'issues, proyectos, equipos' : 'datos'}, y más.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <p className="text-[13px] text-[#1a1a1a]">
+                    Introduce tu API key de {currentSource.name} para importar automáticamente tus datos al Data Warehouse de Clain.
+                  </p>
+                  <p className="text-[13px] text-[#1a1a1a]">
+                    Puedes generar una API key en los ajustes de tu espacio de trabajo de {currentSource.name}. Consulta{' '}
+                    <span className="text-[#e8572a] hover:underline cursor-pointer">esta guía ↗</span>
+                    {' '}para más detalles.
+                  </p>
+                  {currentSource.scopes && currentSource.scopes.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Permisos de API requeridos:</p>
+                      <ul className="space-y-0.5">
+                        {currentSource.scopes.map((scope, i) => (
+                          <li key={i} className="text-[12px] text-[#1a1a1a] flex items-start gap-1.5">
+                            <span className="text-[#646462] mt-0.5">•</span>
+                            <span><span className="font-mono text-[11px]">{scope.split(' - ')[0]}</span> - {scope.split(' - ')[1]}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <button className="mt-2 flex items-center gap-1 text-[12px] text-[#e8572a] font-semibold hover:underline">
+                        Ver documentación ↗
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Description */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">
+                  Descripción <span className="text-[#646462] font-normal">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder={isOAuth ? 'ej. Base de datos de producción' : `ej. 'Base de datos EU de producción' o 'Cuenta de facturación Stripe'`}
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"
+                />
+                <p className="text-[11px] text-[#646462] mt-1">Una descripción para identificar esta fuente.</p>
+              </div>
+
+              {/* OAuth: account connection OR API key: secret input */}
+              {isOAuth ? (
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">
+                    Cuenta de {currentSource.name}
+                  </label>
+                  <select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#646462] bg-white outline-none focus:border-[#3b59f6]">
+                    <option>Elegir conexión de {currentSource.name}</option>
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">API key</label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      defaultValue="••••••••••••••••"
+                      className="w-full h-9 px-3 pr-10 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"
+                    />
+                    <button
+                      onClick={() => setShowApiKey(s => !s)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#646462] hover:text-[#1a1a1a]"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5">
+                        {showApiKey
+                          ? <><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/><path d="M2 2l12 12" strokeLinecap="round"/></>
+                          : <><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></>
+                        }
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Table prefix */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">
+                  Prefijo de tabla <span className="text-[#646462] font-normal">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="internal"
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"
+                />
+                <p className="text-[13px] text-[#1a1a1a] mt-1.5">
+                  El nombre de la tabla tendrá el aspecto de:{' '}
+                  <span className="font-bold">{currentSource.key}_nombre_tabla</span>
+                </p>
+                <p className="text-[11px] text-[#646462] mt-0.5">
+                  Usa solo letras, números y guiones bajos. Debe comenzar con una letra o guión bajo.
+                </p>
+              </div>
+
+              {/* Back / Next */}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setView('picker')}
+                  className="h-9 px-5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]"
+                >
+                  Atrás
+                </button>
+                <button className="h-9 px-5 bg-[#e8572a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#c9451e]">
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Source picker view ─────────────────────────────────────────────────────
+
+  if (view === 'picker') {
+    return (
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-5 h-11 bg-white border-b border-[#e9eae6]">
+          <button onClick={() => setView('list')} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <div className="flex items-center gap-2 flex-1">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M5 8c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3" strokeLinecap="round"/></svg>
+            <span className="text-[15px] font-bold text-[#1a1a1a]">Nueva fuente</span>
+          </div>
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+        </div>
+
+        {/* Search bar */}
+        <div className="flex-shrink-0 flex items-center gap-4 px-5 py-3 bg-white border-b border-[#e9eae6]">
+          <div className="relative flex-1 max-w-xs">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+            <input
+              type="text"
+              placeholder="Buscar..."
+              value={pickerSearch}
+              onChange={e => setPickerSearch(e.target.value)}
+              className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+            />
+          </div>
+          <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">¿No encuentras lo que buscas?</button>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto bg-white">
+          {/* Table header */}
+          <div className="flex items-center px-5 h-9 border-b border-[#e9eae6] text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+            <div className="flex items-center gap-1 flex-1">
+              Nombre
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+            </div>
+          </div>
+
+          {filteredSources.map((src, idx) => (
+            <div
+              key={src.key}
+              className={`flex items-center gap-4 px-5 py-3.5 hover:bg-[#fafafa] ${idx < filteredSources.length - 1 ? 'border-b border-[#f3f3f1]' : ''}`}
+            >
+              {src.logo}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[14px] font-semibold text-[#1a1a1a]">{src.name}</span>
+                  {src.badge && (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${src.badge === 'Beta' ? 'text-[#7856FF] border-[#c4b5fd]' : 'text-[#d97706] border-[#fcd34d]'}`}>
+                      {src.badge}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[12px] text-[#646462]">{src.desc}{' '}
+                  <span className="text-[#3b59f6] hover:underline cursor-pointer">Saber más</span>
+                </p>
+              </div>
+              <button
+                onClick={() => { setSelectedSource(src.key); setView('config'); }}
+                className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 border border-[#e8572a] rounded-lg text-[12px] font-semibold text-[#e8572a] hover:bg-[#fff5f2]"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Crear
+              </button>
+            </div>
+          ))}
+
+          {filteredSources.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">No se encontraron fuentes</p>
+              <p className="text-[12px] text-[#646462] mt-1">Prueba con otro término de búsqueda</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sources list view (default) ────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-11 bg-white border-b border-[#e9eae6]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M5 8c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3" strokeLinecap="round"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Fuentes</span>
+        <button className="p-1 rounded text-[#646462] hover:text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><circle cx="5" cy="8" r="1"/><circle cx="11" cy="8" r="1"/></svg>
+        </button>
+        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+          Quick start
+        </button>
+        <button
+          onClick={() => setView('picker')}
+          className="flex items-center gap-1.5 h-7 px-3 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]"
+        >
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Nueva fuente
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto bg-[#fafaf9]">
+        <div className="max-w-4xl mx-auto p-5 space-y-6">
+          {/* Empty state hero */}
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            <div className="flex items-center gap-8 px-8 py-8">
+              <div className="flex-shrink-0">
+                {ClainMascot({ size: 110, variant: 'suit' })}
+              </div>
+              <div>
+                <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-2">Crea tu primera fuente de datos</h2>
+                <p className="text-[13px] text-[#646462] leading-relaxed mb-4">
+                  Usa fuentes de data warehouse para importar datos desde tus{' '}
+                  <span className="text-[#3b59f6] underline cursor-pointer">fuentes externas</span>{' '}
+                  a Clain.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setView('picker')}
+                    className="flex items-center gap-1.5 h-8 px-4 bg-[#e8572a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#c9451e]"
+                  >
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                    Nueva fuente
+                  </button>
+                  <button className="flex items-center gap-1.5 h-8 px-4 border border-[#e9eae6] text-[#1a1a1a] text-[13px] font-semibold rounded-lg hover:bg-[#f3f3f1]">
+                    Saber más
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Managed sources */}
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            <div className="px-5 pt-5 pb-3">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-0.5">Fuentes gestionadas de data warehouse</h3>
+              <p className="text-[12px] text-[#646462] leading-relaxed">
+                Clain puede conectarse a fuentes externas e importar datos automáticamente<br/>al data warehouse de Clain
+              </p>
+            </div>
+            <div className="px-5 pb-3">
+              <div className="relative max-w-xs">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+                <input type="text" placeholder="Buscar..." className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-t border-[#e9eae6]">
+                  {['Fuente', 'Prefijo de tabla', 'Última ejecución exitosa', 'Total filas sincronizadas', 'Estado'].map((col, i) => (
+                    <th key={col} className={`text-left px-5 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6] ${i > 1 ? 'relative' : ''}`}>
+                      <span className="flex items-center gap-1">
+                        {col}
+                        {(col === 'Última ejecución exitosa' || col === 'Total filas sincronizadas') && (
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+                        )}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center">
+                    <p className="text-[13px] text-[#646462] mb-3">Sin fuentes gestionadas</p>
+                    <button
+                      onClick={() => setView('picker')}
+                      className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] mx-auto"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                      Nueva fuente
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            {/* 7-day banner */}
+            <div className="border-t border-[#e9eae6] px-5 py-3 flex items-center gap-2.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              <p className="text-[12px] text-[#646462] flex-1">
+                Sincroniza todos tus datos históricos desde cualquier nueva fuente gratis durante los primeros 7 días (límite de 100M filas para el plan gratuito)
+              </p>
+              <button className="flex-shrink-0 h-6 px-2.5 bg-[#e8572a] text-white text-[11px] font-semibold rounded hover:bg-[#c9451e]">
+                Saber más
+              </button>
+            </div>
+          </div>
+
+          {/* Self-managed sources */}
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            <div className="px-5 pt-5 pb-3">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-0.5">Fuentes de data warehouse autogestionadas</h3>
+              <p className="text-[12px] text-[#646462]">
+                Conecta tus propias fuentes de datos,{' '}
+                <span className="text-[#3b59f6] underline cursor-pointer">haciéndolas consultables en Clain</span>
+              </p>
+            </div>
+            <div className="px-5 pb-3">
+              <div className="relative max-w-xs">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+                <input type="text" placeholder="Buscar..." className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-t border-[#e9eae6]">
+                  <th className="text-left px-5 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">Fuente</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="px-5 py-4">
+                    <span className="text-[13px] text-[#646462]">Sin entradas</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // "En desarrollo" placeholder for non-home views
 function WADevContent({ title }: { title: string }) {
   return (
@@ -26863,9 +29137,4504 @@ function WADevContent({ title }: { title: string }) {
   );
 }
 
+// ── WADataActionsView ──────────────────────────────────────────────────────────
+function WADataActionsView() {
+  type ActionsView = 'list' | 'new';
+  type MatchTab = 'pageview' | 'autocapture' | 'screen' | 'other';
+  type MatchMode = 'exact' | 'regex' | 'contains';
+  const [view, setView] = useState<ActionsView>('list');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [matchTab, setMatchTab] = useState<MatchTab>('pageview');
+  const [urlMode, setUrlMode] = useState<MatchMode>('contains');
+  const [elTextMode, setElTextMode] = useState<MatchMode>('exact');
+  const [elLinkMode, setElLinkMode] = useState<MatchMode>('contains');
+  const [htmlMode, setHtmlMode] = useState<MatchMode>('contains');
+  const [pageUrlMode, setPageUrlMode] = useState<MatchMode>('contains');
+  const [screenMode, setScreenMode] = useState<MatchMode>('contains');
+  const [actionName, setActionName] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [matchGroupsOpen, setMatchGroupsOpen] = useState(true);
+  const [matchingEventsOpen, setMatchingEventsOpen] = useState(true);
+
+  function ModeBtn({ mode, current, set }: { mode: MatchMode; current: MatchMode; set: (m: MatchMode) => void }) {
+    const label = mode === 'exact' ? 'coincide exactamente' : mode === 'regex' ? 'coincide con regex' : 'contiene';
+    const active = mode === current;
+    return (
+      <button
+        onClick={() => set(mode)}
+        className={`h-6 px-2 text-[11px] rounded border transition-colors ${active ? 'border-[#e8572a] text-[#e8572a] font-semibold bg-white' : 'border-[#e9eae6] text-[#646462] bg-white hover:border-[#1a1a1a]'}`}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  function MatchField({ label, desc, mode, setMode, placeholder }: { label: string; desc?: string; mode: MatchMode; setMode: (m: MatchMode) => void; placeholder?: string }) {
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-[#1a1a1a]">{label}</span>
+          <div className="flex items-center gap-0.5">
+            {ModeBtn({ mode: 'exact', current: mode, set: setMode })}
+            {ModeBtn({ mode: 'regex', current: mode, set: setMode })}
+            {ModeBtn({ mode: 'contains', current: mode, set: setMode })}
+          </div>
+        </div>
+        {desc && <p className="text-[12px] text-[#646462]">{desc}</p>}
+        <input type="text" placeholder={placeholder ?? 'Especifica un valor para coincidir'} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]" />
+      </div>
+    );
+  }
+
+  function AndBadge() {
+    return (
+      <div className="flex items-center justify-center py-1">
+        <span className="text-[10px] font-bold text-[#e8572a] border border-[#e8572a] rounded px-1.5 py-0.5">Y</span>
+      </div>
+    );
+  }
+
+  // ── New action view ──────────────────────────────────────────────────────────
+  if (view === 'new') {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-white">
+        {/* Top bar */}
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 h-12 border-b border-[#e9eae6]">
+          <button onClick={() => setView('list')} className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><path d="M3 3h4v4H3zm6 0h4v4H9zm-6 6h4v4H3zm6 0h4v4H9z" opacity=".7"/><path d="M3.5 3.5l9 9" stroke="#1a1a1a" strokeWidth="1" fill="none"/></svg>
+          {editingName
+            ? <input
+                autoFocus
+                value={actionName}
+                onChange={e => setActionName(e.target.value)}
+                onBlur={() => setEditingName(false)}
+                className="flex-1 text-[15px] font-bold text-[#1a1a1a] border-b border-[#3b59f6] outline-none bg-transparent"
+                placeholder="Introducir nombre"
+              />
+            : <button onClick={() => setEditingName(true)} className="flex-1 flex items-center gap-2 group text-left">
+                <span className="text-[15px] font-bold text-[#646462]">{actionName || 'Introducir nombre'}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] opacity-0 group-hover:opacity-100 transition-opacity"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+              </button>
+          }
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+              Quick start
+            </button>
+            <button onClick={() => setView('list')} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#646462] hover:bg-[#f3f3f1]">Cancelar</button>
+            <button className="h-7 px-4 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]">Guardar</button>
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto bg-[#f3f3f1]">
+          {/* Match groups section */}
+          <div className="bg-white border-b border-[#e9eae6]">
+            <button
+              onClick={() => setMatchGroupsOpen(o => !o)}
+              className="flex items-center gap-2 w-full px-5 pt-4 pb-2 text-left"
+            >
+              <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${matchGroupsOpen ? 'rotate-180' : ''}`}><path d="M3 5l5 5 5-5"/></svg>
+              <span className="text-[14px] font-semibold text-[#1a1a1a]">Grupos de coincidencia</span>
+            </button>
+            {matchGroupsOpen && (
+              <div className="px-5 pb-5">
+                <p className="text-[12px] text-[#646462] mb-4">
+                  Tu acción se activará siempre que se reciba <strong>cualquiera de tus grupos de coincidencia</strong>.
+                </p>
+                <div className="flex gap-3">
+                  {/* Match Group #1 card */}
+                  <div className="flex-1 bg-white border border-[#e9eae6] rounded-xl p-4 space-y-4">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Grupo de coincidencia #1</p>
+
+                    {/* Tab bar */}
+                    <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
+                      {(['pageview','autocapture','screen','other'] as MatchTab[]).map((t, i) => {
+                        const labels = ['Vista de página','Autocaptura','Pantalla','Otros eventos'];
+                        return (
+                          <button
+                            key={t}
+                            onClick={() => setMatchTab(t)}
+                            className={`flex-1 h-8 text-[12px] font-medium transition-colors ${i > 0 ? 'border-l border-[#e9eae6]' : ''} ${matchTab === t ? 'border border-[#e8572a] text-[#e8572a] bg-white rounded-lg -m-px' : 'text-[#646462] hover:bg-[#f3f3f1]'}`}
+                          >
+                            {labels[i]}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Tab content */}
+                    {matchTab === 'pageview' && (
+                      <div className="space-y-4">
+                        {MatchField({ label: 'URL', mode: urlMode, setMode: setUrlMode })}
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                            Filtro
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {matchTab === 'autocapture' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 5h6M5 8h4"/></svg>
+                            Seleccionar elemento en el sitio
+                          </button>
+                          <button className="text-[12px] text-[#e8572a] hover:underline">Ver documentación. ↗</button>
+                        </div>
+                        {MatchField({ label: 'Texto del elemento', mode: elTextMode, setMode: setElTextMode })}
+                        {AndBadge()}
+                        {MatchField({ label: 'Destino del enlace del elemento', desc: 'Filtrando por el atributo href. Solo se coincidirán elementos <a/>.',  mode: elLinkMode, setMode: setElLinkMode })}
+                        {AndBadge()}
+                        {MatchField({ label: 'El elemento coincide con el selector HTML', desc: 'El selector puede ser un nombre de etiqueta, clase, atributo HTML o una combinación. Ejemplo: button[data-attr="signup"]. Aprende más en los Docs.', mode: htmlMode, setMode: setHtmlMode })}
+                        {AndBadge()}
+                        {MatchField({ label: 'URL de página', desc: 'La página en la que ocurrió la interacción.', mode: pageUrlMode, setMode: setPageUrlMode })}
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                            Filtro
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {matchTab === 'screen' && (
+                      <div className="space-y-4">
+                        {MatchField({ label: 'Nombre de pantalla', mode: screenMode, setMode: setScreenMode, placeholder: 'ej. HomeScreen, Settings' })}
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                            Filtro
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {matchTab === 'other' && (
+                      <div className="space-y-4">
+                        {MatchField({ label: 'Nombre del evento', mode: urlMode, setMode: setUrlMode, placeholder: 'ej. user_signed_up' })}
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                            Filtro
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right panel */}
+                  <div className="w-56 flex-shrink-0 flex items-start justify-center pt-8">
+                    <button className="flex items-center gap-1.5 text-[13px] text-[#1a1a1a] font-semibold hover:text-[#3b59f6]">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                      Agregar grupo de coincidencia
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Matching events section */}
+          <div className="bg-white mt-2">
+            <button
+              onClick={() => setMatchingEventsOpen(o => !o)}
+              className="flex items-center gap-2 w-full px-5 pt-4 pb-2 text-left"
+            >
+              <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${matchingEventsOpen ? 'rotate-180' : ''}`}><path d="M3 5l5 5 5-5"/></svg>
+              <div>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">Eventos coincidentes</p>
+                <p className="text-[12px] text-[#646462]">Eventos recientes que coinciden con esta acción.</p>
+              </div>
+            </button>
+            {matchingEventsOpen && (
+              <div className="px-5 pb-5 space-y-3">
+                {/* Controls */}
+                <div className="flex items-center justify-between">
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="1.5" y="1.5" width="13" height="13" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
+                    Últimas 24 horas
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[12px] text-[#646462]">Filtrar usuarios internos y de prueba</span>
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5A5.5 5.5 0 118 2.5a5.5 5.5 0 010 11zM7 7h2v4H7zm0-2.5h2v1.8H7z"/></svg>
+                    <div className="w-8 h-4 bg-[#e9eae6] rounded-full relative cursor-pointer">
+                      <div className="w-3 h-3 bg-white rounded-full absolute top-0.5 left-0.5 shadow-sm"/>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M3 8l5-5 5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Recargar
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M1 4h14M4 4V2.5M8 4V2.5M12 4V2.5M1 8h14M4 8v5M8 8v5M12 8v5"/></svg>
+                      Configurar columnas
+                    </button>
+                    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M4 9l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Exportar
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                    </button>
+                    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
+                      Abrir como nuevo insight
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                    </button>
+                  </div>
+                </div>
+                {/* Table */}
+                <div className="border border-[#e9eae6] rounded-lg overflow-hidden">
+                  <table className="w-full text-[12px]">
+                    <thead className="bg-[#fafaf9]">
+                      <tr className="border-b border-[#e9eae6]">
+                        {['EVENTO', 'PERSONA', 'URL / PANTALLA', 'LIBRERÍA', 'HORA'].map(col => (
+                          <th key={col} className="px-4 py-2.5 text-left font-semibold text-[#646462] text-[11px] tracking-wide">
+                            {col} <span className="text-[#c0c0bb]">···</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center">
+                          <div className="flex flex-col items-center gap-2">
+                            <svg viewBox="0 0 40 40" className="w-10 h-10 fill-[#c0c0bb]"><rect x="5" y="3" width="30" height="34" rx="3" fill="none" stroke="#c0c0bb" strokeWidth="2"/><path d="M10 12h20M10 17h15M10 22h10" stroke="#c0c0bb" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay eventos coincidentes para esta consulta</p>
+                            <p className="text-[12px] text-[#646462]">Intenta cambiar el rango de fechas o elige otra acción, evento o desglose.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── List view ────────────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white relative">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><path d="M3 3h4v4H3zm6 0h4v4H9zm-6 6h4v4H3zm6 0h4v4H9z" opacity=".6"/><path d="M2 2l12 12" stroke="#1a1a1a" strokeWidth="1.2" fill="none"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Acciones</span>
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] cursor-pointer hover:fill-[#1a1a1a]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+        <div className="flex items-center gap-1.5 ml-2">
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+          <div className="relative">
+            <div className="flex">
+              <button
+                onClick={() => setView('new')}
+                className="flex items-center gap-1.5 h-7 px-3 bg-[#e8572a] text-white text-[12px] font-semibold rounded-l-lg hover:bg-[#c9451e]"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Nueva acción
+              </button>
+              <button
+                onClick={() => setShowDropdown(d => !d)}
+                className="h-7 px-2 bg-[#e8572a] text-white rounded-r-lg hover:bg-[#c9451e] border-l border-[#c9451e]"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+            </div>
+            {showDropdown && (
+              <div className="absolute right-0 top-9 bg-white border border-[#e9eae6] rounded-xl shadow-lg w-72 z-50 overflow-hidden">
+                <button
+                  onClick={() => { setView('new'); setMatchTab('pageview'); setShowDropdown(false); }}
+                  className="w-full flex items-start gap-3 px-4 py-3 hover:bg-[#fafaf9] text-left"
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Desde evento o vista de página</p>
+                    <p className="text-[12px] text-[#646462]">Coincide con eventos por nombre, patrones de URL o propiedades personalizadas. <span className="text-[#e8572a]">Saber más ↗</span></p>
+                  </div>
+                </button>
+                <div className="border-t border-[#f3f3f1]"/>
+                <button
+                  onClick={() => { setView('new'); setMatchTab('autocapture'); setShowDropdown(false); }}
+                  className="w-full flex items-start gap-3 px-4 py-3 hover:bg-[#fafaf9] text-left"
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0 mt-0.5" strokeWidth="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.5 1.5M11 11l1.5 1.5M3.5 12.5L5 11M11 5l1.5-1.5"/></svg>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Inspeccionar elemento en el sitio</p>
+                    <p className="text-[12px] text-[#646462]">Usa la barra de herramientas para seleccionar visualmente elementos en tu sitio. <span className="text-[#e8572a]">Saber más ↗</span></p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Subtitle */}
+      <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6]">
+        <p className="text-[13px] text-[#646462]">Combina varios eventos relacionados en uno, que luego puedes analizar en insights y dashboards como si fuera un único evento.</p>
+      </div>
+
+      {/* Empty state */}
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex items-start gap-8 max-w-xl">
+          {ClainMascot({ size: 120, variant: 'suit' })}
+          <div className="flex flex-col gap-3 pt-4">
+            <h2 className="text-[20px] font-bold text-[#1a1a1a]">Crea tu primera acción</h2>
+            <p className="text-[13px] text-[#646462] leading-[20px]">
+              Usa acciones para combinar eventos que quieres rastrear juntos o para facilitar la reutilización de eventos de Autocaptura detallados.
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex">
+                <button
+                  onClick={() => setView('new')}
+                  className="flex items-center gap-1.5 h-8 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-l-lg hover:bg-[#fff5f2]"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Nueva acción
+                </button>
+                <button
+                  onClick={() => setShowDropdown(d => !d)}
+                  className="h-8 px-2 border border-l-0 border-[#e8572a] text-[#e8572a] rounded-r-lg hover:bg-[#fff5f2]"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                </button>
+              </div>
+              <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
+                Saber más
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4h2v2M10 6l3-3M7 4H4v8h8v-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Click outside to close dropdown */}
+      {showDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)}/>}
+    </div>
+  );
+}
+
+// ── WADataEventDefsView ────────────────────────────────────────────────────────
+function WADataEventDefsView() {
+  const [showModal, setShowModal] = useState(false);
+  const [eventName, setEventName] = useState('');
+  const [eventDesc, setEventDesc] = useState('');
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white relative">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
+        <svg viewBox="0 0 20 20" className="w-5 h-5 fill-[#1a1a1a] flex-shrink-0"><path d="M3 5h4v4H3zm6 0h4v4H9zm-6 6h4v4H3zm6 0h4v4H9z" opacity=".7"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Definiciones de eventos</span>
+        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+          Quick start
+        </button>
+      </div>
+
+      {/* Info banner */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 border-b border-[#e9eae6] bg-white">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+        <p className="text-[13px] text-[#646462]">
+          ¿Buscas estadísticas de uso de eventos?{' '}
+          <span className="text-[#e8572a] font-semibold cursor-pointer hover:underline">Consultar con SQL</span>
+        </p>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6]">
+        <div className="relative flex-1 max-w-xs">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input type="text" placeholder="Buscar eventos" className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+        </div>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-[12px] text-[#646462]">Etiquetas:</span>
+          <button className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            Cualquier etiqueta
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+          </button>
+          <span className="text-[12px] text-[#646462]">Tipo:</span>
+          <button className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            Todos los eventos
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 h-7 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Crear evento
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-white">
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  Nombre
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  Última vez visto
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Etiquetas</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-[#e9eae6]">
+              <td colSpan={3} className="px-5 py-4 text-[13px] text-[#e8572a] hover:underline cursor-pointer">
+                Sin definiciones de eventos
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Create event modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-2xl shadow-2xl w-[560px] overflow-hidden">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+              <div>
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Crear evento</h2>
+                <p className="text-[12px] text-[#646462] mt-0.5">Crea una definición de evento antes de que se capturen eventos. La primera y última vez visto se establecerán cuando se ingeste el primer evento.</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+
+            <div className="px-6 pt-4 pb-6 space-y-4">
+              {/* Note banner */}
+              <div className="flex items-start gap-2.5 border border-[#e9eae6] rounded-lg px-4 py-3 bg-[#fafaf9]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+                <p className="text-[12px] text-[#1a1a1a]">
+                  <strong>Nota:</strong> Los nombres de eventos no se pueden cambiar después de la creación. Elige tu nombre con cuidado.
+                </p>
+              </div>
+
+              {/* Event name */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">Nombre del evento</label>
+                <input
+                  type="text"
+                  value={eventName}
+                  onChange={e => setEventName(e.target.value)}
+                  placeholder="ej., user_signed_up"
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">
+                  Descripción <span className="font-normal text-[#646462]">(opcional)</span>
+                </label>
+                <textarea
+                  value={eventDesc}
+                  onChange={e => setEventDesc(e.target.value)}
+                  placeholder="¿Qué representa este evento?"
+                  rows={4}
+                  className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] resize-none"
+                />
+              </div>
+
+              {/* Owner + Tags */}
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">
+                    Propietario <span className="font-normal text-[#646462]">(opcional)</span>
+                  </label>
+                  <select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#646462] bg-white outline-none focus:border-[#3b59f6]">
+                    <option>Cualquier usuario</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">
+                    Etiquetas <span className="font-normal text-[#646462]">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Añadir etiquetas..."
+                    className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                  />
+                </div>
+              </div>
+
+              {/* Divider + buttons */}
+              <div className="border-t border-[#e9eae6] pt-4 flex justify-end gap-2">
+                <button onClick={() => setShowModal(false)} className="h-9 px-5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
+                <button className="h-9 px-5 border border-[#e8572a] text-[#e8572a] text-[13px] font-semibold rounded-lg hover:bg-[#fff5f2]">Crear evento</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── WADataPropDefsView ─────────────────────────────────────────────────────────
+function WADataPropDefsView() {
+  type PropType = 'BOOLEAN' | 'STRING' | 'NUMERIC' | 'DATETIME';
+  const props: { name: string; desc: string; type: PropType }[] = [
+    { name: 'Is bot',           desc: 'Whether the event was generated by a bot, crawler, or automation tool.',                                                   type: 'BOOLEAN' },
+    { name: 'Traffic type',     desc: 'Classification of traffic: Regular, Bot, AI Agent, or Automation.',                                                        type: 'STRING'  },
+    { name: 'Traffic category', desc: 'Detailed traffic category: ai_crawler, ai_search, ai_assistant, search_crawler, seo_crawler, etc.',                        type: 'STRING'  },
+    { name: 'Bot name',         desc: 'Name of the detected bot or crawler.',                                                                                      type: 'STRING'  },
+    { name: 'Bot operator',     desc: 'Company or organization operating the bot.',                                                                               type: 'STRING'  },
+    { name: 'Session duration', desc: 'Total duration of the session in seconds.',                                                                                 type: 'NUMERIC' },
+    { name: 'Page title',       desc: 'The title of the page where the event occurred.',                                                                           type: 'STRING'  },
+    { name: 'Referring domain', desc: 'The domain that referred the user to this page.',                                                                           type: 'STRING'  },
+  ];
+
+  const typeColors: Record<PropType, string> = {
+    BOOLEAN:  'text-[#16a34a] border-[#86efac]',
+    STRING:   'text-[#16a34a] border-[#86efac]',
+    NUMERIC:  'text-[#2563eb] border-[#93c5fd]',
+    DATETIME: 'text-[#d97706] border-[#fcd34d]',
+  };
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
+        <svg viewBox="0 0 20 20" className="w-5 h-5 fill-[#1a1a1a] flex-shrink-0"><path d="M3 5h4v4H3zm6 0h4v4H9zm-6 6h4v4H3zm6 0h4v4H9z" opacity=".7"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Definiciones de propiedades</span>
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] cursor-pointer hover:fill-[#1a1a1a]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] ml-2">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+          Quick start
+        </button>
+      </div>
+
+      {/* Subtitle */}
+      <div className="flex-shrink-0 px-5 py-2.5 border-b border-[#e9eae6]">
+        <p className="text-[13px] text-[#646462]">Las propiedades son campos adicionales que puedes configurar para enviarlos junto con una captura de eventos.</p>
+      </div>
+
+      {/* Info banner */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 border-b border-[#e9eae6]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+        <p className="text-[13px] text-[#646462]">
+          ¿Buscas estadísticas de uso de propiedades?{' '}
+          <span className="text-[#e8572a] font-semibold cursor-pointer hover:underline">Consultar con SQL</span>
+        </p>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-5 py-2.5 border-b border-[#e9eae6]">
+        <div className="relative">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input type="text" placeholder="Buscar propiedades" className="w-52 h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+        </div>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <button className="flex items-center gap-1 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            Propiedades de eventos
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+          </button>
+          <span className="text-[12px] text-[#646462]">Estado:</span>
+          <button className="flex items-center gap-1 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            Todos
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-white sticky top-0">
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  Nombre
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-36">Tipo</th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-28">Etiquetas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.map((p, i) => (
+              <tr key={i} className="border-b border-[#e9eae6] hover:bg-[#fafaf9] cursor-pointer">
+                <td className="px-5 py-3">
+                  <div className="flex items-start gap-3">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><path d="M2 4h12v1.5H2zm0 3h12v1.5H2zm0 3h8v1.5H2z"/></svg>
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#1a1a1a]">{p.name}</p>
+                      <p className="text-[12px] text-[#646462] mt-0.5 leading-[18px]">{p.desc}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-5 py-3">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${typeColors[p.type]}`}>{p.type}</span>
+                </td>
+                <td className="px-5 py-3 text-[13px] text-[#646462]">—</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── WADataRevenueDefsView ──────────────────────────────────────────────────────
+function WADataRevenueDefsView() {
+  const [filterInternal, setFilterInternal] = useState(false);
+  const [revenueTab, setRevenueTab] = useState<'dwh' | 'events'>('events');
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-[#fafaf9] overflow-y-auto">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 bg-white border-b border-[#e9eae6] sticky top-0 z-10">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M8 2l1 3H4L8 2zM4 5l4 9 4-9H4z" strokeLinejoin="round"/><circle cx="8" cy="8" r="2"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Revenue Analytics</span>
+        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+          Quick start
+        </button>
+      </div>
+
+      <div className="px-5 py-4 space-y-0">
+        {/* Subtitle */}
+        <p className="text-[13px] text-[#646462] pb-5 border-b border-[#e9eae6]">
+          Rastrea y analiza tus métricas de ingresos para entender el rendimiento y crecimiento de tu negocio.
+        </p>
+
+        {/* Base currency */}
+        <div className="py-5 border-b border-[#e9eae6] space-y-2.5">
+          <h3 className="text-[14px] font-bold text-[#1a1a1a]">Moneda base</h3>
+          <p className="text-[13px] text-[#646462] leading-[20px]">
+            Clain convertirá todos los valores de moneda del equipo a esta moneda antes de mostrártelos. Si no podemos detectar correctamente tu moneda, asumiremos que está en esta moneda también.
+          </p>
+          <button className="flex items-center gap-2 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f3f3f1]">
+            <span>🇺🇸</span>
+            Dólar estadounidense (USD)
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+          </button>
+        </div>
+
+        {/* Filter internal users */}
+        <div className="py-5 border-b border-[#e9eae6] space-y-2.5">
+          <h3 className="text-[14px] font-bold text-[#1a1a1a]">Filtrar usuarios internos y de prueba de revenue analytics</h3>
+          <p className="text-[13px] text-[#646462] leading-[20px]">
+            Cuando está activado, los eventos de cuentas de prueba se excluirán de Revenue Analytics. Puedes configurar estas cuentas de prueba{' '}
+            <span className="text-[#e8572a] cursor-pointer hover:underline">aquí</span>.
+          </p>
+          <div className="flex items-center gap-2.5">
+            <span className="text-[13px] text-[#1a1a1a]">Filtrar usuarios internos y de prueba</span>
+            <button
+              onClick={() => setFilterInternal(f => !f)}
+              className={`w-9 h-5 rounded-full relative transition-colors ${filterInternal ? 'bg-[#3b59f6]' : 'bg-[#e9eae6]'}`}
+            >
+              <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm ${filterInternal ? 'translate-x-4' : 'translate-x-0.5'}`}/>
+            </button>
+          </div>
+        </div>
+
+        {/* Goals */}
+        <div className="py-5 border-b border-[#e9eae6] space-y-3">
+          <h3 className="text-[14px] font-bold text-[#1a1a1a]">Objetivos</h3>
+          <p className="text-[13px] text-[#646462] leading-[20px]">
+            Establece objetivos de ingresos para fechas específicas para rastrear tu progreso. Puedes rastrear objetivos basados en tus objetivos mensuales/trimestrales/anuales. ¡Se pueden mostrar en tus gráficos de MRR/ARR o ingresos brutos en el panel de revenue analytics!
+          </p>
+          <div className="flex justify-end">
+            <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Agregar objetivo
+            </button>
+          </div>
+          <table className="w-full text-[12px] border border-[#e9eae6] rounded-lg overflow-hidden">
+            <thead className="bg-[#fafaf9]">
+              <tr className="border-b border-[#e9eae6]">
+                {['Nombre del objetivo', 'Fecha límite', 'Importe objetivo (USD)', 'MRR o ingresos brutos'].map((h, i) => (
+                  <th key={i} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                    <span className="flex items-center gap-1">{h}{i > 0 && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colSpan={4} className="px-4 py-3 text-[13px] text-[#646462]">No hay objetivos configurados aún</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Empty state — first revenue source */}
+        <div className="py-5 border-b border-[#e9eae6]">
+          <div className="border border-[#e9eae6] rounded-xl bg-white p-6 flex items-center gap-10">
+            {ClainMascot({ size: 100, variant: 'suit' })}
+            <div className="space-y-3">
+              <h3 className="text-[18px] font-bold text-[#1a1a1a]">Crea tu primera fuente de ingresos</h3>
+              <p className="text-[13px] text-[#e8572a] leading-[20px]">
+                Rastrea y analiza tus métricas de ingresos para entender el rendimiento y crecimiento de tu negocio.
+              </p>
+              <div className="space-y-2">
+                <button className="w-64 flex items-center justify-center gap-2 h-9 border border-[#e8572a] text-[#e8572a] text-[13px] font-semibold rounded-lg hover:bg-[#fff5f2]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Añadir evento de ingresos
+                </button>
+                <button className="w-64 flex items-center justify-center gap-2 h-9 border border-[#e8572a] text-[#e8572a] text-[13px] font-semibold rounded-lg hover:bg-[#fff5f2]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Importar datos de ingresos del data warehouse
+                </button>
+                <div>
+                  <p className="text-[12px] text-[#646462]">Solo Stripe está soportado actualmente.</p>
+                  <p className="text-[12px] text-[#e8572a] cursor-pointer hover:underline">Solicitar más integraciones de ingresos.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Data warehouse sources configuration */}
+        <div className="py-5 border-b border-[#e9eae6] space-y-3">
+          <h3 className="text-[14px] font-bold text-[#1a1a1a]">Configuración de fuentes del data warehouse</h3>
+          <p className="text-[13px] text-[#e8572a] leading-[20px]">
+            Clain puede mostrar datos de ingresos en Revenue Analytics desde las siguientes fuentes de data warehouse. Puedes activar/desactivar cada fuente para evitar que se use para datos de ingresos. También puedes configurar cómo unimos tus datos de ingresos con la tabla de personas de Clain — cuando esto está configurado, podremos mostrar correctamente los ingresos por persona a través de los campos virtuales persons.$virt_revenue y persons.$virt_mrr.
+          </p>
+          <div className="flex justify-end">
+            <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Agregar nueva fuente
+            </button>
+          </div>
+          <table className="w-full text-[12px] border border-[#e9eae6] rounded-lg overflow-hidden">
+            <thead className="bg-[#fafaf9]">
+              <tr className="border-b border-[#e9eae6]">
+                {['Fuente', 'Unión con personas', 'Unión con grupos', 'Incluir cargos sin factura'].map((h, i) => (
+                  <th key={i} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                    <span className="flex items-center gap-1">{h}{i > 0 && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colSpan={4} className="px-4 py-3 text-[13px] text-[#646462]">No hay fuentes de ingresos DWH configuradas aún</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Event Configuration */}
+        <div className="py-5 border-b border-[#e9eae6] space-y-3">
+          <h3 className="text-[14px] font-bold text-[#1a1a1a]">Configuración de eventos</h3>
+          <p className="text-[13px] text-[#e8572a] leading-[20px]">
+            Clain puede mostrar datos de ingresos en Revenue Analytics desde cualquier evento. Puedes configurar tantos eventos como quieras, y especificar la propiedad de ingresos y la moneda para cada evento individualmente.
+          </p>
+          <div className="flex justify-end">
+            <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Agregar evento de ingresos
+            </button>
+          </div>
+          <table className="w-full text-[12px] border border-[#e9eae6] rounded-lg overflow-hidden">
+            <thead className="bg-[#fafaf9]">
+              <tr className="border-b border-[#e9eae6]">
+                {['Nombre del evento', 'Propiedad de ingresos', 'Moneda', 'Propiedades adicionales'].map((h, i) => (
+                  <th key={i} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colSpan={4} className="px-4 py-3 text-[13px] text-[#646462]">No hay fuentes de eventos configuradas aún</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Revenue events tabs */}
+        <div className="py-5 space-y-4">
+          {/* Tabs */}
+          <div className="flex border-b border-[#e9eae6]">
+            {(['dwh', 'events'] as const).map(t => {
+              const labels = { dwh: 'Eventos de ingresos del Data Warehouse', events: 'Eventos de ingresos' };
+              return (
+                <button
+                  key={t}
+                  onClick={() => setRevenueTab(t)}
+                  className={`px-4 pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${revenueTab === t ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}
+                >
+                  {labels[t]}
+                </button>
+              );
+            })}
+          </div>
+
+          {revenueTab === 'events' && (
+            <div className="space-y-3">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Eventos de ingresos</h3>
+              <p className="text-[13px] text-[#e8572a] leading-[20px]">
+                Los siguientes eventos de ingresos están disponibles en tus datos. Esto es útil cuando intentas depurar cómo se ven tus eventos de ingresos.
+              </p>
+              <div className="flex items-center justify-between">
+                <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M3 8l5-5 5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Recargar
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M4 9l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Exportar
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                  </button>
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
+                    Abrir como nuevo insight
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div className="border border-[#e9eae6] rounded-lg overflow-hidden">
+                <table className="w-full text-[12px]">
+                  <thead className="bg-[#fafaf9]">
+                    <tr className="border-b border-[#e9eae6]">
+                      {['Evento', 'Importe ingestado', 'Importe procesado', 'Moneda ingestada', 'Importe', 'Moneda', 'Persona', 'Session_id', 'Hora'].map(h => (
+                        <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td colSpan={9} className="py-10 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <svg viewBox="0 0 40 40" className="w-10 h-10"><rect x="5" y="3" width="30" height="34" rx="3" fill="none" stroke="#c0c0bb" strokeWidth="2"/><path d="M10 12h20M10 17h15M10 22h10" stroke="#c0c0bb" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                          <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay eventos coincidentes para esta consulta</p>
+                          <p className="text-[12px] text-[#646462]">Intenta cambiar el rango de fechas o elige otra acción, evento o desglose.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {revenueTab === 'dwh' && (
+            <div className="space-y-3">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Eventos de ingresos del Data Warehouse</h3>
+              <p className="text-[13px] text-[#646462]">Los eventos de ingresos del data warehouse aparecerán aquí cuando configures fuentes DWH.</p>
+              <div className="border border-[#e9eae6] rounded-lg p-8 text-center bg-white">
+                <p className="text-[13px] text-[#646462]">No hay fuentes de ingresos DWH configuradas aún.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── WADataSqlVarsView ──────────────────────────────────────────────────────────
+function WADataSqlVarsView() {
+  type SqlVarsView = 'list' | 'new';
+  const [view, setView] = useState<SqlVarsView>('list');
+  const [search, setSearch] = useState('');
+  const [varName, setVarName] = useState('');
+  const [varType, setVarType] = useState('String');
+  const [varDefault, setVarDefault] = useState('');
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const types = ['String', 'Number', 'Boolean', 'List', 'Date'];
+
+  // ── New variable view ──────────────────────────────────────────────────────
+  if (view === 'new') {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[#f3f3f1]">
+        {/* Top bar */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-5 h-12 bg-[#f3f3f1] border-b border-[#e9eae6]">
+          <button onClick={() => setView('list')} className="p-1 rounded hover:bg-[#e9eae6] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
+          <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Nueva variable</span>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#e9eae6] bg-[#f3f3f1]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+              Quick start
+            </button>
+            <button onClick={() => setView('list')} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#646462] hover:bg-[#e9eae6] bg-[#f3f3f1]">
+              Descartar cambios
+            </button>
+            <button className="h-7 px-4 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]">Guardar</button>
+          </div>
+        </div>
+
+        {/* Form body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-sm space-y-5">
+            {/* Name */}
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a]">
+                Nombre
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              </label>
+              <input
+                type="text"
+                value={varName}
+                onChange={e => setVarName(e.target.value)}
+                placeholder="ej., Fecha de inicio"
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+              />
+            </div>
+
+            {/* Type */}
+            <div className="space-y-1.5 relative">
+              <label className="block text-[13px] font-semibold text-[#1a1a1a]">Tipo</label>
+              <button
+                onClick={() => setShowTypeDropdown(d => !d)}
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6] outline-none"
+              >
+                <span className="text-[#1a1a1a]">{varType}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+              {showTypeDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowTypeDropdown(false)}/>
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                    {types.map(t => (
+                      <button
+                        key={t}
+                        onClick={() => { setVarType(t); setShowTypeDropdown(false); }}
+                        className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${t === varType ? 'bg-[#f3f3f1] font-medium text-[#1a1a1a]' : 'text-[#1a1a1a]'}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Default value */}
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-semibold text-[#1a1a1a]">Valor por defecto</label>
+              <input
+                type="text"
+                value={varDefault}
+                onChange={e => setVarDefault(e.target.value)}
+                placeholder="Introduce el valor por defecto"
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── List view ──────────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Variables SQL</span>
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] cursor-pointer hover:fill-[#1a1a1a]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+        <div className="flex items-center gap-1.5 ml-2">
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+          <button
+            onClick={() => { setVarName(''); setVarType('String'); setVarDefault(''); setView('new'); }}
+            className="flex items-center gap-1.5 h-7 px-3 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Nueva variable
+          </button>
+        </div>
+      </div>
+
+      {/* Subtitle */}
+      <div className="flex-shrink-0 px-5 py-2.5 border-b border-[#e9eae6]">
+        <p className="text-[13px] text-[#646462]">
+          Crea variables reutilizables para tus consultas SQL. Usa variables para parametrizar tus consultas y hacerlas dinámicas.
+        </p>
+      </div>
+
+      {/* Search */}
+      <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6]">
+        <div className="relative w-56">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar variables..."
+            className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-white sticky top-0">
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  Nombre
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  Nombre en código
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-36">
+                <span className="flex items-center gap-1">
+                  Tipo
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-44">Valor por defecto</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-[#e9eae6]">
+              <td colSpan={4} className="px-5 py-4 text-[13px] text-[#646462]">
+                No hay variables aún.{' '}
+                <button
+                  onClick={() => { setVarName(''); setVarType('String'); setVarDefault(''); setView('new'); }}
+                  className="text-[#e8572a] hover:underline"
+                >
+                  Crea tu primera variable para empezar.
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+
+// ── WASettingsView ─────────────────────────────────────────────────────────────
+function WASettingsView() {
+  type SettingsPage = 'general' | 'customization' | 'autocapture' | 'ai' | 'mcp' |
+    'error-tracking' | 'experiments' | 'feature-flags' | 'heatmaps' | 'product-analytics' |
+    'revenue-analytics' | 'session-replay' | 'support' | 'surveys' | 'web-analytics' |
+    'privacy' | 'access-control' | 'activity-logs' | 'approvals' | 'discussions' |
+    'integrations' | 'danger-zone' | 'org-general' | 'org-members' | 'org-roles' |
+    'org-sso' | 'org-security' | 'org-oauth' | 'org-cimd' | 'org-proxy' | 'org-danger-zone' |
+    'account-profile' | 'account-notifications' | 'account-customization' | 'account-previews' | 'account-integrations' |
+    'account-connected-apps' | 'account-api-keys' | 'account-danger-zone';
+
+  const [page, setPage] = useState<SettingsPage>('general');
+  const [settingsSearch, setSettingsSearch] = useState('');
+  const [projectOpen, setProjectOpen] = useState(true);
+  const [aiOpen, setAiOpen] = useState(true);
+  const [productsOpen, setProductsOpen] = useState(true);
+  const [orgOpen, setOrgOpen] = useState(true);
+  const [accountOpen, setAccountOpen] = useState(true);
+
+  // State for General
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [sdkTab, setSdkTab] = useState<'html'|'js'>('html');
+  const [sdkPlatform, setSdkPlatform] = useState('Web');
+
+  // State for Customization
+  const [displayName, setDisplayName] = useState('Proyecto por defecto');
+  const [timezone, setTimezone] = useState('UTC (UTC+0:00)');
+  const [weekStart, setWeekStart] = useState('Domingo');
+  const [businessModel, setBusinessModel] = useState('No especificado');
+
+  // State for Autocapture
+  const [autocaptureWeb, setAutocaptureWeb] = useState(true);
+  const [webVitals, setWebVitals] = useState(false);
+  const [captureCLS, setCaptureCLS] = useState(true);
+  const [captureFCP, setCaptureFCP] = useState(true);
+  const [captureLCP, setCaptureLCP] = useState(true);
+  const [captureINP, setCaptureINP] = useState(true);
+  const [deadClicks, setDeadClicks] = useState(false);
+
+  function Toggle({ val, set }: { val: boolean; set: (v: boolean) => void }) {
+    return (
+      <button
+        onClick={() => set(!val)}
+        className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${val ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
+      >
+        <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm ${val ? 'translate-x-5' : 'translate-x-0.5'}`}/>
+      </button>
+    );
+  }
+
+  function SectionTitle({ title, link }: { title: string; link?: boolean }) {
+    return (
+      <div className="flex items-center gap-2 mb-1">
+        <h3 className="text-[14px] font-bold text-[#1a1a1a]">{title}</h3>
+        {link && (
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#1a1a1a]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+        )}
+      </div>
+    );
+  }
+
+  function InfoBanner() {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#e9eae6] bg-white flex-shrink-0">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+        <p className="text-[13px] text-[#646462]">
+          Estos ajustes solo aplican al proyecto actual (<strong>Proyecto por defecto</strong>).
+        </p>
+      </div>
+    );
+  }
+
+  function PlatformBadge({ label, check }: { label: string; check?: boolean }) {
+    return (
+      <span className="flex items-center gap-1 text-[11px] text-[#646462]">
+        {check
+          ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a]"><path d="M13 4L6 11 3 8"/></svg>
+          : <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#f59e0b]"><circle cx="8" cy="8" r="7"/><path d="M8 5v4M8 11v.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        }
+        {label}
+      </span>
+    );
+  }
+
+  // ── Sidebar NavItem ──────────────────────────────────────────────────────────
+  function SNavItem({ p, label, indent, red }: { p: SettingsPage; label: string; indent?: boolean; red?: boolean }) {
+    const active = page === p;
+    return (
+      <button
+        onClick={() => setPage(p)}
+        className={`w-full text-left px-3 py-1.5 rounded-lg text-[13px] transition-colors ${indent ? 'pl-5' : ''} ${active ? 'bg-[#eff2ff] text-[#3b59f6] font-medium' : red ? 'text-[#e8572a] hover:bg-[#fff5f2]' : 'text-[#646462] hover:bg-[#f3f3f1] hover:text-[#1a1a1a]'}`}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  function SGroup({ label, open, toggle, children }: { label: string; open: boolean; toggle: () => void; children: React.ReactNode }) {
+    return (
+      <div>
+        <button onClick={toggle} className="flex items-center justify-between w-full px-3 py-1.5 text-[12px] font-semibold text-[#1a1a1a] uppercase tracking-wide hover:bg-[#f3f3f1] rounded-lg">
+          {label}
+          <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${open ? '' : '-rotate-90'}`}><path d="M3 5l5 5 5-5"/></svg>
+        </button>
+        {open && <div className="mt-0.5 space-y-0.5">{children}</div>}
+      </div>
+    );
+  }
+
+  function DevPage({ title }: { title: string }) {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-8 flex items-center justify-center min-h-[300px]">
+          <div className="text-center space-y-2">
+            <p className="text-[16px] font-bold text-[#1a1a1a]">{title}</p>
+            <p className="text-[13px] text-[#646462]">Esta sección está en desarrollo.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Content pages ────────────────────────────────────────────────────────────
+  function GeneralPage() {
+    const token = 'cln_CSSyj2b29HPLUQNUinX5Ezc3QPpkCmQ2gvywjT2wJ5pF';
+    const codeHtml = `<script>
+  !function(t,e){var o,n,p,r;e.__SV||(window.clain=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a=u._i.push([i,[],a]),u.toString=function(t){var e="clain.";return void 0!==a&&(e+=a+"."),e},u.toString(1),o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.clain=window.clain||{});
+  clain.init('${token}', {
+    api_host: 'https://app.clainanalytics.com',
+    defaults: '2026-01-30',
+    person_profiles: 'identified_only', // o 'always' para crear perfiles de usuarios anónimos
+  })
+</script>`;
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Project token & ID */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Token e ID de proyecto</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4zM9 2.5L12.5 6H9V2.5z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-4">Tu token e ID de proyecto para conectar SDKs y APIs a este entorno.</p>
+
+            {/* Token card */}
+            <div className="border border-[#e9eae6] rounded-xl mb-3 overflow-hidden">
+              <div className="px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+                <p className="text-[12px] font-semibold text-[#646462]">Token del proyecto</p>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2.5">
+                <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] truncate">{token}</code>
+                <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                </button>
+                <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M3 8l5 5 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+            <p className="text-[12px] text-[#646462] mb-4">Clave de solo escritura para uso en <span className="text-[#e8572a] cursor-pointer hover:underline">librerías de cliente</span>. Segura para usar en apps públicas.</p>
+
+            {/* Project ID card */}
+            <div className="border border-[#e9eae6] rounded-xl mb-3 overflow-hidden">
+              <div className="px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+                <p className="text-[12px] font-semibold text-[#646462]">ID del proyecto</p>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2.5">
+                <code className="flex-1 text-[12px] font-mono text-[#1a1a1a]">1</code>
+                <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                </button>
+              </div>
+            </div>
+            <p className="text-[12px] text-[#646462]">Usa este ID en la <span className="text-[#e8572a] cursor-pointer hover:underline">API de Clain</span>.</p>
+          </div>
+
+          {/* SDK setup */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Configuración del SDK</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4zM9 2.5L12.5 6H9V2.5z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Instala Clain en tu app usando uno de nuestros SDKs. Selecciona tu plataforma para ver las instrucciones de configuración.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <button className="flex items-center gap-1 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] mb-3">
+              {sdkPlatform}
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+            </button>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Puedes añadir el snippet JavaScript directamente a tu HTML o instalar el SDK de JavaScript a través de tu gestor de paquetes.
+            </p>
+            {/* Tabs */}
+            <div className="flex border-b border-[#e9eae6] mb-0">
+              <button onClick={() => setSdkTab('html')} className={`px-4 pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${sdkTab === 'html' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>HTML snippet</button>
+              <button onClick={() => setSdkTab('js')} className={`px-4 pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${sdkTab === 'js' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>JavaScript SDK</button>
+            </div>
+            {sdkTab === 'html' && (
+              <div>
+                <p className="text-[12px] text-[#646462] my-3">
+                  Añade este snippet a tu web dentro de la etiqueta <code className="bg-[#f3f3f1] px-1 rounded text-[11px]">&lt;head&gt;</code>. También se puede usar en servicios como Google Tag Manager:
+                </p>
+                <div className="relative bg-[#1e1e2e] rounded-xl overflow-hidden">
+                  <button className="absolute top-3 right-3 p-1.5 rounded bg-[#2a2a3a] hover:bg-[#3a3a4a] text-[#9ca3af]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                  </button>
+                  <pre className="p-4 text-[11px] font-mono overflow-x-auto text-[#cdd6f4] leading-[18px]">
+                    <span className="text-[#89b4fa]">{'<script>'}</span>{'\n'}
+                    {'  '}
+                    <span className="text-[#6c7086]">{'// Clain Analytics SDK'}</span>{'\n'}
+                    {'  clain.init(\''}
+                    <span className="text-[#a6e3a1]">{token}</span>
+                    {'\', {\n    api_host: \''}
+                    <span className="text-[#a6e3a1]">https://app.clainanalytics.com</span>
+                    {'\',\n    defaults: \''}
+                    <span className="text-[#a6e3a1]">2026-01-30</span>
+                    {'\',\n    person_profiles: \''}
+                    <span className="text-[#a6e3a1]">identified_only</span>
+                    {'\',\n  });'}
+                    {'\n'}
+                    <span className="text-[#89b4fa]">{'</script>'}</span>
+                  </pre>
+                </div>
+              </div>
+            )}
+            {sdkTab === 'js' && (
+              <div>
+                <p className="text-[12px] text-[#646462] my-3">Instala el paquete npm:</p>
+                <div className="relative bg-[#1e1e2e] rounded-xl overflow-hidden">
+                  <pre className="p-4 text-[11px] font-mono text-[#cdd6f4]">
+                    <span className="text-[#cba6f7]">npm</span>
+                    {' install clain-js\n\n'}
+                    <span className="text-[#89b4fa]">import</span>
+                    {' Clain '}
+                    <span className="text-[#89b4fa]">from</span>
+                    {' \'clain-js\';\nClain.init(\''}
+                    <span className="text-[#a6e3a1]">{token}</span>
+                    {'\');'}
+                  </pre>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-3 mt-4">
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">Ver instrucciones completas de configuración</button>
+              <button className="text-[12px] text-[#e8572a] font-medium hover:underline">Web docs</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function CustomizationPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Display name */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Nombre de visualización</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Un nombre legible para este entorno.</p>
+            <input
+              type="text"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] mb-2.5"
+            />
+            <button className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Renombrar proyecto</button>
+          </div>
+
+          {/* Date & time */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Fecha y hora</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-4">Establece la zona horaria y el día de inicio de semana para mostrar y agrupar datos de series temporales en insights y dashboards. Puede que necesites actualizar los insights para que los cambios se apliquen.</p>
+            <div className="flex items-start gap-6">
+              <div className="flex-1">
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Zona horaria</p>
+                <input type="text" value={timezone} onChange={e => setTimezone(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">La semana empieza el</p>
+                <select value={weekStart} onChange={e => setWeekStart(e.target.value)} className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] appearance-none cursor-pointer">
+                  {['Domingo','Lunes','Sábado'].map(d => <option key={d}>{d}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Business model */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Modelo de negocio</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Indica si este proyecto atiende a clientes B2B o B2C para que Clain pueda adaptar la experiencia y las recomendaciones.</p>
+            <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Modelo de negocio</p>
+            <select value={businessModel} onChange={e => setBusinessModel(e.target.value)} className="w-full max-w-xs h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]">
+              {['No especificado','B2B','B2C','B2B2C'].map(m => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+
+          {/* Base currency */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Moneda base</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-1.5">Establece la moneda predeterminada para cálculos de ingresos y monetarios.</p>
+            <p className="text-[13px] text-[#646462] mb-3">Clain convertirá todos los valores de moneda del equipo a esta moneda antes de mostrártelos. Si no podemos detectar correctamente tu moneda, asumiremos que está en esta moneda también.</p>
+            <button className="flex items-center gap-2 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f3f3f1]">
+              🇺🇸 Dólar estadounidense (USD)
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function AutocapturePage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Autocapture */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <div className="flex items-center gap-2 ml-2">
+                <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
+                <PlatformBadge label="Web" check/>
+                <PlatformBadge label="React Native"/>
+                <PlatformBadge label="iOS"/>
+              </div>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Captura automáticamente eventos de frontend como clics, cambios de input y envíos de formulario al usar el SDK de JavaScript web. También disponible para React Native e iOS mediante configuración de código.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2.5">
+              <Toggle val={autocaptureWeb} set={setAutocaptureWeb}/>
+              <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura para web</span>
+            </div>
+          </div>
+
+          {/* Data attributes */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Atributos de datos</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Especifica atributos de datos utilizados en tu app (ej. data-attr, data-custom-id). Estos atributos ayudan a la barra de herramientas y definiciones de acciones a identificar elementos únicos en tus páginas. Usa * como comodín.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 h-10 bg-white mb-3">
+              <span className="flex items-center gap-1.5 bg-[#f3f3f1] px-2 h-6 rounded text-[12px] text-[#1a1a1a]">
+                data-attr
+                <button className="text-[#646462] hover:text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="2"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                </button>
+              </span>
+              <input type="text" placeholder="Añadir valor" className="flex-1 text-[13px] outline-none bg-transparent text-[#646462]"/>
+            </div>
+            <button className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Guardar</button>
+          </div>
+
+          {/* Web vitals autocapture */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura de Web Vitals</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <div className="flex items-center gap-2 ml-2">
+                <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
+                <PlatformBadge label="Web" check/>
+              </div>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Captura las métricas de Web Vitals de Google Chrome (LCP, CLS, FCP, INP). Estos eventos mejoran el análisis web y la reproducción de sesiones con datos de rendimiento.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2.5 mb-4">
+              <Toggle val={webVitals} set={setWebVitals}/>
+              <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura de Web Vitals</span>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              También puedes elegir capturar solo métricas de Web Vitals específicas. Por defecto, se capturan las cuatro métricas principales: CLS, FCP, LCP e INP.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Capturar CLS', val: captureCLS, set: setCaptureCLS },
+                { label: 'Capturar FCP', val: captureFCP, set: setCaptureFCP },
+                { label: 'Capturar LCP', val: captureLCP, set: setCaptureLCP },
+                { label: 'Capturar INP', val: captureINP, set: setCaptureINP },
+              ].map(({ label, val, set }) => (
+                <div key={label} className="flex items-center gap-2.5">
+                  <Toggle val={val} set={set}/>
+                  <span className="text-[13px] text-[#1a1a1a]">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Dead clicks autocapture */}
+          <div>
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura de clics muertos</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <div className="flex items-center gap-2 ml-2">
+                <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
+                <PlatformBadge label="Web" check/>
+              </div>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Rastrea clics que no resultan en ninguna acción (sin desplazamiento, selección de texto ni mutación del DOM). Los clics muertos ayudan a encontrar elementos que los usuarios esperan que sean interactivos pero no lo son.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2.5">
+              <Toggle val={deadClicks} set={setDeadClicks}/>
+              <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura de clics muertos</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── AI Page ───────────────────────────────────────────────────────────────────
+  function AIPage() {
+    const [aiMemory, setAiMemory] = useState('');
+    const maxChars = 10000;
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Memory */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Memoria</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-1.5">Clain AI recuerda automáticamente detalles sobre tu empresa y producto. Este contexto ayuda a nuestro asistente de IA a proporcionar respuestas y sugerencias relevantes. Si hay detalles que no quieres que Clain AI recuerde, puedes editarlos o eliminarlos a continuación.</p>
+            <p className="text-[13px] text-[#646462] mb-4">Cuando la memoria supera los 5.000 caracteres, solo los primeros y últimos 2.500 caracteres son visibles para Clain AI. El tamaño máximo de memoria es de 10.000 caracteres.</p>
+            <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Memoria de Clain AI</p>
+            <div className="relative border border-[#e9eae6] rounded-lg overflow-hidden">
+              <textarea
+                value={aiMemory}
+                onChange={e => setAiMemory(e.target.value.slice(0, maxChars))}
+                placeholder="¿Qué debería saber Clain AI sobre el Proyecto por defecto?"
+                rows={5}
+                className="w-full px-3 py-2.5 text-[13px] outline-none resize-none bg-white"
+              />
+              <div className="flex justify-end px-3 py-1.5 border-t border-[#e9eae6] bg-[#fafaf9]">
+                <span className="text-[11px] text-[#646462]">{aiMemory.length} / {maxChars}</span>
+              </div>
+            </div>
+            <button className="mt-3 h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Guardar memoria</button>
+          </div>
+          {/* Changelog */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Registro de cambios</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Consulta las últimas funcionalidades de Clain AI y controla si el registro de cambios aparece en la interfaz principal.</p>
+            <p className="text-[13px] text-[#9ca3af] italic">No hay entradas de registro disponibles. Vuelve más tarde para ver actualizaciones de las funcionalidades de Clain AI.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── MCP Page ──────────────────────────────────────────────────────────────────
+  function MCPPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Servidor Model Context Protocol (MCP)</h3>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+          </div>
+          <p className="text-[13px] text-[#646462]">
+            Conecta Clain a herramientas de IA como Claude, Cursor y Copilot a través del protocolo MCP para asistencia de IA basada en datos.{' '}
+            <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+          </p>
+          <p className="text-[13px] text-[#646462]">Los servidores MCP permiten a los asistentes de IA conectarse directamente a tu instancia de Clain, permitiéndoles recuperar insights y realizar acciones en tu nombre.</p>
+          <p className="text-[13px] text-[#646462]">Puedes instalar el servidor MCP de Clain en Cursor, Claude Code, Claude Desktop, VS Code y Zed ejecutando el siguiente comando:</p>
+          <div className="flex items-center border border-[#e9eae6] rounded-lg bg-white overflow-hidden">
+            <code className="flex-1 px-4 py-2.5 text-[13px] font-mono text-[#1a1a1a]">npx @clain/wizard mcp add</code>
+            <button className="px-3 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+            </button>
+          </div>
+          <p className="text-[13px] text-[#646462]">
+            Puedes obtener más información sobre qué herramientas están disponibles y otras opciones de instalación{' '}
+            <span className="text-[#e8572a] cursor-pointer hover:underline">aquí ↗</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Error Tracking Page ───────────────────────────────────────────────────────
+  function ErrorTrackingPage() {
+    const [exceptionCapture, setExceptionCapture] = useState(false);
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Moved notice */}
+          <div className="flex items-start gap-2.5 border border-[#e9eae6] rounded-lg px-4 py-3 bg-[#fafaf9]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a] leading-[20px]">
+              <strong>La configuración de Error tracking se ha movido.</strong> Las configuraciones de alertas, reglas de supresión, detección de picos, asignación automática, agrupación personalizada, symbol sets y releases están ahora en la{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">página de configuración de Error tracking</span>.
+              {' '}Puedes acceder desde la barra lateral: Error tracking → Configuración.
+            </p>
+          </div>
+          {/* Exception autocapture */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura de excepciones</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+              <div className="flex items-center gap-2 ml-2 flex-wrap">
+                <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
+                {['Web','Android','Flutter','React Native'].map(p => (
+                  <span key={p} className="flex items-center gap-1 text-[11px] text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+                    {p}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Captura automáticamente excepciones de frontend usando listeners onError y onUnhandledRejection en el SDK de JavaScript web.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2.5">
+              <Toggle val={exceptionCapture} set={setExceptionCapture}/>
+              <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura de excepciones</span>
+            </div>
+          </div>
+          {/* Integrations */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Integraciones</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-4">Conecta el seguimiento de errores con servicios externos como GitHub o Linear.</p>
+            <div className="space-y-5">
+              {[
+                { name: 'Linear', action: 'Conectar espacio de trabajo', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><rect width="24" height="24" rx="5" fill="#1a1a1a"/><path d="M5 17.5L14 5l5 5-8.5 9H5z" fill="white"/></svg> },
+                { name: 'GitHub', action: 'Conectar organización', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><path d="M12 2C6.48 2 2 6.58 2 12.22c0 4.54 2.87 8.4 6.84 9.77.5.09.68-.22.68-.49v-1.71c-2.78.62-3.37-1.38-3.37-1.38-.45-1.28-1.11-1.62-1.11-1.62-.91-.64.07-.63.07-.63.99.07 1.52 1.05 1.52 1.05.89 1.57 2.33 1.11 2.9.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.09 0-1.13.39-2.05 1.02-2.77-.1-.26-.44-1.31.1-2.73 0 0 .84-.28 2.75 1.05A9.26 9.26 0 0112 7.56c.85 0 1.7.12 2.5.34 1.9-1.33 2.74-1.05 2.74-1.05.54 1.42.2 2.47.1 2.73.63.72 1.02 1.64 1.02 2.77 0 3.96-2.35 4.83-4.58 5.08.36.32.68.95.68 1.91v2.84c0 .27.18.59.69.49A10.23 10.23 0 0022 12.22C22 6.58 17.52 2 12 2z" fill="#1a1a1a"/></svg> },
+                { name: 'GitLab', action: 'Conectar proyecto', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 01-.3-.94L2.27 9.67l2.29-7.03a.42.42 0 01.79 0l2.29 7.03H16.36l2.29-7.03a.42.42 0 01.79 0l2.29 7.03 1.22 3.78a.84.84 0 01-.3.94z" fill="#E24329"/></svg> },
+                { name: 'Jira', action: 'Conectar sitio', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><path d="M12 0L2 10l4 4 6-6 6 6 4-4L12 0zm0 12l-4 4 4 4 4-4-4-4z" fill="#2684FF"/></svg> },
+              ].map(({ name, action, logo }) => (
+                <div key={name}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {logo}
+                    <span className="text-[14px] font-semibold text-[#1a1a1a]">{name}</span>
+                  </div>
+                  <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">{action}</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Experiments Page ──────────────────────────────────────────────────────────
+  function ExperimentsPage() {
+    const [statMethod, setStatMethod] = useState<'bayesian'|'frequentist'>('bayesian');
+    const [confidence, setConfidence] = useState('95%');
+    const [recalcTime, setRecalcTime] = useState('02:00');
+    const [requireConversion, setRequireConversion] = useState(false);
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Statistical method */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Método estadístico por defecto</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-4">
+              Elige el método estadístico a usar por defecto en nuevos experimentos en este entorno. Los experimentos individuales pueden cambiar este ajuste.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setStatMethod('bayesian')}
+                className={`p-4 rounded-xl border-2 text-left transition-colors ${statMethod === 'bayesian' ? 'border-[#e8572a] bg-[#fff5f2]' : 'border-[#e9eae6] hover:border-[#d1d5db]'}`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[13px] font-bold text-[#1a1a1a]">Bayesiano</span>
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${statMethod === 'bayesian' ? 'border-[#e8572a]' : 'border-[#d1d5db]'}`}>
+                    {statMethod === 'bayesian' && <div className="w-2 h-2 rounded-full bg-[#e8572a]"/>}
+                  </div>
+                </div>
+                <p className="text-[12px] text-[#646462] leading-[18px]">Ofrece una probabilidad de ganancia clara, mostrando qué tan probable es que una variante sea mejor que otra. Ideal para ingenieros de producto nuevos en la experimentación.</p>
+              </button>
+              <button
+                onClick={() => setStatMethod('frequentist')}
+                className={`p-4 rounded-xl border-2 text-left transition-colors ${statMethod === 'frequentist' ? 'border-[#e8572a] bg-[#fff5f2]' : 'border-[#e9eae6] hover:border-[#d1d5db]'}`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[13px] font-bold text-[#1a1a1a]">Frecuentista</span>
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${statMethod === 'frequentist' ? 'border-[#e8572a]' : 'border-[#d1d5db]'}`}>
+                    {statMethod === 'frequentist' && <div className="w-2 h-2 rounded-full bg-[#e8572a]"/>}
+                  </div>
+                </div>
+                <p className="text-[12px] text-[#646462] leading-[18px]">Usa p-values para determinar la significancia estadística. Preferido por científicos de datos y equipos con experiencia en A/B testing tradicional.</p>
+              </button>
+            </div>
+          </div>
+          {/* Confidence level */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Nivel de confianza por defecto</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Un nivel de confianza más alto reduce los falsos positivos pero requiere más datos. Se puede cambiar por experimento.</p>
+            <select value={confidence} onChange={e => setConfidence(e.target.value)} className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none cursor-pointer">
+              {['90%','95%','99%'].map(v => <option key={v}>{v}</option>)}
+            </select>
+          </div>
+          {/* Daily recalculation time */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Hora de recálculo diario</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Selecciona la hora del día en que se recalcularán las métricas del experimento. Esta hora está en la zona horaria de tu proyecto.</p>
+            <select value={recalcTime} onChange={e => setRecalcTime(e.target.value)} className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none cursor-pointer">
+              {['00:00','02:00','04:00','06:00','08:00','10:00','12:00'].map(v => <option key={v}>{v}</option>)}
+            </select>
+          </div>
+          {/* Conversion window */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Filtro de ventana de conversión por defecto</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Cuando está activado, los nuevos experimentos solo contarán participantes cuya ventana de conversión completa haya transcurrido. Se puede cambiar por experimento.</p>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={requireConversion} onChange={e => setRequireConversion(e.target.checked)} className="w-4 h-4 border-2 border-[#d1d5db] rounded accent-[#e8572a]"/>
+              <span className="text-[13px] text-[#1a1a1a]">Requerir ventana de conversión completada</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Feature Flags Page ────────────────────────────────────────────────────────
+  function FeatureFlagsPage() {
+    const [flagPersistence, setFlagPersistence] = useState(false);
+    const [flagConfirmation, setFlagConfirmation] = useState(false);
+    const [defaultRelease, setDefaultRelease] = useState(false);
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Flag persistence */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Persistencia de flags</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Cuando está activado, todos los nuevos feature flags tendrán la persistencia activada por defecto. Esto garantiza experiencias de usuario consistentes entre los pasos de autenticación.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2.5">
+              <Toggle val={flagPersistence} set={setFlagPersistence}/>
+              <span className="text-[13px] text-[#1a1a1a]">Activar persistencia de flags por defecto</span>
+            </div>
+          </div>
+          {/* Flag change confirmation */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Confirmación de cambio de flag</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Muestra un modal de confirmación antes de guardar cambios en feature flags existentes, ayudando a prevenir cambios accidentales en las condiciones de publicación.</p>
+            <div className="flex items-center gap-2.5">
+              <Toggle val={flagConfirmation} set={setFlagConfirmation}/>
+              <span className="text-[13px] text-[#1a1a1a]">Requerir confirmación para cambios en feature flags</span>
+            </div>
+          </div>
+          {/* Default release conditions */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Condiciones de publicación por defecto</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Aplica automáticamente condiciones de publicación predeterminadas a los feature flags recién creados. Los usuarios aún pueden modificarlas durante la creación del flag.</p>
+            <div className="flex items-center gap-2.5">
+              <Toggle val={defaultRelease} set={setDefaultRelease}/>
+              <span className="text-[13px] text-[#1a1a1a]">Aplicar condiciones de publicación por defecto a nuevos flags</span>
+            </div>
+          </div>
+          {/* Secure API key */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">API key segura de feature flags</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Usa esta clave para la evaluación local de feature flags o ajustes de configuración remota. Reemplaza las API keys personales para la evaluación local.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <p className="text-[12px] text-[#646462] mb-1.5">Clave primaria <span className="text-[#16a34a] font-medium">(Activa)</span></p>
+            <div className="flex items-center border border-[#e9eae6] rounded-lg bg-white overflow-hidden mb-1.5">
+              <p className="flex-1 px-4 py-2.5 text-[12px] text-[#9ca3af] italic">Haz clic en el botón de rotación a la derecha para generar una nueva clave.</p>
+              <button className="px-2.5 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M13 3a6.5 6.5 0 11-2.5 12.5M13 3V7h-4"/></svg>
+              </button>
+              <button className="px-2.5 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+              </button>
+            </div>
+            <p className="text-[12px] text-[#646462]">Al rotar la clave, la clave primaria actual pasará a ser de respaldo para que puedas migrar de forma segura.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── HeatmapsPage ─────────────────────────────────────────────────────────
+  function HeatmapsPage() {
+    const [heatmapsWeb, setHeatmapsWeb] = useState(false);
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Heatmaps section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Mapas de calor</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#1a1a1a]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11zm.75 8.5h-1.5v-1.5h1.5v1.5zm0-3h-1.5c0-2.25 2.25-2.063 2.25-3.375 0-.75-.563-1.125-1.125-1.125-.688 0-1.125.375-1.125.938H5.25C5.25 2.812 6.187 2 7.5 2c1.25 0 2.25.875 2.25 2 0 1.5-2.25 1.688-2.25 3.5z"/></svg>
+              <div className="flex items-center gap-1.5 ml-1">
+                <span className="text-[11px] font-semibold text-[#646462]">Plataformas compatibles:</span>
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded-full text-[11px] font-semibold text-[#16a34a]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a]"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5z"/></svg>
+                  Web
+                </span>
+              </div>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Captura clics generales, movimientos del ratón y scroll para crear mapas de calor. No se crean eventos adicionales. Los mapas de calor se generan basándose en las posiciones generales del ratón o toque, útil para entender el comportamiento general de los usuarios.{' '}
+              <a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a>
+            </p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar mapas de calor para web</span>
+              <Toggle checked={heatmapsWeb} onChange={setHeatmapsWeb}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ProductAnalyticsPage ──────────────────────────────────────────────────
+  function ProductAnalyticsPage() {
+    const [filterEnabled, setFilterEnabled] = useState(false);
+    const [filterRevenue, setFilterRevenue] = useState(false);
+    const [personMode, setPersonMode] = useState<'event'|'query'|'ids'>('query');
+    const [lastSeen, setLastSeen] = useState(false);
+    const [humanPeriods, setHumanPeriods] = useState(false);
+    const [displayTags, setDisplayTags] = useState(['email', 'name', 'username']);
+    const [excludedEventProps, setExcludedEventProps] = useState('');
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Filter internal users */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Filtrar usuarios internos y de prueba</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <a href="#" className="text-[12px] text-[#e8572a] hover:underline">Docs ↗</a>
+            </div>
+            {/* Info note */}
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-[#f0f4ff] border border-[#c7d2fe] rounded-[10px]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              <p className="text-[12px] text-[#1a1a1a] leading-relaxed">
+                Al filtrar usuarios internos, los filtros de propiedad de persona en línea (p. ej., "el email no contiene tu-dominio.com") funcionan en todos lados, incluidos los destinos CDP en tiempo real. Alternativamente, puedes crear una cohorte y añadirla con un operador "not in" — esto funciona bien para consultas de análisis (insights, dashboards) y también en destinos CDP si la cohorte contiene <strong>exclusivamente filtros de propiedades de persona</strong>. Las cohortes con filtros de comportamiento o sin propiedades definidas harán que los destinos CDP fallen.
+              </p>
+            </div>
+            {/* Filter chips */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 h-7 px-2.5 bg-[#f0f4ff] border border-[#c7d2fe] rounded-lg text-[12px] text-[#3b59f6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6a5 5 0 0110 0H3z"/></svg>
+                <span>Usuario no en Inte...al / Usuarios de prueba</span>
+                <button className="ml-1 text-[#3b59f6] hover:text-[#1a3de0]">✕</button>
+              </div>
+              <button className="flex items-center gap-1 h-7 px-2.5 border border-dashed border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Filtro
+              </button>
+            </div>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar este filtro en todos los nuevos insights</span>
+              <Toggle checked={filterEnabled} onChange={setFilterEnabled}/>
+            </div>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Filtrar usuarios internos y de prueba en revenue analytics</span>
+              <Toggle checked={filterRevenue} onChange={setFilterRevenue}/>
+            </div>
+          </div>
+
+          {/* Chart color themes */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Temas de color de gráficos</h2>
+              <span className="px-1.5 py-0.5 bg-[#fef3c7] text-[#92400e] text-[10px] font-bold rounded border border-[#fde68a] uppercase">BETA</span>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Personaliza la paleta de colores usada en gráficos y visualizaciones.</p>
+            {/* Premium upsell */}
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Colores de gráficos personalizables</h3>
+              <p className="text-[13px] text-[#646462]">Personaliza la apariencia de los insights con temas de color.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+          </div>
+
+          {/* Person properties mode */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Modo de propiedades de persona</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Elige el comportamiento de los filtros de propiedad de persona. Para mejor rendimiento, usa propiedades de persona del momento del evento.</p>
+            <div className="space-y-3">
+              {[
+                { v: 'event', label: 'Usar propiedades de persona del momento del evento', badge: 'RECOMENDADO', sub: 'Consultas rápidas. Si la propiedad de persona se actualiza, los resultados de consultas en datos pasados no cambiarán.' },
+                { v: 'query', label: 'Usar propiedades de persona al ejecutar la consulta', badge: '', sub: 'Consultas más lentas. Si la propiedad de persona se actualiza, los resultados de consultas en datos pasados cambiarán.' },
+                { v: 'ids',   label: 'Usar IDs de persona y propiedades de persona del momento del evento', badge: '', sub: 'Consultas más rápidas, pero los embudos y los conteos de usuarios únicos serán imprecisos. Si la propiedad de persona se actualiza, los resultados de consultas en datos pasados no cambiarán.' },
+              ].map(opt => (
+                <label key={opt.v} className="flex items-start gap-2.5 cursor-pointer group">
+                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center ${personMode === opt.v ? 'border-[#e8572a] bg-[#e8572a]' : 'border-[#d1d5db] group-hover:border-[#9ca3af]'}`} onClick={() => setPersonMode(opt.v as any)}>
+                    {personMode === opt.v && <div className="w-1.5 h-1.5 rounded-full bg-white"/>}
+                  </div>
+                  <div>
+                    <span className="text-[13px] font-medium text-[#1a1a1a]">{opt.label}</span>
+                    {opt.badge && <span className="ml-2 text-[10px] font-bold text-[#646462] tracking-wide">{opt.badge}</span>}
+                    <p className="text-[12px] text-[#646462] mt-0.5">{opt.sub}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+          </div>
+
+          {/* Correlation analysis exclusions */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Exclusiones de análisis de correlación</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">El análisis de correlación detecta automáticamente señales relevantes para la conversión. Excluye eventos o propiedades que no aporten señales útiles.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="border border-[#e9eae6] rounded-[10px] divide-y divide-[#e9eae6]">
+              {[
+                { icon: 'M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6a5 5 0 0110 0H3z', label: 'Propiedades de persona excluidas' },
+                { icon: 'M3 3h10v2H3zm0 4h10v2H3zm0 4h7v2H3z', label: 'Eventos excluidos' },
+                { icon: 'M3 3h10v2H3zm0 4h10v2H3zm0 4h7v2H3z', label: 'Propiedades de evento excluidas' },
+              ].map((row, i) => (
+                <div key={i} className="p-3 space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d={row.icon}/></svg>
+                    <span className="text-[13px] font-semibold text-[#1a1a1a]">{row.label}</span>
+                  </div>
+                  {i < 2 ? (
+                    <button className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                      Añadir exclusión
+                    </button>
+                  ) : (
+                    <input
+                      type="text"
+                      value={excludedEventProps}
+                      onChange={e => setExcludedEventProps(e.target.value)}
+                      className="w-full h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Person display name */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Nombre visible de persona</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Elige qué propiedades de persona se usan para mostrar nombres en la interfaz (p. ej., email, nombre, usuario).{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {displayTags.map(tag => (
+                <div key={tag} className="flex items-center gap-1 h-6 px-2 bg-[#f3f3f1] border border-[#e9eae6] rounded-md text-[12px] text-[#1a1a1a]">
+                  {tag}
+                  <button onClick={() => setDisplayTags(t => t.filter(x => x !== tag))} className="text-[#646462] hover:text-[#1a1a1a]">✕</button>
+                </div>
+              ))}
+              <button className="flex items-center gap-1 h-6 px-2 border border-dashed border-[#e9eae6] rounded-md text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Añadir
+              </button>
+            </div>
+            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+          </div>
+
+          {/* Person last seen tracking */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Seguimiento de última vez visto</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Cuando está activado, Clain registra cuándo estuvo activo por última vez cada usuario. El valor se actualiza cada hora y es visible en la lista de Personas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Registrar cuándo se vio por última vez a una persona</span>
+              <Toggle checked={lastSeen} onChange={setLastSeen}/>
+            </div>
+          </div>
+
+          {/* Path cleaning rules */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Reglas de limpieza de rutas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Define reglas de expresión regular para normalizar URLs en análisis de rutas. Útil para eliminar IDs o parámetros de consulta de las rutas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <p className="text-[13px] text-[#646462]">La limpieza avanzada de rutas es una función premium. Consulta <a href="#" className="text-[#e8572a] hover:underline">la documentación de reglas de limpieza de rutas</a> para saber más.</p>
+          </div>
+
+          {/* Human friendly comparison periods */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Períodos de comparación comprensibles</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Al comparar con un mes o año anterior, compara con el mismo día de la semana en lugar de la misma fecha del calendario. Una comparación anual pasa a ser 52 semanas y una mensual pasa a ser 4 semanas.</p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Usar períodos de comparación comprensibles</span>
+              <Toggle checked={humanPeriods} onChange={setHumanPeriods}/>
+            </div>
+          </div>
+
+          {/* Group analytics */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Analíticas de grupo</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura tipos de grupo para analizar el comportamiento de usuarios a nivel de empresa o equipo.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Analíticas de grupo</h3>
+              <p className="text-[13px] text-[#646462]">Asocia eventos con un grupo —como una empresa, comunidad o proyecto— y analízalos en ese contexto.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RevenueAnalyticsSettingsPage ──────────────────────────────────────────
+  function RevenueAnalyticsSettingsPage() {
+    const [currency, setCurrency] = useState('USD');
+    const [filterInternal, setFilterInternal] = useState(false);
+    const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
+    const currencies = [
+      { code: 'USD', label: 'Dólar americano (USD)', flag: '🇺🇸' },
+      { code: 'EUR', label: 'Euro (EUR)', flag: '🇪🇺' },
+      { code: 'GBP', label: 'Libra esterlina (GBP)', flag: '🇬🇧' },
+      { code: 'JPY', label: 'Yen japonés (JPY)', flag: '🇯🇵' },
+    ];
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Base currency */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Moneda base</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Clain convertirá todos los valores de moneda de todo el equipo a esta moneda antes de mostrártelos. Si no podemos detectar correctamente tu moneda, asumiremos que también está en esta moneda.
+            </p>
+            <div className="relative w-56">
+              <button
+                onClick={() => setShowCurrencyDropdown(d => !d)}
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]"
+              >
+                <span>{currencies.find(c => c.code === currency)?.flag} {currencies.find(c => c.code === currency)?.label}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+              {showCurrencyDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowCurrencyDropdown(false)}/>
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                    {currencies.map(c => (
+                      <button key={c.code} onClick={() => { setCurrency(c.code); setShowCurrencyDropdown(false); }}
+                        className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] flex items-center gap-2 ${c.code === currency ? 'bg-[#f3f3f1] font-medium' : ''}`}>
+                        <span>{c.flag}</span><span>{c.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Filter internal and test users */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Filtrar usuarios internos y de prueba en revenue analytics</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Excluye las cuentas de prueba de los cálculos e informes de ingresos.</p>
+            <div className="border border-[#e9eae6] rounded-[10px] p-4 space-y-2">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Filtrar usuarios internos y de prueba en revenue analytics</h3>
+              <p className="text-[13px] text-[#646462]">Cuando está activado, los eventos de cuentas de prueba se excluirán de Revenue Analytics. Puedes configurar estas cuentas de prueba <a href="#" className="text-[#e8572a] hover:underline">aquí</a>.</p>
+              <div className="flex items-center justify-between pt-2 border-t border-[#e9eae6]">
+                <span className="text-[13px] font-medium text-[#1a1a1a]">Filtrar usuarios internos y de prueba</span>
+                <Toggle checked={filterInternal} onChange={setFilterInternal}/>
+              </div>
+            </div>
+          </div>
+
+          {/* Revenue goals */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Objetivos de ingresos</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Establece objetivos de ingresos para hacer seguimiento del rendimiento frente a tus metas de negocio.</p>
+            <div className="space-y-2">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Objetivos</h3>
+              <p className="text-[13px] text-[#646462] leading-relaxed">
+                Establece objetivos de ingresos para fechas concretas y haz seguimiento de tu progreso. Puedes hacer seguimiento de objetivos basándote en tus metas mensuales/trimestrales/anuales. ¡Estos se pueden mostrar en los gráficos de MRR/ARR o ingresos brutos del panel de revenue analytics!
+              </p>
+              <div className="flex justify-end">
+                <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Añadir objetivo
+                </button>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre del objetivo</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">Fecha límite <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
+                      </th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">Importe objetivo (USD) <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
+                      </th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">MRR o ingresos brutos <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">No hay objetivos configurados aún.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Revenue events */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Eventos de ingresos</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <a href="#" className="text-[12px] text-[#e8572a] hover:underline">Docs ↗</a>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura qué eventos representan acciones de generación de ingresos.</p>
+            {/* Event Configuration */}
+            <div className="space-y-2">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Configuración de eventos</h3>
+              <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+                Clain puede mostrar datos de ingresos en el producto Revenue Analytics desde cualquier evento. Puedes configurar tantos eventos como quieras y especificar la propiedad de ingresos y la moneda para cada evento individualmente.
+              </p>
+              <div className="flex justify-end">
+                <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Añadir evento de ingresos
+                </button>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre del evento</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Propiedad de ingresos</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Moneda</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Propiedades adicionales</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">No hay fuentes de eventos configuradas aún.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* External data sources */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Fuentes de datos externas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Conecta fuentes de datos externas como Stripe para el seguimiento de ingresos.</p>
+            <div className="space-y-2">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Configuración de fuentes de data warehouse</h3>
+              <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+                Clain puede mostrar datos de ingresos en el producto Revenue Analytics desde las siguientes fuentes de data warehouse. Puedes activar/desactivar cada fuente para evitar que se use para datos de ingresos. También puedes configurar cómo unimos tus datos de ingresos con la tabla de personas de Clain — cuando esto está configurado, podremos mostrar correctamente los ingresos de una persona mediante los campos virtuales persons.$virt_revenue y persons.$virt_mrr.
+              </p>
+              <div className="flex justify-end">
+                <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Añadir nueva fuente
+                </button>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fuente</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">Unión de personas <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
+                      </th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">Unión de grupos <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
+                      </th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">Incluir cargos sin factura <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">No hay fuentes de ingresos DWH configuradas aún.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SessionReplayPage ─────────────────────────────────────────────────────
+  function SessionReplayPage() {
+    const [recordSessions, setRecordSessions] = useState(true);
+    const [captureLogs, setCaptureLogs] = useState(true);
+    const [captureCanvas, setCaptureCanvas] = useState(false);
+    const [captureNetwork, setCaptureNetwork] = useState(true);
+    const [captureHeaders, setCaptureHeaders] = useState(false);
+    const [captureBody, setCaptureBody] = useState(false);
+    const [retention, setRetention] = useState('5y');
+    const [recordingTab, setRecordingTab] = useState<'web'|'mobile'>('web');
+    const [triggerMatch, setTriggerMatch] = useState('all');
+    const [privacyMode, setPrivacyMode] = useState('normal');
+    const [showPrivacyDropdown, setShowPrivacyDropdown] = useState(false);
+    const [showTriggerDropdown, setShowTriggerDropdown] = useState(false);
+
+    const PlatformBadge = ({ name, supported }: { name: string; supported?: boolean }) => (
+      <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${supported ? 'bg-[#f0fdf4] border-[#bbf7d0] text-[#16a34a]' : 'bg-[#f3f3f1] border-[#e9eae6] text-[#646462]'}`}>
+        {supported
+          ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a]"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5z"/></svg>
+          : <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>
+        }
+        {name}
+      </span>
+    );
+
+    const SectionHeader = ({ title, link, platforms }: { title: string; link?: boolean; platforms?: { name: string; supported?: boolean }[] }) => (
+      <div className="flex items-center gap-2 flex-wrap">
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">{title}</h2>
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+        {platforms && (
+          <>
+            <span className="text-[11px] font-semibold text-[#646462]">Plataformas compatibles:</span>
+            {platforms.map(p => <PlatformBadge key={p.name} name={p.name} supported={p.supported}/>)}
+          </>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Session replay */}
+          <div className="space-y-3">
+            <SectionHeader title="Replay de sesión"/>
+            <p className="text-[13px] text-[#646462]">Observa grabaciones de cómo interactúan los usuarios con tu aplicación web para diagnosticar problemas y entender el comportamiento de los usuarios.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Grabar sesiones de usuario</span>
+              <Toggle checked={recordSessions} onChange={setRecordSessions}/>
+            </div>
+          </div>
+
+          {/* Log capture */}
+          <div className="space-y-3">
+            <SectionHeader title="Captura de logs" platforms={[{name:'Android'},{name:'iOS'},{name:'Web',supported:true},{name:'React Native'}]}/>
+            <p className="text-[13px] text-[#646462]">Captura los logs de la consola del navegador junto con las grabaciones de sesión para ayudar a depurar problemas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar logs de consola</span>
+              <Toggle checked={captureLogs} onChange={setCaptureLogs}/>
+            </div>
+          </div>
+
+          {/* Canvas capture */}
+          <div className="space-y-3">
+            <SectionHeader title="Captura de canvas" platforms={[{name:'Flutter'},{name:'Web',supported:true}]}/>
+            <p className="text-[13px] text-[#646462]">Captura elementos HTML canvas en las grabaciones de sesión. Útil para aplicaciones que renderizan gráficos, juegos u otro contenido basado en canvas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar elementos canvas</span>
+              <Toggle checked={captureCanvas} onChange={setCaptureCanvas}/>
+            </div>
+          </div>
+
+          {/* Recording conditions */}
+          <div className="space-y-3">
+            <SectionHeader title="Condiciones de grabación"/>
+            <p className="text-[13px] text-[#646462]">Controla cuándo empiezan y paran las grabaciones. Usa activadores de URL, de eventos o muestreo para gestionar el volumen de grabación.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            {/* Web / Mobile tabs */}
+            <div className="flex border-b border-[#e9eae6]">
+              {(['web','mobile'] as const).map(t => (
+                <button key={t} onClick={() => setRecordingTab(t)}
+                  className={`px-4 py-2 text-[13px] font-semibold border-b-2 -mb-px ${recordingTab === t ? 'border-[#e8572a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+                  {t === 'web' ? 'Web' : 'Mobile'}
+                </button>
+              ))}
+            </div>
+            {/* No triggers banner */}
+            <div className="border-l-4 border-[#e8572a] bg-[#fff8f6] px-4 py-3 rounded-r-[8px]">
+              <p className="text-[13px] font-semibold text-[#1a1a1a]">Sin activadores — todas las sesiones grabadas</p>
+              <a href="#" className="text-[12px] text-[#e8572a] hover:underline">Lee cómo iniciar y parar sesiones en nuestra documentación.</a>
+            </div>
+            {/* Conditions list */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden divide-y divide-[#e9eae6]">
+              {[
+                { label: 'Coincidencia de URL' },
+                { label: 'Activadores de evento' },
+                { label: 'Feature flag' },
+              ].map((row, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+                  <span className="flex items-center justify-center w-9 h-5 bg-[#fff0ec] border border-[#f9b4a0] rounded text-[10px] font-bold text-[#e8572a]">AND</span>
+                  <span className="text-[13px] text-[#1a1a1a] flex-1">{row.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Trigger matching */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[13px] font-semibold text-[#1a1a1a]">Coincidencia de activadores</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            </div>
+            <div className="flex items-center gap-2 text-[13px] text-[#1a1a1a]">
+              <span>Iniciar cuando</span>
+              <div className="relative">
+                <button onClick={() => setShowTriggerDropdown(d => !d)}
+                  className="h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center gap-1.5 hover:border-[#3b59f6]">
+                  {triggerMatch}
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+                </button>
+                {showTriggerDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowTriggerDropdown(false)}/>
+                    <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden w-24">
+                      {['all','any'].map(v => (
+                        <button key={v} onClick={() => { setTriggerMatch(v); setShowTriggerDropdown(false); }}
+                          className={`w-full px-3 py-1.5 text-left text-[13px] hover:bg-[#fafaf9] ${v === triggerMatch ? 'font-medium' : ''}`}>{v}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <span>activadores a continuación coincidan</span>
+            </div>
+
+            {/* Recording conditions detail */}
+            <div className="space-y-3">
+              <h3 className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Condiciones de grabación</h3>
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden divide-y divide-[#e9eae6]">
+                {[
+                  { label: 'Coincidencia de URL', note: 'No configurado' },
+                  { label: 'Evento emitido', note: 'No configurado' },
+                  { label: 'Feature flag', note: 'No configurado' },
+                ].map((row, i) => (
+                  <div key={i} className="flex items-center gap-3 px-4 py-3">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+                    <span className="flex items-center justify-center w-9 h-5 bg-[#fff0ec] border border-[#f9b4a0] rounded text-[10px] font-bold text-[#e8572a]">AND</span>
+                    <span className="text-[13px] text-[#1a1a1a] flex-1">{row.label}</span>
+                    <span className="text-[12px] text-[#646462]">{row.note}</span>
+                  </div>
+                ))}
+              </div>
+
+              <h3 className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Límites de grabación</h3>
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden divide-y divide-[#e9eae6]">
+                {[
+                  { label: 'Muestreo', note: '100% (por defecto)' },
+                  { label: 'Duración mínima', note: 'Sin mínimo' },
+                ].map((row, i) => (
+                  <div key={i} className="flex items-center gap-3 px-4 py-3">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+                    <span className="flex items-center justify-center w-9 h-5 bg-[#fff0ec] border border-[#f9b4a0] rounded text-[10px] font-bold text-[#e8572a]">AND</span>
+                    <span className="text-[13px] text-[#1a1a1a] flex-1">{row.label}</span>
+                    <span className="text-[12px] text-[#646462]">{row.note}</span>
+                  </div>
+                ))}
+              </div>
+
+              <h3 className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Exclusiones de grabación</h3>
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+                  <span className="text-[13px] text-[#1a1a1a] flex-1">Lista de bloqueo de URLs</span>
+                  <span className="text-[12px] text-[#646462]">No configurado</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Privacy and masking */}
+          <div className="space-y-3">
+            <SectionHeader title="Privacidad y enmascaramiento" platforms={[{name:'Web',supported:true}]}/>
+            <p className="text-[13px] text-[#646462]">Elige qué datos se enmascaran en tus grabaciones de sesión. Para mayor control, configura el enmascaramiento directamente en tu código.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="relative w-72">
+              <button onClick={() => setShowPrivacyDropdown(d => !d)}
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]">
+                <span>Normal (enmascarar inputs pero no texto/imágenes)</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0 ml-2"><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+              {showPrivacyDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowPrivacyDropdown(false)}/>
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                    {['Normal (enmascarar inputs pero no texto/imágenes)','Enmascarar todo (texto e imágenes)','Sin enmascaramiento'].map(v => (
+                      <button key={v} onClick={() => { setPrivacyMode(v); setShowPrivacyDropdown(false); }}
+                        className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${v === privacyMode ? 'bg-[#f3f3f1] font-medium' : ''}`}>{v}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Network capture */}
+          <div className="space-y-3">
+            <SectionHeader title="Captura de red" platforms={[{name:'Android'},{name:'iOS'},{name:'Web',supported:true},{name:'React Native'}]}/>
+            <p className="text-[13px] text-[#646462]">Captura los tiempos de solicitudes de red junto con las grabaciones de sesión para identificar llamadas API lentas o fallidas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar solicitudes de red</span>
+              <Toggle checked={captureNetwork} onChange={setCaptureNetwork}/>
+            </div>
+          </div>
+
+          {/* Network headers & payloads */}
+          <div className="space-y-3">
+            <SectionHeader title="Cabeceras y payloads de red" platforms={[{name:'Web',supported:true}]}/>
+            <p className="text-[13px] text-[#646462]">Captura las cabeceras de solicitud y respuesta y el contenido del cuerpo junto con los tiempos de red. Los datos sensibles se eliminan automáticamente.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center gap-6 py-2.5 border-t border-[#e9eae6]">
+              <div className="flex items-center gap-3">
+                <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar cabeceras</span>
+                <Toggle checked={captureHeaders} onChange={setCaptureHeaders}/>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar cuerpo</span>
+                <Toggle checked={captureBody} onChange={setCaptureBody}/>
+              </div>
+            </div>
+          </div>
+
+          {/* Data retention */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Retención de datos</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Controla cuánto tiempo se almacenan tus grabaciones. Los cambios solo afectan al período de retención de las grabaciones futuras.</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {[
+                { v: '30d', icon: '🕐', label: '30 días' },
+                { v: '90d', icon: '⏳', label: '90 días' },
+                { v: '1y',  icon: '📅', label: '1 año (365 días)' },
+                { v: '5y',  icon: '∞',  label: '5 años (1825 días)' },
+              ].map(opt => (
+                <button key={opt.v} onClick={() => setRetention(opt.v)}
+                  className={`flex items-center gap-1.5 h-8 px-3 border rounded-lg text-[13px] font-medium transition-colors ${retention === opt.v ? 'border-[#e8572a] text-[#e8572a] bg-[#fff8f6]' : 'border-[#e9eae6] text-[#646462] hover:border-[#1a1a1a] hover:text-[#1a1a1a]'}`}>
+                  <span>{opt.icon}</span>
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[13px] text-[#646462]">¿Necesitas más retención de datos? Ve a nuestra <a href="#" className="text-[#e8572a] hover:underline">página de facturación ↗</a> para mejorar tu plan.</p>
+          </div>
+
+          {/* Integrations */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Integraciones</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura integraciones para crear y vincular incidencias desde los replays de sesión.</p>
+            <div className="space-y-4">
+              {[
+                { name: 'Linear', btn: 'Conectar workspace' },
+                { name: 'GitHub', btn: 'Conectar organización' },
+                { name: 'GitLab', btn: 'Conectar proyecto' },
+                { name: 'Jira',   btn: 'Conectar sitio' },
+              ].map(int => (
+                <div key={int.name} className="space-y-1.5">
+                  <h3 className="text-[13px] font-semibold text-[#1a1a1a]">{int.name}</h3>
+                  <button className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">{int.btn}</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SupportPage ───────────────────────────────────────────────────────────
+  function SupportPage() {
+    const [supportEnabled, setSupportEnabled] = useState(false);
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* General section */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">General</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+
+            {/* Enable support card */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <div className="px-5 py-4 space-y-3">
+                <h3 className="text-[14px] font-bold text-[#1a1a1a]">Activar soporte</h3>
+                <p className="text-[13px] text-[#646462]">Gestiona, asigna y automatiza el soporte a través del widget in-app, email, Slack, Microsoft Teams y la API directa.</p>
+                <ul className="space-y-1.5">
+                  <li className="text-[13px] text-[#1a1a1a]">
+                    <span className="font-semibold">Widget in-app</span>
+                    {' '}—{' '}
+                    <span className="text-[#646462]">integra un chat en tu web para visitantes autenticados o anónimos.</span>
+                  </li>
+                  <li className="text-[13px] text-[#1a1a1a]">
+                    <span className="font-semibold">Email</span>
+                    {' '}—{' '}
+                    <span className="text-[#646462]">reenvía emails de clientes a Clain y responde directamente desde la</span>
+                    {' '}<a href="#" className="text-[#e8572a] hover:underline">bandeja de entrada</a>.
+                  </li>
+                  <li className="text-[13px] text-[#1a1a1a]">
+                    <span className="font-semibold">Slack</span>
+                    {' '}—{' '}
+                    <span className="text-[#646462]">convierte mensajes y reacciones de Slack en tickets.</span>
+                  </li>
+                  <li className="text-[13px] text-[#1a1a1a]">
+                    <span className="font-semibold">API directa</span>
+                    {' '}—{' '}
+                    <span className="text-[#646462]">trae tu propia UI sobre la API de conversaciones.</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#e9eae6]">
+                <div>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Activar para empezar a aceptar tickets.</p>
+                  <p className="text-[12px] text-[#646462]">Configura canales y notificaciones después de activar.</p>
+                </div>
+                <Toggle checked={supportEnabled} onChange={setSupportEnabled}/>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SurveysPage ───────────────────────────────────────────────────────────
+  function SurveysPage() {
+    const [surveysEnabled, setSurveysEnabled] = useState(false);
+    const [selectedTheme, setSelectedTheme] = useState('clean');
+    const [cookielessMode, setCookielessMode] = useState('disabled');
+    const [hideClainBranding, setHideClainBranding] = useState(false);
+    const [shuffleQuestions, setShuffleQuestions] = useState(false);
+    const [delayEnabled, setDelayEnabled] = useState(false);
+    const [delaySeconds, setDelaySeconds] = useState('');
+    const [positionDropdown, setPositionDropdown] = useState(false);
+    const [position, setPosition] = useState('bottom-right');
+    const [fontDropdown, setFontDropdown] = useState(false);
+    const [fontFamily, setFontFamily] = useState('inherit');
+    const [captureCLS, setCaptureCLS] = useState(true);
+    const [captureFCP, setCaptureFCP] = useState(true);
+    const [captureLCP, setCaptureLCP] = useState(true);
+    const [captureINP, setCaptureINP] = useState(true);
+
+    const themes = [
+      { id: 'clean',    label: 'Clean',    sub: 'Light & professional', bg: '#ffffff', accent: '#1a1a1a' },
+      { id: 'ocean',    label: 'Ocean',    sub: 'Cool & calming',       bg: '#e8f0fe', accent: '#3b59f6' },
+      { id: 'sunset',   label: 'Sunset',   sub: 'Warm & energetic',     bg: '#fff1ee', accent: '#e8572a' },
+      { id: 'carbon',   label: 'Carbon',   sub: 'Dark & neutral',       bg: '#2a2a2a', accent: '#646462' },
+      { id: 'midnight', label: 'Midnight', sub: 'Dark & sophisticated', bg: '#1e1e3f', accent: '#6366f1' },
+      { id: 'noir',     label: 'Noir',     sub: 'Pure black & white',   bg: '#000000', accent: '#ffffff' },
+    ];
+
+    const ColorField = ({ label, value, circle }: { label: string; value: string; circle?: string }) => (
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">{label}</label>
+        <div className="flex items-center gap-2 h-9 px-3 border border-[#e9eae6] rounded-lg bg-white">
+          {circle !== undefined && (
+            <div className="w-5 h-5 rounded-full border border-[#e9eae6] flex-shrink-0" style={{ background: circle || '#eeeded' }}/>
+          )}
+          <span className="text-[13px] text-[#1a1a1a]">{value}</span>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Surveys toggle */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Encuestas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <span className="text-[11px] font-semibold text-[#646462]">Plataformas compatibles:</span>
+              {[{n:'Web',ok:true},{n:'Android',ok:false},{n:'iOS',ok:false},{n:'React Native',ok:true}].map(p => (
+                <span key={p.n} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${p.ok ? 'bg-[#f0fdf4] border-[#bbf7d0] text-[#16a34a]' : 'bg-[#f3f3f1] border-[#e9eae6] text-[#646462]'}`}>
+                  {p.ok ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a]"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5z"/></svg> : <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>}
+                  {p.n}
+                </span>
+              ))}
+            </div>
+            <p className="text-[13px] text-[#646462]">Activa o desactiva las encuestas en tu aplicación web. Cuando están desactivadas, las encuestas no se renderizarán automáticamente.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar encuestas</span>
+              <Toggle checked={surveysEnabled} onChange={setSurveysEnabled}/>
+            </div>
+          </div>
+
+          {/* Default survey appearance */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Apariencia predeterminada de encuestas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura el aspecto predeterminado de las nuevas encuestas. Las encuestas individuales pueden sobrescribir estos ajustes.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+
+            {/* Premium upsell */}
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Colores y posición personalizados</h3>
+              <p className="text-[13px] text-[#646462]">Personaliza los colores de tus encuestas para que coincidan con tu marca y establece la posición de la encuesta.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+
+            {/* Theme */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Tema</h3>
+              <p className="text-[13px] text-[#646462]">Empieza con un preset y ajusta los colores individuales a continuación.</p>
+              <div className="grid grid-cols-6 gap-3">
+                {themes.map(t => (
+                  <button key={t.id} onClick={() => setSelectedTheme(t.id)}
+                    className={`flex flex-col items-center gap-1.5 p-2 rounded-[8px] border-2 transition-colors ${selectedTheme === t.id ? 'border-[#e8572a]' : 'border-[#e9eae6] hover:border-[#1a1a1a]'}`}>
+                    {/* Mini preview */}
+                    <div className="w-full h-10 rounded-[4px] flex flex-col gap-0.5 p-1.5 overflow-hidden" style={{ background: t.bg }}>
+                      <div className="h-1 w-3/4 rounded-full" style={{ background: t.accent, opacity: 0.8 }}/>
+                      <div className="h-1 w-full rounded-full" style={{ background: t.accent, opacity: 0.3 }}/>
+                      <div className="h-2.5 w-1/2 rounded-[2px] mt-auto" style={{ background: t.accent }}/>
+                    </div>
+                    <span className="text-[11px] font-semibold text-[#1a1a1a]">{t.label}</span>
+                    <span className="text-[10px] text-[#646462] text-center leading-tight">{t.sub}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Colors */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Colores</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <ColorField label="Fondo de encuesta" value="#eeeded" circle="#eeeded"/>
+                <ColorField label="Texto de pregunta" value="#000000 o var(--color)" circle=""/>
+                <ColorField label="Borde" value="#c9c6c6" circle="#c9c6c6"/>
+                <ColorField label="Fondo de input" value="white" circle="#ffffff"/>
+                <ColorField label="Texto de input" value="#000000 o var(--color)" circle=""/>
+                <ColorField label="Rating seleccionado" value="black" circle="#1a1a1a"/>
+                <ColorField label="Fondo del botón" value="black" circle="#1a1a1a"/>
+                <ColorField label="Texto del botón" value="white" circle="#ffffff"/>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Texto de placeholder</label>
+                  <input type="text" placeholder="Empieza a escribir..." className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+              </div>
+            </div>
+
+            {/* Layout */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Diseño</h3>
+              <p className="text-[13px] text-[#646462]">Contenedor, posicionamiento y tipografía. Solo se aplica en encuestas web, no en apps móviles nativas.</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Ancho de encuesta <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></label>
+                  <input type="text" defaultValue="300px" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Padding de caja</label>
+                  <input type="text" defaultValue="20px 24px" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Radio de borde</label>
+                  <input type="text" defaultValue="10px" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Sombra de caja</label>
+                  <input type="text" defaultValue="0 4px 12px rgba(0, 0, 0, 0.15)" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <div className="space-y-1.5 relative">
+                  <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Familia de fuente <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></label>
+                  <button onClick={() => setFontDropdown(d => !d)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]">
+                    <span>inherit (fuente de tu web)</span>
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+                  </button>
+                  {fontDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setFontDropdown(false)}/>
+                      <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                        {['inherit (fuente de tu web)','sans-serif','serif','monospace'].map(f => (
+                          <button key={f} onClick={() => { setFontFamily(f); setFontDropdown(false); }} className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${f === fontFamily ? 'font-medium bg-[#f3f3f1]' : ''}`}>{f}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">z-index <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></label>
+                  <input type="text" defaultValue="2147482647" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+              </div>
+            </div>
+
+            {/* Position */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Posición</h3>
+              <div className="flex items-end gap-6">
+                {/* Position picker */}
+                <div className="w-24 h-20 border-2 border-[#e9eae6] rounded-[8px] relative bg-[#fafaf9]">
+                  <div className="absolute bottom-2 right-2 w-4 h-4 rounded-full bg-[#e8572a]"/>
+                </div>
+                <div className="relative">
+                  <button onClick={() => setPositionDropdown(d => !d)} className="h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center gap-2 hover:border-[#3b59f6]">
+                    Abajo a la derecha
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+                  </button>
+                  {positionDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setPositionDropdown(false)}/>
+                      <div className="absolute left-0 top-full mt-1 w-44 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                        {['Arriba a la izquierda','Arriba a la derecha','Abajo a la izquierda','Abajo a la derecha','Centro'].map(p => (
+                          <button key={p} className="w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9]">{p}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Full-screen editor */}
+            <button className="w-full flex items-center gap-2 h-10 px-4 border border-[#e9eae6] rounded-[8px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.5 1.5M11 11l1.5 1.5M3.5 12.5L5 11M11 5l1.5-1.5"/></svg>
+              Editor de encuesta a pantalla completa
+            </button>
+
+            {/* Behavior */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Comportamiento</h3>
+              <div className="space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={hideClainBranding} onChange={e => setHideClainBranding(e.target.checked)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
+                  <span className="text-[13px] text-[#1a1a1a]">Ocultar branding de Clain</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={shuffleQuestions} onChange={e => setShuffleQuestions(e.target.checked)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
+                  <span className="text-[13px] text-[#1a1a1a]">Mezclar preguntas</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={delayEnabled} onChange={e => setDelayEnabled(e.target.checked)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
+                  <span className="text-[13px] text-[#1a1a1a] flex items-center gap-1.5">
+                    Retrasar el popup de la encuesta al menos
+                    <input type="text" value={delaySeconds} onChange={e => setDelaySeconds(e.target.value)} className="w-12 h-6 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6] text-center"/>
+                    segundos una vez que se cumplen las condiciones de visualización.
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── WebAnalyticsSettingsPage ──────────────────────────────────────────────
+  function WebAnalyticsSettingsPage() {
+    const [cookieless, setCookieless] = useState('disabled');
+    const [bounceRate, setBounceRate] = useState('10');
+    const [webVitals, setWebVitals] = useState(false);
+    const [cls, setCls] = useState(true);
+    const [fcp, setFcp] = useState(true);
+    const [lcp, setLcp] = useState(true);
+    const [inp, setInp] = useState(true);
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Web analytics domains */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Dominios de web analytics</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura qué dominios se rastrean en web analytics. No se permiten comodines — las URLs deben ser concretas y accesibles.</p>
+
+            {/* No URLs card */}
+            <div className="border border-[#e9eae6] rounded-[10px] p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[13px] font-semibold text-[#1a1a1a]">No hay URLs autorizadas.</p>
+                  <p className="text-[13px] text-[#646462] mt-1">Añade una para empezar. Cuando nos envíes eventos te sugeriremos las que deberías autorizar. Esto te permitirá usar estas URLs en web analytics, experimentos web y nuestra barra de herramientas.</p>
+                </div>
+                <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] whitespace-nowrap">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 2.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/></svg>
+                    Buscar sugerencias
+                  </button>
+                  <span className="text-[11px] text-[#646462] whitespace-nowrap">¿Enviaste un evento? Volver a buscar sugerencias.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Add URL button */}
+            <button className="w-full flex items-center justify-center gap-2 h-10 border border-dashed border-[#e9eae6] rounded-[10px] text-[13px] font-medium text-[#646462] hover:bg-[#f3f3f1] hover:border-[#1a1a1a] hover:text-[#1a1a1a]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Añadir nueva URL autorizada
+            </button>
+          </div>
+
+          {/* Custom channel type */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tipo de canal personalizado</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Define reglas personalizadas para categorizar las fuentes de tráfico en canales.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <p className="text-[13px] text-[#646462]">Puedes crear tipos de canal personalizados definiendo reglas que coincidan con los eventos entrantes. Se usa la primera regla que coincida, y si ninguna regla coincide (o si no hay ninguna definida), se usa el <a href="#" className="text-[#e8572a] hover:underline">tipo de canal predeterminado</a>.</p>
+            <p className="text-[13px] text-[#646462]">Para depurar, prueba la <a href="#" className="text-[#e8572a] hover:underline">herramienta de exploración de atribución de sesiones ↗</a>.</p>
+            <div className="flex items-center gap-2 justify-end">
+              <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Añadir regla
+              </button>
+              <button className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar reglas de tipo de canal</button>
+            </div>
+          </div>
+
+          {/* Cookieless server hash mode */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Modo hash de servidor sin cookies</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Activa el tracking sin cookies usando un hash que preserva la privacidad para contar usuarios únicos sin cookies. Debes activarlo aquí antes de activar cookieless en clain-js.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="space-y-2">
+              {[{v:'enabled',label:'Activado'},{v:'disabled',label:'Desactivado'}].map(opt => (
+                <label key={opt.v} className="flex items-center gap-2.5 cursor-pointer">
+                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${cookieless === opt.v ? 'border-[#e8572a] bg-[#e8572a]' : 'border-[#d1d5db]'}`} onClick={() => setCookieless(opt.v)}>
+                    {cookieless === opt.v && <div className="w-1.5 h-1.5 rounded-full bg-white"/>}
+                  </div>
+                  <span className="text-[13px] text-[#1a1a1a]">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+          </div>
+
+          {/* Bounce rate duration */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Duración de tasa de rebote</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Establece cuánto tiempo puede permanecer un usuario en una página (en segundos) antes de que la sesión no se cuente como rebote. Por defecto son 10 segundos.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="relative max-w-xs">
+              <input type="text" value={bounceRate} onChange={e => setBounceRate(e.target.value)}
+                className="w-full h-9 px-3 pr-8 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+              {bounceRate && (
+                <button onClick={() => setBounceRate('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#646462] hover:text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
+                </button>
+              )}
+            </div>
+            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+          </div>
+
+          {/* Web vitals autocapture */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Autocaptura de Web Vitals</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <span className="text-[11px] font-semibold text-[#646462]">Plataformas compatibles:</span>
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded-full text-[11px] font-semibold text-[#16a34a]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a]"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5z"/></svg>
+                Web
+              </span>
+            </div>
+            <p className="text-[13px] text-[#646462]">Captura las métricas de web vitals de Google Chrome para el seguimiento del rendimiento en web analytics.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar autocaptura de web vitals</span>
+              <Toggle checked={webVitals} onChange={setWebVitals}/>
+            </div>
+            <p className="text-[13px] text-[#646462]">También puedes elegir capturar solo métricas específicas de web vitals. Por defecto, se capturan las cuatro métricas principales: CLS, FCP, LCP e INP.</p>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3 max-w-xs">
+              {[
+                { label: 'Capturar CLS', v: cls, set: setCls },
+                { label: 'Capturar FCP', v: fcp, set: setFcp },
+                { label: 'Capturar LCP', v: lcp, set: setLcp },
+                { label: 'Capturar INP', v: inp, set: setInp },
+              ].map(item => (
+                <div key={item.label} className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-medium text-[#1a1a1a]">{item.label}</span>
+                  <Toggle checked={item.v} onChange={item.set}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── PrivacyPage ───────────────────────────────────────────────────────────
+  function PrivacyPage() {
+    const [discardIP, setDiscardIP] = useState(false);
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Configuración de captura de datos IP</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Cuando está activado, las direcciones IP de los clientes no se almacenarán con tus eventos. Las transformaciones como el enriquecimiento GeoIP y la detección de bots pueden seguir usando la IP antes de que se descarte.{' '}
+              <a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a>
+            </p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente</span>
+              <Toggle checked={discardIP} onChange={setDiscardIP}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccessControlPage ─────────────────────────────────────────────────────
+  function AccessControlPage() {
+    const PremiumCard = ({ title, desc }: { title: string; desc: string }) => (
+      <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+        <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">{title}</h3>
+        <p className="text-[13px] text-[#646462]">{desc}</p>
+        <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+        <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+      </div>
+    );
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Header section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Control de acceso</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Gestiona quién tiene acceso a este entorno y qué pueden hacer.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <button className="flex items-center gap-2 h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+              Probar la nueva UI
+            </button>
+          </div>
+
+          {/* Project permissions */}
+          <div className="space-y-3">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Permisos de proyecto</h3>
+            <p className="text-[13px] text-[#646462]">Usa los permisos de proyecto para asignar acceso a todo el proyecto para personas y roles.</p>
+            <PremiumCard title="Control de acceso" desc="Controla quién puede acceder y modificar datos y funciones dentro de tu organización."/>
+          </div>
+
+          {/* Resource permissions */}
+          <div className="space-y-3">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Permisos de recursos</h3>
+            <p className="text-[13px] text-[#646462]">Usa los permisos de recursos para asignar acceso a recursos específicos del proyecto (p. ej., insights, feature flags, etc.) para personas y roles.</p>
+            <PremiumCard title="Control de acceso" desc="Controla quién puede acceder y modificar datos y funciones dentro de tu organización."/>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ActivityLogsPage ──────────────────────────────────────────────────────
+  function ActivityLogsPage() {
+    const PremiumCard = ({ title, desc }: { title: string; desc: string }) => (
+      <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+        <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">{title}</h3>
+        <p className="text-[13px] text-[#646462]">{desc}</p>
+        <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+        <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+      </div>
+    );
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Registros de actividad</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Consulta un registro de los cambios realizados en este entorno por los miembros del equipo.</p>
+            <PremiumCard title="Registros de actividad" desc="Consulta quién en tu organización ha accedido o modificado entidades dentro de Clain."/>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Ajustes</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura los ajustes de registros de actividad a nivel de organización.</p>
+            <PremiumCard title="Registros de actividad" desc="Consulta quién en tu organización ha accedido o modificado entidades dentro de Clain."/>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ApprovalsPage ─────────────────────────────────────────────────────────
+  function ApprovalsPage() {
+    const PremiumCard = ({ title, desc }: { title: string; desc: string }) => (
+      <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+        <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">{title}</h3>
+        <p className="text-[13px] text-[#646462]">{desc}</p>
+        <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+        <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+      </div>
+    );
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Políticas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura qué acciones requieren aprobación antes de aplicarse.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <PremiumCard title="Aprobaciones" desc="Requiere flujos de aprobación para los cambios en feature flags y otros recursos."/>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Solicitudes de cambio</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Revisa y aprueba solicitudes de cambio pendientes.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <PremiumCard title="Aprobaciones" desc="Requiere flujos de aprobación para los cambios en feature flags y otros recursos."/>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DiscussionsPage ───────────────────────────────────────────────────────
+  function DiscussionsPage() {
+    const [search, setSearch] = useState('');
+    const [createdBy, setCreatedBy] = useState('any');
+    const [showPaused, setShowPaused] = useState(false);
+    const [showCreatedByDropdown, setShowCreatedByDropdown] = useState(false);
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl px-8 py-6 space-y-6">
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Integraciones</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura cómo se entregan las menciones en discusiones a través de integraciones.</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-[13px] text-[#1a1a1a]">Recibe notificaciones cuando alguien te mencione en una discusión.</p>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            </div>
+
+            {/* Toolbar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Search */}
+              <div className="relative">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+                <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." className="h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] w-44"/>
+              </div>
+              <span className="text-[13px] text-[#646462]">¿No encuentras lo que buscas?</span>
+              <div className="flex items-center gap-1 ml-auto">
+                {/* Created by */}
+                <div className="relative">
+                  <button onClick={() => setShowCreatedByDropdown(d => !d)} className="flex items-center gap-1.5 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+                    <span className="text-[12px] text-[#646462] font-semibold">Creado por:</span>
+                    <span>{createdBy === 'any' ? 'Cualquier usuario' : 'Yo'}</span>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+                  </button>
+                  {showCreatedByDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowCreatedByDropdown(false)}/>
+                      <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                        {[{v:'any',l:'Cualquier usuario'},{v:'me',l:'Yo'}].map(o => (
+                          <button key={o.v} onClick={() => { setCreatedBy(o.v); setShowCreatedByDropdown(false); }} className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${o.v === createdBy ? 'font-medium bg-[#f3f3f1]' : ''}`}>{o.l}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                {/* Show paused */}
+                <label className="flex items-center gap-1.5 h-7 px-2.5 cursor-pointer text-[12px] text-[#1a1a1a]">
+                  <input type="checkbox" checked={showPaused} onChange={e => setShowPaused(e.target.checked)} className="w-3.5 h-3.5 accent-[#e8572a]"/>
+                  Mostrar pausados
+                </label>
+                {/* New notification */}
+                <button className="h-7 px-3 border border-[#f59e0b] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+                  Nueva notificación
+                </button>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                    {[
+                      { label: 'Nombre', sort: true },
+                      { label: 'Creado por', sort: true },
+                      { label: 'Actualizado', sort: true },
+                      { label: 'Últimos 7 días', sort: false },
+                      { label: 'Estado', sort: true },
+                    ].map((col, i) => (
+                      <th key={i} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">
+                          {col.label}
+                          {col.sort && (
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                          )}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={5} className="px-4 py-5 text-[13px] text-[#646462]">No hay notificaciones configuradas.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgGeneralPage ────────────────────────────────────────────────────────
+  function OrgGeneralPage() {
+    const [orgName, setOrgName] = useState('Hector prueba');
+    const [aiAnalysis, setAiAnalysis] = useState(false);
+    const [discardIPDefault, setDiscardIPDefault] = useState(false);
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Name & logo */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Nombre y logo</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">El nombre y el logo de tu organización se muestran en toda la interfaz de Clain. Haz clic en el avatar para subir un logo personalizado.</p>
+            <div className="flex items-end gap-4">
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-16 h-16 rounded-[12px] bg-[#f59e0b] flex items-center justify-center text-white text-2xl font-bold cursor-pointer hover:opacity-90">
+                  H
+                </div>
+                <button className="flex items-center gap-1 text-[11px] text-[#646462] hover:text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M8 2l3 4H9v5H7V6H5l3-4z"/></svg>
+                  Subir
+                </button>
+              </div>
+              <div className="flex-1 space-y-2">
+                <input
+                  type="text"
+                  value={orgName}
+                  onChange={e => setOrgName(e.target.value)}
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+                />
+                <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Clain AI data analysis */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Análisis de datos con Clain AI</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Las funciones de Clain AI, como el chat de Clain AI, utilizan{' '}
+              <a href="#" className="underline text-[#646462] hover:text-[#1a1a1a]">servicios de IA externos</a>
+              {' '}para el análisis de datos. Esto <em>puede</em> implicar la transferencia de datos de identificación de usuarios, por lo que pedimos tu consentimiento a nivel de organización a continuación.{' '}
+              <strong>Tus datos no se usarán para entrenar modelos.</strong>
+            </p>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Esta función no cumple con HIPAA y no está destinada al procesamiento de Información de Salud Protegida ("PHI"). Cualquier Acuerdo de Socio Comercial ("BAA") que hayas firmado con Clain no aplica a esta funcionalidad. Eres responsable de garantizar que tu uso cumple con las leyes y regulaciones aplicables.
+            </p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar funciones de análisis de datos de Clain AI</span>
+              <Toggle checked={aiAnalysis} onChange={setAiAnalysis}/>
+            </div>
+          </div>
+
+          {/* IP data capture default */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Captura de datos IP por defecto</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Cuando está activado, los nuevos proyectos tendrán automáticamente activado "Descartar datos IP del cliente". Esto se recomienda para el cumplimiento del RGPD. Los proyectos existentes no se ven afectados.
+            </p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente por defecto en nuevos proyectos</span>
+              <Toggle checked={discardIPDefault} onChange={setDiscardIPDefault}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgMembersPage ────────────────────────────────────────────────────────
+  function OrgMembersPage() {
+    const [memberSearch, setMemberSearch] = useState('');
+
+    const PremiumCard = ({ title, desc }: { title: string; desc: string }) => (
+      <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+        <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">{title}</h3>
+        <p className="text-[13px] text-[#646462]">{desc}</p>
+        <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+        <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+      </div>
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl px-8 py-6 space-y-8">
+          {/* Pending invites */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Invitaciones pendientes</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Gestiona las invitaciones pendientes para unirse a tu organización.</p>
+            {/* Warning banner */}
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              <p className="text-[13px] text-[#1a1a1a]">
+                Esta instancia de Clain no está <a href="#" className="text-[#e8572a] hover:underline">configurada para enviar emails ↗</a>.
+                Recuerda <span className="underline cursor-pointer hover:text-[#e8572a]">compartir el enlace de invitación</span> con cada miembro del equipo que invites.
+              </p>
+            </div>
+            {/* Invites table */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Invitado</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nivel</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                      <span className="flex items-center gap-1">Creado por <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg></span>
+                    </th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                      <span className="flex items-center gap-1">Creado <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg></span>
+                    </th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Enlace de invitación</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462]">No hay invitaciones pendientes. Puedes invitar a otro miembro del equipo arriba.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+              Invitar miembro del equipo
+            </button>
+          </div>
+
+          {/* Organization members */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Miembros de la organización</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Consulta y gestiona los miembros actuales de tu organización y sus roles.</p>
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1 max-w-xs">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+                <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Buscar miembros..." className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <button className="ml-auto h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Descargar lista de miembros</button>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                    {['Nombre','Email','Nivel','2FA','Incorporación','Último acceso'].map((col, i) => (
+                      <th key={i} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">{col} <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg></span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-[#e9eae6] hover:bg-[#fafaf9]">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-[#a78bfa] flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0">H</div>
+                        <span className="text-[13px] text-[#1a1a1a] font-medium">Hector <span className="text-[#646462] font-normal">(tú)</span></span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[#646462]">hectorvidal0411@gmail.com</td>
+                    <td className="px-4 py-3"><span className="px-2 py-0.5 bg-[#f3f3f1] rounded text-[12px] font-semibold text-[#1a1a1a]">Propietario</span></td>
+                    <td className="px-4 py-3"><span className="px-2 py-0.5 bg-[#fef3c7] border border-[#fde68a] rounded text-[11px] font-semibold text-[#92400e]">2FA no activado</span></td>
+                    <td className="px-4 py-3 text-[#646462]">hace 4 días</td>
+                    <td className="px-4 py-3 text-[#646462]">hace un momento</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Two-factor authentication */}
+          <div className="space-y-3">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autenticación de dos factores</h3>
+            <PremiumCard title="Forzar 2FA" desc="Requiere que todos los usuarios de tu organización activen la autenticación de dos factores."/>
+          </div>
+
+          {/* Invite settings */}
+          <div className="space-y-3">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Ajustes de invitación</h3>
+            <PremiumCard title="Ajustes de invitación de la organización" desc="Personaliza quién puede invitar miembros a tu organización."/>
+          </div>
+
+          {/* Security settings */}
+          <div className="space-y-3">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Ajustes de seguridad</h3>
+            <PremiumCard title="Ajustes de seguridad de la organización" desc="Configura los permisos de seguridad para los miembros de la organización."/>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgRolesPage ──────────────────────────────────────────────────────────
+  function OrgRolesPage() {
+    const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+    const [defaultRole, setDefaultRole] = useState('none');
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Roles section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Roles</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Usa los roles para agrupar a los miembros de tu organización y asignarles permisos. Los roles se utilizan para el control de acceso en toda tu organización.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Rol</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Miembros</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={2} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button className="flex items-center gap-1.5 h-8 px-3 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Añadir un rol
+            </button>
+          </div>
+
+          {/* Default role */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Rol predeterminado para nuevos miembros</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Asigna automáticamente un rol a los nuevos miembros cuando se unan a la organización. Los nuevos usuarios heredarán todos los permisos de este rol.</p>
+            <div className="relative w-56">
+              <button onClick={() => setShowRoleDropdown(d => !d)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]">
+                <span className="text-[#646462]">{defaultRole === 'none' ? 'Sin rol predeterminado' : defaultRole}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+              {showRoleDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowRoleDropdown(false)}/>
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                    <button onClick={() => { setDefaultRole('none'); setShowRoleDropdown(false); }} className="w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] text-[#646462]">Sin rol predeterminado</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgSSOPage ────────────────────────────────────────────────────────────
+  function OrgSSOPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Dominios de autenticación</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Aprovisionamiento automático</h3>
+              <p className="text-[13px] text-[#646462]">Verifica tus dominios para forzar SSO y añadir automáticamente usuarios con direcciones de email coincidentes a tu organización.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgSecurityPage ───────────────────────────────────────────────────────
+  function OrgSecurityPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Seguridad</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura las políticas de seguridad de toda la organización, incluyendo el uso compartido público, los tiempos de espera de sesión y los requisitos de contraseña.</p>
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Ajustes de seguridad de la organización</h3>
+              <p className="text-[13px] text-[#646462]">Configura los permisos de seguridad para los miembros de la organización.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgOAuthPage ──────────────────────────────────────────────────────────
+  function OrgOAuthPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Aplicaciones OAuth</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Consulta las aplicaciones que han sido autorizadas para conectarse a tu organización.</p>
+            <div className="border border-[#e9eae6] rounded-[12px] p-10 flex flex-col items-center text-center gap-2">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-[#646462]"><path d="M12.65 10A6 6 0 007 5.07V3h-2v2.07a6 6 0 000 11.86V19h2v-2.07A6 6 0 0012.65 14H14v2h2v-2h2v-2h-2v-2h-2v2h-1.35zm-6.65 2a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin aplicaciones conectadas</h3>
+              <p className="text-[13px] text-[#646462]">Las aplicaciones aparecerán aquí cuando herramientas de terceros se conecten a tu organización.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgCIMDPage ───────────────────────────────────────────────────────────
+  function OrgCIMDPage() {
+    const [showModal, setShowModal] = useState(false);
+    const [tokenLabel, setTokenLabel] = useState('');
+
+    return (
+      <div className="flex-1 overflow-y-auto relative">
+        <div className="max-w-4xl px-8 py-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tokens de verificación CIMD</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Vincula aplicaciones de socios CIMD a esta organización para límites de tasa más altos e identidad.</p>
+            <p className="text-[13px] text-[#646462] leading-relaxed">
+              Los tokens de verificación vinculan una aplicación de socio CIMD a esta organización. Añade el token a tu documento de metadatos CIMD en{' '}
+              <code className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[12px] font-mono">clain_verification_token</code>.
+              {' '}Los socios verificados obtienen un límite de tasa predeterminado más alto para el aprovisionamiento de cuentas y una trazabilidad de identidad clara. Consulta los{' '}
+              <a href="#" className="text-[#e8572a] hover:underline">docs ↗</a>
+              {' '}para el formato de metadatos.
+            </p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => { setTokenLabel(''); setShowModal(true); }}
+                className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white"
+              >
+                Crear token de verificación
+              </button>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[12px] p-10 flex flex-col items-center text-center gap-2">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-[#646462]"><path d="M12.65 10A6 6 0 007 5.07V3h-2v2.07a6 6 0 000 11.86V19h2v-2.07A6 6 0 0012.65 14H14v2h2v-2h2v-2h-2v-2h-2v2h-1.35zm-6.65 2a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin tokens de verificación</h3>
+              <p className="text-[13px] text-[#646462]">Crea uno para vincular una app de socio CIMD a esta organización.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal */}
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <div className="bg-white rounded-[12px] shadow-xl w-[480px] p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Crear token de verificación CIMD</h2>
+                <button onClick={() => setShowModal(false)} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-[#1a1a1a]">Etiqueta</label>
+                <input
+                  type="text"
+                  value={tokenLabel}
+                  onChange={e => setTokenLabel(e.target.value)}
+                  placeholder="ej. Socio CIMD de producción"
+                  className="w-full h-9 px-3 border border-[#3b59f6] rounded-lg text-[13px] bg-white outline-none"
+                  autoFocus
+                />
+                <p className="text-[12px] text-[#646462]">Elige una etiqueta que te ayude a identificar este token más tarde. Solo verás el valor en texto plano una vez.</p>
+              </div>
+              <div className="border-t border-[#e9eae6] pt-4 flex justify-end gap-2">
+                <button onClick={() => setShowModal(false)} className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
+                <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">Crear token</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── OrgProxyPage ──────────────────────────────────────────────────────────
+  function OrgProxyPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Proxies inversos gestionados</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Dominio</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={2} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+              Añadir proxy gestionado
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccountCustomizationPage ──────────────────────────────────────────────
+  function AccountCustomizationPage() {
+    const [anonymize, setAnonymize] = useState(false);
+    const [suggestApps, setSuggestApps] = useState(true);
+    const [hedgehogEnabled, setHedgehogEnabled] = useState(false);
+    const [hedgehogProfile, setHedgehogProfile] = useState(false);
+    const [selectedColor, setSelectedColor] = useState(0);
+    const [selectedHeadwear, setSelectedHeadwear] = useState<number|null>(null);
+    const [selectedEyewear, setSelectedEyewear] = useState<number|null>(null);
+    const [selectedOther, setSelectedOther] = useState<number|null>(null);
+    const [selectedSkin, setSelectedSkin] = useState(0);
+    const [freeRoam, setFreeRoam] = useState(true);
+    const [keyboardControls, setKeyboardControls] = useState(true);
+
+    const colorPalette = ['#8B4513','#4a7c2f','#e05c8a','#4488cc','#9966cc','#7a6a5a','#c4b06a','#888888','#c8a84b','#3399aa','#6b6b6b'];
+    const headwearPalette = ['#6b8cba','#5a8a4a','#f0f0f0','#c49a2e','#7ab3cc','#c85a2a','#cc8844','#7ab870','#333333','#e05c5c','#8B6914'];
+    const eyewearPalette = ['#cc7733','#6699aa','#333333'];
+    const otherPalette = ['#8B4513','#cc6666'];
+    const skinPalette = ['#8B4513','#cc3333','#4488ff','#66aa44','#f0f0f0'];
+
+    const Dot = ({ color, selected, onClick, square }: { color: string; selected?: boolean; onClick?: () => void; square?: boolean }) => (
+      <div
+        onClick={onClick}
+        className={`w-11 h-11 cursor-pointer flex-shrink-0 ${square ? 'rounded-lg' : 'rounded-full'} ${selected ? 'ring-2 ring-[#3b59f6] ring-offset-1' : ''}`}
+        style={{ backgroundColor: color }}
+      />
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+
+          {/* Theme */}
+          <div className="space-y-3">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tema</h2>
+            <button className="flex items-center gap-2 h-9 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+              <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="8" r="2.5" fill="#f59e0b"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M3.2 12.8l1-1M11.8 4.2l1-1" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              Modo claro
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+            </button>
+          </div>
+
+          {/* Anonymize data */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Anonimizar recopilación de datos</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Clain usa Clain para capturar información sobre cómo las personas usan el producto. Anonimiza tus datos de uso si prefieres no compartirlos.</p>
+            <Toggle label="Anonimizar mis datos" checked={anonymize} onChange={setAnonymize} />
+          </div>
+
+          {/* Suggest new apps */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Sugerir nuevas aplicaciones automáticamente</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Cuando detectamos que estás usando un nuevo producto, lo añadiremos automáticamente a tu barra lateral como sugerencia. También podemos sugerir productos relacionados cuando lancemos uno nuevo.</p>
+            <Toggle label="Sugerir nuevas aplicaciones automáticamente" checked={suggestApps} onChange={setSuggestApps} />
+          </div>
+
+          {/* Hedgehog / mascot mode */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Modo mascota</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Activa la mascota de Clain que te acompaña por la aplicación.</p>
+            <div className="flex items-center gap-6">
+              <Toggle label="Activar modo mascota" checked={hedgehogEnabled} onChange={setHedgehogEnabled} />
+              <Toggle label="Usar como foto de perfil" checked={hedgehogProfile} onChange={setHedgehogProfile} />
+            </div>
+
+            {/* Mascot card */}
+            <div className="border border-[#e9eae6] rounded-[12px] p-5 space-y-5">
+              {/* Character intro */}
+              <div className="flex items-start gap-4">
+                <div className="w-16 h-16 rounded-lg bg-[#5a3e1b] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <div className="w-14 h-14 rounded-full bg-[#c49a6c] flex items-center justify-center">
+                    <span className="text-[10px] font-black text-[#5a3e1b] tracking-tighter select-none">CLN</span>
+                  </div>
+                </div>
+                <div className="font-mono text-[13px] space-y-1">
+                  <p className="font-bold text-[#1a1a1a]">hola, soy Clain!</p>
+                  <p className="text-[#646462]">no me hagas caso. solo estoy aquí para acompañarte.</p>
+                  <p className="text-[#646462]">puedes moverme haciendo clic y arrastrándome o controlarme con WASD / flechas.</p>
+                </div>
+              </div>
+
+              {/* options */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">opciones</p>
+                <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a]">
+                  <input type="checkbox" checked={freeRoam} onChange={e => setFreeRoam(e.target.checked)} className="w-4 h-4 accent-[#3b59f6] rounded"/>
+                  Libre movimiento
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a] mt-1">
+                  <input type="checkbox" checked={keyboardControls} onChange={e => setKeyboardControls(e.target.checked)} className="w-4 h-4 accent-[#3b59f6] rounded"/>
+                  Controles de teclado (WASD / flechas)
+                </label>
+              </div>
+
+              {/* friends */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">amigos</p>
+                <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">Añadir amigo</button>
+              </div>
+
+              {/* colors */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">colores</p>
+                <div className="flex flex-wrap gap-2">
+                  {colorPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedColor === i} onClick={() => setSelectedColor(i)} />
+                  ))}
+                </div>
+              </div>
+
+              {/* headwear */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">tocados</p>
+                <div className="flex flex-wrap gap-2">
+                  {headwearPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedHeadwear === i} onClick={() => setSelectedHeadwear(selectedHeadwear === i ? null : i)} />
+                  ))}
+                </div>
+              </div>
+
+              {/* eyewear */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">gafas</p>
+                <div className="flex flex-wrap gap-2">
+                  {eyewearPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedEyewear === i} onClick={() => setSelectedEyewear(selectedEyewear === i ? null : i)} />
+                  ))}
+                </div>
+              </div>
+
+              {/* other */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">otros</p>
+                <div className="flex flex-wrap gap-2">
+                  {otherPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedOther === i} onClick={() => setSelectedOther(selectedOther === i ? null : i)} />
+                  ))}
+                </div>
+              </div>
+
+              {/* skins */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">pieles</p>
+                <div className="flex flex-wrap gap-2">
+                  {skinPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedSkin === i} onClick={() => setSelectedSkin(i)} square />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Customization IRL */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Personalización fuera de la app</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">
+              Consigue <a href="#" className="text-[#e8572a] hover:underline">merchandising de Clain ↗</a> para personalizarte fuera de la app.
+            </p>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccountPreviewsPage ───────────────────────────────────────────────────
+  function AccountPreviewsPage() {
+    const [search, setSearch] = useState('');
+    const [flags, setFlags] = useState<Record<string, boolean>>({});
+    const toggle = (k: string) => setFlags(f => ({ ...f, [k]: !f[k] }));
+
+    const features: { id: string; title: string; desc: string; warning?: string; links?: string[] }[] = [
+      {
+        id: 'feature-flag-notifs',
+        title: 'Notificaciones de feature flags',
+        desc: 'Las organizaciones con planes Scale o Enterprise pueden configurar notificaciones de Slack, Discord, Teams y webhook cuando se crea, cambia o elimina un feature flag.',
+        warning: 'Esta función requiere el plan Enterprise o el complemento Scale. Activar la vista previa no la desbloqueará en tu plan actual.',
+      },
+      {
+        id: 'user-group-targeting',
+        title: 'Targeting de usuario y grupo',
+        desc: 'Los Feature Flags evalúan contra una entidad para decidir qué valor devolver. Por defecto, esa entidad es un usuario (identificado por su distinct ID), pero también puedes hacer targeting de grupos como organizaciones, empresas o equipos. Con targeting mixto, puedes combinar ambos en un solo flag.',
+        links: ['Saber más', 'Dar feedback'],
+      },
+      {
+        id: 'anomaly-alerts',
+        title: 'Alertas de detección de anomalías',
+        desc: 'Detectores de anomalías para alertar más allá de simples alertas de umbral.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'llm-prompts',
+        title: 'Prompts de análisis LLM',
+        desc: 'Lanzamos una función donde puedes definir prompts LLM en la interfaz de Clain e importarlos dinámicamente en tu código, para experimentación y ediciones sencillas.',
+        links: ['Saber más', 'Dar feedback'],
+      },
+      {
+        id: 'llma-feedback',
+        title: 'Feedback de usuario LLMA',
+        desc: 'Sin descripción.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'revenue-analytics-prev',
+        title: 'Revenue Analytics',
+        desc: 'Consulta tu MRR, ARR, tasa de crecimiento, tasa de abandono, riesgo de abandono, etc. de un vistazo desde una interfaz estandarizada. Todo lo que necesitas para tener bien las métricas de tu empresa.',
+        links: ['Saber más', 'Dar feedback'],
+      },
+      {
+        id: 'vim-mode',
+        title: 'Modo Vim para el Editor SQL',
+        desc: 'Lo que dice el nombre, básicamente.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'access-redesign',
+        title: 'Rediseño del control de acceso',
+        desc: 'Una experiencia de control de acceso más ágil y directa.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'feature-flags-v2',
+        title: 'feature-flags-v2',
+        desc: 'Nueva interfaz para la edición de feature flags + experiencia de solo lectura.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'eval-contexts',
+        title: 'Contextos de evaluación',
+        desc: 'Los contextos de evaluación proporcionan un control detallado sobre dónde y cuándo evalúan tus feature flags. Al restringir la evaluación de flags a contextos específicos, puedes reducir evaluaciones innecesarias, optimizar costes y organizar mejor tu estrategia de gestión de flags.',
+        links: ['Saber más', 'Dar feedback'],
+      },
+    ];
+
+    const filtered = features.filter(f =>
+      !search || f.title.toLowerCase().includes(search.toLowerCase()) || f.desc.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Previsualizaciones de funciones</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Prueba las próximas funciones de Clain antes de que estén disponibles para todos. Activar una vista previa la habilita solo para tu cuenta.</p>
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 1a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM0 6.5a6.5 6.5 0 1111.6 4l3.2 3.2a1 1 0 01-1.4 1.4L10.1 12A6.5 6.5 0 010 6.5z"/></svg>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar previsualizaciones de funciones..."
+              className="w-full h-9 pl-9 pr-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+            />
+          </div>
+
+          {/* Feature list */}
+          <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden divide-y divide-[#e9eae6]">
+            {filtered.map(f => (
+              <div key={f.id} className="p-4 space-y-2 bg-white">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggle(f.id)}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${flags[f.id] ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${flags[f.id] ? 'translate-x-4' : 'translate-x-0.5'}`}/>
+                  </button>
+                  <span className="text-[14px] font-bold text-[#1a1a1a]">{f.title}</span>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+                </div>
+                <p className="text-[13px] text-[#646462] leading-relaxed">{f.desc}</p>
+                {f.warning && (
+                  <div className="flex items-start gap-2 bg-[#fef9e7] border border-[#f59e0b]/40 rounded-lg px-3 py-2.5">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#f59e0b] flex-shrink-0 mt-0.5"><path d="M8 2L1 14h14L8 2zm0 4v4m0 2v1.5" stroke="white" strokeWidth="0.5" strokeLinecap="round"/></svg>
+                    <p className="text-[13px] text-[#1a1a1a]">{f.warning}</p>
+                  </div>
+                )}
+                {f.links && f.links.length > 0 && (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {f.links.map((l, i) => (
+                      <span key={l} className="flex items-center gap-1">
+                        <a href="#" className="text-[13px] text-[#e8572a] hover:underline">{l}{l === 'Saber más' ? ' ↗' : ''}</a>
+                        {i < (f.links?.length ?? 0) - 1 && <span className="text-[#646462] mx-0.5">•</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccountIntegrationsPage ───────────────────────────────────────────────
+  function AccountIntegrationsPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Integraciones personales</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Tus integraciones personales de GitHub para acceso a repositorios, atribución de código y autoría de pull requests.</p>
+            <p className="text-[13px] text-[#646462]">Puedes conectar múltiples cuentas u organizaciones de GitHub.</p>
+          </div>
+
+          <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            {/* Empty state */}
+            <div className="flex flex-col items-center gap-3 py-10 px-6 text-center">
+              <svg viewBox="0 0 24 24" className="w-9 h-9 fill-[#999]"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85.004 1.7.115 2.5.337 1.9-1.29 2.74-1.02 2.74-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin instalaciones de GitHub conectadas aún</h3>
+              <p className="text-[13px] text-[#646462] max-w-lg">Conéctate para que Clain pueda acceder a tus repositorios, atribuir commits, abrir pull requests y asignarte issues. Puedes añadir múltiples instalaciones para diferentes cuentas u organizaciones.</p>
+            </div>
+            {/* Connect button row */}
+            <div className="border-t border-[#e9eae6] px-4 py-3 flex items-center gap-3 flex-wrap bg-[#fafaf9]">
+              <button className="flex items-center gap-1.5 h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+                + Conectar GitHub
+              </button>
+              <p className="text-[13px] text-[#646462]">
+                Atención: si el botón <strong>Guardar</strong> de GitHub aparece desactivado, alterna entre <strong>Todos los repositorios</strong> y <strong>Solo repositorios seleccionados</strong> para continuar.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccountConnectedAppsPage ──────────────────────────────────────────────
+  function AccountConnectedAppsPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Aplicaciones conectadas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Aplicaciones a las que se ha concedido acceso a tu cuenta de Clain mediante OAuth. Puedes revocar el acceso en cualquier momento.</p>
+          </div>
+
+          <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-1/2">Aplicación</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Alcances</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Autorizado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={3} className="px-4 py-8">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-[#e8d5b0] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        <svg viewBox="0 0 40 40" className="w-10 h-10"><rect x="8" y="14" width="24" height="18" rx="3" fill="#8B6914"/><rect x="12" y="10" width="16" height="8" rx="2" fill="#6b4f10"/><circle cx="20" cy="32" r="2" fill="#c49a2e"/><rect x="16" y="20" width="8" height="6" rx="1" fill="#c49a2e"/><path d="M14 14 Q20 8 26 14" fill="none" stroke="#6b4f10" strokeWidth="2"/></svg>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M14 7H9V2a1 1 0 00-2 0v5H2a1 1 0 000 2h5v5a1 1 0 002 0V9h5a1 1 0 000-2z" transform="rotate(45 8 8)"/><circle cx="4" cy="4" r="2.5"/></svg>
+                          <span className="text-[13px] font-bold text-[#1a1a1a]">Sin aplicaciones conectadas</span>
+                        </div>
+                        <p className="text-[13px] text-[#646462]">Las aplicaciones aparecerán aquí cuando herramientas de terceros se conecten a tu cuenta.</p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccountApiKeysPage ────────────────────────────────────────────────────
+  function AccountApiKeysPage() {
+    const [showModal, setShowModal] = useState(false);
+    const [label, setLabel] = useState('');
+    const [orgAccess, setOrgAccess] = useState<'all'|'orgs'|'projects'>('all');
+    const [scopeSearch, setScopeSearch] = useState('');
+    const [scopes, setScopes] = useState<Record<string, 'none'|'read'|'write'>>({});
+
+    type ScopeEntry = { name: string; noWrite?: boolean; orange?: boolean; info?: boolean };
+    const allScopes: ScopeEntry[] = [
+      { name: 'Access control' }, { name: 'Action' }, { name: 'Activity log' }, { name: 'Alert' },
+      { name: 'Annotation' }, { name: 'Batch export' }, { name: 'Cohort' }, { name: 'Comment' },
+      { name: 'Customer analytics' }, { name: 'Customer journey' }, { name: 'Customer profile config' },
+      { name: 'Dashboard' }, { name: 'Dashboard template' }, { name: 'Dataset' },
+      { name: 'Desktop recording' }, { name: 'Early access feature' }, { name: 'Element' },
+      { name: 'Endpoint' }, { name: 'Error tracking' }, { name: 'Evaluation' },
+      { name: 'Event definition' }, { name: 'Experiment' }, { name: 'Export' },
+      { name: 'External data source' }, { name: 'Feature flag' }, { name: 'Group' },
+      { name: 'Health issue' }, { name: 'Heatmap' }, { name: 'Hog function' }, { name: 'Insight' },
+      { name: 'Insight variable' }, { name: 'Integration', noWrite: true }, { name: 'Legal document' },
+      { name: 'Live debugger' }, { name: 'LLM analytics' }, { name: 'LLM prompt' },
+      { name: 'LLM provider key', orange: true }, { name: 'LLM skill' }, { name: 'Logs' },
+      { name: 'Notebook' }, { name: 'Organization' }, { name: 'Organization integration' },
+      { name: 'Organization member' }, { name: 'Person' }, { name: 'Plugin' }, { name: 'Product tour' },
+      { name: 'Project' }, { name: 'Property definition' }, { name: 'Query', noWrite: true },
+      { name: 'Revenue analytics' }, { name: 'Session recording' }, { name: 'Session recording playlist' },
+      { name: 'Shared metric' }, { name: 'Sharing configuration' }, { name: 'Subscription' },
+      { name: 'Survey' }, { name: 'Task' }, { name: 'Ticket' }, { name: 'Tracing' },
+      { name: 'Uploaded media' }, { name: 'Usage metric' }, { name: 'User', noWrite: true },
+      { name: 'Visual review' }, { name: 'Warehouse table' }, { name: 'Warehouse view' },
+      { name: 'Web analytics' }, { name: 'Webhook', info: true }, { name: 'Workflow' },
+    ];
+
+    const filteredScopes = allScopes.filter(s =>
+      !scopeSearch || s.name.toLowerCase().includes(scopeSearch.toLowerCase())
+    );
+
+    const setScope = (scope: string, val: 'none'|'read'|'write') =>
+      setScopes(s => ({ ...s, [scope]: val }));
+
+    const ScopeBtn = ({ active, label: lbl, onClick, disabled }: { active: boolean; label: string; onClick: () => void; disabled?: boolean }) => (
+      <button
+        onClick={disabled ? undefined : onClick}
+        className={`h-7 px-3 text-[12px] font-semibold rounded border transition-colors ${
+          disabled
+            ? 'border-transparent text-[#d1d5db] cursor-default'
+            : active
+            ? 'border-[#f59e0b] text-[#1a1a1a] bg-white'
+            : 'border-transparent text-[#646462] hover:text-[#1a1a1a] hover:border-[#e9eae6]'
+        }`}
+      >
+        {lbl}
+      </button>
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto relative">
+        <div className="max-w-4xl px-8 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Claves API personales</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">
+              Estas claves permiten acceso completo a tu cuenta personal a través de la API. Concede solo los permisos necesarios y elimina las claves no utilizadas cuanto antes.{' '}
+              <a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a>
+            </p>
+          </div>
+
+          <button
+            onClick={() => { setLabel(''); setOrgAccess('all'); setScopeSearch(''); setScopes({}); setShowModal(true); }}
+            className="flex items-center gap-1.5 h-9 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white"
+          >
+            <span className="text-[15px] leading-none">+</span> Crear clave API personal
+          </button>
+
+          <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Etiqueta</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Clave secreta</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Alcances</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acceso org. y proyecto</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Último uso</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Última renovación</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={8} className="px-4 py-3 text-[13px] text-[#646462]">Sin claves API personales</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Modal */}
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <div className="bg-white rounded-[12px] shadow-xl w-[560px] max-h-[80vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Crear clave API personal</h2>
+                <button onClick={() => setShowModal(false)} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {/* Label */}
+                <div className="space-y-1.5">
+                  <label className="text-[13px] font-bold text-[#1a1a1a]">Etiqueta</label>
+                  <input
+                    type="text"
+                    value={label}
+                    onChange={e => setLabel(e.target.value)}
+                    placeholder='Por ejemplo "Bot de informes" o "Zapier"'
+                    className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Org & project access */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[13px] font-bold text-[#1a1a1a]">Acceso a organización y proyecto</label>
+                    <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
+                      {(['all','orgs','projects'] as const).map((opt, i) => (
+                        <button
+                          key={opt}
+                          onClick={() => setOrgAccess(opt)}
+                          className={`h-7 px-3 text-[12px] font-semibold transition-colors ${
+                            orgAccess === opt ? 'bg-white text-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'
+                          } ${i > 0 ? 'border-l border-[#e9eae6]' : ''}`}
+                        >
+                          {opt === 'all' ? 'Todo el acceso' : opt === 'orgs' ? 'Organizaciones' : 'Proyectos'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scopes */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[13px] font-bold text-[#1a1a1a]">Alcances</label>
+                    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                      Seleccionar preset
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                    </button>
+                  </div>
+                  <p className="text-[12px] text-[#646462] leading-relaxed">
+                    Las claves API personales tienen alcances para limitar qué acciones pueden realizar. Recomendamos encarecidamente que solo concedas a la clave los permisos que necesita para hacer su trabajo. Puedes añadir o revocar alcances más adelante.
+                  </p>
+                  <p className="text-[12px] text-[#646462]">Tu clave API personal nunca podrá realizar acciones para las que tu cuenta carezca de permisos.</p>
+
+                  {/* Scope search */}
+                  <div className="relative">
+                    <svg viewBox="0 0 16 16" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 1a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM0 6.5a6.5 6.5 0 1111.6 4l3.2 3.2a1 1 0 01-1.4 1.4L10.1 12A6.5 6.5 0 010 6.5z"/></svg>
+                    <input
+                      value={scopeSearch}
+                      onChange={e => setScopeSearch(e.target.value)}
+                      placeholder="Buscar alcances..."
+                      className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[12px] bg-white outline-none focus:border-[#3b59f6]"
+                    />
+                  </div>
+
+                  {/* Scope rows */}
+                  <div className="space-y-0 divide-y divide-[#e9eae6] border border-[#e9eae6] rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                    {filteredScopes.map(entry => {
+                      const cur = scopes[entry.name] ?? 'none';
+                      return (
+                        <div key={entry.name} className="flex items-center justify-between px-3 py-2 bg-white hover:bg-[#fafaf9]">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[13px] font-bold ${entry.orange ? 'text-[#f59e0b]' : 'text-[#1a1a1a]'}`}>{entry.name}</span>
+                            {entry.info && (
+                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11zm.5 8h-1V7h1v3zm0-4h-1V5h1v1z"/></svg>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-0.5">
+                            <ScopeBtn active={cur === 'none'} label="Sin acceso" onClick={() => setScope(entry.name, 'none')} />
+                            <ScopeBtn active={cur === 'read'} label="Leer" onClick={() => setScope(entry.name, 'read')} />
+                            <ScopeBtn active={cur === 'write'} label="Escribir" onClick={() => setScope(entry.name, 'write')} disabled={entry.noWrite} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-[#e9eae6] px-6 py-4 flex justify-end gap-2">
+                <button onClick={() => setShowModal(false)} className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
+                <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">Crear clave</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── AccountDangerZonePage ─────────────────────────────────────────────────
+  function AccountDangerZonePage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Eliminar cuenta</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Elimina permanentemente tu cuenta de Clain. Esta acción no se puede deshacer.</p>
+            <p className="text-[13px] text-[#e8572a]">
+              Esto es <strong>irreversible</strong>. Por favor, asegúrate.
+            </p>
+            <button className="flex items-center gap-2 h-9 px-4 border border-[#e8572a] rounded-lg text-[13px] font-semibold text-[#e8572a] hover:bg-[#fef2f0] bg-white">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#e8572a]"><path d="M6 2a1 1 0 00-1 1v1H3a1 1 0 000 2h.08l.6 7.2A2 2 0 005.67 15h4.66a2 2 0 001.99-1.8L12.92 6H13a1 1 0 000-2h-2V3a1 1 0 00-1-1H6zm1 2h2v1H7V4zm-2.08 2h6.16l-.57 6.87a.5.5 0 01-.5.13H5.99a.5.5 0 01-.5-.13L4.92 6z"/></svg>
+              Eliminar tu cuenta
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Page title map ───────────────────────────────────────────────────────────
+  const pageTitles: Record<SettingsPage, string> = {
+    'general': 'Ajustes - General', 'customization': 'Ajustes - Personalización',
+    'autocapture': 'Ajustes - Autocaptura', 'ai': 'Ajustes - Clain AI',
+    'mcp': 'Ajustes - Clain MCP', 'error-tracking': 'Ajustes - Error Tracking',
+    'experiments': 'Ajustes - Experimentos', 'feature-flags': 'Ajustes - Feature Flags',
+    'heatmaps': 'Ajustes - Mapas de calor', 'product-analytics': 'Ajustes - Analíticas de producto',
+    'revenue-analytics': 'Ajustes - Revenue Analytics', 'session-replay': 'Ajustes - Replay de sesión',
+    'support': 'Ajustes - Soporte', 'surveys': 'Ajustes - Encuestas',
+    'web-analytics': 'Ajustes - Web Analytics', 'privacy': 'Ajustes - Privacidad',
+    'access-control': 'Ajustes - Control de acceso', 'activity-logs': 'Ajustes - Registros de actividad',
+    'approvals': 'Ajustes - Aprobaciones', 'discussions': 'Ajustes - Discusiones',
+    'integrations': 'Ajustes - Integraciones', 'danger-zone': 'Ajustes - Zona de peligro',
+    'org-general': 'Organización - General', 'org-members': 'Organización - Miembros',
+    'org-roles': 'Organización - Roles', 'org-sso': 'Organización - Autenticación y SSO',
+    'org-security': 'Organización - Seguridad', 'org-oauth': 'Organización - Aplicaciones OAuth',
+    'org-cimd': 'Organización - Tokens de verificación CIMD', 'org-proxy': 'Organización - Proxy inverso gestionado',
+    'org-danger-zone': 'Organización - Zona de peligro', 'account-profile': 'Cuenta - Perfil',
+    'account-notifications': 'Cuenta - Notificaciones', 'account-customization': 'Cuenta - Personalización',
+    'account-previews': 'Cuenta - Previsualizaciones de funciones', 'account-integrations': 'Cuenta - Integraciones personales',
+    'account-connected-apps': 'Cuenta - Aplicaciones conectadas', 'account-api-keys': 'Cuenta - Claves API personales',
+    'account-danger-zone': 'Cuenta - Zona de peligro',
+  };
+
+  return (
+    <div className="flex-1 flex min-h-0 bg-white">
+      {/* Settings sidebar */}
+      <div className="w-56 flex-shrink-0 flex flex-col border-r border-[#e9eae6] bg-[#fafaf9]">
+        {/* Search */}
+        <div className="px-3 py-2.5 border-b border-[#e9eae6]">
+          <div className="relative">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+            <input type="text" value={settingsSearch} onChange={e => setSettingsSearch(e.target.value)} placeholder="Buscar ajustes..." className="w-full h-7 pl-7 pr-2 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6] bg-white"/>
+          </div>
+        </div>
+
+        {/* Nav tree */}
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+          <SGroup label="Proyecto" open={projectOpen} toggle={() => setProjectOpen(o => !o)}>
+            <SNavItem p="general" label="General" indent/>
+            <SNavItem p="customization" label="Personalización" indent/>
+            <SNavItem p="autocapture" label="Autocaptura" indent/>
+          </SGroup>
+          <SGroup label="IA" open={aiOpen} toggle={() => setAiOpen(o => !o)}>
+            <SNavItem p="ai" label="Clain AI" indent/>
+            <SNavItem p="mcp" label="Clain MCP" indent/>
+          </SGroup>
+          <SGroup label="Productos" open={productsOpen} toggle={() => setProductsOpen(o => !o)}>
+            <SNavItem p="error-tracking" label="Error tracking" indent/>
+            <SNavItem p="experiments" label="Experimentos" indent/>
+            <SNavItem p="feature-flags" label="Feature flags" indent/>
+            <SNavItem p="heatmaps" label="Mapas de calor" indent/>
+            <SNavItem p="product-analytics" label="Analíticas de producto" indent/>
+            <SNavItem p="revenue-analytics" label="Revenue analytics" indent/>
+            <SNavItem p="session-replay" label="Replay de sesión" indent/>
+            <SNavItem p="support" label="Soporte" indent/>
+            <SNavItem p="surveys" label="Encuestas" indent/>
+            <SNavItem p="web-analytics" label="Web analytics" indent/>
+          </SGroup>
+          <SNavItem p="privacy" label="Privacidad"/>
+          <SNavItem p="access-control" label="Control de acceso"/>
+          <SNavItem p="activity-logs" label="Registros de actividad"/>
+          <SNavItem p="approvals" label="Aprobaciones"/>
+          <SNavItem p="discussions" label="Discusiones"/>
+          <SNavItem p="integrations" label="Integraciones"/>
+          <SNavItem p="danger-zone" label="Zona de peligro" red/>
+          <SGroup label="Organización" open={orgOpen} toggle={() => setOrgOpen(o => !o)}>
+            <SNavItem p="org-general" label="General" indent/>
+            <SNavItem p="org-members" label="Miembros" indent/>
+            <SNavItem p="org-roles" label="Roles" indent/>
+            <SNavItem p="org-sso" label="Autenticación y SSO" indent/>
+            <SNavItem p="org-security" label="Seguridad" indent/>
+            <SNavItem p="org-oauth" label="Aplicaciones OAuth" indent/>
+            <SNavItem p="org-cimd" label="Tokens CIMD" indent/>
+            <SNavItem p="org-proxy" label="Proxy inverso gestionado" indent/>
+            <SNavItem p="org-danger-zone" label="Zona de peligro" indent red/>
+          </SGroup>
+          <SGroup label="Cuenta" open={accountOpen} toggle={() => setAccountOpen(o => !o)}>
+            <SNavItem p="account-profile" label="Perfil" indent/>
+            <SNavItem p="account-notifications" label="Notificaciones" indent/>
+            <SNavItem p="account-customization" label="Personalización" indent/>
+            <SNavItem p="account-previews" label="Previsualizaciones" indent/>
+            <SNavItem p="account-integrations" label="Integraciones personales" indent/>
+            <SNavItem p="account-connected-apps" label="Aplicaciones conectadas" indent/>
+            <SNavItem p="account-api-keys" label="Claves API personales" indent/>
+            <SNavItem p="account-danger-zone" label="Zona de peligro" indent red/>
+          </SGroup>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.5 1.5M11 11l1.5 1.5M3.5 12.5L5 11M11 5l1.5-1.5"/></svg>
+          <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">{pageTitles[page]}</span>
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+        </div>
+
+        {/* Page content */}
+        {page === 'general'         && <GeneralPage />}
+        {page === 'customization'   && <CustomizationPage />}
+        {page === 'autocapture'     && <AutocapturePage />}
+        {page === 'ai'             && <AIPage />}
+        {page === 'mcp'            && <MCPPage />}
+        {page === 'error-tracking' && <ErrorTrackingPage />}
+        {page === 'experiments'    && <ExperimentsPage />}
+        {page === 'feature-flags'        && <FeatureFlagsPage />}
+        {page === 'heatmaps'             && <HeatmapsPage />}
+        {page === 'product-analytics'    && <ProductAnalyticsPage />}
+        {page === 'revenue-analytics'    && <RevenueAnalyticsSettingsPage />}
+        {page === 'session-replay'       && <SessionReplayPage />}
+        {page === 'support'              && <SupportPage />}
+        {page === 'surveys'             && <SurveysPage />}
+        {page === 'web-analytics'       && <WebAnalyticsSettingsPage />}
+        {page === 'privacy'             && <PrivacyPage />}
+        {page === 'access-control'      && <AccessControlPage />}
+        {page === 'activity-logs'       && <ActivityLogsPage />}
+        {page === 'approvals'           && <ApprovalsPage />}
+        {page === 'discussions'         && <DiscussionsPage />}
+        {page === 'org-general'         && <OrgGeneralPage />}
+        {page === 'org-members'         && <OrgMembersPage />}
+        {page === 'org-roles'           && <OrgRolesPage />}
+        {page === 'org-sso'             && <OrgSSOPage />}
+        {page === 'org-security'        && <OrgSecurityPage />}
+        {page === 'org-oauth'           && <OrgOAuthPage />}
+        {page === 'org-cimd'            && <OrgCIMDPage />}
+        {page === 'org-proxy'               && <OrgProxyPage />}
+        {page === 'account-customization'   && <AccountCustomizationPage />}
+        {page === 'account-previews'        && <AccountPreviewsPage />}
+        {page === 'account-integrations'    && <AccountIntegrationsPage />}
+        {page === 'account-connected-apps'  && <AccountConnectedAppsPage />}
+        {page === 'account-api-keys'        && <AccountApiKeysPage />}
+        {page === 'account-danger-zone'     && <AccountDangerZonePage />}
+        {!['general','customization','autocapture','ai','mcp','error-tracking','experiments','feature-flags','heatmaps','product-analytics','revenue-analytics','session-replay','support','surveys','web-analytics','privacy','access-control','activity-logs','approvals','discussions','org-general','org-members','org-roles','org-sso','org-security','org-oauth','org-cimd','org-proxy','account-customization','account-previews','account-integrations','account-connected-apps','account-api-keys','account-danger-zone'].includes(page) && <DevPage title={pageTitles[page]}/>}
+      </div>
+    </div>
+  );
+}
+
+
 function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
   const [sub,     setSub]     = useState<WAView>('waHome');
   const [dataSub, setDataSub] = useState<WADataSubView>('waDataModels');
+  const [showSqlEditor, setShowSqlEditor] = useState(false);
 
   const DATA_TITLES: Record<WADataSubView, string> = {
     waDataModels:            'Modelos',
@@ -26899,16 +33668,51 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
   function renderContent() {
     if (sub === 'waHome')     return <WAHomeView />;
     if (sub === 'waActivity') return <WAActivityView />;
+    if (sub === 'waSettings') return <WASettingsView />;
+    // SQL editor full-screen (no WADataSidebar)
+    if (showSqlEditor) return (
+      <div className="flex flex-1 min-h-0 p-2 min-w-0">
+        <WADataSQLQueryView onClose={() => setShowSqlEditor(false)} />
+      </div>
+    );
+    const PERSONS_SUBS: WADataSubView[] = ['waDataPersons', 'waDataCohorts', 'waDataGroups'];
     if (sub === 'waData') return (
       <div className="flex flex-1 min-h-0 gap-2 p-2 min-w-0">
         <WADataSidebar sub={dataSub} onSelect={setDataSub} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{DATA_TITLES[dataSub]}</h1>
-            <span className="text-[12px] text-[#3b59f6] font-semibold bg-[#eff2ff] px-2.5 py-1 rounded-full">Clain Web Analytics</span>
+        {PERSONS_SUBS.includes(dataSub)
+          ? <WADataPersonsGroupsView dataSub={dataSub} onDataSubChange={setDataSub} />
+          : dataSub === 'waDataAnnotations'
+          ? <WADataAnnotationsView />
+          : dataSub === 'waDataDestinations'
+          ? <WADataDestinationsView />
+          : dataSub === 'waDataIngestionWarnings'
+          ? <WADataIngestionWarningsView />
+          : dataSub === 'waDataSources'
+          ? <WADataSourcesView />
+          : dataSub === 'waDataActions'
+          ? <WADataActionsView />
+          : dataSub === 'waDataEventDefs'
+          ? <WADataEventDefsView />
+          : dataSub === 'waDataPropDefs'
+          ? <WADataPropDefsView />
+          : dataSub === 'waDataRevenueDefs'
+          ? <WADataRevenueDefsView />
+          : dataSub === 'waDataSqlVars'
+          ? <WADataSqlVarsView />
+          : (
+          <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+            {dataSub === 'waDataModels'
+              ? <WADataModelsView onOpenSqlEditor={() => setShowSqlEditor(true)} />
+              : <>
+                  <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+                    <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{DATA_TITLES[dataSub]}</h1>
+                    <span className="text-[12px] text-[#3b59f6] font-semibold bg-[#eff2ff] px-2.5 py-1 rounded-full">Clain Web Analytics</span>
+                  </div>
+                  <WADevContent title={DATA_TITLES[dataSub]} />
+                </>
+            }
           </div>
-          <WADevContent title={DATA_TITLES[dataSub]} />
-        </div>
+        )}
       </div>
     );
     return (

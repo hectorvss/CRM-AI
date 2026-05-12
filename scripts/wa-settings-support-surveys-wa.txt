@@ -1,0 +1,437 @@
+  // ── SupportPage ───────────────────────────────────────────────────────────
+  function SupportPage() {
+    const [supportEnabled, setSupportEnabled] = useState(false);
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* General section */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">General</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+
+            {/* Enable support card */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <div className="px-5 py-4 space-y-3">
+                <h3 className="text-[14px] font-bold text-[#1a1a1a]">Activar soporte</h3>
+                <p className="text-[13px] text-[#646462]">Gestiona, asigna y automatiza el soporte a través del widget in-app, email, Slack, Microsoft Teams y la API directa.</p>
+                <ul className="space-y-1.5">
+                  <li className="text-[13px] text-[#1a1a1a]">
+                    <span className="font-semibold">Widget in-app</span>
+                    {' '}—{' '}
+                    <span className="text-[#646462]">integra un chat en tu web para visitantes autenticados o anónimos.</span>
+                  </li>
+                  <li className="text-[13px] text-[#1a1a1a]">
+                    <span className="font-semibold">Email</span>
+                    {' '}—{' '}
+                    <span className="text-[#646462]">reenvía emails de clientes a Clain y responde directamente desde la</span>
+                    {' '}<a href="#" className="text-[#e8572a] hover:underline">bandeja de entrada</a>.
+                  </li>
+                  <li className="text-[13px] text-[#1a1a1a]">
+                    <span className="font-semibold">Slack</span>
+                    {' '}—{' '}
+                    <span className="text-[#646462]">convierte mensajes y reacciones de Slack en tickets.</span>
+                  </li>
+                  <li className="text-[13px] text-[#1a1a1a]">
+                    <span className="font-semibold">API directa</span>
+                    {' '}—{' '}
+                    <span className="text-[#646462]">trae tu propia UI sobre la API de conversaciones.</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#e9eae6]">
+                <div>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Activar para empezar a aceptar tickets.</p>
+                  <p className="text-[12px] text-[#646462]">Configura canales y notificaciones después de activar.</p>
+                </div>
+                <Toggle checked={supportEnabled} onChange={setSupportEnabled}/>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SurveysPage ───────────────────────────────────────────────────────────
+  function SurveysPage() {
+    const [surveysEnabled, setSurveysEnabled] = useState(false);
+    const [selectedTheme, setSelectedTheme] = useState('clean');
+    const [cookielessMode, setCookielessMode] = useState('disabled');
+    const [hideClainBranding, setHideClainBranding] = useState(false);
+    const [shuffleQuestions, setShuffleQuestions] = useState(false);
+    const [delayEnabled, setDelayEnabled] = useState(false);
+    const [delaySeconds, setDelaySeconds] = useState('');
+    const [positionDropdown, setPositionDropdown] = useState(false);
+    const [position, setPosition] = useState('bottom-right');
+    const [fontDropdown, setFontDropdown] = useState(false);
+    const [fontFamily, setFontFamily] = useState('inherit');
+    const [captureCLS, setCaptureCLS] = useState(true);
+    const [captureFCP, setCaptureFCP] = useState(true);
+    const [captureLCP, setCaptureLCP] = useState(true);
+    const [captureINP, setCaptureINP] = useState(true);
+
+    const themes = [
+      { id: 'clean',    label: 'Clean',    sub: 'Light & professional', bg: '#ffffff', accent: '#1a1a1a' },
+      { id: 'ocean',    label: 'Ocean',    sub: 'Cool & calming',       bg: '#e8f0fe', accent: '#3b59f6' },
+      { id: 'sunset',   label: 'Sunset',   sub: 'Warm & energetic',     bg: '#fff1ee', accent: '#e8572a' },
+      { id: 'carbon',   label: 'Carbon',   sub: 'Dark & neutral',       bg: '#2a2a2a', accent: '#646462' },
+      { id: 'midnight', label: 'Midnight', sub: 'Dark & sophisticated', bg: '#1e1e3f', accent: '#6366f1' },
+      { id: 'noir',     label: 'Noir',     sub: 'Pure black & white',   bg: '#000000', accent: '#ffffff' },
+    ];
+
+    const ColorField = ({ label, value, circle }: { label: string; value: string; circle?: string }) => (
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">{label}</label>
+        <div className="flex items-center gap-2 h-9 px-3 border border-[#e9eae6] rounded-lg bg-white">
+          {circle !== undefined && (
+            <div className="w-5 h-5 rounded-full border border-[#e9eae6] flex-shrink-0" style={{ background: circle || '#eeeded' }}/>
+          )}
+          <span className="text-[13px] text-[#1a1a1a]">{value}</span>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Surveys toggle */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Encuestas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <span className="text-[11px] font-semibold text-[#646462]">Plataformas compatibles:</span>
+              {[{n:'Web',ok:true},{n:'Android',ok:false},{n:'iOS',ok:false},{n:'React Native',ok:true}].map(p => (
+                <span key={p.n} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${p.ok ? 'bg-[#f0fdf4] border-[#bbf7d0] text-[#16a34a]' : 'bg-[#f3f3f1] border-[#e9eae6] text-[#646462]'}`}>
+                  {p.ok ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a]"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5z"/></svg> : <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>}
+                  {p.n}
+                </span>
+              ))}
+            </div>
+            <p className="text-[13px] text-[#646462]">Activa o desactiva las encuestas en tu aplicación web. Cuando están desactivadas, las encuestas no se renderizarán automáticamente.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar encuestas</span>
+              <Toggle checked={surveysEnabled} onChange={setSurveysEnabled}/>
+            </div>
+          </div>
+
+          {/* Default survey appearance */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Apariencia predeterminada de encuestas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura el aspecto predeterminado de las nuevas encuestas. Las encuestas individuales pueden sobrescribir estos ajustes.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+
+            {/* Premium upsell */}
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Colores y posición personalizados</h3>
+              <p className="text-[13px] text-[#646462]">Personaliza los colores de tus encuestas para que coincidan con tu marca y establece la posición de la encuesta.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+
+            {/* Theme */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Tema</h3>
+              <p className="text-[13px] text-[#646462]">Empieza con un preset y ajusta los colores individuales a continuación.</p>
+              <div className="grid grid-cols-6 gap-3">
+                {themes.map(t => (
+                  <button key={t.id} onClick={() => setSelectedTheme(t.id)}
+                    className={`flex flex-col items-center gap-1.5 p-2 rounded-[8px] border-2 transition-colors ${selectedTheme === t.id ? 'border-[#e8572a]' : 'border-[#e9eae6] hover:border-[#1a1a1a]'}`}>
+                    {/* Mini preview */}
+                    <div className="w-full h-10 rounded-[4px] flex flex-col gap-0.5 p-1.5 overflow-hidden" style={{ background: t.bg }}>
+                      <div className="h-1 w-3/4 rounded-full" style={{ background: t.accent, opacity: 0.8 }}/>
+                      <div className="h-1 w-full rounded-full" style={{ background: t.accent, opacity: 0.3 }}/>
+                      <div className="h-2.5 w-1/2 rounded-[2px] mt-auto" style={{ background: t.accent }}/>
+                    </div>
+                    <span className="text-[11px] font-semibold text-[#1a1a1a]">{t.label}</span>
+                    <span className="text-[10px] text-[#646462] text-center leading-tight">{t.sub}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Colors */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Colores</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <ColorField label="Fondo de encuesta" value="#eeeded" circle="#eeeded"/>
+                <ColorField label="Texto de pregunta" value="#000000 o var(--color)" circle=""/>
+                <ColorField label="Borde" value="#c9c6c6" circle="#c9c6c6"/>
+                <ColorField label="Fondo de input" value="white" circle="#ffffff"/>
+                <ColorField label="Texto de input" value="#000000 o var(--color)" circle=""/>
+                <ColorField label="Rating seleccionado" value="black" circle="#1a1a1a"/>
+                <ColorField label="Fondo del botón" value="black" circle="#1a1a1a"/>
+                <ColorField label="Texto del botón" value="white" circle="#ffffff"/>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Texto de placeholder</label>
+                  <input type="text" placeholder="Empieza a escribir..." className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+              </div>
+            </div>
+
+            {/* Layout */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Diseño</h3>
+              <p className="text-[13px] text-[#646462]">Contenedor, posicionamiento y tipografía. Solo se aplica en encuestas web, no en apps móviles nativas.</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Ancho de encuesta <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></label>
+                  <input type="text" defaultValue="300px" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Padding de caja</label>
+                  <input type="text" defaultValue="20px 24px" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Radio de borde</label>
+                  <input type="text" defaultValue="10px" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Sombra de caja</label>
+                  <input type="text" defaultValue="0 4px 12px rgba(0, 0, 0, 0.15)" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <div className="space-y-1.5 relative">
+                  <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Familia de fuente <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></label>
+                  <button onClick={() => setFontDropdown(d => !d)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]">
+                    <span>inherit (fuente de tu web)</span>
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+                  </button>
+                  {fontDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setFontDropdown(false)}/>
+                      <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                        {['inherit (fuente de tu web)','sans-serif','serif','monospace'].map(f => (
+                          <button key={f} onClick={() => { setFontFamily(f); setFontDropdown(false); }} className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${f === fontFamily ? 'font-medium bg-[#f3f3f1]' : ''}`}>{f}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">z-index <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></label>
+                  <input type="text" defaultValue="2147482647" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+                </div>
+              </div>
+            </div>
+
+            {/* Position */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Posición</h3>
+              <div className="flex items-end gap-6">
+                {/* Position picker */}
+                <div className="w-24 h-20 border-2 border-[#e9eae6] rounded-[8px] relative bg-[#fafaf9]">
+                  <div className="absolute bottom-2 right-2 w-4 h-4 rounded-full bg-[#e8572a]"/>
+                </div>
+                <div className="relative">
+                  <button onClick={() => setPositionDropdown(d => !d)} className="h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center gap-2 hover:border-[#3b59f6]">
+                    Abajo a la derecha
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+                  </button>
+                  {positionDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setPositionDropdown(false)}/>
+                      <div className="absolute left-0 top-full mt-1 w-44 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                        {['Arriba a la izquierda','Arriba a la derecha','Abajo a la izquierda','Abajo a la derecha','Centro'].map(p => (
+                          <button key={p} className="w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9]">{p}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Full-screen editor */}
+            <button className="w-full flex items-center gap-2 h-10 px-4 border border-[#e9eae6] rounded-[8px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.5 1.5M11 11l1.5 1.5M3.5 12.5L5 11M11 5l1.5-1.5"/></svg>
+              Editor de encuesta a pantalla completa
+            </button>
+
+            {/* Behavior */}
+            <div className="space-y-3">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Comportamiento</h3>
+              <div className="space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={hideClainBranding} onChange={e => setHideClainBranding(e.target.checked)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
+                  <span className="text-[13px] text-[#1a1a1a]">Ocultar branding de Clain</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={shuffleQuestions} onChange={e => setShuffleQuestions(e.target.checked)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
+                  <span className="text-[13px] text-[#1a1a1a]">Mezclar preguntas</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={delayEnabled} onChange={e => setDelayEnabled(e.target.checked)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
+                  <span className="text-[13px] text-[#1a1a1a] flex items-center gap-1.5">
+                    Retrasar el popup de la encuesta al menos
+                    <input type="text" value={delaySeconds} onChange={e => setDelaySeconds(e.target.value)} className="w-12 h-6 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6] text-center"/>
+                    segundos una vez que se cumplen las condiciones de visualización.
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── WebAnalyticsSettingsPage ──────────────────────────────────────────────
+  function WebAnalyticsSettingsPage() {
+    const [cookieless, setCookieless] = useState('disabled');
+    const [bounceRate, setBounceRate] = useState('10');
+    const [webVitals, setWebVitals] = useState(false);
+    const [cls, setCls] = useState(true);
+    const [fcp, setFcp] = useState(true);
+    const [lcp, setLcp] = useState(true);
+    const [inp, setInp] = useState(true);
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Web analytics domains */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Dominios de web analytics</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura qué dominios se rastrean en web analytics. No se permiten comodines — las URLs deben ser concretas y accesibles.</p>
+
+            {/* No URLs card */}
+            <div className="border border-[#e9eae6] rounded-[10px] p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[13px] font-semibold text-[#1a1a1a]">No hay URLs autorizadas.</p>
+                  <p className="text-[13px] text-[#646462] mt-1">Añade una para empezar. Cuando nos envíes eventos te sugeriremos las que deberías autorizar. Esto te permitirá usar estas URLs en web analytics, experimentos web y nuestra barra de herramientas.</p>
+                </div>
+                <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] whitespace-nowrap">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 2.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/></svg>
+                    Buscar sugerencias
+                  </button>
+                  <span className="text-[11px] text-[#646462] whitespace-nowrap">¿Enviaste un evento? Volver a buscar sugerencias.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Add URL button */}
+            <button className="w-full flex items-center justify-center gap-2 h-10 border border-dashed border-[#e9eae6] rounded-[10px] text-[13px] font-medium text-[#646462] hover:bg-[#f3f3f1] hover:border-[#1a1a1a] hover:text-[#1a1a1a]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Añadir nueva URL autorizada
+            </button>
+          </div>
+
+          {/* Custom channel type */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tipo de canal personalizado</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Define reglas personalizadas para categorizar las fuentes de tráfico en canales.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <p className="text-[13px] text-[#646462]">Puedes crear tipos de canal personalizados definiendo reglas que coincidan con los eventos entrantes. Se usa la primera regla que coincida, y si ninguna regla coincide (o si no hay ninguna definida), se usa el <a href="#" className="text-[#e8572a] hover:underline">tipo de canal predeterminado</a>.</p>
+            <p className="text-[13px] text-[#646462]">Para depurar, prueba la <a href="#" className="text-[#e8572a] hover:underline">herramienta de exploración de atribución de sesiones ↗</a>.</p>
+            <div className="flex items-center gap-2 justify-end">
+              <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Añadir regla
+              </button>
+              <button className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar reglas de tipo de canal</button>
+            </div>
+          </div>
+
+          {/* Cookieless server hash mode */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Modo hash de servidor sin cookies</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Activa el tracking sin cookies usando un hash que preserva la privacidad para contar usuarios únicos sin cookies. Debes activarlo aquí antes de activar cookieless en clain-js.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="space-y-2">
+              {[{v:'enabled',label:'Activado'},{v:'disabled',label:'Desactivado'}].map(opt => (
+                <label key={opt.v} className="flex items-center gap-2.5 cursor-pointer">
+                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${cookieless === opt.v ? 'border-[#e8572a] bg-[#e8572a]' : 'border-[#d1d5db]'}`} onClick={() => setCookieless(opt.v)}>
+                    {cookieless === opt.v && <div className="w-1.5 h-1.5 rounded-full bg-white"/>}
+                  </div>
+                  <span className="text-[13px] text-[#1a1a1a]">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+          </div>
+
+          {/* Bounce rate duration */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Duración de tasa de rebote</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Establece cuánto tiempo puede permanecer un usuario en una página (en segundos) antes de que la sesión no se cuente como rebote. Por defecto son 10 segundos.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="relative max-w-xs">
+              <input type="text" value={bounceRate} onChange={e => setBounceRate(e.target.value)}
+                className="w-full h-9 px-3 pr-8 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
+              {bounceRate && (
+                <button onClick={() => setBounceRate('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#646462] hover:text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
+                </button>
+              )}
+            </div>
+            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+          </div>
+
+          {/* Web vitals autocapture */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Autocaptura de Web Vitals</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <span className="text-[11px] font-semibold text-[#646462]">Plataformas compatibles:</span>
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded-full text-[11px] font-semibold text-[#16a34a]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a]"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5z"/></svg>
+                Web
+              </span>
+            </div>
+            <p className="text-[13px] text-[#646462]">Captura las métricas de web vitals de Google Chrome para el seguimiento del rendimiento en web analytics.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar autocaptura de web vitals</span>
+              <Toggle checked={webVitals} onChange={setWebVitals}/>
+            </div>
+            <p className="text-[13px] text-[#646462]">También puedes elegir capturar solo métricas específicas de web vitals. Por defecto, se capturan las cuatro métricas principales: CLS, FCP, LCP e INP.</p>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3 max-w-xs">
+              {[
+                { label: 'Capturar CLS', v: cls, set: setCls },
+                { label: 'Capturar FCP', v: fcp, set: setFcp },
+                { label: 'Capturar LCP', v: lcp, set: setLcp },
+                { label: 'Capturar INP', v: inp, set: setInp },
+              ].map(item => (
+                <div key={item.label} className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-medium text-[#1a1a1a]">{item.label}</span>
+                  <Toggle checked={item.v} onChange={item.set}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
