@@ -25795,6 +25795,851 @@ function ClainModuleCard({
 // ─────────────────────────────────────────────────────────────────────────────
 type WAView = 'waHome' | 'waActivity' | 'waData' | 'waFiles' | 'waApps' | 'waStarred' | 'waSettings' | 'waExports' | 'waHealth';
 type WADataSubView = 'waDataModels' | 'waDataGroups' | 'waDataAnnotations' | 'waDataComments' | 'waDataPersons' | 'waDataCohorts' | 'waDataDestinations' | 'waDataIngestionWarnings' | 'waDataSources' | 'waDataTransformations' | 'waDataActions' | 'waDataEventDefs' | 'waDataPropDefs' | 'waDataRevenueDefs' | 'waDataSqlVars';
+type WAAppsSubView = 'appDashboards' | 'appProductAnalytics' | 'appSqlEditor' | 'appWebAnalytics' |
+  'appLlmAnalytics' | 'appClusters' | 'appPlayground' |
+  'appErrorTracking' | 'appHeatmaps' | 'appLogs' | 'appSessionReplay' | 'appSupport' | 'appSurveys' |
+  'appEarlyAccess' | 'appExperiments' | 'appFeatureFlags' |
+  'appNotebooks' | 'appToolbar' | 'appWebScripts' | 'appWorkflows';
+
+// ── WAAppsSidebar ──────────────────────────────────────────────────────────────
+function WAAppsSidebar({ sub, onSelect }: { sub: WAAppsSubView; onSelect: (s: WAAppsSubView) => void }) {
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    Analytics: true, 'AI engineering': true, Behavior: true, Features: true, Tools: true,
+  });
+  const toggle = (g: string) => setOpenSections(s => ({ ...s, [g]: !s[g] }));
+
+  type AppGroup = { label: string; items: { key: WAAppsSubView; label: string; badge?: string; icon: ReactNode }[] };
+
+  const groups: AppGroup[] = [
+    {
+      label: 'Analytics',
+      items: [
+        { key: 'appDashboards', label: 'Dashboards', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="8" width="3" height="7" rx="0.5" fill="#e8572a"/><rect x="6" y="5" width="3" height="10" rx="0.5" fill="#e8572a"/><rect x="11" y="2" width="3" height="13" rx="0.5" fill="#e8572a"/></svg>
+        )},
+        { key: 'appProductAnalytics', label: 'Product analytics', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#3b59f6]" strokeWidth="1.5" strokeLinecap="round"><path d="M2 12l3.5-4 3 2.5L12 4"/></svg>
+        )},
+        { key: 'appSqlEditor', label: 'SQL editor', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="2" width="14" height="12" rx="2" fill="#9966cc"/><path d="M4 6l2.5 2.5L4 11M8 11h4" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+        )},
+        { key: 'appWebAnalytics', label: 'Web analytics', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><circle cx="8" cy="8" r="7" fill="none" stroke="#22c55e" strokeWidth="1.5"/><path d="M1 8h14M8 1c-2 2-3 4-3 7s1 5 3 7M8 1c2 2 3 4 3 7s-1 5-3 7" stroke="#22c55e" strokeWidth="1.2" fill="none"/></svg>
+        )},
+      ],
+    },
+    {
+      label: 'AI engineering',
+      items: [
+        { key: 'appLlmAnalytics', label: 'LLM analytics', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><circle cx="8" cy="8" r="7" fill="#ec4899"/><path d="M5 8h6M8 5v6" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
+        )},
+        { key: 'appClusters', label: 'Clusters', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><circle cx="8" cy="4" r="2" fill="#3b59f6"/><circle cx="4" cy="11" r="2" fill="#3b59f6"/><circle cx="12" cy="11" r="2" fill="#3b59f6"/><path d="M8 6L4 9M8 6l4 3" stroke="#3b59f6" strokeWidth="1" fill="none"/></svg>
+        )},
+        { key: 'appPlayground', label: 'Playground', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="2" y="2" width="12" height="12" rx="3" fill="#06b6d4"/><path d="M6 5l4 3-4 3V5z" fill="white"/></svg>
+        )},
+      ],
+    },
+    {
+      label: 'Behavior',
+      items: [
+        { key: 'appErrorTracking', label: 'Error tracking', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><path d="M8 1.5L1 13.5h14L8 1.5z" fill="#f59e0b"/><path d="M8 6v3.5M8 11v.5" stroke="white" strokeWidth="1.3" strokeLinecap="round" fill="none"/></svg>
+        )},
+        { key: 'appHeatmaps', label: 'Heatmaps', badge: 'BETA', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="1" width="14" height="14" rx="2" fill="#f97316"/><circle cx="5" cy="8" r="3" fill="#fef3c7" opacity="0.6"/><circle cx="11" cy="7" r="2" fill="#fef3c7" opacity="0.4"/></svg>
+        )},
+        { key: 'appLogs', label: 'Logs', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M2 4h12M2 8h9M2 12h6"/></svg>
+        )},
+        { key: 'appSessionReplay', label: 'Session replay', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><circle cx="8" cy="8" r="7" fill="none" stroke="#e8572a" strokeWidth="1.5"/><path d="M6 5.5l5 2.5-5 2.5V5.5z" fill="#e8572a"/></svg>
+        )},
+        { key: 'appSupport', label: 'Support', badge: 'BETA', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><circle cx="8" cy="8" r="7" fill="#3b59f6"/><path d="M5.5 6.5a2.5 2.5 0 115 0c0 1.5-2.5 2-2.5 3.5M8 12v.5" stroke="white" strokeWidth="1.3" strokeLinecap="round" fill="none"/></svg>
+        )},
+        { key: 'appSurveys', label: 'Surveys', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><path d="M2 2h12v9H9.5L7.5 13.5 8 11H2V2z" fill="#9966cc"/><path d="M5 6h6M5 8h4" stroke="white" strokeWidth="1.2" strokeLinecap="round" fill="none"/></svg>
+        )},
+      ],
+    },
+    {
+      label: 'Features',
+      items: [
+        { key: 'appEarlyAccess', label: 'Early access features', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><path d="M8 2c-1 2-4 3-4 6a4 4 0 008 0c0-3-3-4-4-6z" fill="#14b8a6"/><circle cx="8" cy="10" r="1.5" fill="white"/></svg>
+        )},
+        { key: 'appExperiments', label: 'Experiments', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><path d="M6 2v5L2.5 13.5h11L10 7V2M5.5 2h5" stroke="#9966cc" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/><circle cx="5.5" cy="11" r="1" fill="#9966cc"/><circle cx="10.5" cy="12" r="0.8" fill="#9966cc"/></svg>
+        )},
+        { key: 'appFeatureFlags', label: 'Feature flags', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="6" width="14" height="5" rx="2.5" fill="#3b59f6"/><circle cx="10.5" cy="8.5" r="2" fill="white"/></svg>
+        )},
+      ],
+    },
+    {
+      label: 'Tools',
+      items: [
+        { key: 'appNotebooks', label: 'Notebooks', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="3" y="1" width="10" height="14" rx="1.5" fill="none" stroke="#646462" strokeWidth="1.3"/><path d="M6 5h5M6 8h5M6 11h3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/><rect x="1" y="3" width="3" height="10" rx="0.5" fill="#e9eae6"/></svg>
+        )},
+        { key: 'appToolbar', label: 'Toolbar', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="4" width="14" height="8" rx="2" fill="#1a1a1a"/><circle cx="4" cy="8" r="1" fill="white"/><rect x="7" y="7" width="6" height="1.5" rx="0.5" fill="white"/></svg>
+        )},
+        { key: 'appWebScripts', label: 'Web scripts', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#3b59f6]" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4l-3 4 3 4M11 4l3 4-3 4M9 3l-2 10"/></svg>
+        )},
+        { key: 'appWorkflows', label: 'Workflows', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><circle cx="3" cy="8" r="2" fill="#3b59f6"/><circle cx="13" cy="4" r="2" fill="#3b59f6"/><circle cx="13" cy="12" r="2" fill="#3b59f6"/><path d="M5 8h3.5M8.5 8L11 4.5M8.5 8L11 11.5" stroke="#3b59f6" strokeWidth="1.2" fill="none"/></svg>
+        )},
+      ],
+    },
+  ];
+
+  return (
+    <div className="w-56 flex-shrink-0 flex flex-col bg-[#fafaf9] rounded-[12px] border border-[#e9eae6] overflow-hidden">
+      {/* Search */}
+      <div className="px-3 py-2.5 border-b border-[#e9eae6]">
+        <div className="relative">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input placeholder="Buscar aplicaciones..." readOnly className="w-full h-7 pl-7 pr-2 border border-[#e9eae6] rounded-lg text-[12px] outline-none bg-white"/>
+        </div>
+      </div>
+      {/* Nav */}
+      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
+        {groups.map(g => (
+          <div key={g.label}>
+            <button onClick={() => toggle(g.label)} className="flex items-center justify-between w-full px-2 py-1 text-[11px] font-bold text-[#646462] uppercase tracking-widest hover:text-[#1a1a1a] rounded">
+              {g.label}
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform flex-shrink-0 ${openSections[g.label] ? '' : '-rotate-90'}`}><path d="M3 5l5 5 5-5"/></svg>
+            </button>
+            {openSections[g.label] && (
+              <div className="mt-0.5 space-y-0.5">
+                {g.items.map(item => (
+                  <button
+                    key={item.key}
+                    onClick={() => onSelect(item.key)}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[13px] transition-colors text-left ${
+                      sub === item.key ? 'bg-white border border-[#e9eae6] text-[#1a1a1a] font-semibold shadow-sm' : 'text-[#1a1a1a] hover:bg-[#f3f3f1]'
+                    }`}
+                  >
+                    {item.icon}
+                    <span className="flex-1 truncate">{item.label}</span>
+                    {item.badge && (
+                      <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-[#f59e0b]/15 text-[#b45309] tracking-wide flex-shrink-0">{item.badge}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── WAAppDashboardsView ────────────────────────────────────────────────────────
+function WAAppDashboardsView() {
+  type DashTab = 'all' | 'mine' | 'pinned' | 'templates';
+  const [tab, setTab] = useState<DashTab>('all');
+  const [detail, setDetail] = useState<string | null>(null);
+
+  const tabs: { key: DashTab; label: string }[] = [
+    { key: 'all', label: 'Todos los dashboards' },
+    { key: 'mine', label: 'Mis dashboards' },
+    { key: 'pinned', label: 'Fijados' },
+    { key: 'templates', label: 'Plantillas' },
+  ];
+
+  // ── Detail view ────────────────────────────────────────────────────────────
+  if (detail) {
+    type InsightCard = {
+      period: string; periodColor?: string; title: string; info?: string; desc: string;
+      leftColor: string; type: 'empty' | 'retention';
+    };
+    const cards: InsightCard[] = [
+      { period: 'Últimos 30 días', title: 'Usuarios activos diarios (DAUs)', desc: 'Muestra el número de usuarios únicos que ven una página o pantalla en tu app cada día.', leftColor: '#3b59f6', type: 'empty' },
+      { period: 'Últimos 90 días', title: 'Usuarios activos semanales (WAUs)', desc: 'Muestra el número de usuarios únicos que ven una página o pantalla en tu app cada semana.', leftColor: '#22c55e', type: 'empty' },
+      { period: 'Últimos 30 días', title: 'Contabilidad de crecimiento', desc: 'Cuántos de tus usuarios son nuevos, recurrentes, resucitados o inactivos cada semana según las páginas vistas.', leftColor: '#9966cc', type: 'empty' },
+      { period: '', title: 'Retención', desc: 'Retención semanal de tus usuarios basada en páginas vistas.', leftColor: '#3b59f6', type: 'retention' },
+      { period: 'Últimos 14 días', title: 'Dominio de referencia (últimos 14 días)', desc: 'Muestra los dominios de referencia más comunes de tus usuarios en los últimos 14 días. Solo páginas vistas.', leftColor: '#e8572a', type: 'empty' },
+      { period: 'Últimos 7 días', title: 'Embudo de páginas vistas, por navegador', desc: 'Este embudo de ejemplo muestra cuántos usuarios completaron 3 páginas vistas, desglosado por navegador. Solo páginas vistas.', leftColor: '#22c55e', type: 'empty' },
+    ];
+
+    const EmptyCard = ({ card }: { card: InsightCard }) => (
+      <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden flex flex-col min-h-[280px]">
+        <div className="flex-shrink-0 flex items-start gap-0">
+          <div className="w-1 self-stretch rounded-l-[10px] flex-shrink-0" style={{ backgroundColor: card.leftColor }}/>
+          <div className="flex-1 px-4 pt-3 pb-2">
+            {card.period && (
+              <div className="flex items-center gap-1 mb-1">
+                <span className="text-[11px] font-bold text-[#646462] uppercase tracking-wide">{card.period}</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[14px] font-bold text-[#1a1a1a]">{card.title}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              </div>
+              <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
+              </button>
+            </div>
+            <p className="text-[12px] text-[#646462] mt-0.5 leading-relaxed">{card.desc}</p>
+          </div>
+        </div>
+        {card.type === 'empty' ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 py-6">
+            <svg viewBox="0 0 40 40" className="w-10 h-10 fill-none stroke-[#d1d5db]" strokeWidth="1.5"><rect x="4" y="8" width="32" height="24" rx="2"/><path d="M14 32l-4 6M26 32l4 6M10 38h20" strokeLinecap="round"/><path d="M12 20h16M12 25h10" strokeLinecap="round"/></svg>
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay eventos coincidentes para esta consulta</p>
+            <p className="text-[12px] text-[#646462]">Prueba a cambiar el rango de fechas o elige otra acción, evento o desglose.</p>
+          </div>
+        ) : (
+          <div className="flex-1 px-4 py-3 overflow-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6]">
+                  <th className="text-left pb-2 text-[#646462] font-semibold">Cohorte</th>
+                  <th className="text-right pb-2 text-[#646462] font-semibold">Tamaño</th>
+                  <th className="text-right pb-2 text-[#646462] font-semibold">Semana 0</th>
+                  <th className="text-right pb-2 text-[#646462] font-semibold">Semana 1</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-[#e9eae6]">
+                  <td className="py-1.5 flex items-center gap-1"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg> Media</td>
+                  <td className="text-right py-1.5 text-[#646462]">0</td>
+                  <td className="text-right py-1.5"><span className="bg-[#e8eeff] text-[#3b59f6] px-2 py-0.5 rounded text-[11px] font-semibold">0,0%</span></td>
+                  <td className="text-right py-1.5"><span className="bg-[#e8eeff] text-[#3b59f6] px-2 py-0.5 rounded text-[11px] font-semibold">0,0%</span></td>
+                </tr>
+                {[['3–9 may', '0', '0,0%', '0,0%'], ['10–16 may', '0', '0,0%', '']].map(([cohort, size, w0, w1]) => (
+                  <tr key={cohort} className="border-b border-[#e9eae6]">
+                    <td className="py-1.5 pl-4 text-[#646462]">{cohort}</td>
+                    <td className="text-right py-1.5 text-[#646462]">{size}</td>
+                    <td className="text-right py-1.5"><span className="bg-[#e8eeff]/50 text-[#3b59f6] px-2 py-0.5 rounded text-[11px]">{w0}</span></td>
+                    <td className="text-right py-1.5">{w1 ? <span className="text-[#646462] text-[11px]">{w1}</span> : null}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[#f3f3f1]">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-6 py-3 bg-white border-b border-[#e9eae6]">
+          <button onClick={() => setDetail(null)} className="p-1 rounded hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M10 3L5 8l5 5"/></svg>
+          </button>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><circle cx="8" cy="8" r="7" fill="none" stroke="#e8572a" strokeWidth="1.5"/><path d="M6 5.5l5 2.5-5 2.5V5.5z" fill="#e8572a"/></svg>
+          <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">{detail}</span>
+          <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M11 2h2a1 1 0 011 1v2M1 11v2a1 1 0 001 1h2M15 5V3M5 15H3" strokeLinecap="round"/></svg></button>
+          <div className="flex items-center gap-1.5 ml-2">
+            <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M11 8a3 3 0 110-6 3 3 0 010 6zM5.5 13.5a3 3 0 110-6 3 3 0 010 6zM8.7 5.5L6.8 10.5" strokeLinecap="round"/></svg>
+              Compartir
+            </button>
+            <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+              Editar layout
+            </button>
+            <button className="flex items-center gap-1.5 h-8 px-3 border border-[#f59e0b] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+              + Añadir
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+          </div>
+        </div>
+        {/* Description */}
+        <div className="flex-shrink-0 px-6 py-2 bg-white border-b border-[#e9eae6]">
+          <button className="flex items-center gap-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a]">
+            Introducir descripción (opcional)
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>
+          </button>
+        </div>
+        {/* Toolbar */}
+        <div className="flex-shrink-0 flex items-center gap-2 px-6 py-2.5 bg-white border-b border-[#e9eae6]">
+          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="1.5" y="3" width="13" height="2" rx="1"/><rect x="1.5" y="7" width="10" height="2" rx="1"/><rect x="1.5" y="11" width="7" height="2" rx="1"/></svg>
+            Sin override de rango de fechas
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+          </button>
+          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">+ Filtro</button>
+          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">+ Desglose</button>
+          <div className="flex-1"/>
+          <span className="text-[12px] text-[#646462]">Última actualización hace 4 horas</span>
+          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5" strokeLinecap="round"><path d="M2 8a6 6 0 106-6"/><path d="M2 4v4h4"/></svg>
+            Actualizar
+          </button>
+        </div>
+        {/* Cards grid */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="grid grid-cols-2 gap-3">
+            {cards.map((card) => <EmptyCard key={card.title} card={card} />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── List view ──────────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white">
+      {/* Header */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-0">
+        <div className="flex items-center gap-2 mb-1">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="8" width="3" height="7" rx="0.5" fill="#e8572a"/><rect x="6" y="5" width="3" height="10" rx="0.5" fill="#e8572a"/><rect x="11" y="2" width="3" height="13" rx="0.5" fill="#e8572a"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">Dashboards</h1>
+          <button className="h-8 px-4 border border-[#1a1a1a] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">Nuevo dashboard</button>
+        </div>
+        <p className="text-[13px] text-[#646462] mb-3">Crea y gestiona tus dashboards.</p>
+        {/* Tabs */}
+        <div className="flex gap-0 border-b border-[#e9eae6]">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-4 py-2 text-[13px] font-semibold transition-colors border-b-2 -mb-px ${tab === t.key ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Filter bar */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-6 py-3 border-b border-[#e9eae6]">
+        <div className="relative">
+          <svg viewBox="0 0 16 16" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input placeholder="Buscar dashboards..." className="h-8 w-52 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] bg-white"/>
+        </div>
+        <div className="flex-1"/>
+        <span className="text-[12px] text-[#646462] font-semibold">Filtrar por:</span>
+        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1l1 2.5 2.5.5-1.8 1.8.4 2.7L8 7l-2.1 1.5.4-2.7L4.5 4l2.5-.5L8 1z"/></svg>
+          Fijados
+        </button>
+        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+          Etiquetas
+        </button>
+        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M11 8a3 3 0 110-6 3 3 0 010 6zM5.5 13.5a3 3 0 110-6 3 3 0 010 6zM8.7 5.5L6.8 10.5" strokeLinecap="round"/></svg>
+          Compartido
+        </button>
+        <span className="text-[12px] text-[#646462] font-semibold">Creado por:</span>
+        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+          Cualquier usuario
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+        </button>
+      </div>
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-[13px]">
+          <thead className="sticky top-0 bg-white border-b border-[#e9eae6] z-10">
+            <tr>
+              <th className="w-8 px-4 py-2.5"><input type="checkbox" className="w-3.5 h-3.5 rounded"/></th>
+              <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">
+                <button className="flex items-center gap-1 hover:text-[#1a1a1a]">
+                  Nombre
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3v10M5 6l3-3 3 3M5 10l3 3 3-3"/></svg>
+                </button>
+              </th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Etiquetas</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Creado por</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Creado</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Último acceso</th>
+              <th className="w-8"/>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-[#e9eae6] hover:bg-[#fafaf9] group">
+              <td className="w-8 px-4 py-3"><input type="checkbox" className="w-3.5 h-3.5 rounded"/></td>
+              <td className="px-2 py-3">
+                <button onClick={() => setDetail('Mi App Dashboard')} className="flex items-center gap-2 text-left hover:underline">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a] flex-shrink-0"><path d="M8 1.5L10 6h4.5l-3.5 2.5 1.3 4.5L8 10.5l-4.3 2.5 1.3-4.5L1.5 6H6L8 1.5z"/></svg>
+                  <span className="font-semibold text-[#1a1a1a]">Mi App Dashboard</span>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M8 3a5 5 0 100 10A5 5 0 008 3zM6 8l1.5-1.5L9 8l-1.5 1.5L6 8z"/></svg>
+                </button>
+              </td>
+              <td className="px-4 py-3 text-[#646462]">—</td>
+              <td className="px-4 py-3 text-[#646462]"></td>
+              <td className="px-4 py-3 text-[#646462]">hace 4 días</td>
+              <td className="px-4 py-3 text-[#646462]">hace 4 horas</td>
+              <td className="px-4 py-3">
+                <button className="p-1 rounded hover:bg-[#f3f3f1] opacity-0 group-hover:opacity-100">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── WAAppProductAnalyticsView ──────────────────────────────────────────────────
+function WAAppProductAnalyticsView() {
+  type PATab = 'all' | 'mine' | 'alerts' | 'history';
+  const [tab, setTab] = useState<PATab>('all');
+  const [selectedInsight, setSelectedInsight] = useState<string | null>(null);
+
+  // Toolbar dropdown states (shared for detail view)
+  const [dateRange, setDateRange] = useState('Últimos 7 días');
+  const [groupBy, setGroupBy] = useState('día');
+  const [comparison, setComparison] = useState('Sin comparación entre períodos');
+  const [chartType, setChartType] = useState('Línea');
+  const [showDateDrop, setShowDateDrop] = useState(false);
+  const [showGroupDrop, setShowGroupDrop] = useState(false);
+  const [showCompDrop, setShowCompDrop] = useState(false);
+  const [showChartDrop, setShowChartDrop] = useState(false);
+
+  const tabs: { key: PATab; label: string }[] = [
+    { key: 'all', label: 'Todos los insights' },
+    { key: 'mine', label: 'Mis insights' },
+    { key: 'alerts', label: 'Alertas' },
+    { key: 'history', label: 'Historial' },
+  ];
+
+  type InsightConfig = {
+    name: string; desc?: string; tags: string; createdBy?: boolean;
+    created: string; modified: string; viewed: string;
+    iconType: 'trend' | 'funnel' | 'retention' | 'bar';
+    detailDateRange: string;
+    detailGroupBy?: string;
+    detailChartType: 'trend' | 'bar' | 'funnel' | 'retention';
+    resultsType: 'series-daily' | 'ai-model' | 'series-daily-ai' | 'no-table' | 'series-formula' | 'series-weekly' | 'funnel-table' | 'bar-growth' | 'retention-grid';
+    aiDesc: string;
+  };
+
+  const insights: InsightConfig[] = [
+    { name: 'Generaciones por estado HTTP', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace unos segundos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Analiza el estado HTTP de las generaciones de IA a lo largo del tiempo.' },
+    { name: 'Latencia de generación por modelo (mediana)', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'ai-model', aiDesc: 'Muestra la latencia mediana de generación por modelo de IA.' },
+    { name: 'Errores de IA', desc: 'Llamadas de generación de IA fallidas', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily-ai', aiDesc: 'Detecta patrones en los errores de generación de IA.' },
+    { name: 'Llamadas de generación', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Rastrea el volumen de llamadas de generación de IA en el tiempo.' },
+    { name: 'Coste por modelo (USD)', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'bar', detailDateRange: 'Últimos 7 días', detailChartType: 'bar', resultsType: 'no-table', aiDesc: 'Compara el coste en USD de cada modelo de IA utilizado.' },
+    { name: 'Coste por usuario (USD)', desc: 'Coste medio por cada usuario de IA generativa activo en el período del punto de datos.', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-formula', aiDesc: 'Calcula el coste medio por usuario activo de IA generativa.' },
+    { name: 'Coste total (USD)', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Muestra el coste total acumulado de todas las llamadas de IA.' },
+    { name: 'Usuarios de IA generativa', desc: 'Para contar usuarios, establece distinct_id en el seguimiento LLM.', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Cuenta los usuarios únicos que interactúan con funciones de IA generativa.' },
+    { name: 'Trazas', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Visualiza el número de trazas de IA registradas en el tiempo.' },
+    { name: 'Embudo de páginas vistas, por navegador', desc: 'Este embudo muestra cuántos usuarios completaron 3 páginas vistas, desglosado por navegador. Solo páginas vistas.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'funnel', detailDateRange: 'Últimos 7 días', detailChartType: 'funnel', resultsType: 'funnel-table', aiDesc: 'Analiza la conversión del embudo de páginas vistas por tipo de navegador.' },
+    { name: 'Dominio de referencia (últimos 14 días)', desc: 'Muestra los dominios de referencia más comunes en los últimos 14 días. Solo páginas vistas.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'trend', detailDateRange: 'Últimos 14 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Identifica los dominios de referencia que generan más tráfico.' },
+    { name: 'Contabilidad de crecimiento', desc: 'Cuántos usuarios son nuevos, recurrentes, resucitados o inactivos cada semana según páginas vistas.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'bar', detailDateRange: 'Últimos 30 días', detailChartType: 'bar', resultsType: 'bar-growth', aiDesc: 'Clasifica usuarios en nuevos, recurrentes, resucitados e inactivos por semana.' },
+    { name: 'Retención', desc: 'Retención semanal de tus usuarios basada en páginas vistas.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'retention', detailDateRange: 'Últimos 90 días', detailChartType: 'retention', resultsType: 'retention-grid', aiDesc: 'Mide qué porcentaje de usuarios vuelven semana tras semana.' },
+    { name: 'Usuarios activos semanales (WAUs)', desc: 'Muestra el número de usuarios únicos que ven una página o pantalla cada semana. Esta métrica utiliza Pageview y Screen View.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'trend', detailDateRange: 'Últimos 90 días', detailGroupBy: 'semana', detailChartType: 'trend', resultsType: 'series-weekly', aiDesc: 'Rastrea usuarios activos semanales basándose en páginas vistas y vistas de pantalla.' },
+    { name: 'Usuarios activos diarios (DAUs)', desc: 'Muestra el número de usuarios únicos que ven una página o pantalla cada día.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'trend', detailDateRange: 'Últimos 30 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Rastrea usuarios activos diarios basándose en páginas y pantallas vistas.' },
+  ];
+
+  const InsightIcon = ({ type, color }: { type: InsightConfig['iconType']; color?: string }) => {
+    const c = color || '#1a1a1a';
+    if (type === 'trend') return <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none" style={{stroke: c}} strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg>;
+    if (type === 'funnel') return <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0" style={{fill: c}}><path d="M2 2h12v2L9 9v5l-2-1V9L2 4V2z"/></svg>;
+    if (type === 'retention') return <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="1" width="4" height="4" rx="0.5" style={{fill: c}}/><rect x="7" y="1" width="4" height="4" rx="0.5" style={{fill: c}} opacity="0.6"/><rect x="1" y="7" width="4" height="4" rx="0.5" style={{fill: c}} opacity="0.4"/><rect x="7" y="7" width="4" height="4" rx="0.5" style={{fill: c}} opacity="0.2"/></svg>;
+    return <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="8" width="3" height="7" rx="0.5" style={{fill: c}}/><rect x="6" y="5" width="3" height="10" rx="0.5" style={{fill: c}} opacity="0.7"/><rect x="11" y="2" width="3" height="13" rx="0.5" style={{fill: c}} opacity="0.4"/></svg>;
+  };
+
+  // Daily date columns used in results tables
+  const dailyCols = ['6 may', '7 may', '8 may', '9 may', '10 may', '11 may', '12 may'];
+  const weeklyCols = ['28 abr', '5 may', '12 may'];
+
+  function DetailResultsTable({ ins }: { ins: InsightConfig }) {
+    if (ins.resultsType === 'ai-model') {
+      return (
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Modelo de IA (LLM)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td className="px-4 py-6 text-center text-[13px] text-[#646462]">Sin resultados de insight</td></tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    if (ins.resultsType === 'no-table') return null;
+    if (ins.resultsType === 'funnel-table') {
+      return (
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Paso</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Usuarios</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tasa de conversión</th>
+              </tr>
+            </thead>
+            <tbody>
+              {['Pageview 1', 'Pageview 2', 'Pageview 3'].map((step, i) => (
+                <tr key={step} className="border-b border-[#e9eae6] last:border-0">
+                  <td className="px-4 py-2.5 text-[#1a1a1a] font-semibold">{step}</td>
+                  <td className="px-4 py-2.5 text-[#646462]">0</td>
+                  <td className="px-4 py-2.5 text-[#646462]">{i === 0 ? '100%' : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    if (ins.resultsType === 'retention-grid') {
+      const weeks = ['Semana 0', 'Semana 1', 'Semana 2', 'Semana 3'];
+      return (
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Cohorte</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Usuarios</th>
+                {weeks.map(w => <th key={w} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{w}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-[13px] text-[#646462]">Sin datos de retención</td></tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    if (ins.resultsType === 'bar-growth') {
+      return (
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Serie</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nuevo</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Recurrente</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Resucitado</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Inactivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-[13px] text-[#646462]">Sin datos de crecimiento</td></tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    // series-daily, series-daily-ai, series-formula, series-weekly
+    const cols = ins.resultsType === 'series-weekly' ? weeklyCols : dailyCols;
+    const isFormula = ins.resultsType === 'series-formula';
+    const isAI = ins.resultsType === 'series-daily-ai';
+    const seriesLabel = isAI ? 'AI generation (LLM)' : ins.name;
+    return (
+      <div className="border border-[#e9eae6] rounded-[10px] overflow-x-auto">
+        <table className="w-full text-[12px] whitespace-nowrap">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide sticky left-0 bg-[#fafaf9]">Serie</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide sticky left-[120px] bg-[#fafaf9]">Color</th>
+              {isFormula && <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fórmula</th>}
+              {cols.map(c => <th key={c} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{c}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-[#e9eae6] last:border-0 hover:bg-[#fafaf9]">
+              <td className="px-4 py-2.5 sticky left-0 bg-white font-semibold text-[#1a1a1a] max-w-[120px] truncate">
+                {isAI ? <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#eff2ff] text-[#3b59f6] rounded-full text-[11px] font-semibold">AI generation (LLM)</span> : seriesLabel}
+              </td>
+              <td className="px-4 py-2.5 sticky left-[120px] bg-white">
+                <div className="w-3 h-3 rounded-full bg-[#3b59f6]"/>
+              </td>
+              {isFormula && <td className="px-4 py-2.5 text-[#646462]">A/B</td>}
+              {cols.map(c => (
+                <td key={c} className="px-4 py-2.5 text-[#646462]">
+                  {isFormula ? '$0' : '0'}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  function InsightDetailView({ ins }: { ins: InsightConfig }) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-white" onClick={() => { setShowDateDrop(false); setShowGroupDrop(false); setShowCompDrop(false); setShowChartDrop(false); }}>
+        {/* Top bar */}
+        <div className="flex-shrink-0 px-6 pt-4 pb-3 border-b border-[#e9eae6]">
+          <div className="flex items-center gap-2 mb-2">
+            {/* Back */}
+            <button onClick={() => setSelectedInsight(null)} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><path d="M10 3L5 8l5 5"/></svg>
+            </button>
+            <InsightIcon type={ins.iconType} color="#e8572a" />
+            <h1 className="text-[16px] font-bold text-[#1a1a1a] flex-1 truncate">{ins.name}</h1>
+            {/* Edit pencil */}
+            <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/></svg>
+            </button>
+            <button onClick={() => setSelectedInsight(null)} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+          {/* Description */}
+          <div className="flex items-center gap-1.5 mb-3">
+            {ins.desc
+              ? <span className="text-[13px] text-[#646462]">{ins.desc}</span>
+              : <span className="text-[13px] text-[#b0b0ae] italic">Escribe una descripción (opcional)</span>
+            }
+            <button className="p-0.5 rounded hover:bg-[#f3f3f1] text-[#b0b0ae] flex-shrink-0">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/></svg>
+            </button>
+          </div>
+          {/* Toolbar */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Date range */}
+            <div className="relative">
+              <button onClick={e => { e.stopPropagation(); setShowDateDrop(v => !v); setShowGroupDrop(false); setShowCompDrop(false); setShowChartDrop(false); }}
+                className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="#646462" strokeWidth="1.3"/><path d="M5 1.5v3M11 1.5v3M2 7h12" stroke="#646462" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                {ins.detailDateRange}
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              {showDateDrop && (
+                <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
+                  {['Hoy', 'Ayer', 'Últimos 7 días', 'Últimos 14 días', 'Últimos 30 días', 'Últimos 90 días', 'Este mes', 'Este año'].map(opt => (
+                    <button key={opt} onClick={() => { setDateRange(opt); setShowDateDrop(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f3f3f1] ${dateRange === opt ? 'font-semibold text-[#e8572a]' : 'text-[#1a1a1a]'}`}>{opt}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Grouped by (only for trend/line charts) */}
+            {ins.detailGroupBy && (
+              <div className="relative">
+                <button onClick={e => { e.stopPropagation(); setShowGroupDrop(v => !v); setShowDateDrop(false); setShowCompDrop(false); setShowChartDrop(false); }}
+                  className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+                  agrupado por {ins.detailGroupBy}
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                </button>
+                {showGroupDrop && (
+                  <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
+                    {['hora', 'día', 'semana', 'mes'].map(opt => (
+                      <button key={opt} onClick={() => { setGroupBy(opt); setShowGroupDrop(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f3f3f1] ${groupBy === opt ? 'font-semibold text-[#e8572a]' : 'text-[#1a1a1a]'}`}>{opt}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Comparison */}
+            <div className="relative">
+              <button onClick={e => { e.stopPropagation(); setShowCompDrop(v => !v); setShowDateDrop(false); setShowGroupDrop(false); setShowChartDrop(false); }}
+                className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+                Sin comparación entre períodos
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              {showCompDrop && (
+                <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
+                  {['Sin comparación entre períodos', 'Período anterior', 'Mismo período del año anterior'].map(opt => (
+                    <button key={opt} onClick={() => { setComparison(opt); setShowCompDrop(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f3f3f1] ${comparison === opt ? 'font-semibold text-[#e8572a]' : 'text-[#1a1a1a]'}`}>{opt}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="w-px h-4 bg-[#e9eae6] mx-0.5"/>
+
+            {/* Options */}
+            <button className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+              Opciones
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+
+            {/* Chart type */}
+            <div className="relative">
+              <button onClick={e => { e.stopPropagation(); setShowChartDrop(v => !v); setShowDateDrop(false); setShowGroupDrop(false); setShowCompDrop(false); }}
+                className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+                {ins.detailChartType === 'trend' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#1a1a1a]" strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg>}
+                {ins.detailChartType === 'bar' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><rect x="1" y="8" width="3" height="7" rx="0.5"/><rect x="6" y="5" width="3" height="10" rx="0.5" opacity="0.7"/><rect x="11" y="2" width="3" height="13" rx="0.5" opacity="0.4"/></svg>}
+                {ins.detailChartType === 'funnel' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M2 2h12v2L9 9v5l-2-1V9L2 4V2z"/></svg>}
+                {ins.detailChartType === 'retention' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><rect x="1" y="1" width="4" height="4" rx="0.5"/><rect x="7" y="1" width="4" height="4" rx="0.5" opacity="0.6"/><rect x="1" y="7" width="4" height="4" rx="0.5" opacity="0.4"/><rect x="7" y="7" width="4" height="4" rx="0.5" opacity="0.2"/></svg>}
+                {ins.detailChartType === 'trend' ? 'Línea' : ins.detailChartType === 'bar' ? 'Barras' : ins.detailChartType === 'funnel' ? 'Embudo' : 'Retención'}
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              {showChartDrop && (
+                <div className="absolute top-full right-0 mt-1 w-36 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
+                  {[{k:'trend',l:'Línea'},{k:'bar',l:'Barras'},{k:'funnel',l:'Embudo'},{k:'retention',l:'Retención'}].map(opt => (
+                    <button key={opt.k} onClick={() => { setChartType(opt.l); setShowChartDrop(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f3f3f1] ${chartType === opt.l ? 'font-semibold text-[#e8572a]' : 'text-[#1a1a1a]'}`}>{opt.l}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Content area */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Computed timestamp */}
+          <div className="flex items-center gap-1.5 px-6 py-2 border-b border-[#e9eae6]">
+            <span className="text-[12px] text-[#646462]">Calculado hace 3 minutos</span>
+            <span className="text-[#e9eae6]">•</span>
+            <button className="text-[12px] text-[#3b59f6] hover:underline">Actualizar</button>
+          </div>
+
+          <div className="px-6 py-4 space-y-6">
+            {/* Chart empty state */}
+            <div className="flex flex-col items-center justify-center h-64 border border-[#e9eae6] rounded-[10px] bg-[#fafaf9] gap-3">
+              <svg viewBox="0 0 64 64" className="w-16 h-16 opacity-20">
+                <rect x="4" y="10" width="56" height="38" rx="4" fill="none" stroke="#1a1a1a" strokeWidth="2.5"/>
+                <path d="M14 48v6M50 48v6M10 54h44" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
+                <path d="M16 36l8-10 8 6 10-14 6 8" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 2"/>
+                <circle cx="44" cy="26" r="3" fill="none" stroke="#e8572a" strokeWidth="2"/>
+                <path d="M42 28l-4 4" stroke="#e8572a" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <p className="text-[13px] text-[#646462]">No hay eventos coincidentes para esta consulta</p>
+            </div>
+
+            {/* AI Analysis */}
+            <div className="border border-[#e9eae6] rounded-[10px] p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-bold text-[#1a1a1a]">Análisis de IA</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-[#f0fdf4] border border-[#86efac] text-[10px] font-bold text-[#16a34a] uppercase tracking-wide">Beta</span>
+              </div>
+              <p className="text-[13px] text-[#646462] leading-relaxed">{ins.aiDesc}</p>
+              <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#e8572a]" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2l1.5 4H14l-3.5 2.5 1.5 4L8 10l-4 2.5 1.5-4L2 6h4.5L8 2z"/></svg>
+                Explicar este insight
+              </button>
+            </div>
+
+            {/* Detailed results */}
+            <div className="space-y-2">
+              <h3 className="text-[13px] font-bold text-[#1a1a1a]">Resultados detallados</h3>
+              <DetailResultsTable ins={ins} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const activeInsight = insights.find(i => i.name === selectedInsight);
+
+  if (activeInsight) {
+    return <InsightDetailView ins={activeInsight} />;
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white">
+      {/* Header */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-0">
+        <div className="flex items-center gap-2 mb-1">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#3b59f6]" strokeWidth="1.5" strokeLinecap="round"><path d="M2 12l3.5-4 3 2.5L12 4"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">Product analytics</h1>
+          <button className="flex items-center gap-1.5 h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+            + Nuevo
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+          </button>
+        </div>
+        <p className="text-[13px] text-[#646462] mb-3">Rastrea, analiza y experimenta con el comportamiento del usuario.</p>
+        {/* Tabs */}
+        <div className="flex gap-0 border-b border-[#e9eae6]">
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`px-4 py-2 text-[13px] font-semibold transition-colors border-b-2 -mb-px ${tab === t.key ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-6 py-3 border-b border-[#e9eae6] flex-wrap">
+        <div className="relative">
+          <svg viewBox="0 0 16 16" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input placeholder="Buscar insights..." className="h-8 w-52 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] bg-white"/>
+        </div>
+        {['Todos los tipos', 'Etiquetas', 'Creado por'].map(f => (
+          <button key={f} className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+            {f} <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+          </button>
+        ))}
+        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 2l1 2.5 2.5.5-1.8 1.8.4 2.7L8 8l-2.1 1.5.4-2.7L4.5 5 7 4.5 8 2z"/></svg>
+          Favoritos
+        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="text-[12px] text-[#646462]">Ocultar insights de feature flags:</span>
+          <div className="w-8 h-4 rounded-full bg-[#d1d5db] relative cursor-pointer"><div className="absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow"/></div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-[13px]">
+          <thead className="sticky top-0 bg-white border-b border-[#e9eae6] z-10">
+            <tr>
+              <th className="w-8 px-4 py-2.5"><input type="checkbox" className="w-3.5 h-3.5 rounded"/></th>
+              <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Nombre</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Etiquetas</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Creado por</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Creado</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">
+                <button className="flex items-center gap-1">Últ. modificación <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M8 12V4M5 9l3 3 3-3"/></svg></button>
+              </th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Última vista</th>
+              <th className="w-8"/>
+            </tr>
+          </thead>
+          <tbody>
+            {insights.map((ins) => (
+              <tr key={ins.name} className="border-b border-[#e9eae6] hover:bg-[#fafaf9] group cursor-pointer" onClick={() => setSelectedInsight(ins.name)}>
+                <td className="w-8 px-4 py-2.5" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-3.5 h-3.5 rounded"/></td>
+                <td className="px-2 py-2.5">
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5"><InsightIcon type={ins.iconType} /></div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-[#1a1a1a] hover:underline cursor-pointer">{ins.name}</span>
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#d1d5db] hover:stroke-[#f59e0b] cursor-pointer" strokeWidth="1.3" onClick={e => e.stopPropagation()}><path d="M8 2l1 2.5 2.5.5-1.8 1.8.4 2.7L8 8l-2.1 1.5.4-2.7L4.5 5 7 4.5 8 2z"/></svg>
+                      </div>
+                      {ins.desc && <p className="text-[12px] text-[#646462] mt-0.5 leading-snug">{ins.desc}</p>}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-2.5 text-[#646462]">{ins.tags}</td>
+                <td className="px-4 py-2.5">
+                  {ins.createdBy && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-5 h-5 rounded-full bg-[#9966cc] flex items-center justify-center text-white text-[9px] font-bold">H</div>
+                      <span className="text-[#646462]">tú</span>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-[#646462] whitespace-nowrap">{ins.created}</td>
+                <td className="px-4 py-2.5 text-[#646462] whitespace-nowrap">{ins.modified}</td>
+                <td className="px-4 py-2.5 text-[#646462] whitespace-nowrap">{ins.viewed}</td>
+                <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                  <button className="p-1 rounded hover:bg-[#f3f3f1] opacity-0 group-hover:opacity-100">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 
 // ── WADataSidebar — identical pattern to ReportsSidebar / KnowledgeSidebar ──
 function WADataSidebar({ sub, onSelect }: { sub: WADataSubView; onSelect: (s: WADataSubView) => void }) {
@@ -30331,19 +31176,22 @@ function WASettingsView() {
     return (
       <button
         onClick={() => setPage(p)}
-        className={`w-full text-left px-3 py-1.5 rounded-lg text-[13px] transition-colors ${indent ? 'pl-5' : ''} ${active ? 'bg-[#eff2ff] text-[#3b59f6] font-medium' : red ? 'text-[#e8572a] hover:bg-[#fff5f2]' : 'text-[#646462] hover:bg-[#f3f3f1] hover:text-[#1a1a1a]'}`}
+        className={`w-full text-left px-3 py-1.5 rounded-lg text-[13px] transition-colors ${indent ? 'pl-5' : ''} ${active ? 'bg-white text-[#1a1a1a] font-bold shadow-sm border border-[#e9eae6]' : red ? 'text-[#e8572a] font-medium hover:bg-[#fff5f2]' : 'text-[#1a1a1a] hover:bg-[#f3f3f1]'}`}
       >
         {label}
       </button>
     );
   }
 
-  function SGroup({ label, open, toggle, children }: { label: string; open: boolean; toggle: () => void; children: React.ReactNode }) {
+  function SGroup({ label, icon, open, toggle, children }: { label: string; icon?: React.ReactNode; open: boolean; toggle: () => void; children: React.ReactNode }) {
     return (
       <div>
-        <button onClick={toggle} className="flex items-center justify-between w-full px-3 py-1.5 text-[12px] font-semibold text-[#1a1a1a] uppercase tracking-wide hover:bg-[#f3f3f1] rounded-lg">
-          {label}
-          <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${open ? '' : '-rotate-90'}`}><path d="M3 5l5 5 5-5"/></svg>
+        <button onClick={toggle} className="flex items-center justify-between w-full px-3 py-1.5 text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest hover:bg-[#f3f3f1] rounded-lg">
+          <span className="flex items-center gap-2">
+            {icon}
+            {label}
+          </span>
+          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform flex-shrink-0 ${open ? '' : '-rotate-90'}`}><path d="M3 5l5 5 5-5"/></svg>
         </button>
         {open && <div className="mt-0.5 space-y-0.5">{children}</div>}
       </div>
@@ -33525,16 +34373,16 @@ function WASettingsView() {
 
         {/* Nav tree */}
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-          <SGroup label="Proyecto" open={projectOpen} toggle={() => setProjectOpen(o => !o)}>
+          <SGroup label="Proyecto" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M2 3a1 1 0 011-1h3.5l1.5 2H13a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V3z"/></svg>} open={projectOpen} toggle={() => setProjectOpen(o => !o)}>
             <SNavItem p="general" label="General" indent/>
             <SNavItem p="customization" label="Personalización" indent/>
             <SNavItem p="autocapture" label="Autocaptura" indent/>
           </SGroup>
-          <SGroup label="IA" open={aiOpen} toggle={() => setAiOpen(o => !o)}>
+          <SGroup label="IA" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1l1.5 3.5L13 6l-2.5 2.5.5 3.5L8 10.5 5 12l.5-3.5L3 6l3.5-1.5L8 1z"/></svg>} open={aiOpen} toggle={() => setAiOpen(o => !o)}>
             <SNavItem p="ai" label="Clain AI" indent/>
             <SNavItem p="mcp" label="Clain MCP" indent/>
           </SGroup>
-          <SGroup label="Productos" open={productsOpen} toggle={() => setProductsOpen(o => !o)}>
+          <SGroup label="Productos" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>} open={productsOpen} toggle={() => setProductsOpen(o => !o)}>
             <SNavItem p="error-tracking" label="Error tracking" indent/>
             <SNavItem p="experiments" label="Experimentos" indent/>
             <SNavItem p="feature-flags" label="Feature flags" indent/>
@@ -33553,7 +34401,7 @@ function WASettingsView() {
           <SNavItem p="discussions" label="Discusiones"/>
           <SNavItem p="integrations" label="Integraciones"/>
           <SNavItem p="danger-zone" label="Zona de peligro" red/>
-          <SGroup label="Organización" open={orgOpen} toggle={() => setOrgOpen(o => !o)}>
+          <SGroup label="Organización" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1a3 3 0 100 6 3 3 0 000-6zM3 13c0-2.76 2.24-5 5-5s5 2.24 5 5H3z"/></svg>} open={orgOpen} toggle={() => setOrgOpen(o => !o)}>
             <SNavItem p="org-general" label="General" indent/>
             <SNavItem p="org-members" label="Miembros" indent/>
             <SNavItem p="org-roles" label="Roles" indent/>
@@ -33564,7 +34412,7 @@ function WASettingsView() {
             <SNavItem p="org-proxy" label="Proxy inverso gestionado" indent/>
             <SNavItem p="org-danger-zone" label="Zona de peligro" indent red/>
           </SGroup>
-          <SGroup label="Cuenta" open={accountOpen} toggle={() => setAccountOpen(o => !o)}>
+          <SGroup label="Cuenta" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.31 2.69-6 6-6s6 2.69 6 6H2z"/></svg>} open={accountOpen} toggle={() => setAccountOpen(o => !o)}>
             <SNavItem p="account-profile" label="Perfil" indent/>
             <SNavItem p="account-notifications" label="Notificaciones" indent/>
             <SNavItem p="account-customization" label="Personalización" indent/>
@@ -33634,6 +34482,7 @@ function WASettingsView() {
 function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
   const [sub,     setSub]     = useState<WAView>('waHome');
   const [dataSub, setDataSub] = useState<WADataSubView>('waDataModels');
+  const [appsSub, setAppsSub] = useState<WAAppsSubView>('appDashboards');
   const [showSqlEditor, setShowSqlEditor] = useState(false);
 
   const DATA_TITLES: Record<WADataSubView, string> = {
@@ -33669,6 +34518,23 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
     if (sub === 'waHome')     return <WAHomeView />;
     if (sub === 'waActivity') return <WAActivityView />;
     if (sub === 'waSettings') return <WASettingsView />;
+    if (sub === 'waApps') return (
+      <div className="flex flex-1 min-h-0 gap-2 p-2 min-w-0">
+        <WAAppsSidebar sub={appsSub} onSelect={setAppsSub} />
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 rounded-[12px] border border-[#e9eae6] overflow-hidden bg-white">
+          {appsSub === 'appDashboards'       ? <WAAppDashboardsView /> :
+           appsSub === 'appProductAnalytics' ? <WAAppProductAnalyticsView /> : (
+            <>
+              <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+                <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{appsSub.replace(/^app/, '').replace(/([A-Z])/g, ' $1').trim()}</h1>
+                <span className="text-[12px] text-[#3b59f6] font-semibold bg-[#eff2ff] px-2.5 py-1 rounded-full">Clain Web Analytics</span>
+              </div>
+              <WADevContent title={appsSub} />
+            </>
+          )}
+        </div>
+      </div>
+    );
     // SQL editor full-screen (no WADataSidebar)
     if (showSqlEditor) return (
       <div className="flex flex-1 min-h-0 p-2 min-w-0">
