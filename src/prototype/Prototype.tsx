@@ -8426,6 +8426,8 @@ function SecurityInput({ label, defaultValue = "", placeholder = "", blue = fals
 function SecurityView({ view, onNavigate, onBack }: { view: View; onNavigate: (v: View) => void; onBack: () => void }) {
   const { data: me } = useApi(() => iamApi.me(), [], null);
   const displayEmail = me?.email ?? 'hectorvidal041103@gmail.com';
+  const [show2FAModal, setShow2FAModal] = useState(false);
+  const [twoFACode, setTwoFACode] = useState('');
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
@@ -8525,10 +8527,13 @@ function SecurityView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
                     {/* Warning icon */}
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0"><path d="M8 2L14 13H2L8 2z" fill="#F9C61F" stroke="#F9C61F" strokeWidth="0.5"/><path d="M8 6v3M8 10.5v.5" stroke="#1a1a1a" strokeWidth="1.3" strokeLinecap="round"/></svg>
                   </div>
-                  <div className="flex items-center gap-1.5 cursor-pointer hover:opacity-70">
+                  <button
+                    onClick={() => setShow2FAModal(true)}
+                    className="flex items-center gap-1.5 hover:opacity-70 transition-opacity"
+                  >
                     <span className="text-[14px] font-medium text-[#1a1a1a]">Configurar</span>
-                    <img src={ICON_CHEVRON} alt="" className="w-3.5 h-3.5 opacity-50" />
-                  </div>
+                    <svg viewBox="0 0 14 14" fill="none" className="w-3.5 h-3.5 flex-shrink-0"><path d="M5 3l4 4-4 4" stroke="#1a1a1a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
                 </div>
               }
             />
@@ -8575,6 +8580,126 @@ function SecurityView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
           </div>
         </div>
       </div>
+
+      {/* ── 2FA Setup Modal ────────────────────────────────────────── */}
+      {show2FAModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[60px]" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="bg-white rounded-[16px] w-full max-w-[680px] mx-4 shadow-[0px_8px_40px_rgba(0,0,0,0.18)] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-7 py-5 border-b border-[#e9eae6]">
+              <h2 className="text-[17px] font-semibold text-[#1a1a1a]">Autenticación de dos factores (2FA)</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShow2FAModal(false); setTwoFACode(''); }}
+                  className="text-[14px] font-semibold text-[#1a1a1a] bg-[#f3f3f1] hover:bg-[#ededea] rounded-full px-4 py-[7px] transition-colors"
+                >
+                  Validar y guardar
+                </button>
+                <button
+                  onClick={() => { setShow2FAModal(false); setTwoFACode(''); }}
+                  className="text-[14px] font-semibold text-[#1a1a1a] hover:opacity-70 transition-opacity px-2 py-[7px]"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-7 py-6 flex flex-col gap-5">
+              {/* Instruction */}
+              <p className="text-[14px] text-[#1a1a1a] leading-[1.6]">
+                Descarga la aplicación gratuita{' '}
+                <span className="underline cursor-pointer">Google Authenticator</span>
+                {' '}en tu dispositivo móvil, haz clic en Agregar y luego escanea este código QR para configurar tu cuenta.
+              </p>
+
+              {/* QR Code */}
+              <div className="w-[190px] h-[190px] border border-[#e9eae6] rounded-[8px] p-2 flex items-center justify-center bg-white">
+                <svg viewBox="0 0 210 210" width="170" height="170" xmlns="http://www.w3.org/2000/svg">
+                  {/* Top-left finder pattern */}
+                  <rect x="10" y="10" width="60" height="60" rx="4" fill="#1a1a1a"/>
+                  <rect x="18" y="18" width="44" height="44" rx="3" fill="white"/>
+                  <rect x="26" y="26" width="28" height="28" rx="2" fill="#1a1a1a"/>
+                  {/* Top-right finder pattern */}
+                  <rect x="140" y="10" width="60" height="60" rx="4" fill="#1a1a1a"/>
+                  <rect x="148" y="18" width="44" height="44" rx="3" fill="white"/>
+                  <rect x="156" y="26" width="28" height="28" rx="2" fill="#1a1a1a"/>
+                  {/* Bottom-left finder pattern */}
+                  <rect x="10" y="140" width="60" height="60" rx="4" fill="#1a1a1a"/>
+                  <rect x="18" y="148" width="44" height="44" rx="3" fill="white"/>
+                  <rect x="26" y="156" width="28" height="28" rx="2" fill="#1a1a1a"/>
+                  {/* Data area - row by row pattern */}
+                  {(() => {
+                    const cells: React.ReactNode[] = [];
+                    const cols = [80,87,94,101,108,115,122,129,136];
+                    const rows = [80,87,94,101,108,115,122,129,136];
+                    const pattern = [
+                      [1,0,1,1,0,1,0,1,1],
+                      [0,1,1,0,1,0,1,1,0],
+                      [1,1,0,1,0,1,1,0,1],
+                      [1,0,1,0,1,1,0,1,0],
+                      [0,1,0,1,1,0,1,0,1],
+                      [1,0,1,1,0,1,0,1,1],
+                      [0,1,1,0,1,0,1,1,0],
+                      [1,1,0,1,0,1,1,0,1],
+                      [1,0,1,0,1,1,0,1,0],
+                    ];
+                    rows.forEach((y, ri) => cols.forEach((x, ci) => {
+                      if (pattern[ri][ci]) cells.push(<rect key={`${ri}-${ci}`} x={x} y={y} width="5" height="5" fill="#1a1a1a"/>);
+                    }));
+                    return cells;
+                  })()}
+                  {/* Extra scattered modules */}
+                  {[10,17,24,31,38,45,52,59,66,73].map((x) =>
+                    [80,87,94,101,108,115,122,129,136,143,150,157,164,171,178].map((y) => {
+                      const on = ((x * 3 + y * 7 + 13) % 11) < 5;
+                      return on ? <rect key={`e${x}-${y}`} x={x} y={y} width="5" height="5" fill="#1a1a1a"/> : null;
+                    })
+                  )}
+                  {[140,147,154,161,168,175,182,189].map((x) =>
+                    [80,87,94,101,108,115,122,129,136,143,150,157,164,171,178].map((y) => {
+                      const on = ((x * 5 + y * 3 + 7) % 13) < 6;
+                      return on ? <rect key={`f${x}-${y}`} x={x} y={y} width="5" height="5" fill="#1a1a1a"/> : null;
+                    })
+                  )}
+                  {[80,87,94,101,108,115,122,129,136].map((x) =>
+                    [10,17,24,31,38,45,52,59,66,73].map((y) => {
+                      const on = ((x * 2 + y * 9 + 3) % 7) < 3;
+                      return on ? <rect key={`g${x}-${y}`} x={x} y={y} width="5" height="5" fill="#1a1a1a"/> : null;
+                    })
+                  )}
+                  {[80,87,94,101,108,115,122,129,136].map((x) =>
+                    [140,147,154,161,168,175,182,189].map((y) => {
+                      const on = ((x * 4 + y * 6 + 5) % 9) < 4;
+                      return on ? <rect key={`h${x}-${y}`} x={x} y={y} width="5" height="5" fill="#1a1a1a"/> : null;
+                    })
+                  )}
+                  {/* Timing strips */}
+                  {[80,94,108,122,136,150,164,178,192].map((x) => (
+                    <rect key={`ts${x}`} x={x} y="72" width="5" height="5" fill="#1a1a1a"/>
+                  ))}
+                  {[80,94,108,122,136,150,164,178,192].map((y) => (
+                    <rect key={`tv${y}`} x="72" y={y} width="5" height="5" fill="#1a1a1a"/>
+                  ))}
+                </svg>
+              </div>
+
+              {/* Code input */}
+              <div className="flex flex-col gap-2">
+                <label className="text-[14px] font-medium text-[#1a1a1a]">Ingresa el código que se generó</label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="Código de seis dígitos"
+                  value={twoFACode}
+                  onChange={e => setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="border border-[#e9eae6] rounded-[8px] px-4 py-2.5 text-[14px] text-[#1a1a1a] outline-none focus:border-[#1a1a1a] w-full max-w-[480px] placeholder:text-[#9a9a98] tracking-[2px]"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -13190,7 +13315,7 @@ function FeaturesComparisonView({ view: _view, onNavigate }: { view: View; onNav
         <div style={{ borderBottom: `1px solid ${LC.border}`, padding: '32px 64px 28px', position: 'relative', display: 'flex', alignItems: 'center', gap: 16 }}>
           <LandingCornerDots />
           <button
-            onClick={() => onNavigate('billing')}
+            onClick={() => onNavigate('billingPlans')}
             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: LC.text60, background: 'none', border: `1px solid ${LC.border}`, padding: '6px 14px', cursor: 'pointer', flexShrink: 0 }}
           >
             ← Volver a planes
@@ -13245,7 +13370,7 @@ function FeaturesComparisonView({ view: _view, onNavigate }: { view: View; onNav
             <p style={{ fontSize: 14, color: LC.text60, marginBottom: 24 }}>Prueba cualquier plan gratis durante 14 días, sin tarjeta de crédito.</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
               <button
-                onClick={() => onNavigate('billing')}
+                onClick={() => onNavigate('billingPlans')}
                 style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700, background: LC.accent, color: '#fff', border: 'none', cursor: 'pointer' }}
               >
                 Ver planes y precios
