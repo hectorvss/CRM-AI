@@ -11431,102 +11431,181 @@ window.Clain('boot', {
 
 // ── GlosarioTab ───────────────────────────────────────────────────────────────
 
-interface GlosarioEntry { id: string; source: string; target: string; lang: string; }
+interface GlosarioPhrase {
+  id: string;
+  source: string;
+  neverTranslate: boolean;
+  translations: Record<string, string>;
+}
+
+const GLOSARIO_LANGS = [
+  { code: 'ar', label: 'Arabic (ar)' }, { code: 'hy', label: 'Armenian (hy)' },
+  { code: 'az', label: 'Azerbaijani (az)' }, { code: 'bn', label: 'Bengali (bn)' },
+  { code: 'bs', label: 'Bosnian (bs)' }, { code: 'pt-BR', label: 'Brazilian Portuguese (pt-BR)' },
+  { code: 'bg', label: 'Bulgarian (bg)' }, { code: 'fr-CA', label: 'Canadian French (fr-CA)' },
+  { code: 'ca', label: 'Catalan (ca)' }, { code: 'hr', label: 'Croatian (hr)' },
+  { code: 'cs', label: 'Czech (cs)' }, { code: 'da', label: 'Danish (da)' },
+  { code: 'nl', label: 'Dutch (nl)' }, { code: 'et', label: 'Estonian (et)' },
+  { code: 'fi', label: 'Finnish (fi)' }, { code: 'fr', label: 'French (fr)' },
+  { code: 'ka', label: 'Georgian (ka)' }, { code: 'de', label: 'German (de)' },
+  { code: 'el', label: 'Greek (el)' }, { code: 'he', label: 'Hebrew (he)' },
+  { code: 'hi', label: 'Hindi (hi)' }, { code: 'hu', label: 'Hungarian (hu)' },
+  { code: 'id', label: 'Indonesian (id)' }, { code: 'it', label: 'Italian (it)' },
+  { code: 'ja', label: 'Japanese (ja)' }, { code: 'ko', label: 'Korean (ko)' },
+  { code: 'lv', label: 'Latvian (lv)' }, { code: 'lt', label: 'Lithuanian (lt)' },
+  { code: 'ms', label: 'Malay (ms)' }, { code: 'nb', label: 'Norwegian (nb)' },
+  { code: 'pl', label: 'Polish (pl)' }, { code: 'pt', label: 'Portuguese (pt)' },
+  { code: 'ro', label: 'Romanian (ro)' }, { code: 'ru', label: 'Russian (ru)' },
+  { code: 'sr', label: 'Serbian (sr)' }, { code: 'sk', label: 'Slovak (sk)' },
+  { code: 'sl', label: 'Slovenian (sl)' }, { code: 'es', label: 'Spanish (es)' },
+  { code: 'sv', label: 'Swedish (sv)' }, { code: 'th', label: 'Thai (th)' },
+  { code: 'tr', label: 'Turkish (tr)' }, { code: 'uk', label: 'Ukrainian (uk)' },
+  { code: 'vi', label: 'Vietnamese (vi)' }, { code: 'zh', label: 'Chinese (zh)' },
+];
 
 function GlosarioTab({ wsId, showToast }: { wsId: string; showToast: (m: string, ok?: boolean) => void }) {
-  const [entries, setEntries] = useState<GlosarioEntry[]>([
-    { id: '1', source: 'Inbox', target: 'Buzón', lang: 'es' },
-    { id: '2', source: 'Lead', target: 'Prospecto', lang: 'es' },
-    { id: '3', source: 'Ticket', target: 'Caso', lang: 'es' },
-  ]);
-  const [newSource, setNewSource] = useState('');
-  const [newTarget, setNewTarget] = useState('');
-  const [newLang, setNewLang] = useState('es');
+  const [phrases, setPhrases] = useState<GlosarioPhrase[]>([]);
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [editingPhrase, setEditingPhrase] = useState<GlosarioPhrase | null>(null);
   const [saving, setSaving] = useState(false);
 
-  async function persist(updated: GlosarioEntry[]) {
+  async function persist(updated: GlosarioPhrase[]) {
     if (!wsId) return;
-    try { await workspacesApi.updateSettings(wsId, { glossary: updated }); } catch { /* non-fatal */ }
+    try { await workspacesApi.updateSettings(wsId, { glossaryPhrases: updated }); } catch { /* non-fatal */ }
   }
 
-  async function addEntry() {
-    if (!newSource.trim() || !newTarget.trim()) return;
-    const entry: GlosarioEntry = { id: Date.now().toString(), source: newSource.trim(), target: newTarget.trim(), lang: newLang };
-    const updated = [...entries, entry];
+  function openNew() {
+    setEditingPhrase({ id: Date.now().toString(), source: '', neverTranslate: false, translations: {} });
+    setShowDrawer(true);
+  }
+
+  async function savePhrase() {
+    if (!editingPhrase || !editingPhrase.source.trim()) return;
     setSaving(true);
+    const exists = phrases.find(p => p.id === editingPhrase.id);
+    const updated = exists
+      ? phrases.map(p => p.id === editingPhrase.id ? editingPhrase : p)
+      : [...phrases, editingPhrase];
     await persist(updated);
     setSaving(false);
-    setEntries(updated);
-    setNewSource(''); setNewTarget('');
-    showToast('Entrada añadida');
+    setPhrases(updated);
+    setShowDrawer(false);
+    setEditingPhrase(null);
+    showToast('Frase guardada');
   }
 
-  async function removeEntry(id: string) {
-    const updated = entries.filter(e => e.id !== id);
+  async function deletePhrase(id: string) {
+    const updated = phrases.filter(p => p.id !== id);
     await persist(updated);
-    setEntries(updated);
-    showToast('Entrada eliminada');
+    setPhrases(updated);
+    showToast('Frase eliminada');
   }
 
   return (
-    <div className="flex flex-col gap-4 max-w-[720px]">
-      <div>
-        <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Glosario de traducciones</h2>
-        <p className="text-[13px] text-[#646462]">Define términos específicos para que el motor de traducción de IA los respete exactamente. Útil para nombres de producto, tecnicismos o jerga empresarial.</p>
-      </div>
-      {/* Table */}
-      <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
-        <table className="w-full text-[13px]">
-          <thead className="bg-[#fafaf9]">
-            <tr>
-              {['Término original (inglés)', 'Traducción', 'Idioma destino', ''].map(h => (
-                <th key={h} className="text-left px-4 py-2.5 font-medium text-[#646462] text-[12px] border-b border-[#e9eae6]">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#e9eae6]">
-            {entries.map(entry => (
-              <tr key={entry.id} className="hover:bg-[#fafaf9]">
-                <td className="px-4 py-2.5 text-[#1a1a1a] font-medium">{entry.source}</td>
-                <td className="px-4 py-2.5 text-[#1a1a1a]">{entry.target}</td>
-                <td className="px-4 py-2.5">
-                  <span className="bg-[#eff6ff] text-[#1d4ed8] rounded-full px-2 py-0.5 text-[11px] font-medium">{entry.lang}</span>
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <button onClick={() => removeEntry(entry.id)} className="text-[12px] text-[#b91c1c] hover:underline">Eliminar</button>
-                </td>
-              </tr>
-            ))}
-            {entries.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-[13px] text-[#a4a4a2]">Sin entradas en el glosario</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      {/* Add row */}
-      <div className="border border-[#e9eae6] rounded-[12px] p-4 flex items-end gap-3 bg-[#fafaf9]">
-        <div className="flex-1">
-          <label className="block text-[12px] font-medium text-[#646462] mb-1">Término original</label>
-          <input className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Inbox" value={newSource} onChange={e => setNewSource(e.target.value)} />
+    <div className="relative flex flex-col h-full">
+      {/* List / empty state */}
+      {phrases.length === 0 ? (
+        <div className="flex flex-col items-center justify-center flex-1 py-20 gap-3">
+          <svg viewBox="0 0 48 48" className="w-10 h-10" fill="none">
+            <text x="4" y="36" fontSize="36" fill="#ccc">翻</text>
+          </svg>
+          <p className="text-[15px] font-semibold text-[#1a1a1a]">Sin frases</p>
+          <p className="text-[13px] text-[#646462] text-center max-w-[360px]">Personaliza las traducciones de IA para el buzón para palabras clave y frases específicas de tu empresa.</p>
+          <button onClick={openNew} className="mt-2 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nueva frase</button>
         </div>
-        <div className="flex-1">
-          <label className="block text-[12px] font-medium text-[#646462] mb-1">Traducción</label>
-          <input className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Buzón" value={newTarget} onChange={e => setNewTarget(e.target.value)} />
+      ) : (
+        <div className="flex flex-col gap-3 max-w-[760px]">
+          <div className="flex items-center justify-between">
+            <p className="text-[13px] text-[#646462]">{phrases.length} {phrases.length === 1 ? 'frase' : 'frases'}</p>
+            <button onClick={openNew} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nueva frase</button>
+          </div>
+          <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead className="bg-[#fafaf9]">
+                <tr>
+                  {['Frase predeterminada', 'Traducciones', 'Nunca traducir', ''].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 font-medium text-[#646462] text-[12px] border-b border-[#e9eae6]">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {phrases.map(ph => (
+                  <tr key={ph.id} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-3 font-medium text-[#1a1a1a]">{ph.source}</td>
+                    <td className="px-4 py-3 text-[#646462]">{Object.keys(ph.translations).filter(k => ph.translations[k]).length} idiomas</td>
+                    <td className="px-4 py-3">{ph.neverTranslate && <span className="bg-[#fef3c7] text-[#92400e] px-2 py-0.5 rounded-full text-[11px] font-medium">Nunca traducir</span>}</td>
+                    <td className="px-4 py-3 text-right flex items-center justify-end gap-3">
+                      <button onClick={() => { setEditingPhrase(ph); setShowDrawer(true); }} className="text-[12px] text-[#3b59f6] hover:underline">Editar</button>
+                      <button onClick={() => deletePhrase(ph.id)} className="text-[12px] text-[#b91c1c] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="w-32">
-          <label className="block text-[12px] font-medium text-[#646462] mb-1">Idioma</label>
-          <select className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white focus:outline-none" value={newLang} onChange={e => setNewLang(e.target.value)}>
-            <option value="es">Español</option>
-            <option value="fr">Français</option>
-            <option value="de">Deutsch</option>
-            <option value="pt">Português</option>
-            <option value="it">Italiano</option>
-          </select>
+      )}
+
+      {/* Right-side drawer */}
+      {showDrawer && editingPhrase && (
+        <div className="fixed inset-0 z-50 flex" onClick={() => setShowDrawer(false)}>
+          <div className="flex-1" />
+          <div className="w-[520px] bg-white h-full shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Drawer header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+              <h2 className="text-[16px] font-bold text-[#1a1a1a]">Nueva frase</h2>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowDrawer(false)} className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[13px] font-medium text-[#646462] hover:bg-[#f5f5f4]">Cancelar</button>
+                <button onClick={savePhrase} disabled={saving || !editingPhrase.source.trim()} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[5px] text-[13px] font-semibold hover:bg-[#444] disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
+              </div>
+            </div>
+            {/* Drawer body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+              <p className="text-[13px] text-[#646462]">Agrega frases y traducciones para mantener la coherencia de los términos clave. Las traducciones del glosario coinciden con los ajustes de idioma de tu espacio de trabajo. <a href="#" className="text-[#3b59f6] underline">Agrega más idiomas compatibles</a> para obtener más traducciones.</p>
+
+              {/* Default phrase */}
+              <div>
+                <label className="block text-[12.5px] font-semibold text-[#1a1a1a] mb-1.5">Frase predeterminada: English (en) <span className="text-[#b91c1c]">*</span></label>
+                <input
+                  autoFocus
+                  className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                  placeholder="Escribe la frase original en inglés…"
+                  value={editingPhrase.source}
+                  onChange={e => setEditingPhrase(p => p ? { ...p, source: e.target.value } : p)}
+                />
+              </div>
+
+              {/* Never translate toggle */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setEditingPhrase(p => p ? { ...p, neverTranslate: !p.neverTranslate } : p)}
+                  className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${editingPhrase.neverTranslate ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${editingPhrase.neverTranslate ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
+                <span className="text-[13px] text-[#1a1a1a]">Nunca traducir</span>
+              </div>
+
+              {/* Per-language fields */}
+              {!editingPhrase.neverTranslate && (
+                <div className="flex flex-col gap-3">
+                  {GLOSARIO_LANGS.map(lang => (
+                    <div key={lang.code}>
+                      <label className="block text-[12.5px] font-medium text-[#1a1a1a] mb-1">{lang.label}</label>
+                      <input
+                        className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                        placeholder=""
+                        value={editingPhrase.translations[lang.code] ?? ''}
+                        onChange={e => setEditingPhrase(p => p ? { ...p, translations: { ...p.translations, [lang.code]: e.target.value } } : p)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        <button onClick={addEntry} disabled={!newSource.trim() || !newTarget.trim() || saving} className="bg-[#1a1a1a] text-white rounded-full px-4 py-2 text-[13px] font-semibold hover:bg-[#444] disabled:opacity-50 flex-shrink-0">
-          {saving ? '…' : '+ Añadir'}
-        </button>
-      </div>
+      )}
     </div>
   );
 }
@@ -11539,6 +11618,7 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
   const [aiTranslate, setAiTranslate] = useState(false);
   const [defaultLang, setDefaultLang] = useState('English');
   const [supported, setSupported] = useState('Todo');
+  const [translationTone, setTranslationTone] = useState<'amistoso' | 'neutro' | 'profesional'>('neutro');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
@@ -11547,6 +11627,7 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
     const s = (ws as any)?.settings || {};
     if (s.aiTranslate !== undefined) setAiTranslate(!!s.aiTranslate);
     if (s.defaultLang) setDefaultLang(s.defaultLang);
+    if (s.translationTone) setTranslationTone(s.translationTone);
   }, [ws]);
 
   function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); }
@@ -11555,7 +11636,7 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
     setSaving(true);
     try {
       const wsId = (ws as any)?.id ?? '';
-      await workspacesApi.updateSettings(wsId, { aiTranslate, defaultLang, supportedLangs: supported });
+      await workspacesApi.updateSettings(wsId, { aiTranslate, defaultLang, supportedLangs: supported, translationTone });
       showToast('Configuración de idioma guardada.');
     } catch {
       showToast('Error al guardar.', false);
@@ -11649,6 +11730,31 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
               </div>
 
               <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-3 mt-4">Tono de traducción</h2>
+              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
+                <div className="flex-1">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Preferencias de tono de traducción</h3>
+                  <p className="text-[13px] text-[#646462]">Elige cómo deben sonar las traducciones de IA. Elige un tono que coincida con la voz de tu marca; esto se usará para traducir el mensaje de tu personal al cliente.</p>
+                </div>
+                <div className="flex-shrink-0 flex items-center gap-2">
+                  {([
+                    { id: 'amistoso' as const, label: 'Amistoso', icon: '👋' },
+                    { id: 'neutro'    as const, label: 'Neutro',   icon: '🎯' },
+                    { id: 'profesional' as const, label: 'Profesional', icon: '💼' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setTranslationTone(opt.id)}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-full border text-[13px] font-medium transition-colors ${
+                        translationTone === opt.id
+                          ? 'border-[#1a1a1a] bg-[#1a1a1a] text-white'
+                          : 'border-[#e9eae6] bg-white text-[#1a1a1a] hover:border-[#c8c9c4]'
+                      }`}
+                    >
+                      <span>{opt.icon}</span> {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </>}
             {tab === 'glosario' && (
               <GlosarioTab wsId={(ws as any)?.id ?? ''} showToast={showToast} />
@@ -13910,20 +14016,36 @@ function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v:
 
 // ── MarcasView (1-97215) ──────────────────────────────────────────────────────
 
-interface BrandItem { id: string; name: string; color: string; helpCenterUrl: string; finEnabled: boolean; isDefault: boolean; }
+interface BrandItem {
+  id: string; name: string; color: string; helpCenterUrl: string;
+  finEnabled: boolean; isDefault: boolean;
+  brandId: string; finIdentity: string; helpCenter: string;
+  defaultAddress: string; finEmail: string;
+}
+
+function generateBrandId() {
+  return 'brand_' + Array.from(crypto.getRandomValues(new Uint8Array(6)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const { data: ws } = useApi(() => workspacesApi.currentContext(), [], null);
   const wsName = (ws as any)?.name ?? 'Mi empresa';
 
   const [brands, setBrands] = useState<BrandItem[]>([
-    { id: 'default', name: wsName, color: '#3b59f6', helpCenterUrl: 'soporte.miempresa.com', finEnabled: true, isDefault: true },
+    {
+      id: 'default', name: wsName, color: '#3b59f6', helpCenterUrl: 'soporte.miempresa.com',
+      finEnabled: true, isDefault: true,
+      brandId: 'brand_4a7f2e9b1c3d', finIdentity: 'Fin', helpCenter: 'Centro de ayuda principal',
+      defaultAddress: 'Dirección de la empresa', finEmail: 'fin@miempresa.com',
+    },
   ]);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [drawerBrand, setDrawerBrand] = useState<BrandItem | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [newBrandName, setNewBrandName] = useState('');
   const [newBrandColor, setNewBrandColor] = useState('#3b59f6');
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   // Sync default brand name with workspace
@@ -13931,6 +14053,13 @@ function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
     if (!ws) return;
     const name = (ws as any)?.name;
     if (name) setBrands(prev => prev.map(b => b.isDefault ? { ...b, name } : b));
+  }, [ws]);
+
+  // Load persisted brands
+  useEffect(() => {
+    if (!ws) return;
+    const s = (ws as any)?.settings ?? {};
+    if (Array.isArray(s.brands) && s.brands.length > 0) setBrands(s.brands);
   }, [ws]);
 
   function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); }
@@ -13942,14 +14071,19 @@ function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
       const allBrands = brands.map(b => b.id === brand.id ? brand : b);
       await workspacesApi.updateSettings(wsId, { brands: allBrands });
       setBrands(allBrands);
+      setDrawerBrand(null);
       showToast('Marca guardada correctamente');
     } catch { showToast('Error al guardar', false); }
-    finally { setSaving(false); setEditingId(null); }
+    finally { setSaving(false); }
   }
 
   async function addBrand() {
     if (!newBrandName.trim()) return;
-    const nb: BrandItem = { id: Date.now().toString(), name: newBrandName.trim(), color: newBrandColor, helpCenterUrl: '', finEnabled: false, isDefault: false };
+    const nb: BrandItem = {
+      id: Date.now().toString(), name: newBrandName.trim(), color: newBrandColor,
+      helpCenterUrl: '', finEnabled: false, isDefault: false,
+      brandId: generateBrandId(), finIdentity: 'Fin', helpCenter: '', defaultAddress: '', finEmail: '',
+    };
     const updated = [...brands, nb];
     setSaving(true);
     try {
@@ -13970,7 +14104,11 @@ function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
     showToast('Marca eliminada');
   }
 
-  const editing = editingId ? brands.find(b => b.id === editingId) : null;
+  function copyBrandId(brandId: string) {
+    navigator.clipboard.writeText(brandId).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
@@ -13994,7 +14132,6 @@ function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
             <div className="flex flex-col gap-3 max-w-[760px]">
               {brands.map(brand => (
                 <div key={brand.id} className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
-                  {/* Brand header row */}
                   <div className="flex items-center gap-4 px-5 py-4">
                     <div className="w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0 text-white text-[16px] font-bold" style={{ background: brand.color }}>
                       {brand.name.charAt(0).toUpperCase()}
@@ -14015,70 +14152,21 @@ function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                           <span className={`w-1.5 h-1.5 rounded-full ${brand.finEnabled ? 'bg-[#16a34a]' : 'bg-[#d1d5db]'}`} />
                           Fin {brand.finEnabled ? 'activo' : 'inactivo'}
                         </span>
+                        <span className="text-[12px] text-[#c8c9c4] font-mono">{brand.brandId}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <button onClick={() => setEditingId(brand.id === editingId ? null : brand.id)} className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-                        {editingId === brand.id ? 'Cerrar' : 'Editar'}
+                      <button
+                        onClick={() => setDrawerBrand({ ...brand })}
+                        className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]"
+                      >
+                        Editar
                       </button>
                       {!brand.isDefault && (
                         <button onClick={() => deleteBrand(brand.id)} className="text-[12px] text-[#b91c1c] hover:underline">Eliminar</button>
                       )}
                     </div>
                   </div>
-                  {/* Inline edit panel */}
-                  {editingId === brand.id && editing && (
-                    <div className="border-t border-[#e9eae6] px-5 py-4 bg-[#fafaf9] flex flex-col gap-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre de la marca</label>
-                          <input
-                            className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-                            value={editing.name}
-                            onChange={e => setBrands(prev => prev.map(b => b.id === editing.id ? { ...b, name: e.target.value } : b))}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[12px] font-medium text-[#646462] mb-1">Color de la marca</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="color"
-                              value={editing.color}
-                              onChange={e => setBrands(prev => prev.map(b => b.id === editing.id ? { ...b, color: e.target.value } : b))}
-                              className="w-9 h-9 rounded border border-[#e9eae6] cursor-pointer"
-                            />
-                            <span className="text-[12px] font-mono text-[#646462]">{editing.color}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[12px] font-medium text-[#646462] mb-1">URL del Help Center</label>
-                        <input
-                          className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-                          placeholder="soporte.miempresa.com"
-                          value={editing.helpCenterUrl}
-                          onChange={e => setBrands(prev => prev.map(b => b.id === editing.id ? { ...b, helpCenterUrl: e.target.value } : b))}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <button
-                            onClick={() => setBrands(prev => prev.map(b => b.id === editing.id ? { ...b, finEnabled: !b.finEnabled } : b))}
-                            className={`w-9 h-5 rounded-full relative transition-colors ${editing.finEnabled ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}
-                          >
-                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${editing.finEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                          </button>
-                          <span className="text-[13px] text-[#1a1a1a]">Fin AI activo para esta marca</span>
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => setEditingId(null)} className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] font-medium text-[#646462] hover:bg-[#f5f5f4]">Cancelar</button>
-                          <button onClick={() => saveBrand(editing)} disabled={saving} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[5px] text-[12px] font-semibold hover:bg-[#444] disabled:opacity-50">
-                            {saving ? 'Guardando…' : 'Guardar cambios'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -14091,6 +14179,195 @@ function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
           </div>
         </div>
       </div>
+
+      {/* ── Right-side brand edit drawer ─────────────────────────────────────── */}
+      {drawerBrand && (
+        <div className="fixed inset-0 z-50 flex" onClick={() => setDrawerBrand(null)}>
+          <div className="flex-1" />
+          <div
+            className="w-[520px] bg-white h-full shadow-2xl flex flex-col border-l border-[#e9eae6]"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Drawer header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-[8px] flex items-center justify-center text-white text-[13px] font-bold" style={{ background: drawerBrand.color }}>
+                  {drawerBrand.name.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-[15px] font-bold text-[#1a1a1a]">Editar marca</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a href="#" className="text-[13px] text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Aprender</a>
+                <button onClick={() => setDrawerBrand(null)} className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] font-medium text-[#646462] hover:bg-[#f5f5f4] ml-2">Cancelar</button>
+                <button
+                  onClick={() => saveBrand(drawerBrand)}
+                  disabled={saving}
+                  className="bg-[#1a1a1a] text-white rounded-full px-4 py-[5px] text-[12px] font-semibold hover:bg-[#444] disabled:opacity-50"
+                >
+                  {saving ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+
+            {/* Drawer body */}
+            <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-6">
+
+              {/* Brand ID */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">ID de marca</label>
+                <p className="text-[12px] text-[#646462] mb-2">Identificador único de solo lectura generado automáticamente.</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={drawerBrand.brandId}
+                    className="flex-1 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[12px] font-mono text-[#646462] bg-[#f8f8f7] focus:outline-none"
+                  />
+                  <button
+                    onClick={() => copyBrandId(drawerBrand.brandId)}
+                    className="flex items-center gap-1.5 border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4] transition-colors flex-shrink-0"
+                  >
+                    {copied ? (
+                      <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#16a34a]"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Copiado</>
+                    ) : (
+                      <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>Copiar</>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-[#e9eae6]" />
+
+              {/* Brand name + color */}
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Nombre de la marca</label>
+                  <input
+                    className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                    value={drawerBrand.name}
+                    onChange={e => setDrawerBrand(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Color de la marca</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={drawerBrand.color}
+                      onChange={e => setDrawerBrand(prev => prev ? { ...prev, color: e.target.value } : prev)}
+                      className="w-9 h-9 rounded-[6px] border border-[#e9eae6] cursor-pointer"
+                    />
+                    <span className="text-[13px] font-mono text-[#646462]">{drawerBrand.color}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-[#e9eae6]" />
+
+              {/* Fin AI Agent */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Agente de IA Fin</label>
+                <p className="text-[12px] text-[#646462] mb-3">Configura la identidad del agente Fin para esta marca.</p>
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="block text-[12px] font-medium text-[#646462] mb-1">Identidad de Fin</label>
+                    <input
+                      className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                      placeholder="Ej: Fin, Asistente, Bot de soporte…"
+                      value={drawerBrand.finIdentity}
+                      onChange={e => setDrawerBrand(prev => prev ? { ...prev, finIdentity: e.target.value } : prev)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <button
+                        onClick={() => setDrawerBrand(prev => prev ? { ...prev, finEnabled: !prev.finEnabled } : prev)}
+                        className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${drawerBrand.finEnabled ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}
+                      >
+                        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${drawerBrand.finEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                      </button>
+                      <span className="text-[13px] text-[#1a1a1a]">Fin activo para esta marca</span>
+                    </label>
+                    <a href="#" className="text-[13px] text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>
+                      Editar audiencias →
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-[#e9eae6]" />
+
+              {/* Centro de ayuda */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Centro de ayuda</label>
+                <p className="text-[12px] text-[#646462] mb-2">Selecciona el centro de ayuda asociado a esta marca.</p>
+                <select
+                  className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  value={drawerBrand.helpCenter}
+                  onChange={e => setDrawerBrand(prev => prev ? { ...prev, helpCenter: e.target.value, helpCenterUrl: e.target.value } : prev)}
+                >
+                  <option value="">Ninguno</option>
+                  <option value="Centro de ayuda principal">Centro de ayuda principal</option>
+                  <option value="Help Center Desarrolladores">Help Center Desarrolladores</option>
+                  <option value="Soporte Enterprise">Soporte Enterprise</option>
+                </select>
+              </div>
+
+              <div className="border-t border-[#e9eae6]" />
+
+              {/* Dirección predeterminada */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Dirección predeterminada</label>
+                <p className="text-[12px] text-[#646462] mb-2">Dirección que aparece en los emails enviados por esta marca.</p>
+                <select
+                  className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  value={drawerBrand.defaultAddress}
+                  onChange={e => setDrawerBrand(prev => prev ? { ...prev, defaultAddress: e.target.value } : prev)}
+                >
+                  <option value="">Ninguna</option>
+                  <option value="Dirección de la empresa">Dirección de la empresa</option>
+                  <option value="Oficina central">Oficina central</option>
+                  <option value="Delegación Madrid">Delegación Madrid</option>
+                </select>
+              </div>
+
+              <div className="border-t border-[#e9eae6]" />
+
+              {/* Dirección de correo electrónico de Fin */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Dirección de correo electrónico de Fin</label>
+                <p className="text-[12px] text-[#646462] mb-2">Email desde el que Fin responde a los clientes de esta marca.</p>
+                <select
+                  className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                  value={drawerBrand.finEmail}
+                  onChange={e => setDrawerBrand(prev => prev ? { ...prev, finEmail: e.target.value } : prev)}
+                >
+                  <option value="">Ninguno</option>
+                  <option value="fin@miempresa.com">fin@miempresa.com</option>
+                  <option value="soporte@miempresa.com">soporte@miempresa.com</option>
+                  <option value="hola@miempresa.com">hola@miempresa.com</option>
+                </select>
+              </div>
+
+              <div className="border-t border-[#e9eae6]" />
+
+              {/* Estilos de Messenger */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Estilos de Messenger</label>
+                <p className="text-[12px] text-[#646462] mb-3">Personaliza la apariencia del Messenger para esta marca.</p>
+                <button
+                  className="flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-4 py-2.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4] transition-colors"
+                  onClick={() => {}}
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M8 1a7 7 0 110 14A7 7 0 018 1zm0 1.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM8 4a.75.75 0 01.75.75v3.5l2.25 1.3a.75.75 0 11-.75 1.3l-2.625-1.516A.75.75 0 017.25 8.75v-4A.75.75 0 018 4z"/></svg>
+                  Abrir editor de Messenger
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a96] ml-auto"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New brand modal */}
       {showNewModal && (
@@ -28573,7 +28850,7 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
           </div>
 
           <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-[700px] mx-auto py-8 px-6 flex flex-col gap-0">
+            <div className="py-8 px-8 flex flex-col gap-0 w-full">
 
               {/* ── Nombre y zona horaria ── */}
               <div className="border border-[#e9eae6] rounded-xl overflow-hidden mb-4">
@@ -28582,7 +28859,7 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
                     <p className="text-[14px] font-semibold text-[#1a1a1a] mb-0.5">Nombre y zona horaria del espacio de trabajo</p>
                     <p className="text-[12.5px] text-[#646462]">La zona horaria afecta a las funciones que dependen de la hora.</p>
                   </div>
-                  <div className="w-[280px] flex flex-col gap-3">
+                  <div className="w-[340px] flex flex-col gap-3">
                     <div>
                       <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre</label>
                       <input
@@ -28724,6 +29001,357 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
   );
 }
 
+// ─── Shared permission data ───────────────────────────────────────────────────
+const BUILTIN_ROLE_PERMS: Record<string, string[]> = {
+  owner:           ['conversations:read','conversations:write','conversations:assign','conversations:close','conversations:delete','contacts:read','contacts:write','contacts:delete','contacts:export','companies:read','companies:write','reports:read','reports:export','settings:read','settings:write','teammates:read','teammates:invite','teammates:manage','channels:read','channels:write','ai:read','ai:configure','ai:train'],
+  workspace_admin: ['conversations:read','conversations:write','conversations:assign','conversations:close','contacts:read','contacts:write','contacts:delete','contacts:export','companies:read','companies:write','reports:read','reports:export','settings:read','settings:write','teammates:read','teammates:invite','teammates:manage','channels:read','channels:write','ai:read','ai:configure'],
+  supervisor:      ['conversations:read','conversations:write','conversations:assign','conversations:close','contacts:read','contacts:write','companies:read','reports:read','reports:export','settings:read','teammates:read','channels:read','ai:read'],
+  agent:           ['conversations:read','conversations:write','conversations:assign','conversations:close','contacts:read','contacts:write','companies:read','reports:read','channels:read','ai:read'],
+  viewer:          ['conversations:read','contacts:read','companies:read','reports:read','channels:read'],
+};
+
+const ALL_PERMS_META = [
+  { group: 'Conversaciones', color: 'bg-[#eff6ff] text-[#1d4ed8] border-[#bfdbfe]', perms: [
+    { id: 'conversations:read',   label: 'Ver' },
+    { id: 'conversations:write',  label: 'Responder' },
+    { id: 'conversations:assign', label: 'Asignar' },
+    { id: 'conversations:close',  label: 'Cerrar' },
+    { id: 'conversations:delete', label: 'Eliminar' },
+  ]},
+  { group: 'Contactos', color: 'bg-[#f0fdf4] text-[#15803d] border-[#bbf7d0]', perms: [
+    { id: 'contacts:read',   label: 'Ver' },
+    { id: 'contacts:write',  label: 'Editar' },
+    { id: 'contacts:delete', label: 'Eliminar' },
+    { id: 'contacts:export', label: 'Exportar' },
+  ]},
+  { group: 'Empresas', color: 'bg-[#fff7ed] text-[#b45309] border-[#fed7aa]', perms: [
+    { id: 'companies:read',  label: 'Ver' },
+    { id: 'companies:write', label: 'Editar' },
+  ]},
+  { group: 'Informes', color: 'bg-[#f5f3ff] text-[#6d28d9] border-[#ddd6fe]', perms: [
+    { id: 'reports:read',   label: 'Ver' },
+    { id: 'reports:export', label: 'Exportar' },
+  ]},
+  { group: 'Ajustes', color: 'bg-[#fef9c3] text-[#854d0e] border-[#fef08a]', perms: [
+    { id: 'settings:read',  label: 'Ver' },
+    { id: 'settings:write', label: 'Modificar' },
+  ]},
+  { group: 'Compañeros', color: 'bg-[#fce7f3] text-[#9d174d] border-[#fbcfe8]', perms: [
+    { id: 'teammates:read',   label: 'Ver' },
+    { id: 'teammates:invite', label: 'Invitar' },
+    { id: 'teammates:manage', label: 'Gestionar' },
+  ]},
+  { group: 'Canales', color: 'bg-[#f0f9ff] text-[#0369a1] border-[#bae6fd]', perms: [
+    { id: 'channels:read',  label: 'Ver' },
+    { id: 'channels:write', label: 'Configurar' },
+  ]},
+  { group: 'IA', color: 'bg-[#ecfdf5] text-[#047857] border-[#a7f3d0]', perms: [
+    { id: 'ai:read',      label: 'Ver' },
+    { id: 'ai:configure', label: 'Configurar' },
+    { id: 'ai:train',     label: 'Entrenar' },
+  ]},
+];
+
+// ─── TeammateProfileView ──────────────────────────────────────────────────────
+function TeammateProfileView({
+  member, roles, onBack, onRoleChange, onDeactivate,
+}: {
+  member: any;
+  roles: any[];
+  onBack: () => void;
+  onRoleChange: (memberId: string, roleId: string) => void;
+  onDeactivate: (memberId: string, name: string) => void;
+}) {
+  const [selectedRole, setSelectedRole] = useState<string>(member.role_id || 'agent');
+  const [extraPerms, setExtraPerms]     = useState<string[]>([]);
+  const [extraModal, setExtraModal]     = useState(false);
+  const [saving, setSaving]             = useState(false);
+  const [toast, setToast]               = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const rolePerms = BUILTIN_ROLE_PERMS[selectedRole] ?? roles.find((r: any) => r.id === selectedRole)?.permissions ?? [];
+  const initials  = (member.name || member.email || '?')[0].toUpperCase();
+
+  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); }
+
+  async function handleSaveRole() {
+    setSaving(true);
+    try {
+      await iamApi.updateMember(member.id, { role_id: selectedRole });
+      onRoleChange(member.id, selectedRole);
+      showToast('Función actualizada.');
+    } catch { showToast('Error al guardar.', false); }
+    finally { setSaving(false); }
+  }
+
+  function toggleExtra(p: string) {
+    setExtraPerms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+  }
+
+  // Demo conversations (prototype)
+  const DEMO_CONVS = [
+    { id: 1, subject: 'Problema con el pago', channel: 'Email', status: 'Abierto',   ts: 'Hace 2 h',   preview: 'Hola, tengo un problema con mi último cargo...' },
+    { id: 2, subject: 'Consulta de envío',    channel: 'Chat',  status: 'Resuelto',  ts: 'Ayer',        preview: '¿Cuándo llegará mi pedido #A-4921?' },
+    { id: 3, subject: 'Solicitud de reembolso', channel: 'Email', status: 'Pendiente', ts: 'Hace 3 días', preview: 'Quisiera solicitar la devolución de...' },
+    { id: 4, subject: 'Bug en la app móvil',  channel: 'Chat',  status: 'Abierto',   ts: 'Hace 4 días', preview: 'La app se cierra sola cuando intento abrir...' },
+    { id: 5, subject: 'Actualización de plan', channel: 'Email', status: 'Resuelto', ts: 'Hace 1 sem',  preview: 'Me gustaría pasar al plan Enterprise.' },
+  ];
+
+  const ROLE_COLOR: Record<string, string> = {
+    owner: 'bg-[#ede9fe] text-[#6d28d9]', workspace_admin: 'bg-[#fef9c3] text-[#854d0e]',
+    supervisor: 'bg-[#fff7ed] text-[#c2410c]', agent: 'bg-[#f0fdf4] text-[#15803d]', viewer: 'bg-[#f0f9ff] text-[#0369a1]',
+  };
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[#f8f8f7]">
+      {/* Top bar */}
+      <div className="flex-shrink-0 bg-white border-b border-[#e9eae6] px-6 h-12 flex items-center gap-3">
+        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-[13px] text-[#646462] hover:text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round"/></svg>
+          Compañeros de equipo
+        </button>
+        <span className="text-[#d1d5db]">/</span>
+        <span className="text-[13px] font-semibold text-[#1a1a1a]">{member.name ?? member.email ?? 'Perfil'}</span>
+        {toast && <span className={`ml-auto text-[12.5px] font-medium ${toast.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{toast.ok ? '✓' : '✕'} {toast.msg}</span>}
+      </div>
+
+      {/* Body: sidebar + main */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+
+        {/* ── LEFT SIDEBAR (300px) ── */}
+        <div className="w-[300px] flex-shrink-0 border-r border-[#e9eae6] bg-white flex flex-col overflow-y-auto">
+          {/* Cover + Avatar */}
+          <div className="relative h-24 bg-gradient-to-br from-[#e0e7ff] to-[#c7d2fe] flex-shrink-0">
+            <div className="absolute -bottom-8 left-6 w-16 h-16 rounded-full bg-[#3b59f6] border-4 border-white flex items-center justify-center text-[22px] font-bold text-white shadow-md">
+              {initials}
+            </div>
+          </div>
+          <div className="mt-10 px-6 pb-6 flex flex-col gap-4">
+            {/* Name + role */}
+            <div>
+              <h2 className="text-[16px] font-bold text-[#1a1a1a] leading-tight">{member.name ?? '—'}</h2>
+              <p className="text-[12.5px] text-[#646462] mt-0.5">{member.email ?? ''}</p>
+              <span className={`mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${ROLE_COLOR[member.role_id] ?? 'bg-[#f1f1ee] text-[#646462]'}`}>
+                {roles.find((r: any) => r.id === member.role_id)?.name ?? member.role_id ?? 'Sin función'}
+              </span>
+            </div>
+
+            {/* Status */}
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+              <span className="text-[12.5px] text-[#1a1a1a]">Activo</span>
+            </div>
+
+            {/* Meta */}
+            <div className="flex flex-col gap-2 text-[12.5px]">
+              <div className="flex items-center gap-2 text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current flex-shrink-0" strokeWidth="1.4"><path d="M2 4h12v9H2zM2 4l6 5 6-5"/></svg>
+                {member.email ?? '—'}
+              </div>
+              <div className="flex items-center gap-2 text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current flex-shrink-0" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>
+                Miembro desde {member.joined_at ? new Date(member.joined_at).toLocaleDateString('es', { month: 'short', year: 'numeric' }) : 'hace 1 hora'}
+              </div>
+              <div className="flex items-center gap-2 text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current flex-shrink-0" strokeWidth="1.4"><rect x="1.5" y="1.5" width="13" height="13" rx="2"/><path d="M5 8h6M5 5h6M5 11h4"/></svg>
+                Plaza: <span className="font-semibold text-[#1a1a1a]">{(member.seat_type ?? 'FULL').toUpperCase()}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current flex-shrink-0" strokeWidth="1.4"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z"/><path d="M8 5v4l2.5 1.5"/></svg>
+                2FA: <span className={`font-semibold ${member.mfa_enabled ? 'text-[#16a34a]' : 'text-[#a4a4a2]'}`}>{member.mfa_enabled ? 'Activado' : 'Desactivado'}</span>
+              </div>
+            </div>
+
+            <div className="border-t border-[#e9eae6] pt-4">
+              <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-3">Estadísticas</p>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Conversaciones', value: DEMO_CONVS.length },
+                  { label: 'Resueltas', value: DEMO_CONVS.filter(c => c.status === 'Resuelto').length },
+                  { label: 'Tiempo medio', value: '14m' },
+                  { label: 'CSAT', value: '4.8/5' },
+                ].map(s => (
+                  <div key={s.label} className="bg-[#f8f8f7] rounded-lg p-2.5 text-center">
+                    <p className="text-[18px] font-bold text-[#1a1a1a]">{s.value}</p>
+                    <p className="text-[10.5px] text-[#a4a4a2]">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-[#e9eae6] pt-4 flex flex-col gap-2">
+              <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-1">Acciones</p>
+              <button
+                onClick={() => onDeactivate(member.id, member.name ?? member.email)}
+                className="w-full text-left px-3 py-2 rounded-lg text-[12.5px] text-[#b91c1c] hover:bg-[#fef2f2] transition-colors border border-[#fca5a5]"
+              >
+                Desactivar acceso
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT MAIN AREA ── */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 gap-5">
+
+          {/* ── Función y accesos ── */}
+          <div className="bg-white rounded-xl border border-[#e9eae6] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <div>
+                <h3 className="text-[14px] font-bold text-[#1a1a1a]">Función y accesos</h3>
+                <p className="text-[12px] text-[#646462] mt-0.5">Asigna una función base y añade permisos individuales adicionales.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setExtraModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[12.5px] font-medium text-[#3b59f6] border border-[#bfdbfe] rounded-lg hover:bg-[#eff6ff] transition-colors"
+                >
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+                  Permisos extra{extraPerms.length > 0 ? ` (${extraPerms.length})` : ''}
+                </button>
+                <button
+                  onClick={handleSaveRole} disabled={saving}
+                  className="px-3 py-1.5 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-lg hover:bg-[#333] disabled:opacity-50 transition-colors"
+                >
+                  {saving ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+            <div className="p-5">
+              {/* Role selector cards */}
+              <div className="grid grid-cols-5 gap-2 mb-5">
+                {(roles.length > 0 ? roles : Object.keys(BUILTIN_ROLE_PERMS).map(id => ({
+                  id, name: { owner: 'Owner', workspace_admin: 'Admin', supervisor: 'Supervisor', agent: 'Agente', viewer: 'Viewer' }[id] ?? id,
+                }))).map((r: any) => {
+                  const isSelected = selectedRole === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => setSelectedRole(r.id)}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all ${isSelected ? 'border-[#3b59f6] bg-[#eff6ff]' : 'border-[#e9eae6] hover:border-[#1a1a1a] bg-white'}`}
+                    >
+                      <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold ${isSelected ? 'bg-[#3b59f6] text-white' : 'bg-[#f1f1ee] text-[#646462]'}`}>
+                        {(r.name ?? r.id)[0].toUpperCase()}
+                      </span>
+                      <span className={`text-[11.5px] font-semibold leading-tight ${isSelected ? 'text-[#1d4ed8]' : 'text-[#1a1a1a]'}`}>{r.name ?? r.id}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Permission pills for selected role */}
+              <div className="border border-[#e9eae6] rounded-lg p-4">
+                <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-3">Permisos incluidos en esta función</p>
+                <div className="flex flex-wrap gap-2">
+                  {ALL_PERMS_META.flatMap(g => g.perms.map(p => ({ ...p, groupColor: g.color, group: g.group }))).map(p => {
+                    const included = rolePerms.includes(p.id);
+                    const isExtra  = extraPerms.includes(p.id);
+                    if (!included && !isExtra) return null;
+                    return (
+                      <span key={p.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${isExtra ? 'bg-[#fffbeb] text-[#b45309] border-[#fde68a]' : p.groupColor}`}>
+                        {isExtra && <span className="text-[9px] font-bold">+</span>}
+                        {p.group}: {p.label}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Conversaciones recientes ── */}
+          <div className="bg-white rounded-xl border border-[#e9eae6] overflow-hidden flex-1">
+            <div className="px-5 py-4 border-b border-[#e9eae6]">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Conversaciones recientes</h3>
+              <p className="text-[12px] text-[#646462] mt-0.5">{DEMO_CONVS.length} conversaciones en los últimos 30 días</p>
+            </div>
+            <div className="divide-y divide-[#e9eae6]">
+              {DEMO_CONVS.map(conv => (
+                <div key={conv.id} className="flex items-start gap-4 px-5 py-3.5 hover:bg-[#f8f8f7] cursor-pointer group">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-white ${conv.channel === 'Email' ? 'bg-[#3b59f6]' : 'bg-[#8b5cf6]'}`}>
+                    {conv.channel[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{conv.subject}</p>
+                      <span className="text-[11.5px] text-[#a4a4a2] whitespace-nowrap">{conv.ts}</span>
+                    </div>
+                    <p className="text-[12px] text-[#646462] truncate mt-0.5">{conv.preview}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10.5px] text-[#a4a4a2]">{conv.channel}</span>
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0 rounded-full text-[10px] font-semibold ${
+                        conv.status === 'Abierto' ? 'bg-[#f0fdf4] text-[#15803d]' :
+                        conv.status === 'Resuelto' ? 'bg-[#f1f1ee] text-[#646462]' :
+                        'bg-[#fff7ed] text-[#b45309]'
+                      }`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                        {conv.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Extra permissions modal ── */}
+      {extraModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-2xl shadow-2xl w-[600px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 pt-5 pb-4 border-b border-[#e9eae6] flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="text-[16px] font-bold text-[#1a1a1a]">Permisos extra individuales</h3>
+                <p className="text-[12px] text-[#646462] mt-0.5">Añade permisos específicos además de los incluidos en la función asignada.</p>
+              </div>
+              <button onClick={() => setExtraModal(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f1f1ee]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-6 py-4 flex flex-col gap-4">
+              {ALL_PERMS_META.map(g => (
+                <div key={g.group}>
+                  <p className="text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide mb-2">{g.group}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {g.perms.map(p => {
+                      const inRole  = rolePerms.includes(p.id);
+                      const checked = inRole || extraPerms.includes(p.id);
+                      return (
+                        <label key={p.id} className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-all select-none ${
+                          inRole ? 'border-[#e9eae6] bg-[#f8f8f7] text-[#a4a4a2] cursor-not-allowed' :
+                          checked ? `border-[#3b59f6] ${g.color} font-semibold` :
+                          'border-[#e9eae6] text-[#646462] hover:border-[#1a1a1a]'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={inRole}
+                            onChange={() => !inRole && toggleExtra(p.id)}
+                            className="w-3.5 h-3.5 accent-[#3b59f6]"
+                          />
+                          <span className="text-[12px]">{p.label}</span>
+                          {inRole && <span className="text-[10px] bg-[#f1f1ee] px-1 rounded">del rol</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-4 border-t border-[#e9eae6] flex items-center justify-between flex-shrink-0">
+              <span className="text-[12.5px] text-[#646462]">{extraPerms.length} permiso{extraPerms.length !== 1 ? 's' : ''} extra seleccionado{extraPerms.length !== 1 ? 's' : ''}</span>
+              <div className="flex gap-2">
+                <button onClick={() => setExtraModal(false)} className="px-4 py-1.5 text-[13px] font-medium text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7]">Cancelar</button>
+                <button onClick={() => setExtraModal(false)} className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Aplicar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── WorkspaceTeammatesView ──────────────────────────────────────────────────
 type TeammatesTab = 'teammates' | 'invited' | 'roles' | 'scim' | 'activity';
 
@@ -28745,7 +29373,8 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
   const [creatingRole, setCreatingRole] = useState(false);
   const [actDateFrom, setActDateFrom] = useState('');
   const [actDateTo, setActDateTo]    = useState('');
-  const [memberMenuId, setMemberMenuId] = useState<string | null>(null);
+  const [memberMenuId, setMemberMenuId]       = useState<string | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
   const members: any[] = Array.isArray(membersRaw) ? membersRaw : [];
   const roles: any[]   = Array.isArray(rolesRaw)   ? rolesRaw   : [];
@@ -28888,6 +29517,28 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
     { id: 'activity',  label: 'Registros de actividad' },
   ];
 
+  // ── Profile view ────────────────────────────────────────────────────────────
+  const selectedMember = selectedMemberId ? members.find((m: any) => m.id === selectedMemberId) : null;
+  if (selectedMember) {
+    return (
+      <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+        <TrialBanner />
+        <div className="flex flex-1 min-h-0 gap-2">
+          <SettingsSidebar view={view} onNavigate={onNavigate} />
+          <div className="flex-1 rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden bg-[#f8f8f7]">
+            <TeammateProfileView
+              member={selectedMember}
+              roles={displayRoles}
+              onBack={() => setSelectedMemberId(null)}
+              onRoleChange={handleRoleChange}
+              onDeactivate={handleDeactivate}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -29011,7 +29662,10 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                                   <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border-2 border-white" />
                                 </div>
                                 <div>
-                                  <p className="font-semibold text-[#1a1a1a] leading-tight">{m.name ?? '—'}</p>
+                                  <button
+                                    onClick={() => setSelectedMemberId(m.id)}
+                                    className="font-semibold text-[#1a1a1a] leading-tight hover:text-[#3b59f6] hover:underline text-left"
+                                  >{m.name ?? '—'}</button>
                                   <p className="text-[11.5px] text-[#a4a4a2]">{m.email ?? ''}</p>
                                 </div>
                               </div>
@@ -29147,23 +29801,48 @@ function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: 
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  {displayRoles.map((r: any) => (
-                    <div key={r.id} className="border border-[#e9eae6] rounded-xl p-4 flex items-center gap-4 hover:bg-[#f8f8f7] transition-colors">
-                      <span className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold flex-shrink-0 ${r.color ?? roleColor(r.id)}`}>{r.name}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12.5px] text-[#646462] truncate">{r.desc ?? r.description ?? 'Función personalizada'}</p>
+                <div className="flex flex-col gap-3">
+                  {displayRoles.map((r: any) => {
+                    const rolePms = BUILTIN_ROLE_PERMS[r.id] ?? r.permissions ?? [];
+                    const memberCount = r.members ?? members.filter((m: any) => m.role_id === r.id).length;
+                    return (
+                      <div key={r.id} className="border border-[#e9eae6] rounded-xl overflow-hidden hover:border-[#d1d5db] transition-colors">
+                        {/* Role header */}
+                        <div className="flex items-center gap-4 px-5 py-4 bg-white">
+                          <span className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold flex-shrink-0 ${r.color ?? roleColor(r.id)}`}>{r.name}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12.5px] text-[#646462]">{r.desc ?? r.description ?? 'Función personalizada'}</p>
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <div className="flex items-center gap-1.5 text-[12px] text-[#646462]">
+                              <div className="w-5 h-5 rounded-full bg-[#e9eae6] flex items-center justify-center text-[10px] font-semibold">{memberCount}</div>
+                              miembro{memberCount !== 1 ? 's' : ''}
+                            </div>
+                            {!['owner','workspace_admin','supervisor','agent','viewer'].includes(r.id) && (
+                              <button className="text-[12px] text-[#646462] hover:text-[#3b59f6] border border-[#e9eae6] rounded-lg px-2.5 py-1 hover:border-[#3b59f6] transition-colors">
+                                Editar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {/* Permission groups */}
+                        <div className="px-5 pb-4 bg-[#fafaf9] border-t border-[#f0f0ee]">
+                          <p className="text-[10px] font-semibold text-[#a4a4a2] uppercase tracking-wide pt-3 mb-2">Permisos</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {ALL_PERMS_META.flatMap(g => g.perms.map(p => ({ ...p, groupColor: g.color }))).map(p => {
+                              const has = rolePms.includes(p.id);
+                              return (
+                                <span key={p.id} className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-medium border transition-opacity ${has ? p.groupColor : 'bg-transparent text-[#d1d5db] border-[#e9eae6] opacity-40'}`}>
+                                  {has && <svg viewBox="0 0 8 8" className="w-2 h-2 mr-1 fill-current"><path d="M1 4l2 2 4-4"/></svg>}
+                                  {p.label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <span className="text-[12px] text-[#a4a4a2]">{r.members ?? members.filter(m => m.role_id === r.id).length} miembro{(r.members ?? members.filter(m => m.role_id === r.id).length) !== 1 ? 's' : ''}</span>
-                        {!['owner','workspace_admin','supervisor','agent','viewer'].includes(r.id) && (
-                          <button className="text-[12px] text-[#646462] hover:text-[#3b59f6] border border-[#e9eae6] rounded-lg px-2 py-0.5 hover:border-[#3b59f6] transition-colors">
-                            Editar
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
