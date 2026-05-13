@@ -49861,6 +49861,42 @@ function WASettingsView() {
   function OrgCIMDPage() {
     const [showModal, setShowModal] = useState(false);
     const [tokenLabel, setTokenLabel] = useState('');
+    const [tokens, setTokens] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [creating, setCreating] = React.useState(false);
+    const [newTokenShown, setNewTokenShown] = React.useState<string | null>(null);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/organizations/@current/verification_tokens/`);
+        setTokens(res?.results ?? []);
+      } catch { setTokens([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function createToken() {
+      if (!tokenLabel.trim()) return;
+      setCreating(true);
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phPost(`/api/organizations/@current/verification_tokens/`, { label: tokenLabel.trim() });
+        const tok = res?.value ?? res?.token;
+        if (tok) setNewTokenShown(tok);
+        setTokenLabel('');
+        setShowModal(false);
+        await refresh();
+      } catch (e: any) { alert('No se pudo crear el token: ' + (e?.message ?? '')); }
+      finally { setCreating(false); }
+    }
+    async function deleteToken(id: string) {
+      if (!confirm('¿Eliminar token?')) return;
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phDelete(`/api/organizations/@current/verification_tokens/${id}/`);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function copyToken(t: string) { try { await navigator.clipboard.writeText(t); } catch {} }
 
     return (
       <div className="flex-1 overflow-y-auto relative">
@@ -49886,10 +49922,47 @@ function WASettingsView() {
                 Crear token de verificación
               </button>
             </div>
-            <div className="border border-[#e9eae6] rounded-[12px] p-10 flex flex-col items-center text-center gap-2">
-              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-[#646462]"><path d="M12.65 10A6 6 0 007 5.07V3h-2v2.07a6 6 0 000 11.86V19h2v-2.07A6 6 0 0012.65 14H14v2h2v-2h2v-2h-2v-2h-2v2h-1.35zm-6.65 2a4 4 0 110-8 4 4 0 010 8z"/></svg>
-              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin tokens de verificación</h3>
-              <p className="text-[13px] text-[#646462]">Crea uno para vincular una app de socio CIMD a esta organización.</p>
+            {newTokenShown && (
+              <div className="border border-[#fde68a] bg-[#fffbeb] rounded-[10px] p-4 space-y-2">
+                <p className="text-[13px] font-semibold text-[#92400e]">⚠️ Token generado — guárdalo ahora, no podrás verlo de nuevo</p>
+                <div className="flex items-center gap-2 bg-white border border-[#e9eae6] rounded px-3 py-2">
+                  <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] break-all">{newTokenShown}</code>
+                  <button onClick={() => copyToken(newTokenShown)} className="text-[#e8572a] text-[12px] hover:underline">Copiar</button>
+                </div>
+                <button onClick={() => setNewTokenShown(null)} className="text-[12px] text-[#646462] hover:underline">Cerrar</button>
+              </div>
+            )}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              {loading ? (
+                <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando tokens…</div>
+              ) : tokens.length === 0 ? (
+                <div className="p-10 flex flex-col items-center text-center gap-2">
+                  <svg viewBox="0 0 24 24" className="w-8 h-8 fill-[#646462]"><path d="M12.65 10A6 6 0 007 5.07V3h-2v2.07a6 6 0 000 11.86V19h2v-2.07A6 6 0 0012.65 14H14v2h2v-2h2v-2h-2v-2h-2v2h-1.35zm-6.65 2a4 4 0 110-8 4 4 0 010 8z"/></svg>
+                  <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin tokens de verificación</h3>
+                  <p className="text-[13px] text-[#646462]">Crea uno para vincular una app de socio CIMD a esta organización.</p>
+                </div>
+              ) : (
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Etiqueta</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado</th>
+                      <th className="px-4 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e9eae6]">
+                    {tokens.map((t: any) => (
+                      <tr key={t.id}>
+                        <td className="px-4 py-2.5 text-[13px] text-[#1a1a1a]">{t.label ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button onClick={() => deleteToken(t.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
@@ -49918,7 +49991,7 @@ function WASettingsView() {
               </div>
               <div className="border-t border-[#e9eae6] pt-4 flex justify-end gap-2">
                 <button onClick={() => setShowModal(false)} className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
-                <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">Crear token</button>
+                <button onClick={createToken} disabled={creating || !tokenLabel.trim()} className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white disabled:opacity-50">{creating ? 'Creando…' : 'Crear token'}</button>
               </div>
             </div>
           </div>
@@ -49929,32 +50002,148 @@ function WASettingsView() {
 
   // ── OrgProxyPage ──────────────────────────────────────────────────────────
   function OrgProxyPage() {
+    const [proxies, setProxies] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [newDomain, setNewDomain] = React.useState('');
+    const [creating, setCreating] = React.useState(false);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/organizations/@current/proxy_records/`);
+        setProxies(res?.results ?? []);
+      } catch { setProxies([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function addProxy() {
+      if (!newDomain.trim()) return;
+      setCreating(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/organizations/@current/proxy_records/`, { domain: newDomain.trim() });
+        setNewDomain(''); setShowAdd(false);
+        await refresh();
+      } catch (e: any) { alert('No se pudo crear el proxy: ' + (e?.message ?? '')); }
+      finally { setCreating(false); }
+    }
+    async function deleteProxy(id: string) {
+      if (!confirm('¿Eliminar proxy?')) return;
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phDelete(`/api/organizations/@current/proxy_records/${id}/`);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-6">
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <h2 className="text-[15px] font-bold text-[#1a1a1a]">Proxies inversos gestionados</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Proxies inversos para envíos de eventos desde tu dominio"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
             </div>
+            <p className="text-[13px] text-[#646462]">Configura un proxy inverso gestionado en tu propio dominio para que los SDK envíen eventos sin cruzar dominios.{' '}<a href="https://posthog.com/docs/advanced/proxy/managed-reverse-proxy" target="_blank" rel="noopener noreferrer" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Dominio</th>
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
+                    <th className="px-4 py-2.5"></th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr>
-                    <td colSpan={2} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td>
-                  </tr>
+                <tbody className="divide-y divide-[#e9eae6]">
+                  {loading ? (
+                    <tr><td colSpan={3} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando…</td></tr>
+                  ) : proxies.length === 0 ? (
+                    <tr><td colSpan={3} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td></tr>
+                  ) : (
+                    proxies.map((p: any) => (
+                      <tr key={p.id} className="hover:bg-[#fafaf9]">
+                        <td className="px-4 py-2.5 text-[13px] text-[#1a1a1a]"><code className="font-mono text-[12px]">{p.domain}</code></td>
+                        <td className="px-4 py-2.5">
+                          {p.status === 'live' || p.status === 'verified'
+                            ? <span className="px-2 py-0.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded text-[11px] font-semibold text-[#16a34a]">Live</span>
+                            : <span className="px-2 py-0.5 bg-[#fef3c7] border border-[#fde68a] rounded text-[11px] font-semibold text-[#92400e]">{p.status ?? 'Pendiente'}</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button onClick={() => deleteProxy(p.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
-            <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
-              Añadir proxy gestionado
-            </button>
+            {showAdd ? (
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  type="text"
+                  value={newDomain}
+                  onChange={e => setNewDomain(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addProxy(); if (e.key === 'Escape') { setShowAdd(false); setNewDomain(''); } }}
+                  placeholder="events.ejemplo.com"
+                  className="flex-1 max-w-xs h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                />
+                <button onClick={addProxy} disabled={creating || !newDomain.trim()} className="h-9 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{creating ? 'Añadiendo…' : 'Añadir'}</button>
+                <button onClick={() => { setShowAdd(false); setNewDomain(''); }} className="h-9 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              </div>
+            ) : (
+              <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+                Añadir proxy gestionado
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgDangerZonePage ─────────────────────────────────────────────────────
+  function OrgDangerZonePage() {
+    const [confirmName, setConfirmName] = React.useState('');
+    const [deleting, setDeleting] = React.useState(false);
+    const orgName = organization?.name ?? '';
+    async function deleteOrg() {
+      if (confirmName !== orgName) { alert('El nombre no coincide.'); return; }
+      if (!confirm(`¿Eliminar la organización "${orgName}"? Esta acción es IRREVERSIBLE.`)) return;
+      setDeleting(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phDelete(`/api/organizations/@current/`);
+        alert('Organización eliminada. Serás redirigido.');
+        window.location.href = '/';
+      } catch (e: any) { alert('No se pudo eliminar: ' + (e?.message ?? '')); setDeleting(false); }
+    }
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#dc2626]">Zona de peligro</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#dc2626]"><path d="M8 1L1 14h14L8 1zm0 5v4M8 12h.01" stroke="#dc2626" strokeWidth="1.5" fill="none"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Acciones irreversibles sobre tu organización. Procede con cuidado.</p>
+
+            <div className="border-2 border-[#dc2626] rounded-[10px] p-4 space-y-3">
+              <h3 className="text-[14px] font-bold text-[#dc2626]">Eliminar organización</h3>
+              <p className="text-[13px] text-[#646462]">Esto eliminará permanentemente la organización <strong className="text-[#1a1a1a]">{orgName}</strong>, todos sus proyectos y datos asociados. Esta acción <strong>no se puede deshacer</strong>.</p>
+              <p className="text-[12px] text-[#646462]">Para confirmar, escribe el nombre exacto de la organización abajo:</p>
+              <input
+                type="text"
+                value={confirmName}
+                onChange={e => setConfirmName(e.target.value)}
+                placeholder={orgName}
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#dc2626] font-mono"
+              />
+              <button
+                onClick={deleteOrg}
+                disabled={deleting || confirmName !== orgName}
+                className="h-9 px-4 bg-[#dc2626] text-white text-[13px] font-semibold rounded-lg hover:bg-[#b91c1c] disabled:opacity-50 disabled:cursor-not-allowed"
+              >{deleting ? 'Eliminando…' : 'Eliminar organización definitivamente'}</button>
+            </div>
           </div>
         </div>
       </div>
@@ -50717,13 +50906,14 @@ function WASettingsView() {
         {page === 'org-oauth'           && <OrgOAuthPage />}
         {page === 'org-cimd'            && <OrgCIMDPage />}
         {page === 'org-proxy'               && <OrgProxyPage />}
+        {page === 'org-danger-zone'         && <OrgDangerZonePage />}
         {page === 'account-customization'   && <AccountCustomizationPage />}
         {page === 'account-previews'        && <AccountPreviewsPage />}
         {page === 'account-integrations'    && <AccountIntegrationsPage />}
         {page === 'account-connected-apps'  && <AccountConnectedAppsPage />}
         {page === 'account-api-keys'        && <AccountApiKeysPage />}
         {page === 'account-danger-zone'     && <AccountDangerZonePage />}
-        {!['general','customization','autocapture','ai','mcp','error-tracking','experiments','feature-flags','heatmaps','product-analytics','revenue-analytics','session-replay','support','surveys','web-analytics','privacy','access-control','activity-logs','approvals','discussions','org-general','org-members','org-roles','org-sso','org-security','org-oauth','org-cimd','org-proxy','account-customization','account-previews','account-integrations','account-connected-apps','account-api-keys','account-danger-zone'].includes(page) && <DevPage title={pageTitles[page]}/>}
+        {!['general','customization','autocapture','ai','mcp','error-tracking','experiments','feature-flags','heatmaps','product-analytics','revenue-analytics','session-replay','support','surveys','web-analytics','privacy','access-control','activity-logs','approvals','discussions','org-general','org-members','org-roles','org-sso','org-security','org-oauth','org-cimd','org-proxy','org-danger-zone','account-customization','account-previews','account-integrations','account-connected-apps','account-api-keys','account-danger-zone'].includes(page) && <DevPage title={pageTitles[page]}/>}
       </div>
 
       {/* Quick start modal */}
