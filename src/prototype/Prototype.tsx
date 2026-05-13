@@ -28052,343 +28052,455 @@ function WAAppWebAnalyticsView() {
 }
 
 
-function WAAppSqlEditorView() {
-  const [showRunDrop, setShowRunDrop] = useState(false);
-  const [showVarDrop, setShowVarDrop] = useState(false);
-  const [showFilterDrop, setShowFilterDrop] = useState(false);
-  const [showSourceDrop, setShowSourceDrop] = useState(false);
-  const [showWarehousePopup, setShowWarehousePopup] = useState(true);
-  const [resultTab, setResultTab] = useState<'results'|'visualization'>('results');
-  const [posthogOpen, setPosthogOpen] = useState(true);
-  const [viewsOpen, setViewsOpen] = useState(true);
-  const [managedOpen, setManagedOpen] = useState(true);
-  const [varSearch, setVarSearch] = useState('');
-  const [editorContent, setEditorContent] = useState('');
-  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+// â”€â”€ WAAppSqlEditorView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog HogQL / SQL editor.
+// Backend:
+//   - Run query:  POST /api/environments/{teamId}/query/  body { query: { kind: 'HogQLQuery', query: 'SELECT...' } }
+//   - Save as:    POST /api/environments/{teamId}/insights/  body { name, query: { kind: 'DataTableNode', source: {...} } }
 
-  const closeAll = () => { setShowRunDrop(false); setShowVarDrop(false); setShowFilterDrop(false); setShowSourceDrop(false); };
+interface SqlTab {
+  id:     string;
+  name:   string;
+  query:  string;
+  result: any | null;
+  error:  string | null;
+  ran:    boolean;
+}
+
+interface HistoryEntry {
+  id:        string;
+  query:     string;
+  ts:        number;
+  duration?: number;
+  rowCount?: number;
+  error?:    string;
+}
+
+const SCHEMA_TABLES: { name: string; description: string; columns: { name: string; type: string }[] }[] = [
+  { name: 'events', description: 'Eventos capturados (tabla principal).', columns: [
+    { name: 'event', type: 'String' }, { name: 'timestamp', type: 'DateTime' },
+    { name: 'distinct_id', type: 'String' }, { name: 'person_id', type: 'UUID' },
+    { name: 'session_id', type: 'String' }, { name: 'properties', type: 'JSON' },
+    { name: 'elements_chain', type: 'String' }, { name: 'uuid', type: 'UUID' },
+  ]},
+  { name: 'persons', description: 'Personas identificadas.', columns: [
+    { name: 'id', type: 'UUID' }, { name: 'properties', type: 'JSON' },
+    { name: 'created_at', type: 'DateTime' }, { name: 'version', type: 'Int' },
+  ]},
+  { name: 'sessions', description: 'Sesiones agregadas.', columns: [
+    { name: 'session_id', type: 'String' }, { name: '$start_timestamp', type: 'DateTime' },
+    { name: '$end_timestamp', type: 'DateTime' }, { name: '$session_duration', type: 'Int' },
+    { name: '$pageview_count', type: 'Int' }, { name: '$entry_current_url', type: 'String' },
+    { name: '$exit_current_url', type: 'String' }, { name: '$is_bounce', type: 'Bool' },
+  ]},
+  { name: 'groups', description: 'Grupos (cuentas, equipos).', columns: [
+    { name: 'index', type: 'Int' }, { name: 'key', type: 'String' },
+    { name: 'properties', type: 'JSON' }, { name: 'created_at', type: 'DateTime' },
+  ]},
+  { name: 'cohort_people', description: 'Pertenencia a cohortes.', columns: [
+    { name: 'cohort_id', type: 'Int' }, { name: 'person_id', type: 'UUID' },
+  ]},
+];
+
+const SQL_SNIPPETS: { name: string; description: string; query: string }[] = [
+  { name: 'Eventos por dÃ­a', description: 'Conteo en Ãºltimos 7 dÃ­as.', query: `SELECT toDate(timestamp) AS day, count() AS events\nFROM events\nWHERE timestamp >= now() - INTERVAL 7 DAY\nGROUP BY day\nORDER BY day DESC` },
+  { name: 'Top eventos', description: 'Top 20 eventos mÃ¡s frecuentes.', query: `SELECT event, count() AS total, uniq(distinct_id) AS unique_users\nFROM events\nWHERE timestamp >= now() - INTERVAL 30 DAY\nGROUP BY event\nORDER BY total DESC\nLIMIT 20` },
+  { name: 'PÃ¡ginas mÃ¡s vistas', description: 'Top URLs de la semana.', query: `SELECT properties.$current_url AS url, count() AS pageviews, uniq(distinct_id) AS visitors\nFROM events\nWHERE event = '$pageview' AND timestamp >= now() - INTERVAL 7 DAY\nGROUP BY url\nORDER BY pageviews DESC\nLIMIT 25` },
+  { name: 'Funnel manual', description: 'Embudo en 3 pasos.', query: `SELECT countIf(event = '$pageview') AS visitas, countIf(event = '$identify') AS ids, countIf(event = 'compra') AS compras\nFROM events\nWHERE timestamp >= now() - INTERVAL 14 DAY` },
+  { name: 'Top paÃ­ses', description: 'DistribuciÃ³n por GeoIP.', query: `SELECT properties.$geoip_country_name AS country, uniq(distinct_id) AS users\nFROM events\nWHERE timestamp >= now() - INTERVAL 30 DAY\nGROUP BY country\nORDER BY users DESC\nLIMIT 20` },
+  { name: 'Errores recientes', description: '$exception en Ãºltimas 24h.', query: `SELECT timestamp, properties.$exception_message AS message, properties.$current_url AS url, distinct_id\nFROM events\nWHERE event = '$exception' AND timestamp >= now() - INTERVAL 1 DAY\nORDER BY timestamp DESC\nLIMIT 50` },
+];
+
+const HOGQL_KEYWORDS = new Set(['SELECT','FROM','WHERE','GROUP','BY','ORDER','LIMIT','HAVING','JOIN','INNER','LEFT','RIGHT','OUTER','ON','AS','AND','OR','NOT','IN','LIKE','BETWEEN','IS','NULL','TRUE','FALSE','CASE','WHEN','THEN','ELSE','END','DISTINCT','UNION','ALL','WITH','OVER','PARTITION','ASC','DESC','OFFSET','INTERVAL','DAY','HOUR','WEEK','MONTH','YEAR']);
+
+function HogQLHighlight({ text }: { text: string }) {
+  const lines = text.split('\n');
+  return (
+    <>
+      {lines.map((line, li) => {
+        const tokens: React.ReactNode[] = [];
+        const re = /(\b\w+\b|'[^']*'|"[^"]*"|--[^\n]*|[0-9]+(\.[0-9]+)?|[^\w\s])/g;
+        let m, last = 0, key = 0;
+        while ((m = re.exec(line)) != null) {
+          if (m.index > last) tokens.push(<span key={key++}>{line.slice(last, m.index)}</span>);
+          const t = m[0];
+          if (HOGQL_KEYWORDS.has(t.toUpperCase()))      tokens.push(<span key={key++} className="text-[#a855f7] font-semibold">{t}</span>);
+          else if (/^['"]/.test(t))                     tokens.push(<span key={key++} className="text-[#16a34a]">{t}</span>);
+          else if (/^[0-9]/.test(t))                    tokens.push(<span key={key++} className="text-[#e8572a]">{t}</span>);
+          else if (t.startsWith('--'))                  tokens.push(<span key={key++} className="text-[#9ca3af] italic">{t}</span>);
+          else                                          tokens.push(<span key={key++} className="text-[#1a1a18]">{t}</span>);
+          last = m.index + t.length;
+        }
+        if (last < line.length) tokens.push(<span key={key++}>{line.slice(last)}</span>);
+        return <div key={li} className="whitespace-pre">{tokens.length ? tokens : <>&nbsp;</>}</div>;
+      })}
+    </>
+  );
+}
+
+function SchemaBrowser({ onInsert }: { onInsert: (t: string) => void }) {
+  const [open, setOpen] = React.useState<Record<string, boolean>>({ events: true });
+  const [search, setSearch] = React.useState('');
+  const filtered = SCHEMA_TABLES.map(t => ({ ...t, columns: t.columns.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())) })).filter(t => !search || t.name.includes(search.toLowerCase()) || t.columns.length > 0);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white" onClick={closeAll}>
-      {/* Top bar */}
-      <div className="flex items-center gap-0 px-3 py-2 border-b border-[#e9eae6] flex-shrink-0 bg-[#fafaf9]">
-        {/* Tab */}
-        <div className="flex items-center gap-1 h-7 px-2.5 bg-white border border-[#e9eae6] rounded-lg mr-1 shadow-sm">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0"><rect x="1" y="2" width="14" height="12" rx="2" fill="#9966cc"/><path d="M4 6l2.5 2.5L4 11M8 11h4" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-          <span className="text-[12px] font-semibold text-[#1a1a1a]">Consulta SQL</span>
-          <button className="ml-1 text-[#646462] hover:text-[#1a1a1a] text-[13px]">×</button>
-        </div>
-        <button className="h-7 w-7 flex items-center justify-center text-[#646462] hover:bg-[#f3f3f1] rounded text-[16px] mr-2">+</button>
-        <div className="flex-1"/>
-        {/* Quick start */}
-        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white mr-2">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#e8572a]" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2l1.5 4H14l-3.5 2.5 1.5 4L8 10l-4 2.5 1.5-4L2 6h4.5L8 2z"/></svg>
-          Inicio rápido
-          <span className="text-[10px] bg-[#f59e0b] text-white px-1 rounded leading-tight">0</span>
-        </button>
-        {/* Save as insight */}
-        <div className="flex items-center border border-[#f59e0b] rounded-lg overflow-hidden mr-2">
-          <button className="h-7 px-3 text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7]">Guardar como insight</button>
-          <div className="w-px h-4 bg-[#f59e0b]"/>
-          <button className="h-7 px-2 hover:bg-[#fef3c7]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M4 6l4 4 4-4"/></svg></button>
-        </div>
-        <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462] mr-1">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zM8 10l3 3M8 2v3M2 8h3"/></svg>
-        </button>
-        <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg>
-        </button>
+    <div className="flex flex-col h-full">
+      <div className="p-2 border-b border-[#e9eae6]">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscarâ€¦" className="w-full px-2 py-1.5 bg-white border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]" />
       </div>
-
-      {/* Sub toolbar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#e9eae6] flex-shrink-0 bg-white" onClick={e => e.stopPropagation()}>
-        <button onClick={() => setLeftPanelOpen(v => !v)} className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M6 2v12"/></svg>
-        </button>
-        {/* Source selector */}
-        <div className="relative">
-          <button onClick={e => { e.stopPropagation(); setShowSourceDrop(v => !v); setShowRunDrop(false); setShowVarDrop(false); }}
-            className="flex items-center gap-1.5 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0"><rect x="1" y="2" width="14" height="12" rx="2" fill="#9966cc"/><path d="M4 6l2.5 2.5L4 11M8 11h4" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-            PostHog (ClickHouse)
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-          </button>
-          {showSourceDrop && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
-              <button className="w-full text-left px-3 py-1.5 text-[12px] font-semibold text-[#1a1a1a] bg-[#f3f3f1] flex items-center gap-2">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0"><rect x="1" y="2" width="14" height="12" rx="2" fill="#9966cc"/><path d="M4 6l2.5 2.5L4 11M8 11h4" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                PostHog (ClickHouse)
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="w-px h-4 bg-[#e9eae6]"/>
-
-        {/* Run button */}
-        <div className="relative flex items-center">
-          <button className="flex items-center gap-1.5 h-7 px-3 bg-[#1a1a1a] hover:bg-[#333] text-white rounded-l-lg text-[12px] font-semibold">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M4 3l9 5-9 5V3z"/></svg>
-            Ejecutar
-          </button>
-          <button onClick={e => { e.stopPropagation(); setShowRunDrop(v => !v); setShowVarDrop(false); setShowFilterDrop(false); }}
-            className="h-7 px-1.5 bg-[#1a1a1a] hover:bg-[#333] text-white border-l border-[#444] rounded-r-lg">
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4"/></svg>
-          </button>
-          {showRunDrop && (
-            <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
-              <button className="w-full text-left px-3 py-2 text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] flex items-center justify-between">
-                Ejecutar consulta en cursor
-                <span className="text-[10px] text-[#646462] font-mono bg-[#f3f3f1] px-1.5 py-0.5 rounded">⌘↵</span>
-              </button>
-              <button className="w-full text-left px-3 py-2 text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] flex items-center justify-between">
-                Ejecutar subconsulta más interna en cursor
-                <span className="text-[10px] text-[#646462] font-mono bg-[#f3f3f1] px-1.5 py-0.5 rounded">⌘⇧↵</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Variables */}
-        <div className="relative">
-          <button onClick={e => { e.stopPropagation(); setShowVarDrop(v => !v); setShowRunDrop(false); setShowFilterDrop(false); }}
-            className="flex items-center gap-1.5 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 8h6M8 5.5v5" strokeLinecap="round"/></svg>
-            Variables
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-          </button>
-          {showVarDrop && (
-            <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50" onClick={e => e.stopPropagation()}>
-              <div className="p-2 border-b border-[#e9eae6]">
-                <div className="relative">
-                  <svg viewBox="0 0 16 16" className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
-                  <input value={varSearch} onChange={e => setVarSearch(e.target.value)} placeholder="Buscar variables..."
-                    className="w-full h-7 pl-7 pr-2 text-[12px] bg-[#f3f3f1] rounded outline-none"/>
-                </div>
-              </div>
-              <div className="px-3 py-2 text-[12px] text-[#646462]">Sin variables encontradas</div>
-              <div className="border-t border-[#e9eae6]">
-                <button className="w-full text-left px-3 py-2 text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] flex items-center justify-between">
-                  Gestionar variables SQL
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M10 2v12M2 6h8"/></svg>
-                </button>
-                <button className="w-full text-left px-3 py-2 text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] flex items-center justify-between">
-                  Nueva variable
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4"/></svg>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Filters */}
-        <div className="relative">
-          <button onClick={e => { e.stopPropagation(); setShowFilterDrop(v => !v); setShowRunDrop(false); setShowVarDrop(false); }}
-            className="flex items-center gap-1.5 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M4 8h8M6 12h4"/></svg>
-            Filtros
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-          </button>
-          {showFilterDrop && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
-              <button className="w-full text-left px-3 py-2 text-[12px] text-[#646462] hover:bg-[#f3f3f1]">Sin filtros disponibles</button>
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1"/>
-        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#646462] hover:bg-[#f3f3f1] bg-white">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9966cc]" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2l1.5 4H14l-3.5 2.5 1.5 4L8 10l-4 2.5 1.5-4L2 6h4.5L8 2z"/></svg>
-          Corregir errores con IA
-        </button>
-      </div>
-
-      {/* Main area */}
-      <div className="flex-1 flex min-h-0">
-        {/* Left panel — file explorer */}
-        {leftPanelOpen && (
-          <div className="w-[260px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col bg-[#fafaf9] relative">
-            {/* Search */}
-            <div className="px-3 py-2 border-b border-[#e9eae6]">
-              <div className="relative">
-                <svg viewBox="0 0 16 16" className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
-                <input placeholder="Buscar en PostHog Warehouse" className="w-full h-7 pl-7 pr-2 text-[12px] bg-white border border-[#e9eae6] rounded outline-none focus:border-[#3b59f6]"/>
-              </div>
-            </div>
-
-            {/* Tree */}
-            <div className="flex-1 overflow-y-auto py-1 text-[13px]">
-              {/* Sources */}
-              <div>
-                <div className="flex items-center justify-between px-3 py-1.5">
-                  <button onClick={() => setPosthogOpen(v => !v)} className="flex items-center gap-1 text-[11px] font-bold text-[#646462] uppercase tracking-wide hover:text-[#1a1a1a]">
-                    <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${posthogOpen?'rotate-90':''}`}><path d="M6 4l4 4-4 4z"/></svg>
-                    Fuentes
+      <div className="flex-1 overflow-y-auto py-1">
+        {filtered.map(table => (
+          <div key={table.name}>
+            <button onClick={() => setOpen(o => ({ ...o, [table.name]: !o[table.name] }))} className="w-full flex items-center gap-1.5 px-3 py-1.5 hover:bg-[#f3f3f1] text-left">
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 text-[#9ca3af] transition-transform ${open[table.name] ? 'rotate-90' : ''}`}><path d="M5 3l6 5-6 5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#3b59f6]"><rect x="2" y="3" width="12" height="2" fill="currentColor"/><rect x="2" y="6" width="12" height="2" fill="currentColor" opacity=".7"/><rect x="2" y="9" width="12" height="2" fill="currentColor" opacity=".5"/><rect x="2" y="12" width="12" height="2" fill="currentColor" opacity=".3"/></svg>
+              <span className="text-xs font-semibold text-[#1a1a18] font-mono">{table.name}</span>
+              <span className="text-[10px] text-[#9ca3af] ml-auto">{table.columns.length}</span>
+            </button>
+            {open[table.name] && (
+              <div className="bg-[#f9f9f7]">
+                <p className="px-3 py-1 text-[10px] text-[#9ca3af] italic">{table.description}</p>
+                {table.columns.map(c => (
+                  <button key={c.name} onClick={() => onInsert(c.name)} onDoubleClick={() => onInsert(`${table.name}.${c.name}`)} className="w-full flex items-center justify-between px-7 py-1 hover:bg-[#eff2ff] text-left group" title={`Click: ${c.name} â€” Doble click: ${table.name}.${c.name}`}>
+                    <span className="text-[11px] font-mono text-[#1a1a18] group-hover:text-[#3b59f6]">{c.name}</span>
+                    <span className="text-[9px] text-[#9ca3af] uppercase tracking-widest">{c.type}</span>
                   </button>
-                  <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#646462] font-bold">+</button>
-                </div>
-                {posthogOpen && (
-                  <div className="pl-4">
-                    {/* PostHog source */}
-                    <div>
-                      <button className="flex items-center gap-1.5 w-full px-2 py-1 text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] rounded">
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0"><rect x="1" y="2" width="14" height="12" rx="2" fill="#9966cc"/><path d="M4 6l2.5 2.5L4 11M8 11h4" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                        PostHog
-                      </button>
-                      <div className="pl-5 space-y-0">
-                        {[
-                          { label: 'events', icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-[#646462]"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="#646462" strokeWidth="1.2"/><path d="M5 6h6M5 9h4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg> },
-                          { label: 'groups', icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-[#646462]"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="#646462" strokeWidth="1.2"/><path d="M5 6h6M5 9h4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg> },
-                          { label: 'persons', icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-[#646462]"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="#646462" strokeWidth="1.2"/><path d="M5 6h6M5 9h4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg> },
-                          { label: 'sessions', icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-[#646462]"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="#646462" strokeWidth="1.2"/><path d="M5 6h6M5 9h4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg> },
-                        ].map(item => (
-                          <button key={item.label} className="flex items-center gap-1.5 w-full px-2 py-1 text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] rounded">
-                            {item.icon}
-                            {item.label}
-                          </button>
-                        ))}
-                        <button className="flex items-center gap-1.5 w-full px-2 py-1 text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] rounded">
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-[#646462]"><circle cx="8" cy="8" r="6" fill="none" stroke="#646462" strokeWidth="1.2"/><path d="M6 8h4M8 6v4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                          System
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Views */}
-              <div>
-                <button onClick={() => setViewsOpen(v => !v)} className="flex items-center gap-1 w-full px-3 py-1.5 text-[11px] font-bold text-[#646462] uppercase tracking-wide hover:text-[#1a1a1a]">
-                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${viewsOpen?'rotate-90':''}`}><path d="M6 4l4 4-4 4z"/></svg>
-                  Vistas
-                </button>
-                {viewsOpen && (
-                  <div className="pl-6 px-4 py-1">
-                    <span className="flex items-center gap-1.5 text-[12px] text-[#b0b0ae] italic">
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#b0b0ae]"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="#b0b0ae" strokeWidth="1.2" strokeDasharray="2 1"/></svg>
-                      Carpeta vacía
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Managed Views */}
-              <div>
-                <button onClick={() => setManagedOpen(v => !v)} className="flex items-center gap-1 w-full px-3 py-1.5 text-[11px] font-bold text-[#646462] uppercase tracking-wide hover:text-[#1a1a1a]">
-                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${managedOpen?'rotate-90':''}`}><path d="M6 4l4 4-4 4z"/></svg>
-                  Vistas gestionadas
-                </button>
-                {managedOpen && (
-                  <div className="pl-6 px-4 py-1">
-                    <span className="flex items-center gap-1.5 text-[12px] text-[#b0b0ae] italic">
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#b0b0ae]"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="#b0b0ae" strokeWidth="1.2" strokeDasharray="2 1"/></svg>
-                      Carpeta vacía
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Warehouse popup */}
-            {showWarehousePopup && (
-              <div className="absolute bottom-4 left-3 right-3 bg-white border border-[#e9eae6] rounded-xl shadow-lg p-4 z-20">
-                <button onClick={() => setShowWarehousePopup(false)} className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded hover:bg-[#f3f3f1] text-[#646462] text-[14px]">×</button>
-                <div className="flex items-center justify-center gap-3 mb-3">
-                  {/* Postgres */}
-                  <div className="w-9 h-9 rounded-lg bg-[#336791] flex items-center justify-center">
-                    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
-                  </div>
-                  {/* Stripe */}
-                  <div className="w-9 h-9 rounded-lg bg-[#635bff] flex items-center justify-center">
-                    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M13.479 9.883c-1.626-.604-2.512-1.067-2.512-1.803 0-.622.511-1.022 1.314-1.022 1.601 0 3.179.622 4.284 1.178l.621-3.829c-.95-.489-2.872-1.022-5.048-1.022-1.889 0-3.467.511-4.595 1.511-1.156 1-.978 2.311-.978 3.134 0 2.334 1.378 3.267 3.779 4.133 1.512.556 2.045 1.023 2.045 1.734 0 .689-.6 1.156-1.512 1.156-1.4 0-3.312-.689-4.779-1.645l-.622 3.889c1.223.733 3.312 1.356 5.512 1.356 1.956 0 3.623-.489 4.779-1.467 1.2-1 1.601-2.489 1.601-3.934-.001-2.356-1.39-3.467-3.889-4.369z"/></svg>
-                  </div>
-                  {/* Google Ads */}
-                  <div className="w-9 h-9 rounded-lg bg-[#4285F4] flex items-center justify-center">
-                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-                      <path d="M14.97 18.95l5.03-8.71L16.5 4.73 11.47 13.5l3.5 5.45z" fill="#FBBC04"/>
-                      <path d="M3 18.95h6l5.03-8.71-3-5.22L5.97 14 3 18.95z" fill="#34A853"/>
-                      <path d="M16.5 4.73h-6L5.97 14l5.5-9.5 5.03.23z" fill="#4285F4"/>
-                    </svg>
-                  </div>
-                </div>
-                <p className="text-[12px] font-bold text-[#1a1a1a] text-center mb-1">Sin fuentes de data warehouse conectadas</p>
-                <p className="text-[11px] text-[#646462] text-center leading-relaxed mb-3">Importa datos de fuentes externas como Postgres, Stripe u otras bases de datos para enriquecer tu analítica.</p>
-                <button className="w-full h-8 border border-[#f59e0b] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7]">Añadir fuente de datos</button>
+                ))}
               </div>
             )}
           </div>
-        )}
-
-        {/* Editor + Results */}
-        <div className="flex-1 flex flex-col min-h-0">
-          {/* Code editor area */}
-          <div className="flex-1 border-b border-[#e9eae6] flex min-h-0 overflow-hidden">
-            {/* Line numbers */}
-            <div className="w-10 flex-shrink-0 bg-[#fafaf9] border-r border-[#e9eae6] pt-2 text-right select-none">
-              <span className="block px-2 text-[12px] text-[#b0b0ae] font-mono leading-6">1</span>
-            </div>
-            {/* Editor */}
-            <textarea
-              value={editorContent}
-              onChange={e => setEditorContent(e.target.value)}
-              className="flex-1 p-2 text-[13px] font-mono text-[#1a1a1a] resize-none outline-none bg-white leading-6 placeholder:text-[#b0b0ae]"
-              placeholder=""
-              spellCheck={false}
-            />
-          </div>
-
-          {/* Results area */}
-          <div className="flex flex-col flex-shrink-0" style={{height:'40%', minHeight:180}}>
-            {/* Result tabs */}
-            <div className="flex items-center border-b border-[#e9eae6] bg-white flex-shrink-0">
-              <button className="p-2 rounded hover:bg-[#f3f3f1] text-[#646462] ml-1">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg>
-              </button>
-              {[{k:'results',l:'Resultados'},{k:'visualization',l:'Visualización'}].map(t => (
-                <button key={t.k} onClick={() => setResultTab(t.k as any)}
-                  className={`flex items-center gap-1.5 px-4 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors ${resultTab===t.k?'border-[#f59e0b] text-[#1a1a1a]':'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
-                  {t.k==='results' && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="#646462" strokeWidth="1.2"/><path d="M5 6h6M5 9h4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>}
-                  {t.k==='visualization' && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg>}
-                  {t.l}
-                </button>
-              ))}
-              <div className="flex-1"/>
-              {/* Action buttons */}
-              <div className="flex items-center gap-1 px-2">
-                <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M11 5V3a1 1 0 00-1-1H3a1 1 0 00-1 1v7a1 1 0 001 1h2"/></svg></button>
-                <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2v9M5 8l3 3 3-3M3 14h10"/></svg></button>
-                <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><path d="M6 3h6a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V5l2-2zM6 3v3h7"/></svg></button>
-              </div>
-            </div>
-
-            {/* Result content */}
-            <div className="flex-1 flex items-center justify-center bg-white overflow-hidden">
-              {resultTab === 'results' && (
-                <p className="text-[13px] text-[#646462] text-center px-4">
-                  Los resultados de la consulta aparecerán aquí. Presiona{' '}
-                  <kbd className="px-1.5 py-0.5 border border-[#e9eae6] rounded text-[11px] font-mono bg-[#f3f3f1]">Ctrl↵</kbd>
-                  {' '}para ejecutar la consulta en tu cursor. Separa múltiples sentencias con{' '}
-                  <code className="font-mono text-[#e8572a]">;</code>
-                  {' '}para ejecutarlas de forma independiente.
-                </p>
-              )}
-              {resultTab === 'visualization' && (
-                <div className="flex flex-col items-center gap-2">
-                  <svg viewBox="0 0 48 48" className="w-10 h-10 opacity-20"><rect x="3" y="7" width="42" height="28" rx="3" fill="none" stroke="#1a1a1a" strokeWidth="2"/><path d="M10 35v5M38 35v5M7 40h34" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round"/></svg>
-                  <p className="text-[13px] text-[#646462]">Ejecuta una consulta para ver la visualización</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );
 }
 
+function SqlResultsTable({ result }: { result: any }) {
+  const cols: string[] = result.columns ?? [];
+  const rows: any[][]  = result.results ?? [];
+  const [limit, setLimit] = React.useState(100);
+  if (cols.length === 0) return <pre className="p-4 text-xs bg-[#f9f9f7] rounded overflow-auto max-h-96">{JSON.stringify(result, null, 2)}</pre>;
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-2 flex items-center gap-3 text-xs text-[#646462] border-b border-[#e9eae6] bg-[#f9f9f7]">
+        <span><strong className="text-[#1a1a18]">{rows.length.toLocaleString('es-ES')}</strong> filas</span><span>Â·</span>
+        <span><strong className="text-[#1a1a18]">{cols.length}</strong> columnas</span>
+        {result.timings && <><span>Â·</span><span><strong className="text-[#1a1a18]">{Math.round(result.timings?.elapsed * 1000)}ms</strong></span></>}
+        <div className="ml-auto">
+          <button onClick={() => {
+            const header = cols.map(c => `"${c.replace(/"/g, '""')}"`).join(',');
+            const lines  = rows.map(r => r.map(v => { const s = typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''); return `"${s.replace(/"/g, '""')}"`; }).join(','));
+            const blob   = new Blob([[header, ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `query-result-${Date.now()}.csv`; a.click();
+          }} className="px-2 py-0.5 bg-white border border-[#e9eae6] rounded text-[11px] hover:bg-white text-[#1a1a18] flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M8 2v8M5 7l3 3 3-3M2 13h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            CSV
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-white border-b border-[#e9eae6] z-10">
+            <tr>{cols.map(c => <th key={c} className="text-left px-3 py-2 font-bold text-[#9ca3af] uppercase tracking-widest text-[10px] whitespace-nowrap">{c}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, limit).map((r, i) => (
+              <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#f9f9f7]">
+                {r.map((v, j) => (
+                  <td key={j} className="px-3 py-1.5 font-mono text-[11px] text-[#1a1a18] whitespace-nowrap max-w-xs truncate" title={typeof v === 'object' ? JSON.stringify(v) : String(v ?? '')}>
+                    {v == null ? <span className="text-[#c4c4be]">NULL</span> : typeof v === 'object' ? <span className="text-[#a855f7]">{JSON.stringify(v).slice(0, 50)}</span> : String(v)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length > limit && (
+          <div className="px-4 py-3 text-center bg-[#f9f9f7] border-t border-[#e9eae6]">
+            <button onClick={() => setLimit(l => l + 100)} className="text-xs text-[#3b59f6] hover:underline">Mostrar 100 mÃ¡s (de {rows.length - limit} restantes)</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-// ── WAAppLlmAnalyticsView ────────────────────────────────────────────────────
+function WAAppSqlEditorView() {
+  const [tabs, setTabs] = React.useState<SqlTab[]>([
+    { id: crypto.randomUUID(), name: 'Consulta 1', query: 'SELECT event, count()\nFROM events\nWHERE timestamp >= now() - INTERVAL 1 DAY\nGROUP BY event\nORDER BY count() DESC\nLIMIT 20', result: null, error: null, ran: false },
+  ]);
+  const [activeId, setActiveId] = React.useState<string>(tabs[0].id);
+  const [running, setRunning] = React.useState(false);
+  const [history, setHistory] = React.useState<HistoryEntry[]>([]);
+  const [showHistory, setShowHistory] = React.useState(false);
+  const [showSnippets, setShowSnippets] = React.useState(false);
+  const [showSchema, setShowSchema] = React.useState(true);
+  const [bottomTab, setBottomTab] = React.useState<'results' | 'json'>('results');
+  const [savingAs, setSavingAs] = React.useState(false);
+  const [saveName, setSaveName] = React.useState('');
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const active = tabs.find(t => t.id === activeId)!;
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('wa-sql-tabs');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length) { setTabs(parsed); setActiveId(parsed[0].id); }
+      }
+      const rawH = localStorage.getItem('wa-sql-history');
+      if (rawH) setHistory(JSON.parse(rawH));
+    } catch {}
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-sql-tabs', JSON.stringify(tabs.map(t => ({ ...t, result: null, error: null, ran: false })))); } catch {}
+  }, [tabs]);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-sql-history', JSON.stringify(history.slice(0, 50))); } catch {}
+  }, [history]);
+
+  function updateActive(patch: Partial<SqlTab>) {
+    setTabs(prev => prev.map(t => t.id === activeId ? { ...t, ...patch } : t));
+  }
+
+  async function runQuery() {
+    if (!active || !active.query.trim() || running) return;
+    setRunning(true); updateActive({ error: null });
+    const t0 = performance.now();
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: active.query } });
+      const dur = Math.round(performance.now() - t0);
+      updateActive({ result: res, error: null, ran: true });
+      setHistory(prev => [{ id: crypto.randomUUID(), query: active.query, ts: Date.now(), duration: dur, rowCount: (res.results ?? []).length }, ...prev].slice(0, 50));
+    } catch (e: any) {
+      const msg = e?.message ?? 'Error desconocido';
+      updateActive({ error: msg, result: null, ran: true });
+      setHistory(prev => [{ id: crypto.randomUUID(), query: active.query, ts: Date.now(), error: msg }, ...prev].slice(0, 50));
+    } finally { setRunning(false); }
+  }
+
+  async function saveAsInsight() {
+    if (!saveName.trim()) return;
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      await ph.phPost(`/api/environments/${ph.getTeamId()}/insights/`, {
+        name: saveName.trim(), saved: true,
+        query: { kind: 'DataTableNode', source: { kind: 'HogQLQuery', query: active.query } },
+      });
+      alert('Insight guardado.');
+      setSavingAs(false); setSaveName('');
+    } catch (e: any) { alert(e?.message ?? 'Error'); }
+  }
+
+  function newTab() {
+    const id = crypto.randomUUID();
+    setTabs(prev => [...prev, { id, name: `Consulta ${prev.length + 1}`, query: 'SELECT 1', result: null, error: null, ran: false }]);
+    setActiveId(id);
+  }
+  function closeTab(id: string) {
+    if (tabs.length === 1) return;
+    const idx = tabs.findIndex(t => t.id === id);
+    const newTabs = tabs.filter(t => t.id !== id);
+    setTabs(newTabs);
+    if (activeId === id) setActiveId(newTabs[Math.max(0, idx - 1)].id);
+  }
+  function renameTab(id: string, name: string) {
+    setTabs(prev => prev.map(t => t.id === id ? { ...t, name } : t));
+  }
+
+  function insertAtCursor(text: string) {
+    if (!textareaRef.current) { updateActive({ query: active.query + text }); return; }
+    const ta = textareaRef.current;
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const newQuery = active.query.slice(0, s) + text + active.query.slice(e);
+    updateActive({ query: newQuery });
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(s + text.length, s + text.length); }, 0);
+  }
+
+  function onTextareaKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); runQuery(); }
+    if (e.key === 'Tab') { e.preventDefault(); insertAtCursor('  '); }
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-white min-h-0">
+      <div className="px-6 pt-4 pb-3 flex items-start justify-between border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#a855f7]"><ellipse cx="8" cy="3.5" rx="5" ry="2" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M3 3.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9M3 7.5c0 1.1 2.2 2 5 2s5-.9 5-2" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+            <h1 className="text-lg font-bold text-[#1a1a18]">SQL editor</h1>
+            <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-2 py-0.5 rounded font-semibold">HogQL</span>
+          </div>
+          <p className="text-xs text-[#646462]">Escribe consultas en HogQL para analizar tus datos al mÃ¡ximo nivel.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setShowSnippets(s => !s)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M3 1h7l3 3v11H3z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round"/><path d="M10 1v3h3M6 8h4M6 11h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            Plantillas
+          </button>
+          <button onClick={() => setShowHistory(h => !h)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 4v4l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/></svg>
+            Historial
+          </button>
+          <button onClick={() => setSavingAs(true)} disabled={!active.ran} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7] disabled:opacity-50">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M3 1h8l2 2v11H3z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round"/><rect x="5" y="1" width="6" height="4" fill="none" stroke="currentColor" strokeWidth="1.3"/></svg>
+            Guardar como insight
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex min-h-0">
+        {showSchema && (
+          <div className="w-60 border-r border-[#e9eae6] bg-[#fafaf9] flex flex-col flex-shrink-0">
+            <div className="px-3 py-2 border-b border-[#e9eae6] flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Esquema</span>
+              <button onClick={() => setShowSchema(false)} className="text-[#9ca3af] hover:text-[#1a1a18] text-xs">Ã—</button>
+            </div>
+            <div className="flex-1 min-h-0"><SchemaBrowser onInsert={insertAtCursor} /></div>
+          </div>
+        )}
+
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex items-center border-b border-[#e9eae6] bg-[#fafaf9] flex-shrink-0">
+            {!showSchema && (
+              <button onClick={() => setShowSchema(true)} className="px-3 py-2 text-xs text-[#646462] hover:bg-white border-r border-[#e9eae6]" title="Mostrar esquema">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><rect x="2" y="3" width="12" height="2" fill="currentColor"/><rect x="2" y="6" width="12" height="2" fill="currentColor" opacity=".7"/><rect x="2" y="9" width="12" height="2" fill="currentColor" opacity=".5"/></svg>
+              </button>
+            )}
+            <div className="flex-1 flex items-center overflow-x-auto">
+              {tabs.map(t => (
+                <div key={t.id} onClick={() => setActiveId(t.id)} className={`flex items-center gap-2 px-3 py-2 text-xs cursor-pointer border-r border-[#e9eae6] group ${t.id === activeId ? 'bg-white text-[#1a1a18] font-medium' : 'text-[#646462] hover:bg-white'}`}>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#a855f7]"><ellipse cx="8" cy="3.5" rx="5" ry="2" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>
+                  <input value={t.name} onChange={e => renameTab(t.id, e.target.value)} onClick={e => e.stopPropagation()} onDoubleClick={e => (e.target as HTMLInputElement).select()} className="bg-transparent border-0 focus:outline-none focus:bg-white focus:border focus:border-[#3b59f6] focus:rounded px-1 w-24" />
+                  {tabs.length > 1 && (
+                    <button onClick={e => { e.stopPropagation(); closeTab(t.id); }} className="text-[#9ca3af] hover:text-[#dc2626] opacity-0 group-hover:opacity-100">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button onClick={newTab} className="px-3 py-2 text-xs text-[#646462] hover:bg-white">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+
+          <div className="relative flex-1 min-h-0 flex flex-col">
+            <div className="relative flex-1 min-h-[180px]">
+              <div className="absolute inset-0 px-4 py-3 font-mono text-[13px] leading-[1.6] pointer-events-none overflow-auto whitespace-pre" aria-hidden="true">
+                <HogQLHighlight text={active.query} />
+              </div>
+              <textarea ref={textareaRef} value={active.query} onChange={e => updateActive({ query: e.target.value })} onKeyDown={onTextareaKey} spellCheck={false} className="absolute inset-0 w-full h-full px-4 py-3 font-mono text-[13px] leading-[1.6] bg-transparent caret-[#1a1a18] text-transparent resize-none focus:outline-none whitespace-pre" placeholder="-- Escribe HogQL aquÃ­â€¦" />
+            </div>
+
+            <div className="flex items-center gap-2 px-4 py-2 border-t border-[#e9eae6] bg-[#fafaf9] flex-shrink-0">
+              <button onClick={runQuery} disabled={running} className="flex items-center gap-2 px-4 py-1.5 bg-[#16a34a] text-white text-sm rounded-lg hover:bg-[#15803d] disabled:opacity-50 shadow-sm">
+                {running ? (<><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Ejecutandoâ€¦</>) : (<><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M4 3l9 5-9 5z"/></svg> Ejecutar</>)}
+              </button>
+              <kbd className="px-1.5 py-0.5 bg-white border border-[#e9eae6] rounded text-[10px] font-mono text-[#646462]">âŒ˜ Enter</kbd>
+              <div className="ml-auto flex items-center gap-2 text-[10px] text-[#9ca3af]">
+                {active.error ? <span className="text-[#dc2626] font-mono">âš  Error</span> : active.ran ? <span className="text-[#16a34a]">âœ“ Ãšltima ejecuciÃ³n correcta</span> : null}
+                <span>Â·</span>
+                <span>{active.query.split('\n').length} lÃ­neas</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-[#e9eae6] flex flex-col" style={{ minHeight: 220, maxHeight: '50%' }}>
+            <div className="flex items-center gap-1 px-4 border-b border-[#e9eae6] bg-[#fafaf9] flex-shrink-0">
+              <button onClick={() => setBottomTab('results')} className={`px-3 py-2 text-xs font-medium border-b-2 ${bottomTab === 'results' ? 'border-[#a855f7] text-[#a855f7]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>Resultados</button>
+              <button onClick={() => setBottomTab('json')} className={`px-3 py-2 text-xs font-medium border-b-2 ${bottomTab === 'json' ? 'border-[#a855f7] text-[#a855f7]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>JSON crudo</button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              {active.error ? (
+                <div className="p-4">
+                  <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b]">
+                    <p className="font-semibold mb-1">Error al ejecutar la consulta:</p>
+                    <pre className="font-mono whitespace-pre-wrap break-words">{active.error}</pre>
+                  </div>
+                </div>
+              ) : !active.result ? (
+                <div className="flex items-center justify-center h-full text-xs text-[#9ca3af]">
+                  {running ? 'Ejecutandoâ€¦' : 'Ejecuta una consulta para ver resultados (âŒ˜ Enter)'}
+                </div>
+              ) : bottomTab === 'json' ? (
+                <pre className="p-3 text-[11px] font-mono overflow-auto h-full whitespace-pre-wrap">{JSON.stringify(active.result, null, 2)}</pre>
+              ) : (
+                <SqlResultsTable result={active.result} />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {showSnippets && (
+          <div className="w-72 border-l border-[#e9eae6] bg-white flex flex-col flex-shrink-0">
+            <div className="px-3 py-2 border-b border-[#e9eae6] flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Plantillas</span>
+              <button onClick={() => setShowSnippets(false)} className="text-[#9ca3af] hover:text-[#1a1a18] text-xs">Ã—</button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {SQL_SNIPPETS.map((s, i) => (
+                <button key={i} onClick={() => updateActive({ query: s.query })} className="w-full text-left p-3 border-b border-[#e9eae6] hover:bg-[#f9f9f7]">
+                  <p className="text-xs font-semibold text-[#1a1a18] mb-0.5">{s.name}</p>
+                  <p className="text-[11px] text-[#646462]">{s.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showHistory && (
+          <div className="w-80 border-l border-[#e9eae6] bg-white flex flex-col flex-shrink-0">
+            <div className="px-3 py-2 border-b border-[#e9eae6] flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Historial</span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setHistory([])} className="text-[10px] text-[#9ca3af] hover:text-[#dc2626]">Limpiar</button>
+                <button onClick={() => setShowHistory(false)} className="text-[#9ca3af] hover:text-[#1a1a18] text-xs">Ã—</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {history.length === 0 ? (
+                <p className="p-4 text-xs text-[#9ca3af] text-center">Sin consultas previas</p>
+              ) : history.map(h => (
+                <button key={h.id} onClick={() => updateActive({ query: h.query })} className="w-full text-left p-3 border-b border-[#e9eae6] hover:bg-[#f9f9f7]">
+                  <div className="flex items-center gap-2 mb-1">
+                    {h.error ? <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded">Error</span> : <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">OK Â· {h.rowCount} filas</span>}
+                    <span className="text-[10px] text-[#9ca3af]">{new Date(h.ts).toLocaleTimeString('es-ES')}</span>
+                    {h.duration && <span className="text-[10px] text-[#9ca3af]">{h.duration}ms</span>}
+                  </div>
+                  <pre className="text-[10px] font-mono text-[#1a1a18] line-clamp-3 whitespace-pre-wrap break-words">{h.query.slice(0, 200)}</pre>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {savingAs && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setSavingAs(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[480px] max-w-[92vw] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e9eae6]">
+              <h2 className="text-base font-bold text-[#1a1a18]">Guardar como insight</h2>
+              <p className="text-xs text-[#646462] mt-0.5">Crea un insight tipo DataTable con esta consulta.</p>
+            </div>
+            <div className="p-5">
+              <label className="block text-xs font-medium text-[#1a1a18] mb-1">Nombre</label>
+              <input autoFocus value={saveName} onChange={e => setSaveName(e.target.value)} placeholder="Mi consulta personalizada" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" />
+            </div>
+            <div className="px-5 py-3 bg-[#f9f9f7] border-t border-[#e9eae6] flex justify-end gap-2">
+              <button onClick={() => setSavingAs(false)} className="px-3 py-1.5 text-sm text-[#1a1a18] hover:bg-white rounded">Cancelar</button>
+              <button onClick={saveAsInsight} disabled={!saveName.trim()} className="px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded disabled:opacity-50">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WAAppLlmAnalyticsView() {
   type LLMTab = 'overview' | 'traces' | 'generations' | 'users';
   const [llmTab, setLlmTab] = useState<LLMTab>('overview');
@@ -53976,6 +54088,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
