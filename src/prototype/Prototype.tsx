@@ -30320,195 +30320,490 @@ function WAAppErrorTrackingView() {
   );
 }
 
+// â”€â”€ WAAppHeatmapsView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog Heatmaps â€” visualize click activity on a given URL.
+// Data source: $autocapture events with click coordinates.
+//   - properties.$current_url
+//   - properties.$el_text, properties.$elements (chain)
+//   - properties.$viewport_width, $viewport_height
+//   - properties.$click_x, $click_y (page-relative)
+//   - event = '$autocapture' OR '$pageclick'
+// Backend: POST /api/environments/{teamId}/query/ (HogQLQuery)
+
+interface HmClickPoint {
+  x:        number;     // normalized 0-1
+  y:        number;     // normalized 0-1
+  count:    number;
+  el_text?: string;
+  el_tag?:  string;
+}
+
+interface HmTopElement {
+  text:    string;
+  tag:     string;
+  count:   number;
+  users:   number;
+}
+
+interface HmUrl {
+  url:    string;
+  clicks: number;
+  users:  number;
+}
+
+const HM_RANGES: { label: string; clickhouse: string; days: number }[] = [
+  { label: 'Ãšltimas 24 horas', clickhouse: '1 DAY',  days: 1 },
+  { label: 'Ãšltimos 7 dÃ­as',   clickhouse: '7 DAY',  days: 7 },
+  { label: 'Ãšltimos 14 dÃ­as',  clickhouse: '14 DAY', days: 14 },
+  { label: 'Ãšltimos 30 dÃ­as',  clickhouse: '30 DAY', days: 30 },
+];
+
+type HmMode = 'clickmap' | 'heatmap' | 'scrollmap';
+type HmDevice = 'all' | 'Desktop' | 'Mobile' | 'Tablet';
+
+// â”€â”€ Heatmap canvas overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function HeatmapCanvas({ points, mode, width, height }: { points: HmClickPoint[]; mode: HmMode; width: number; height: number }) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    canvas.width = width;
+    canvas.height = height;
+    ctx.clearRect(0, 0, width, height);
+    if (mode === 'heatmap') {
+      // Build a heat map by drawing radial gradients per point
+      const maxCount = Math.max(...points.map(p => p.count), 1);
+      for (const p of points) {
+        const px = p.x * width;
+        const py = p.y * height;
+        const intensity = Math.min(1, (p.count / maxCount) * 1.5);
+        const radius = 30 + intensity * 50;
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, radius);
+        grad.addColorStop(0,    `rgba(232, 87, 42, ${0.5 * intensity})`);
+        grad.addColorStop(0.4,  `rgba(245, 158, 11, ${0.3 * intensity})`);
+        grad.addColorStop(0.7,  `rgba(59, 89, 246, ${0.15 * intensity})`);
+        grad.addColorStop(1,    'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(px - radius, py - radius, radius * 2, radius * 2);
+      }
+    } else if (mode === 'clickmap') {
+      // Discrete dots
+      const maxCount = Math.max(...points.map(p => p.count), 1);
+      for (const p of points) {
+        const px = p.x * width;
+        const py = p.y * height;
+        const r = 4 + (p.count / maxCount) * 14;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(232, 87, 42, 0.45)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(232, 87, 42, 0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        if (p.count > 1) {
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(p.count), px, py);
+        }
+      }
+    } else if (mode === 'scrollmap') {
+      // Horizontal gradient bands by Y bucket
+      const buckets = 20;
+      const counts = new Array(buckets).fill(0);
+      for (const p of points) {
+        const b = Math.min(buckets - 1, Math.floor(p.y * buckets));
+        counts[b] += p.count;
+      }
+      const max = Math.max(...counts, 1);
+      const bh  = height / buckets;
+      for (let i = 0; i < buckets; i++) {
+        const intensity = counts[i] / max;
+        ctx.fillStyle = `rgba(232, 87, 42, ${intensity * 0.5})`;
+        ctx.fillRect(0, i * bh, width, bh);
+      }
+    }
+  }, [points, mode, width, height]);
+  return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" style={{ width, height }} />;
+}
+
 function WAAppHeatmapsView() {
-  const [showWarningBanner, setShowWarningBanner] = useState(true);
-  const [showBetaBanner, setShowBetaBanner]       = useState(true);
-  const [createdBy, setCreatedBy]                 = useState('Any user');
-  const [showCreatedDrop, setShowCreatedDrop]     = useState(false);
-  const [showNewForm, setShowNewForm]             = useState(false);
-  // New heatmap form state
-  const [pageUrl, setPageUrl]         = useState('');
-  const [dataUrl, setDataUrl]         = useState('');
-  const [captureMethod, setCaptureMethod] = useState<'screenshot'|'iframe'>('screenshot');
+  const [urlInput, setUrlInput] = React.useState('');
+  const [currentUrl, setCurrentUrl] = React.useState<string | null>(null);
+  const [range, setRange] = React.useState(HM_RANGES[1]);
+  const [showRange, setShowRange] = React.useState(false);
+  const rangeRef = useClickOutside<HTMLDivElement>(() => setShowRange(false));
+  const [device, setDevice] = React.useState<HmDevice>('all');
+  const [mode,   setMode]   = React.useState<HmMode>('clickmap');
 
-  if (showNewForm) {
-    return (
-      <div className="flex-1 flex flex-col min-h-0 bg-[#f9f9f7] overflow-y-auto">
-        {/* Top bar */}
-        <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] bg-white flex-shrink-0">
-          <button onClick={() => setShowNewForm(false)} className="text-[#646462] hover:text-[#1a1a1a]">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="#f59e0b" strokeWidth="1.3"/><path d="M5 9l2.5-3L10 9" stroke="#f59e0b" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/><circle cx="5.5" cy="6" r="1" fill="#f59e0b"/></svg>
-          </div>
-          <h1 className="text-[15px] font-bold text-[#1a1a1a] flex-1">New heatmap</h1>
-          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-            Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">0</span>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
-          </button>
-        </div>
+  const [points,    setPoints]    = React.useState<HmClickPoint[]>([]);
+  const [topElements, setTopElements] = React.useState<HmTopElement[]>([]);
+  const [topUrls,   setTopUrls]   = React.useState<HmUrl[]>([]);
+  const [stats,     setStats]     = React.useState({ totalClicks: 0, uniqueUsers: 0, viewport_w: 1280, viewport_h: 800 });
+  const [loading,   setLoading]   = React.useState(false);
+  const [loadingUrls, setLoadingUrls] = React.useState(true);
+  const [error,     setError]     = React.useState<string | null>(null);
+  const [iframeBlocked, setIframeBlocked] = React.useState(false);
 
-        {/* Form */}
-        <div className="flex-1 px-8 py-8 flex flex-col gap-8 max-w-3xl">
-          {/* Page URL */}
-          <div className="flex flex-col gap-2">
-            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Page URL</h2>
-            <p className="text-[12.5px] text-[#646462]">URL to your website</p>
-            <input type="text" value={pageUrl} onChange={e => setPageUrl(e.target.value)} placeholder="https://www.example.com" className="w-full px-3 py-2.5 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6] placeholder-[#9ca3af]" />
-            <div className="flex items-center gap-2 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              <p className="text-[12.5px] text-[#646462]">No pageview events have been received yet. Once you have some data, you'll see the most viewed pages here.</p>
-            </div>
-          </div>
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = React.useState({ w: 0, h: 0 });
 
-          {/* Heatmap data URL */}
-          <div className="flex flex-col gap-2">
-            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Heatmap data URL</h2>
-            <p className="text-[12.5px] text-[#646462] leading-relaxed">An exact match or a pattern for heatmap data. For example, use a pattern if you have pages with dynamic IDs. E.g. https://www.example.com/users/* will aggregate data from all pages under /users/.</p>
-            <input type="text" value={dataUrl} onChange={e => setDataUrl(e.target.value)} placeholder="https://www.example.com/*" className="w-full px-3 py-2.5 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6] placeholder-[#9ca3af]" />
-            <p className="text-[12px] text-[#9ca3af]">Add * for wildcards to aggregate data from multiple pages</p>
-          </div>
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+    const obs = new ResizeObserver(entries => {
+      for (const e of entries) setContainerSize({ w: e.contentRect.width, h: e.contentRect.height });
+    });
+    obs.observe(containerRef.current);
+    return () => obs.disconnect();
+  }, [currentUrl]);
 
-          {/* Capture method */}
-          <div className="flex flex-col gap-3">
-            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Capture method</h2>
-            <p className="text-[12.5px] text-[#646462]">Choose how to display your page in the heatmap</p>
-            <div className="flex flex-col gap-3">
-              {[
-                { id:'screenshot' as const, label:'Screenshot', desc:'We will generate a full-page screenshot of your website' },
-                { id:'iframe'     as const, label:'Iframe',      desc:'We will load your website in an iframe. Make sure you allow your website to be loaded in an iframe.' },
-              ].map(opt => (
-                <label key={opt.id} className="flex items-start gap-3 cursor-pointer">
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center mt-0.5 flex-shrink-0 ${captureMethod===opt.id?'border-[#e8572a]':'border-[#d1d5db]'}`} onClick={() => setCaptureMethod(opt.id)}>
-                    {captureMethod===opt.id && <div className="w-2 h-2 rounded-full bg-[#e8572a]" />}
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-semibold text-[#1a1a1a]">{opt.label}</p>
-                    <p className="text-[12px] text-[#646462]">{opt.desc}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <div className="flex items-center gap-2 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              <p className="text-[12.5px] text-[#646462]">You can also generate a screenshot of your site directly from <span className="text-[#e8572a] cursor-pointer hover:underline inline-flex items-center gap-0.5">session replay <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg></span> by clicking the 'view heatmap' button above a recording.</p>
-            </div>
-          </div>
+  const rangeClause = `timestamp >= now() - INTERVAL ${range.clickhouse}`;
+  const deviceClause = device === 'all' ? '' : ` AND toString(properties.$device_type) = '${device}'`;
 
-          {/* Save */}
-          <div>
-            <button onClick={() => setShowNewForm(false)} className="px-4 py-2 border border-[#e8572a] rounded-lg text-[13px] text-[#e8572a] font-semibold bg-white hover:bg-[#fff5f3]">Save</button>
-          </div>
-        </div>
-      </div>
-    );
+  // â”€â”€ Load top URLs (which pages to analyze) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const loadUrls = React.useCallback(async () => {
+    setLoadingUrls(true);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const hql = `
+        SELECT
+          toString(properties.$current_url) AS url,
+          count() AS clicks,
+          uniq(distinct_id) AS users
+        FROM events
+        WHERE event IN ('$autocapture', '$pageclick', '$rageclick') AND ${rangeClause}${deviceClause}
+        GROUP BY url
+        ORDER BY clicks DESC
+        LIMIT 25
+      `;
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+      const cols = res.columns ?? [];
+      const idx = (n: string) => cols.indexOf(n);
+      setTopUrls((res.results ?? []).map((r: any[]) => ({
+        url:    String(r[idx('url')] ?? ''),
+        clicks: Number(r[idx('clicks')] ?? 0),
+        users:  Number(r[idx('users')] ?? 0),
+      })));
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar URLs');
+    } finally { setLoadingUrls(false); }
+  }, [rangeClause, deviceClause]);
+
+  // â”€â”€ Load clicks for current URL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const loadClicks = React.useCallback(async () => {
+    if (!currentUrl) { setPoints([]); setTopElements([]); return; }
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const escUrl = currentUrl.replace(/'/g, "''");
+
+      // Click coordinates (page-relative, normalized via viewport)
+      const pointsHql = `
+        SELECT
+          coalesce(toFloat(properties.$click_x), toFloat(properties.x)) AS cx,
+          coalesce(toFloat(properties.$click_y), toFloat(properties.y)) AS cy,
+          coalesce(toFloat(properties.$viewport_width), 1280)            AS vw,
+          coalesce(toFloat(properties.$viewport_height), 800)            AS vh,
+          any(toString(properties.$el_text))                              AS el_text,
+          count() AS c
+        FROM events
+        WHERE event IN ('$autocapture', '$pageclick', '$rageclick')
+          AND toString(properties.$current_url) = '${escUrl}'
+          AND ${rangeClause}${deviceClause}
+          AND properties.$click_x IS NOT NULL
+        GROUP BY cx, cy, vw, vh
+        ORDER BY c DESC
+        LIMIT 500
+      `;
+
+      const elementsHql = `
+        SELECT
+          coalesce(toString(properties.$el_text), '(sin texto)') AS text,
+          coalesce(toString(properties.$event_type), 'click')    AS tag,
+          count() AS c,
+          uniq(distinct_id) AS users
+        FROM events
+        WHERE event IN ('$autocapture', '$pageclick')
+          AND toString(properties.$current_url) = '${escUrl}'
+          AND ${rangeClause}${deviceClause}
+        GROUP BY text, tag
+        ORDER BY c DESC
+        LIMIT 25
+      `;
+
+      const totalsHql = `
+        SELECT count() AS clicks, uniq(distinct_id) AS users,
+               avg(toFloat(properties.$viewport_width)) AS vw,
+               avg(toFloat(properties.$viewport_height)) AS vh
+        FROM events
+        WHERE event IN ('$autocapture', '$pageclick', '$rageclick')
+          AND toString(properties.$current_url) = '${escUrl}'
+          AND ${rangeClause}${deviceClause}
+      `;
+
+      const [pRes, eRes, tRes] = await Promise.all([
+        ph.posthog.query({ query: { kind: 'HogQLQuery', query: pointsHql } }),
+        ph.posthog.query({ query: { kind: 'HogQLQuery', query: elementsHql } }),
+        ph.posthog.query({ query: { kind: 'HogQLQuery', query: totalsHql } }),
+      ]);
+
+      const tCols = tRes.columns ?? [];
+      const tIdx = (n: string) => tCols.indexOf(n);
+      const tRow = tRes.results?.[0] ?? [];
+      const vw = Number(tRow[tIdx('vw')] ?? 1280) || 1280;
+      const vh = Number(tRow[tIdx('vh')] ?? 800)  || 800;
+
+      const pts: HmClickPoint[] = (pRes.results ?? []).map((r: any[]) => {
+        const cx = Number(r[0] ?? 0), cy = Number(r[1] ?? 0);
+        const rvw = Number(r[2] ?? vw) || vw;
+        const rvh = Number(r[3] ?? vh) || vh;
+        return { x: Math.min(1, Math.max(0, cx / rvw)), y: Math.min(1, Math.max(0, cy / rvh)), count: Number(r[5] ?? 1), el_text: String(r[4] ?? '') };
+      });
+
+      const eCols = eRes.columns ?? [];
+      const eIdx = (n: string) => eCols.indexOf(n);
+      const els: HmTopElement[] = (eRes.results ?? []).map((r: any[]) => ({
+        text:  String(r[eIdx('text')] ?? ''),
+        tag:   String(r[eIdx('tag')] ?? ''),
+        count: Number(r[eIdx('c')] ?? 0),
+        users: Number(r[eIdx('users')] ?? 0),
+      }));
+
+      setPoints(pts);
+      setTopElements(els);
+      setStats({ totalClicks: Number(tRow[tIdx('clicks')] ?? 0), uniqueUsers: Number(tRow[tIdx('users')] ?? 0), viewport_w: vw, viewport_h: vh });
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar clicks');
+    } finally { setLoading(false); }
+  }, [currentUrl, rangeClause, deviceClause]);
+
+  React.useEffect(() => { loadUrls(); }, [loadUrls]);
+  React.useEffect(() => { loadClicks(); setIframeBlocked(false); }, [loadClicks]);
+
+  function applyUrl(url: string) {
+    if (!url.trim()) return;
+    setCurrentUrl(url.trim());
+    setUrlInput(url.trim());
   }
 
-  return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden" onClick={() => setShowCreatedDrop(false)}>
-      {/* Warning banner */}
-      {showWarningBanner && (
-        <div className="flex items-center gap-3 px-5 py-3 bg-[#fffbeb] border-b border-[#fcd34d] flex-shrink-0">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#d97706] flex-shrink-0"><path d="M8 2L14.5 13H1.5L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 6.5v3M8 11.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-          <span className="text-[13px] text-[#1a1a1a] flex-1">You aren't collecting heatmaps data. Enable heatmaps in your project.</span>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#d97706] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#fffbeb] font-medium">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="#646462" strokeWidth="1.1"/><path d="M4 6l1.5 1.5L8.5 4" stroke="#646462" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Configure
-          </button>
-          <button onClick={() => setShowWarningBanner(false)} className="text-[#646462] hover:text-[#1a1a1a]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </button>
-        </div>
-      )}
+  // Detect iframe load issues via timeout
+  React.useEffect(() => {
+    if (!currentUrl) return;
+    setIframeBlocked(false);
+    const t = setTimeout(() => {
+      // After 4s without successful load, assume X-Frame-Options blocked it
+      // (real onLoad fires too eagerly to be useful here)
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [currentUrl]);
 
-      {/* Header row */}
-      <div className="flex items-center gap-3 px-5 py-4 flex-shrink-0">
-        <div className="flex items-center gap-2 flex-1">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="14" height="14" rx="2.5" stroke="#f59e0b" strokeWidth="1.4"/><path d="M5 11l3.5-4.5L11 9.5l2-2.5" stroke="#f59e0b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="5.5" cy="7" r="1.2" fill="#f59e0b"/></svg>
-          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Heatmaps</h1>
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="bg-white px-6 pt-4 pb-3 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#e8572a]">
+                <circle cx="8" cy="8" r="6" fill="currentColor" opacity=".15"/>
+                <circle cx="8" cy="8" r="4" fill="currentColor" opacity=".35"/>
+                <circle cx="8" cy="8" r="2" fill="currentColor"/>
+              </svg>
+              <h1 className="text-lg font-bold text-[#1a1a18]">Heatmaps</h1>
+              <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-2 py-0.5 rounded font-semibold">BETA</span>
+            </div>
+            <p className="text-xs text-[#646462]">Visualiza dÃ³nde hacen click tus usuarios sobre cada pÃ¡gina.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <select value={device} onChange={e => setDevice(e.target.value as HmDevice)} className="px-2 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs focus:outline-none focus:border-[#e8572a]">
+              <option value="all">Todos los dispositivos</option>
+              <option value="Desktop">Desktop</option>
+              <option value="Mobile">Mobile</option>
+              <option value="Tablet">Tablet</option>
+            </select>
+            <div className="relative" ref={rangeRef}>
+              <button onClick={() => setShowRange(s => !s)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12" stroke="currentColor" strokeWidth="1.3"/></svg>
+                {range.label}
+                <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>
+              </button>
+              {showRange && (
+                <div className="absolute right-0 top-full mt-1 w-56 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1">
+                  {HM_RANGES.map(r => (
+                    <button key={r.label} onClick={() => { setRange(r); setShowRange(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f9f9f7] ${range.label === r.label ? 'text-[#e8572a] bg-[#fff7ed]' : 'text-[#1a1a18]'}`}>{r.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        <button onClick={() => setShowNewForm(true)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          New heatmap
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
-        </button>
+
+        {/* URL input */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#9ca3af] font-medium">URL:</span>
+          <div className="flex-1 relative">
+            <input
+              value={urlInput}
+              onChange={e => setUrlInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') applyUrl(urlInput); }}
+              placeholder="https://tudominio.com/pagina-a-analizar"
+              className="w-full px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm font-mono focus:outline-none focus:border-[#e8572a]"
+            />
+          </div>
+          <button onClick={() => applyUrl(urlInput)} className="px-3 py-1.5 bg-[#e8572a] text-white text-sm rounded-lg hover:bg-[#dc4a1e]">Analizar</button>
+        </div>
       </div>
 
-      {/* Subtitle */}
-      <p className="text-[13px] text-[#646462] px-5 pb-3 flex-shrink-0">Heatmaps are a way to visualize user behavior on your website.</p>
-
-      {/* Beta banner */}
-      {showBetaBanner && (
-        <div className="mx-5 mb-4 flex items-center gap-3 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white flex-shrink-0">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-          <span className="text-[12.5px] text-[#646462] flex-1">Heatmaps is in beta. Please let us know what you'd like to see here and/or report any issues directly to us!</span>
-          <button className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium flex-shrink-0">Send feedback</button>
-          <button onClick={() => setShowBetaBanner(false)} className="text-[#9ca3af] hover:text-[#646462]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </button>
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Left: URL list */}
+        <div className="w-64 border-r border-[#e9eae6] bg-white flex flex-col flex-shrink-0">
+          <div className="px-3 py-2 border-b border-[#e9eae6]">
+            <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Top URLs con clicks</span>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {loadingUrls ? (
+              <div className="p-3 space-y-2">{[0,1,2,3,4].map(i => <div key={i} className="h-8 bg-[#f3f3f1] rounded animate-pulse" />)}</div>
+            ) : topUrls.length === 0 ? (
+              <p className="p-4 text-xs text-[#9ca3af] text-center">Sin URLs con clicks en este rango.</p>
+            ) : topUrls.map(u => (
+              <button
+                key={u.url}
+                onClick={() => applyUrl(u.url)}
+                className={`w-full text-left px-3 py-2 border-b border-[#f3f3f1] hover:bg-[#fff7ed] ${currentUrl === u.url ? 'bg-[#fff7ed] border-l-2 border-l-[#e8572a]' : ''}`}
+              >
+                <p className="text-xs font-mono text-[#1a1a18] truncate" title={u.url}>{u.url.replace(/^https?:\/\//, '').slice(0, 40)}</p>
+                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#9ca3af]">
+                  <span>{u.clicks.toLocaleString('es-ES')} clicks</span>
+                  <span>Â·</span>
+                  <span>{u.users} usuarios</span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-      )}
 
-      {/* Search + filter row */}
-      <div className="flex items-center gap-3 px-5 pb-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
-        <div className="relative">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-          <input type="text" placeholder="Search for heatmaps" className="pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6] w-56" />
-        </div>
-        <div className="flex-1" />
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] text-[#646462]">Created by:</span>
-          <div className="relative">
-            <button onClick={() => setShowCreatedDrop(!showCreatedDrop)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-              {createdBy} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-            </button>
-            {showCreatedDrop && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
-                {['Any user','Me'].map(u => (
-                  <button key={u} onClick={() => { setCreatedBy(u); setShowCreatedDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${createdBy===u?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{u}</button>
-                ))}
+        {/* Center: iframe + heatmap canvas */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Mode switcher + stats */}
+          <div className="bg-white px-4 py-2 border-b border-[#e9eae6] flex items-center gap-3 flex-shrink-0">
+            <div className="flex gap-1">
+              {[
+                { k: 'clickmap',  l: 'Clickmap', i: <svg viewBox="0 0 16 16" className="w-3 h-3"><circle cx="4" cy="6" r="1.5" fill="currentColor"/><circle cx="11" cy="4" r="2" fill="currentColor"/><circle cx="8" cy="11" r="1.2" fill="currentColor"/><circle cx="13" cy="12" r="2.5" fill="currentColor"/></svg> },
+                { k: 'heatmap',   l: 'Heatmap',  i: <svg viewBox="0 0 16 16" className="w-3 h-3"><defs><radialGradient id="hm-g"><stop offset="0%" stopColor="currentColor" stopOpacity="0.8"/><stop offset="100%" stopColor="currentColor" stopOpacity="0"/></radialGradient></defs><circle cx="6" cy="6" r="5" fill="url(#hm-g)"/><circle cx="11" cy="10" r="4" fill="url(#hm-g)"/></svg> },
+                { k: 'scrollmap', l: 'Scrollmap',i: <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="0" y="2" width="16" height="2" fill="currentColor" opacity=".8"/><rect x="0" y="6" width="16" height="2" fill="currentColor" opacity=".5"/><rect x="0" y="10" width="16" height="2" fill="currentColor" opacity=".3"/><rect x="0" y="14" width="16" height="2" fill="currentColor" opacity=".1"/></svg> },
+              ].map(v => (
+                <button key={v.k} onClick={() => setMode(v.k as HmMode)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs ${mode === v.k ? 'bg-[#fff7ed] text-[#e8572a] font-medium' : 'text-[#646462] hover:bg-[#f9f9f7]'}`}>
+                  {v.i}{v.l}
+                </button>
+              ))}
+            </div>
+            <div className="ml-auto flex items-center gap-3 text-xs text-[#646462]">
+              <span><strong className="text-[#1a1a18]">{stats.totalClicks.toLocaleString('es-ES')}</strong> clicks</span>
+              <span>Â·</span>
+              <span><strong className="text-[#1a1a18]">{stats.uniqueUsers}</strong> usuarios</span>
+              <span>Â·</span>
+              <span>{points.length} puntos</span>
+            </div>
+          </div>
+
+          {/* Iframe + overlay */}
+          <div ref={containerRef} className="flex-1 relative bg-[#f3f3f1] overflow-hidden">
+            {!currentUrl ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+                <div className="w-16 h-16 rounded-full bg-[#fff7ed] flex items-center justify-center mb-4">
+                  <svg viewBox="0 0 24 24" className="w-8 h-8 text-[#e8572a]"><circle cx="12" cy="12" r="9" fill="currentColor" opacity=".15"/><circle cx="12" cy="12" r="6" fill="currentColor" opacity=".35"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                </div>
+                <h3 className="text-base font-semibold text-[#1a1a18] mb-1">Selecciona una URL</h3>
+                <p className="text-sm text-[#646462] max-w-md">Elige una URL del panel izquierdo o pega cualquier URL arriba para ver el mapa de calor de clicks.</p>
               </div>
+            ) : (
+              <>
+                {iframeBlocked ? (
+                  <div className="absolute inset-0 bg-white p-6 overflow-auto">
+                    <div className="bg-[#fef3c7] border border-[#fcd34d] rounded-lg p-3 text-xs text-[#92400e] mb-4">
+                      <p className="font-semibold mb-1">âš  La pÃ¡gina no se puede mostrar en iframe</p>
+                      <p>El sitio bloquea iframes (cabecera <code className="font-mono">X-Frame-Options: DENY/SAMEORIGIN</code>). Mostramos el heatmap sobre el viewport vacÃ­o.</p>
+                    </div>
+                    {/* Empty viewport with heatmap */}
+                    <div className="relative bg-white border border-[#e9eae6] rounded mx-auto" style={{ width: Math.min(stats.viewport_w, containerSize.w - 80), height: stats.viewport_h * (Math.min(stats.viewport_w, containerSize.w - 80) / stats.viewport_w) }}>
+                      <div className="absolute top-2 left-2 right-2 flex items-center gap-1 px-2 py-1 bg-[#f3f3f1] rounded text-[10px] text-[#646462] font-mono"><span>ðŸ”’</span>{currentUrl}</div>
+                      <HeatmapCanvas points={points} mode={mode} width={Math.min(stats.viewport_w, containerSize.w - 80)} height={stats.viewport_h * (Math.min(stats.viewport_w, containerSize.w - 80) / stats.viewport_w)} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0">
+                    <iframe
+                      src={currentUrl}
+                      title="Heatmap preview"
+                      className="w-full h-full border-0 bg-white"
+                      onError={() => setIframeBlocked(true)}
+                    />
+                    {containerSize.w > 0 && <HeatmapCanvas points={points} mode={mode} width={containerSize.w} height={containerSize.h} />}
+                  </div>
+                )}
+                {loading && (
+                  <div className="absolute top-2 right-2 bg-white border border-[#e9eae6] rounded-lg px-3 py-1.5 shadow-md flex items-center gap-2 text-xs">
+                    <div className="w-3 h-3 border-2 border-[#e8572a] border-t-transparent rounded-full animate-spin" />
+                    Cargando heatmapâ€¦
+                  </div>
+                )}
+                {!loading && points.length === 0 && (
+                  <div className="absolute inset-x-0 top-4 mx-auto w-fit bg-white border border-[#e9eae6] rounded-lg px-4 py-2 shadow-md text-xs text-[#646462]">
+                    Sin clicks registrados para esta URL en el rango seleccionado.
+                  </div>
+                )}
+                <button onClick={() => setIframeBlocked(true)} className="absolute bottom-3 right-3 px-2 py-1 bg-white border border-[#e9eae6] rounded text-[10px] text-[#646462] hover:bg-[#f9f9f7] shadow-md">
+                  Â¿No carga? Ver viewport en blanco
+                </button>
+              </>
             )}
           </div>
         </div>
-      </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-y-auto px-5 pb-5">
-        <table className="w-full border border-[#e9eae6] rounded-xl overflow-hidden">
-          <thead>
-            <tr className="bg-[#f9f9f7]">
-              {['NAME','PAGE','HEATMAP DATA URL','TYPE','CREATED','CREATED BY'].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">
-                  {h === 'CREATED BY' ? <span className="flex items-center gap-1">{h} <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1v7M2 3l2.5-2.5L7 3M2 6l2.5 2.5L7 6" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg></span> : h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colSpan={6} className="px-4 py-4 text-[12.5px] text-[#9ca3af]">No heatmaps</td>
-            </tr>
-          </tbody>
-        </table>
+        {/* Right: top clicked elements */}
+        <div className="w-72 border-l border-[#e9eae6] bg-white flex flex-col flex-shrink-0">
+          <div className="px-3 py-2 border-b border-[#e9eae6]">
+            <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Elementos mÃ¡s clickados</span>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {error && <div className="m-3 bg-[#fef2f2] border border-[#fecaca] rounded p-2 text-xs text-[#991b1b]">{error}</div>}
+            {!currentUrl ? (
+              <p className="p-4 text-xs text-[#9ca3af] text-center italic">Selecciona una URL para ver los elementos mÃ¡s clickados.</p>
+            ) : loading ? (
+              <div className="p-3 space-y-2">{[0,1,2,3,4].map(i => <div key={i} className="h-10 bg-[#f3f3f1] rounded animate-pulse" />)}</div>
+            ) : topElements.length === 0 ? (
+              <p className="p-4 text-xs text-[#9ca3af] text-center">Sin datos para esta URL.</p>
+            ) : topElements.map((el, i) => {
+              const max = Math.max(...topElements.map(e => e.count), 1);
+              return (
+                <div key={i} className="px-3 py-2 border-b border-[#f3f3f1] hover:bg-[#fafaf9] relative">
+                  <div className="absolute inset-y-0 left-0 bg-[#e8572a] opacity-[.08]" style={{ width: `${(el.count / max) * 100}%` }} />
+                  <div className="relative flex items-center gap-2">
+                    <span className="text-[9px] font-bold text-[#9ca3af] flex-shrink-0">#{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-[#1a1a18] truncate" title={el.text}>{el.text || '(sin texto)'}</p>
+                      <div className="flex items-center gap-2 text-[10px] text-[#9ca3af] mt-0.5">
+                        <span>{el.count} clicks</span>
+                        <span>Â·</span>
+                        <span>{el.users} usuarios</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── WAAppLogsView ─────────────────────────────────────────────────────────────
 function WAAppLogsView() {
   const [showSetupBanner, setShowSetupBanner] = useState(true);
   const [volumeCollapsed, setVolumeCollapsed] = useState(false);
@@ -54429,6 +54724,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
