@@ -42450,15 +42450,100 @@ function WADataPersonsGroupsView({
   const [showCreatedByMenu, setShowCreatedByMenu] = useState(false);
   const [showPersonConfigCols, setShowPersonConfigCols] = useState(false);
 
+  // Drawer state
+  const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
+  const [selectedCohort, setSelectedCohort] = useState<any | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
+
+  function humanFriendlyTimeAgo(date: Date): string {
+    const diff = Date.now() - date.getTime();
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return 'hace un momento';
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `hace ${min} min`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `hace ${hr} h`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `hace ${day} días`;
+    if (day < 30) return `hace ${Math.floor(day / 7)} semanas`;
+    if (day < 365) return `hace ${Math.floor(day / 30)} meses`;
+    return `hace ${Math.floor(day / 365)} años`;
+  }
+
+  // Real data
+  const [persons, setPersons] = useState<any[]>([]);
+  const [personsLoading, setPersonsLoading] = useState(true);
+  const [cohorts, setCohorts] = useState<any[]>([]);
+  const [cohortsLoading, setCohortsLoading] = useState(true);
+  const [groupTypes, setGroupTypes] = useState<any[]>([]);
+  const [groupsByType, setGroupsByType] = useState<Record<number, any[]>>({});
+  const [activeGroupType, setActiveGroupType] = useState<number>(0);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+
+  async function refreshPersons() {
+    setPersonsLoading(true);
+    try {
+      const ph = await import('../api/posthog');
+      const res: any = await ph.posthog.persons.list({ search: personSearch || undefined, limit: 100 });
+      setPersons(res?.results ?? []);
+    } catch { setPersons([]); }
+    finally { setPersonsLoading(false); }
+  }
+  async function refreshCohorts() {
+    setCohortsLoading(true);
+    try {
+      const ph = await import('../api/posthog');
+      const res: any = await ph.posthog.cohorts.list();
+      setCohorts(res?.results ?? []);
+    } catch { setCohorts([]); }
+    finally { setCohortsLoading(false); }
+  }
+  async function refreshGroupTypes() {
+    setGroupsLoading(true);
+    try {
+      const ph = await import('../api/posthog');
+      const types: any = await ph.posthog.groups.types();
+      const typesList = Array.isArray(types) ? types : (types?.results ?? []);
+      setGroupTypes(typesList);
+      if (typesList.length > 0) setActiveGroupType(typesList[0].group_type_index);
+    } catch { setGroupTypes([]); }
+    finally { setGroupsLoading(false); }
+  }
+  async function loadGroupsForType(idx: number) {
+    if (groupsByType[idx]) return;
+    try {
+      const ph = await import('../api/posthog');
+      const res: any = await ph.posthog.groups.list({ group_type_index: idx, limit: 100 });
+      setGroupsByType(prev => ({ ...prev, [idx]: res?.results ?? [] }));
+    } catch { setGroupsByType(prev => ({ ...prev, [idx]: [] })); }
+  }
+  React.useEffect(() => { if (tab === 'persons') refreshPersons(); }, [tab]);
+  React.useEffect(() => { if (tab === 'cohorts') refreshCohorts(); }, [tab]);
+  React.useEffect(() => { if (tab === 'groups') refreshGroupTypes(); }, [tab]);
+  React.useEffect(() => { if (tab === 'groups' && groupTypes.length > 0) loadGroupsForType(activeGroupType); }, [tab, activeGroupType, groupTypes.length]);
+
   const TABS = [
     { key: 'persons', label: 'Personas' },
     { key: 'cohorts', label: 'Cohortes' },
     { key: 'groups',  label: 'Grupos'   },
   ];
 
-  const SAMPLE_COHORTS = [
-    { name: 'Usuarios internos / Test', desc: 'Personas que son miembros internos del equipo o usuarios de prueba. Usado para filtrar el tráfico interno de analytics.', users: 0, createdBy: '', created: 'hace 4 días', lastCalc: 'hace 10 min' },
-  ];
+  const filteredPersons = persons.filter(p => {
+    if (!personSearch) return true;
+    const q = personSearch.toLowerCase();
+    const props = p.properties || {};
+    return (props.email ?? '').toLowerCase().includes(q) || (props.name ?? '').toLowerCase().includes(q) || (p.id ?? '').toString().toLowerCase().includes(q) || (p.distinct_ids ?? []).some((d: string) => d.toLowerCase().includes(q));
+  });
+  const filteredCohorts = cohorts.filter(c => {
+    if (!cohortSearch && cohortType === 'Todos') return true;
+    if (cohortSearch && !((c.name ?? '').toLowerCase().includes(cohortSearch.toLowerCase()))) return false;
+    if (cohortType !== 'Todos') {
+      const isStatic = c.is_static;
+      if (cohortType === 'Estáticos' && !isStatic) return false;
+      if (cohortType === 'Dinámicos' && isStatic) return false;
+    }
+    return true;
+  });
 
   // ── Personas tab ───────────────────────────────────────────────────────────
   function PersonsContent() {
@@ -42559,22 +42644,45 @@ function WADataPersonsGroupsView({
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td colSpan={4} className="py-20">
-                  <div className="flex flex-col items-center gap-3">
-                    <svg viewBox="0 0 40 40" className="w-12 h-12 fill-[#d4d4d2]">
-                      <rect x="4" y="8" width="32" height="24" rx="3"/>
-                      <rect x="10" y="4" width="20" height="8" rx="2" fill="#e9eae6"/>
-                    </svg>
-                    <p className="text-[14px] font-medium text-[#1a1a1a]">No existen personas porque no se han ingestado eventos</p>
-                    <p className="text-[13px] text-[#646462]">
-                      Ve al{' '}
-                      <button className="text-[#3b59f6] hover:underline font-medium">flujo de incorporación</button>
-                      {' '}para empezar
-                    </p>
-                  </div>
-                </td>
-              </tr>
+              {personsLoading ? (
+                <tr><td colSpan={4} className="py-12 text-center text-[12px] text-[#646462]">Cargando personas…</td></tr>
+              ) : filteredPersons.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-20">
+                    <div className="flex flex-col items-center gap-3">
+                      <svg viewBox="0 0 40 40" className="w-12 h-12 fill-[#d4d4d2]">
+                        <rect x="4" y="8" width="32" height="24" rx="3"/>
+                        <rect x="10" y="4" width="20" height="8" rx="2" fill="#e9eae6"/>
+                      </svg>
+                      <p className="text-[14px] font-medium text-[#1a1a1a]">No existen personas porque no se han ingestado eventos</p>
+                      <p className="text-[13px] text-[#646462]">
+                        Ve al{' '}
+                        <button className="text-[#3b59f6] hover:underline font-medium">flujo de incorporación</button>
+                        {' '}para empezar
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredPersons.map((p: any) => {
+                  const props = p.properties || {};
+                  const displayName = props.email ?? props.name ?? (p.distinct_ids?.[0] ?? p.id);
+                  const initials = (displayName || '?').toString().charAt(0).toUpperCase();
+                  return (
+                    <tr key={p.id} onClick={() => setSelectedPerson(p)} className="border-b border-[#e9eae6] hover:bg-[#f8f8f7] cursor-pointer">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-[#fff5f2] flex items-center justify-center text-[12px] font-semibold text-[#e8572a]">{initials}</div>
+                          <span className="text-[13px] text-[#1a1a1a]">{displayName}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-[12px] text-[#646462] font-mono">{p.distinct_ids?.[0] ?? p.id}</td>
+                      <td className="px-4 py-2.5 text-[12px] text-[#646462]">{props.email ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-[12px] text-[#646462]">{p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}</td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -42715,23 +42823,29 @@ function WADataPersonsGroupsView({
               </tr>
             </thead>
             <tbody>
-              {SAMPLE_COHORTS.map((c, i) => (
-                <tr key={i} className="border-b border-[#f0f0ee] hover:bg-[#fafaf9] cursor-pointer group">
-                  <td className="px-4 py-3 align-middle">
-                    <div className="font-semibold text-[#1a1a1a]">{c.name}</div>
-                    <div className="text-[12px] text-[#3b59f6] mt-0.5 max-w-[360px] truncate">{c.desc}</div>
-                  </td>
-                  <td className="px-4 py-3 align-middle text-center font-mono text-[13px]">{c.users}</td>
-                  <td className="px-4 py-3 align-middle text-[#9a9a98]">{c.createdBy || '—'}</td>
-                  <td className="px-4 py-3 align-middle text-[12px] text-[#9a9a98]">{c.created}</td>
-                  <td className="px-4 py-3 align-middle text-[12px] text-[#9a9a98]">{c.lastCalc}</td>
-                  <td className="px-4 py-3 align-middle">
-                    <button className="w-6 h-6 rounded flex items-center justify-center hover:bg-[#e9eae6] opacity-0 group-hover:opacity-100">
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="3" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="8" cy="13" r="1.25"/></svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {cohortsLoading ? (
+                <tr><td colSpan={6} className="py-12 text-center text-[12px] text-[#646462]">Cargando cohortes…</td></tr>
+              ) : filteredCohorts.length === 0 ? (
+                <tr><td colSpan={6} className="py-12 text-center text-[12px] text-[#646462]">Sin cohortes. Crea una con "+ Nueva cohorte".</td></tr>
+              ) : (
+                filteredCohorts.map((c: any) => (
+                  <tr key={c.id} onClick={() => setSelectedCohort(c)} className="border-b border-[#f0f0ee] hover:bg-[#fafaf9] cursor-pointer group">
+                    <td className="px-4 py-3 align-middle">
+                      <div className="font-semibold text-[#1a1a1a]">{c.name ?? '(sin nombre)'}</div>
+                      <div className="text-[12px] text-[#646462] mt-0.5 max-w-[360px] truncate">{c.description ?? (c.is_static ? 'Cohorte estática' : 'Cohorte dinámica')}</div>
+                    </td>
+                    <td className="px-4 py-3 align-middle text-center font-mono text-[13px]">{c.count ?? '—'}</td>
+                    <td className="px-4 py-3 align-middle text-[12px] text-[#646462]">{c.created_by?.first_name ?? c.created_by?.email ?? '—'}</td>
+                    <td className="px-4 py-3 align-middle text-[12px] text-[#9a9a98]" title={c.created_at}>{c.created_at ? humanFriendlyTimeAgo(new Date(c.created_at)) : '—'}</td>
+                    <td className="px-4 py-3 align-middle text-[12px] text-[#9a9a98]" title={c.last_calculation}>{c.last_calculation ? humanFriendlyTimeAgo(new Date(c.last_calculation)) : '—'}</td>
+                    <td className="px-4 py-3 align-middle">
+                      <button onClick={e => { e.stopPropagation(); setSelectedCohort(c); }} className="w-6 h-6 rounded flex items-center justify-center hover:bg-[#e9eae6] opacity-0 group-hover:opacity-100">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="3" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="8" cy="13" r="1.25"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -42768,30 +42882,65 @@ function WADataPersonsGroupsView({
           Asocia eventos con un grupo o entidad —como una empresa, comunidad o proyecto. Analízalos como si los hubiera enviado esa entidad. Ideal para B2B, marketplaces y más.
         </p>
 
-        {/* Upgrade card */}
-        <div className="mx-6 rounded-[12px] border border-dashed border-[#c7d2fe] bg-[#fafbff] p-10 flex flex-col items-center text-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-[#eff2ff] flex items-center justify-center">
-            <svg viewBox="0 0 24 24" className="w-7 h-7 fill-[#3b59f6]">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
+        {groupsLoading ? (
+          <div className="px-6 py-12 text-center text-[12px] text-[#646462]">Cargando grupos…</div>
+        ) : groupTypes.length === 0 ? (
+          <div className="mx-6 rounded-[12px] border border-dashed border-[#c7d2fe] bg-[#fafbff] p-10 flex flex-col items-center text-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#eff2ff] flex items-center justify-center">
+              <svg viewBox="0 0 24 24" className="w-7 h-7 fill-[#3b59f6]">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-[17px] font-bold text-[#1a1a1a] mb-2">Analítica de grupos</h3>
+              <p className="text-[13px] text-[#646462] leading-[20px] max-w-[440px]">
+                Asocia eventos con un grupo —como una empresa, comunidad o proyecto— y analízalos en ese contexto.
+              </p>
+              <p className="text-[12px] text-[#9a9a98] mt-2">Llama a <code className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[11px] font-mono">posthog.group()</code> desde tu SDK para crear el primer tipo de grupo.</p>
+            </div>
+            <a href="https://posthog.com/docs/product-analytics/group-analytics" target="_blank" rel="noopener noreferrer" className="h-9 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff] flex items-center">Ver docs ↗</a>
           </div>
-          <div>
-            <h3 className="text-[17px] font-bold text-[#1a1a1a] mb-2">Analítica de grupos</h3>
-            <p className="text-[13px] text-[#646462] leading-[20px] max-w-[440px]">
-              Asocia eventos con un grupo —como una empresa, comunidad o proyecto— y analízalos en ese contexto.
-            </p>
-            <p className="text-[12px] text-[#9a9a98] mt-2">Esta función está disponible en el plan Enterprise de Clain.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button className="h-9 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff]">
-              Actualizar plan
-            </button>
-            <button className="h-9 px-4 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
-              Saber más
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M9 3V1.5M13 9h1.5" strokeLinecap="round"/></svg>
-            </button>
-          </div>
-        </div>
+        ) : (
+          <>
+            {/* Type tabs */}
+            <div className="px-6 pb-3 flex items-center gap-2 flex-shrink-0">
+              {groupTypes.map((gt: any) => (
+                <button
+                  key={gt.group_type_index}
+                  onClick={() => setActiveGroupType(gt.group_type_index)}
+                  className={`h-8 px-3 rounded-[8px] text-[12px] font-medium ${activeGroupType === gt.group_type_index ? 'bg-[#eff2ff] text-[#3b59f6] border border-[#c7d2fe]' : 'bg-white border border-[#e9eae6] text-[#646462] hover:bg-[#f7f7f5]'}`}
+                >{gt.name_plural ?? `${gt.group_type}s`}</button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-auto min-h-0 border-t border-[#e9eae6]">
+              <table className="w-full text-[13px] border-collapse">
+                <thead className="sticky top-0 z-10 bg-[#f8f8f7]">
+                  <tr className="border-b border-[#e9eae6]">
+                    <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">GRUPO</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">KEY</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">PROPIEDADES</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">CREADO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(groupsByType[activeGroupType] ?? []).length === 0 ? (
+                    <tr><td colSpan={4} className="py-12 text-center text-[12px] text-[#646462]">Sin grupos en este tipo.</td></tr>
+                  ) : (
+                    (groupsByType[activeGroupType] ?? []).map((g: any) => (
+                      <tr key={g.group_key} onClick={() => setSelectedGroup({ ...g, group_type_index: activeGroupType, type_name: groupTypes.find((t: any) => t.group_type_index === activeGroupType)?.name_singular })} className="border-b border-[#e9eae6] hover:bg-[#f8f8f7] cursor-pointer">
+                        <td className="px-4 py-2.5 text-[13px] text-[#1a1a1a] font-medium">{g.group_properties?.name ?? g.group_key}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462] font-mono">{g.group_key}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{Object.keys(g.group_properties || {}).length} prop{Object.keys(g.group_properties || {}).length !== 1 ? 's' : ''}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{g.created_at ? humanFriendlyTimeAgo(new Date(g.created_at)) : '—'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -42817,6 +42966,507 @@ function WADataPersonsGroupsView({
       {tab === 'persons'  && <PersonsContent />}
       {tab === 'cohorts'  && <CohortsContent />}
       {tab === 'groups'   && <GroupsContent />}
+
+      {selectedPerson && <PersonDetailDrawer person={selectedPerson} onClose={() => setSelectedPerson(null)} onChanged={refreshPersons}/>}
+      {selectedCohort && <CohortDetailDrawer cohort={selectedCohort} onClose={() => setSelectedCohort(null)} onChanged={refreshCohorts}/>}
+      {selectedGroup && <GroupDetailDrawer group={selectedGroup} onClose={() => setSelectedGroup(null)}/>}
+    </div>
+  );
+}
+
+// ── PersonDetailDrawer ──────────────────────────────────────────────────────
+function PersonDetailDrawer({ person, onClose, onChanged }: { person: any; onClose: () => void; onChanged: () => void }) {
+  const [tab, setTab] = useState<'props' | 'events' | 'cohorts' | 'sessions'>('props');
+  const [events, setEvents] = useState<any[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [editingProp, setEditingProp] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  const props = person.properties || {};
+  const displayName = props.email ?? props.name ?? (person.distinct_ids?.[0] ?? person.id);
+  const distinctId = person.distinct_ids?.[0] ?? person.id;
+  React.useEffect(() => {
+    if (tab !== 'events' || events.length > 0) return;
+    setLoadingEvents(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.posthog.persons.events(distinctId);
+        setEvents(res?.results ?? []);
+      } catch { setEvents([]); }
+      finally { setLoadingEvents(false); }
+    })();
+  }, [tab]);
+  async function saveProp(key: string) {
+    setBusy(true);
+    try {
+      const ph = await import('../api/posthog');
+      const next = { ...props, [key]: editValue };
+      await ph.posthog.persons.update(person.id, { properties: next });
+      person.properties = next;
+      setEditingProp(null);
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    setBusy(false);
+  }
+  async function deleteProp(key: string) {
+    if (!confirm(`¿Eliminar propiedad "${key}"?`)) return;
+    setBusy(true);
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.persons.deleteProperty(person.id, key);
+      delete person.properties[key];
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    setBusy(false);
+  }
+  async function deletePerson() {
+    if (!confirm(`¿Eliminar persona "${displayName}"?\n\nEsto eliminará el perfil pero NO los eventos asociados.`)) return;
+    setBusy(true);
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.persons.delete(person.id, false);
+      onChanged(); onClose();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); setBusy(false); }
+  }
+  async function deletePersonAndEvents() {
+    if (!confirm(`⚠️ Eliminar persona Y TODOS sus eventos.\n\nEsta acción no se puede deshacer.`)) return;
+    setBusy(true);
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.persons.delete(person.id, true);
+      onChanged(); onClose();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); setBusy(false); }
+  }
+  async function splitIds() {
+    if (!confirm('¿Dividir los distinct IDs en personas separadas?')) return;
+    setBusy(true);
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.persons.splitDistinctIds(person.id);
+      onChanged(); onClose();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); setBusy(false); }
+  }
+  return (
+    <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-end" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white border-l border-[#e9eae6] shadow-2xl w-full max-w-2xl h-full overflow-y-auto">
+        <div className="px-5 py-4 border-b border-[#e9eae6] sticky top-0 bg-white z-10">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#fff5f2] flex items-center justify-center text-[16px] font-bold text-[#e8572a]">{(displayName || '?').toString().charAt(0).toUpperCase()}</div>
+              <div>
+                <h3 className="text-[15px] font-bold text-[#1a1a1a]">{displayName}</h3>
+                <p className="text-[11px] text-[#646462] font-mono">{distinctId}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-[#646462] hover:text-[#1a1a1a]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            {(['props','events','cohorts','sessions'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} className={`h-8 px-3 text-[12px] font-medium border-b-2 -mb-px ${tab === t ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+                {t === 'props' ? 'Propiedades' : t === 'events' ? 'Eventos' : t === 'cohorts' ? 'Cohortes' : 'Sesiones'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-5">
+          {tab === 'props' && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold text-[#646462] uppercase">Propiedades ({Object.keys(props).length})</p>
+              {Object.keys(props).length === 0 ? (
+                <p className="text-[12px] text-[#646462]">Sin propiedades.</p>
+              ) : (
+                <div className="border border-[#e9eae6] rounded-[8px] divide-y divide-[#e9eae6]">
+                  {Object.entries(props).map(([k, v]: [string, any]) => (
+                    <div key={k} className="flex items-center gap-2 px-3 py-2">
+                      <code className="text-[11px] font-mono text-[#646462] flex-shrink-0 w-40 truncate">{k}</code>
+                      {editingProp === k ? (
+                        <>
+                          <input
+                            autoFocus
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') saveProp(k); if (e.key === 'Escape') setEditingProp(null); }}
+                            className="flex-1 h-7 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6]"
+                          />
+                          <button onClick={() => saveProp(k)} disabled={busy} className="text-[#e8572a] text-[11px] hover:underline">Guardar</button>
+                          <button onClick={() => setEditingProp(null)} className="text-[#646462] text-[11px]">×</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex-1 text-[12px] text-[#1a1a1a] font-mono break-all">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+                          <button onClick={() => { setEditingProp(k); setEditValue(typeof v === 'object' ? JSON.stringify(v) : String(v)); }} className="text-[#e8572a] text-[11px] hover:underline">Editar</button>
+                          <button onClick={() => deleteProp(k)} className="text-[#dc2626] text-[11px] hover:underline">×</button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-[11px] font-semibold text-[#646462] uppercase mt-4 mb-1">Distinct IDs ({(person.distinct_ids ?? []).length})</p>
+              <div className="border border-[#e9eae6] rounded-[8px] divide-y divide-[#e9eae6]">
+                {(person.distinct_ids ?? []).map((d: string) => (
+                  <div key={d} className="px-3 py-1.5 flex items-center gap-2">
+                    <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] truncate">{d}</code>
+                    <button onClick={() => navigator.clipboard.writeText(d).catch(() => {})} className="text-[#646462] hover:text-[#1a1a1a]" title="Copiar">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-[#e9eae6] pt-4 mt-6 space-y-2">
+                <p className="text-[11px] font-semibold text-[#dc2626] uppercase">Acciones peligrosas</p>
+                {(person.distinct_ids ?? []).length > 1 && (
+                  <button onClick={splitIds} disabled={busy} className="h-8 px-3 border border-[#f59e0b] text-[#92400e] text-[12px] rounded-lg hover:bg-[#fffbeb] disabled:opacity-50 mr-2">Dividir distinct IDs</button>
+                )}
+                <button onClick={deletePerson} disabled={busy} className="h-8 px-3 border border-[#dc2626] text-[#dc2626] text-[12px] rounded-lg hover:bg-[#fef2f2] disabled:opacity-50 mr-2">Eliminar persona</button>
+                <button onClick={deletePersonAndEvents} disabled={busy} className="h-8 px-3 bg-[#dc2626] text-white text-[12px] rounded-lg hover:bg-[#b91c1c] disabled:opacity-50">Eliminar persona + eventos</button>
+              </div>
+            </div>
+          )}
+
+          {tab === 'events' && (
+            <div>
+              {loadingEvents ? (
+                <p className="text-[12px] text-[#646462]">Cargando eventos…</p>
+              ) : events.length === 0 ? (
+                <p className="text-[12px] text-[#646462]">Sin eventos.</p>
+              ) : (
+                <div className="border border-[#e9eae6] rounded-[8px] divide-y divide-[#e9eae6]">
+                  {events.map((ev: any) => (
+                    <div key={ev.id} className="px-3 py-2">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <code className="text-[12px] font-mono text-[#1a1a1a] font-semibold">{ev.event}</code>
+                        <span className="text-[11px] text-[#646462] ml-auto">{new Date(ev.timestamp).toLocaleString()}</span>
+                      </div>
+                      {ev.properties?.$current_url && <p className="text-[11px] text-[#646462] truncate">{ev.properties.$current_url}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'cohorts' && (
+            <PersonCohortsTab personId={person.id}/>
+          )}
+
+          {tab === 'sessions' && (
+            <PersonSessionsTab distinctId={distinctId}/>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PersonCohortsTab({ personId }: { personId: string }) {
+  const [cohorts, setCohorts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        const all: any = await ph.posthog.cohorts.list();
+        // For each cohort, we'd ideally check membership via persons endpoint. For now, just list.
+        setCohorts(all?.results ?? []);
+      } catch { setCohorts([]); }
+      finally { setLoading(false); }
+    })();
+  }, [personId]);
+  if (loading) return <p className="text-[12px] text-[#646462]">Cargando…</p>;
+  if (cohorts.length === 0) return <p className="text-[12px] text-[#646462]">Sin cohortes definidas.</p>;
+  return (
+    <div className="border border-[#e9eae6] rounded-[8px] divide-y divide-[#e9eae6]">
+      {cohorts.map((c: any) => (
+        <div key={c.id} className="px-3 py-2 flex items-center gap-2">
+          <span className="text-[12px] text-[#1a1a1a] flex-1">{c.name}</span>
+          <span className="text-[11px] text-[#646462]">{c.count ?? 0} miembros</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PersonSessionsTab({ distinctId }: { distinctId: string }) {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.posthog.recordings.list({ distinct_id: distinctId, limit: 20 });
+        setSessions(res?.results ?? []);
+      } catch { setSessions([]); }
+      finally { setLoading(false); }
+    })();
+  }, [distinctId]);
+  if (loading) return <p className="text-[12px] text-[#646462]">Cargando…</p>;
+  if (sessions.length === 0) return <p className="text-[12px] text-[#646462]">Sin grabaciones de sesión.</p>;
+  return (
+    <div className="border border-[#e9eae6] rounded-[8px] divide-y divide-[#e9eae6]">
+      {sessions.map((s: any) => (
+        <div key={s.id} className="px-3 py-2 flex items-center gap-2">
+          <code className="text-[11px] font-mono text-[#646462] flex-1 truncate">{s.id}</code>
+          <span className="text-[11px] text-[#646462]">{Math.round((s.recording_duration ?? 0) / 60)} min</span>
+          <span className="text-[11px] text-[#646462]">{s.start_time ? new Date(s.start_time).toLocaleDateString() : '—'}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── CohortDetailDrawer ──────────────────────────────────────────────────────
+function CohortDetailDrawer({ cohort, onClose, onChanged }: { cohort: any; onClose: () => void; onChanged: () => void }) {
+  const [tab, setTab] = useState<'def' | 'members'>('def');
+  const [name, setName] = useState<string>(cohort.name ?? '');
+  const [description, setDescription] = useState<string>(cohort.description ?? '');
+  const [isStatic, setIsStatic] = useState<boolean>(!!cohort.is_static);
+  const [filters, setFilters] = useState<any[]>(cohort.filters?.properties?.values?.[0]?.values ?? cohort.groups?.[0]?.properties ?? []);
+  const [members, setMembers] = useState<any[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  React.useEffect(() => {
+    if (tab !== 'members' || members.length > 0) return;
+    setLoadingMembers(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.posthog.cohorts.persons(cohort.id);
+        setMembers(res?.results ?? []);
+      } catch { setMembers([]); }
+      finally { setLoadingMembers(false); }
+    })();
+  }, [tab, cohort.id]);
+
+  function addFilter() { setFilters(f => [...f, { key: '', value: '', operator: 'exact', type: 'person' }]); }
+  function updateFilter(i: number, patch: any) { setFilters(f => f.map((x, idx) => idx === i ? { ...x, ...patch } : x)); }
+  function removeFilter(i: number) { setFilters(f => f.filter((_, idx) => idx !== i)); }
+
+  async function save() {
+    setBusy(true);
+    try {
+      const ph = await import('../api/posthog');
+      const filtersPayload = {
+        properties: { type: 'AND', values: [{ type: 'AND', values: filters }] },
+      };
+      await ph.posthog.cohorts.update(cohort.id, {
+        name: name.trim(),
+        description,
+        is_static: isStatic,
+        filters: filtersPayload,
+      });
+      onChanged(); onClose();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    setBusy(false);
+  }
+  async function deleteCohort() {
+    if (!confirm(`¿Eliminar cohorte "${name}"?`)) return;
+    setBusy(true);
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.cohorts.delete(cohort.id);
+      onChanged(); onClose();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); setBusy(false); }
+  }
+  async function duplicate() {
+    setBusy(true);
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.cohorts.duplicate(cohort.id);
+      onChanged(); onClose();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-end" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white border-l border-[#e9eae6] shadow-2xl w-full max-w-2xl h-full overflow-y-auto">
+        <div className="px-5 py-4 border-b border-[#e9eae6] sticky top-0 bg-white z-10">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">{name}</h3>
+              <p className="text-[11px] text-[#646462]">{cohort.count ?? 0} miembros · {isStatic ? 'Estática' : 'Dinámica'}</p>
+            </div>
+            <button onClick={onClose} className="text-[#646462] hover:text-[#1a1a1a]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            {(['def','members'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} className={`h-8 px-3 text-[12px] font-medium border-b-2 -mb-px ${tab === t ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+                {t === 'def' ? 'Definición' : `Miembros (${cohort.count ?? 0})`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {tab === 'def' && (
+            <>
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1">Nombre</p>
+                <input value={name} onChange={e => setName(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1">Descripción</p>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] resize-none"/>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={isStatic} onChange={e => setIsStatic(e.target.checked)} className="w-4 h-4 accent-[#e8572a]"/>
+                  <span className="text-[13px] text-[#1a1a1a]">Cohorte estática (lista fija de personas)</span>
+                </label>
+              </div>
+
+              {!isStatic && (
+                <div>
+                  <p className="text-[12px] font-semibold text-[#646462] mb-2">Filtros (todos deben cumplirse)</p>
+                  <div className="space-y-2">
+                    {filters.length === 0 ? (
+                      <p className="text-[12px] text-[#646462] italic">Sin filtros. Añade uno para definir miembros.</p>
+                    ) : (
+                      filters.map((f: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 p-2 border border-[#e9eae6] rounded-lg bg-[#fafaf9]">
+                          <input value={f.key ?? ''} onChange={e => updateFilter(i, { key: e.target.value })} placeholder="email" className="h-7 px-2 border border-[#e9eae6] rounded text-[11px] flex-1 font-mono outline-none focus:border-[#3b59f6]"/>
+                          <select value={f.operator ?? 'exact'} onChange={e => updateFilter(i, { operator: e.target.value })} className="h-7 px-2 border border-[#e9eae6] rounded text-[11px] bg-white">
+                            <option value="exact">=</option>
+                            <option value="is_not">≠</option>
+                            <option value="icontains">contiene</option>
+                            <option value="not_icontains">no contiene</option>
+                            <option value="regex">regex</option>
+                            <option value="is_set">existe</option>
+                            <option value="is_not_set">no existe</option>
+                          </select>
+                          <input value={f.value ?? ''} onChange={e => updateFilter(i, { value: e.target.value })} placeholder="valor" className="h-7 px-2 border border-[#e9eae6] rounded text-[11px] flex-1 outline-none focus:border-[#3b59f6]"/>
+                          <button onClick={() => removeFilter(i)} className="text-[#dc2626] text-[11px] hover:underline">×</button>
+                        </div>
+                      ))
+                    )}
+                    <button onClick={addFilter} className="text-[12px] text-[#e8572a] hover:underline">+ Añadir filtro</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-4 border-t border-[#e9eae6]">
+                <button onClick={deleteCohort} disabled={busy} className="h-8 px-3 border border-[#dc2626] text-[#dc2626] text-[12px] rounded-lg hover:bg-[#fef2f2] disabled:opacity-50">Eliminar</button>
+                <div className="flex gap-2">
+                  <button onClick={duplicate} disabled={busy} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1] disabled:opacity-50">Duplicar como estática</button>
+                  <button onClick={save} disabled={busy} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar'}</button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {tab === 'members' && (
+            <div>
+              {loadingMembers ? (
+                <p className="text-[12px] text-[#646462]">Cargando miembros…</p>
+              ) : members.length === 0 ? (
+                <p className="text-[12px] text-[#646462]">Sin miembros todavía.</p>
+              ) : (
+                <div className="border border-[#e9eae6] rounded-[8px] divide-y divide-[#e9eae6]">
+                  {members.map((m: any) => {
+                    const p = m.properties || {};
+                    const display = p.email ?? p.name ?? m.distinct_ids?.[0] ?? m.id;
+                    return (
+                      <div key={m.id} className="px-3 py-2 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-[#fff5f2] flex items-center justify-center text-[10px] font-semibold text-[#e8572a]">{(display || '?').toString().charAt(0).toUpperCase()}</div>
+                        <span className="text-[12px] text-[#1a1a1a] flex-1 truncate">{display}</span>
+                        <span className="text-[11px] text-[#646462] font-mono truncate">{m.distinct_ids?.[0]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── GroupDetailDrawer ───────────────────────────────────────────────────────
+function GroupDetailDrawer({ group, onClose }: { group: any; onClose: () => void }) {
+  const [tab, setTab] = useState<'props' | 'persons'>('props');
+  const [relatedPersons, setRelatedPersons] = useState<any[]>([]);
+  const [loadingPersons, setLoadingPersons] = useState(false);
+  const props = group.group_properties || {};
+  const displayName = props.name ?? group.group_key;
+  React.useEffect(() => {
+    if (tab !== 'persons' || relatedPersons.length > 0) return;
+    setLoadingPersons(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.posthog.groups.relatedPersons(group.group_type_index, group.group_key);
+        setRelatedPersons(res?.results ?? res ?? []);
+      } catch { setRelatedPersons([]); }
+      finally { setLoadingPersons(false); }
+    })();
+  }, [tab, group.group_key]);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-end" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white border-l border-[#e9eae6] shadow-2xl w-full max-w-2xl h-full overflow-y-auto">
+        <div className="px-5 py-4 border-b border-[#e9eae6] sticky top-0 bg-white z-10">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-[#f0f4ff] flex items-center justify-center text-[16px] font-bold text-[#3b59f6]">{(displayName || '?').toString().charAt(0).toUpperCase()}</div>
+              <div>
+                <h3 className="text-[15px] font-bold text-[#1a1a1a]">{displayName}</h3>
+                <p className="text-[11px] text-[#646462]">{group.type_name ?? 'Grupo'} · <code className="font-mono">{group.group_key}</code></p>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-[#646462] hover:text-[#1a1a1a]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setTab('props')} className={`h-8 px-3 text-[12px] font-medium border-b-2 -mb-px ${tab === 'props' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>Propiedades</button>
+            <button onClick={() => setTab('persons')} className={`h-8 px-3 text-[12px] font-medium border-b-2 -mb-px ${tab === 'persons' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>Personas vinculadas</button>
+          </div>
+        </div>
+        <div className="p-5">
+          {tab === 'props' && (
+            Object.keys(props).length === 0 ? (
+              <p className="text-[12px] text-[#646462]">Sin propiedades.</p>
+            ) : (
+              <div className="border border-[#e9eae6] rounded-[8px] divide-y divide-[#e9eae6]">
+                {Object.entries(props).map(([k, v]: [string, any]) => (
+                  <div key={k} className="flex items-center gap-2 px-3 py-2">
+                    <code className="text-[11px] font-mono text-[#646462] w-40 truncate flex-shrink-0">{k}</code>
+                    <span className="text-[12px] text-[#1a1a1a] font-mono break-all flex-1">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+          {tab === 'persons' && (
+            loadingPersons ? <p className="text-[12px] text-[#646462]">Cargando…</p>
+              : relatedPersons.length === 0 ? <p className="text-[12px] text-[#646462]">Sin personas vinculadas.</p>
+              : (
+                <div className="border border-[#e9eae6] rounded-[8px] divide-y divide-[#e9eae6]">
+                  {relatedPersons.map((p: any) => {
+                    const pp = p.properties || {};
+                    const d = pp.email ?? pp.name ?? p.distinct_ids?.[0] ?? p.id;
+                    return (
+                      <div key={p.id ?? p.distinct_ids?.[0]} className="px-3 py-2 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-[#fff5f2] flex items-center justify-center text-[10px] font-semibold text-[#e8572a]">{(d || '?').toString().charAt(0).toUpperCase()}</div>
+                        <span className="text-[12px] text-[#1a1a1a] flex-1 truncate">{d}</span>
+                        <code className="text-[11px] text-[#646462] font-mono truncate">{p.distinct_ids?.[0]}</code>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+          )}
+        </div>
+      </div>
     </div>
   );
 }

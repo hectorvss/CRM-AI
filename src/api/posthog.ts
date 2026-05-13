@@ -289,6 +289,16 @@ export const posthog = {
       phGet(`/api/environments/${_teamId}/persons/`, params),
     get: (id: string) =>
       phGet(`/api/environments/${_teamId}/persons/${id}/`),
+    update: (id: string, data: any) =>
+      phPatch(`/api/environments/${_teamId}/persons/${id}/`, data),
+    delete: (id: string, deleteEvents = false) =>
+      phDelete(`/api/environments/${_teamId}/persons/${id}/${deleteEvents ? '?delete_events=true' : ''}`),
+    events: (distinctId: string) =>
+      phGet(`/api/environments/${_teamId}/events/`, { distinct_id: distinctId, limit: 50 }),
+    splitDistinctIds: (id: string) =>
+      phPost(`/api/environments/${_teamId}/persons/${id}/split/`, {}),
+    deleteProperty: (id: string, property: string) =>
+      phPost(`/api/environments/${_teamId}/persons/${id}/delete_property/`, { $unset: property }),
   },
 
   // ── Session Recordings ────────────────────────────────────────────────────
@@ -388,12 +398,30 @@ export const posthog = {
   cohorts: {
     list: () =>
       phGet(`/api/projects/${_projectId}/cohorts/`),
+    get: (id: number) =>
+      phGet(`/api/projects/${_projectId}/cohorts/${id}/`),
     create: (data: any) =>
       phPost(`/api/projects/${_projectId}/cohorts/`, data),
     update: (id: number, data: any) =>
       phPatch(`/api/projects/${_projectId}/cohorts/${id}/`, data),
     delete: (id: number) =>
       phDelete(`/api/projects/${_projectId}/cohorts/${id}/`),
+    persons: (id: number) =>
+      phGet(`/api/projects/${_projectId}/cohorts/${id}/persons/`),
+    duplicate: (id: number) =>
+      phPost(`/api/projects/${_projectId}/cohorts/${id}/duplicate_as_static_cohort/`, {}),
+  },
+
+  // ── Groups ────────────────────────────────────────────────────────────────
+  groups: {
+    list: (params?: any) =>
+      phGet(`/api/projects/${_projectId}/groups/`, params),
+    get: (groupTypeIndex: number, groupKey: string) =>
+      phGet(`/api/projects/${_projectId}/groups/find/`, { group_type_index: groupTypeIndex, group_key: groupKey }),
+    types: () =>
+      phGet(`/api/projects/${_projectId}/groups_types/`),
+    relatedPersons: (groupTypeIndex: number, groupKey: string) =>
+      phGet(`/api/projects/${_projectId}/groups/related/`, { group_type_index: groupTypeIndex, id: groupKey }),
   },
 
   // ── Event definitions ─────────────────────────────────────────────────────
