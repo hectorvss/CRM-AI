@@ -50661,12 +50661,120 @@ function WASettingsView() {
           </div>
 
           {/* Resource permissions */}
-          <div className="space-y-3">
-            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Permisos de recursos</h3>
-            <p className="text-[13px] text-[#646462]">Usa los permisos de recursos para asignar acceso a recursos específicos del proyecto (p. ej., insights, feature flags, etc.) para personas y roles.</p>
-            <PremiumCard title="Control de acceso" desc="Controla quién puede acceder y modificar datos y funciones dentro de tu organización."/>
-          </div>
+          <ResourcePermissionsSection/>
         </div>
+      </div>
+    );
+  }
+
+  // ── ResourcePermissionsSection ─────────────────────────────────────────────
+  function ResourcePermissionsSection() {
+    const [permissions, setPermissions] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [resourceType, setResourceType] = React.useState<string>('dashboard');
+    const [level, setLevel] = React.useState<'none' | 'viewer' | 'editor' | 'manager'>('viewer');
+    const [saving, setSaving] = React.useState(false);
+    const resourceTypes = [
+      { v: 'dashboard', l: 'Dashboard' },
+      { v: 'insight', l: 'Insight' },
+      { v: 'feature_flag', l: 'Feature Flag' },
+      { v: 'experiment', l: 'Experimento' },
+      { v: 'notebook', l: 'Notebook' },
+      { v: 'session_recording', l: 'Grabación' },
+      { v: 'plugin', l: 'Plugin' },
+      { v: 'event_definition', l: 'Definición de evento' },
+      { v: 'cohort', l: 'Cohorte' },
+    ];
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/access_controls/`);
+        setPermissions(res?.results ?? res?.access_controls ?? res ?? []);
+      } catch { setPermissions([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function add() {
+      setSaving(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/projects/${ph.getTeamId()}/access_controls/`, {
+          resource: resourceType,
+          access_level: level,
+        });
+        await refresh();
+        setShowAdd(false);
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      setSaving(false);
+    }
+    async function remove(id: string) {
+      if (!confirm('¿Eliminar regla de permiso?')) return;
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/projects/${ph.getTeamId()}/access_controls/${id}/`); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    return (
+      <div className="space-y-3">
+        <h3 className="text-[14px] font-bold text-[#1a1a1a]">Permisos de recursos</h3>
+        <p className="text-[13px] text-[#646462]">Define qué acceso por defecto tienen los miembros a cada tipo de recurso (insights, dashboards, flags, etc.).</p>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tipo de recurso</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acceso por defecto</th>
+                <th className="px-4 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e9eae6]">
+              {loading ? (
+                <tr><td colSpan={3} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando…</td></tr>
+              ) : permissions.length === 0 ? (
+                <tr><td colSpan={3} className="px-4 py-4 text-[13px] text-[#646462]">No hay reglas. Por defecto todos los miembros tienen acceso editor.</td></tr>
+              ) : (
+                permissions.map((p: any) => {
+                  const rt = resourceTypes.find(r => r.v === p.resource);
+                  return (
+                    <tr key={p.id} className="hover:bg-[#fafaf9]">
+                      <td className="px-4 py-2.5 text-[12px] font-medium text-[#1a1a1a]">{rt?.l ?? p.resource}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${p.access_level === 'manager' ? 'bg-[#fff5f2] text-[#e8572a]' : p.access_level === 'editor' ? 'bg-[#f0f4ff] text-[#3b59f6]' : p.access_level === 'viewer' ? 'bg-[#f0fdf4] text-[#16a34a]' : 'bg-[#fee2e2] text-[#dc2626]'}`}>{p.access_level}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button onClick={() => remove(p.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 grid grid-cols-2 gap-3 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Tipo de recurso</p>
+              <select value={resourceType} onChange={e => setResourceType(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+                {resourceTypes.map(r => <option key={r.v} value={r.v}>{r.l}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Nivel de acceso</p>
+              <select value={level} onChange={e => setLevel(e.target.value as any)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+                <option value="none">Sin acceso</option>
+                <option value="viewer">Viewer (solo lectura)</option>
+                <option value="editor">Editor</option>
+                <option value="manager">Manager (gestiona permisos)</option>
+              </select>
+            </div>
+            <div className="col-span-2 flex justify-end gap-2">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={add} disabled={saving} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{saving ? 'Creando…' : 'Crear regla'}</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir regla de permiso</button>
+        )}
       </div>
     );
   }
@@ -50677,19 +50785,31 @@ function WASettingsView() {
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState('');
     const [scopeFilter, setScopeFilter] = React.useState('all');
-    React.useEffect(() => {
-      let cancelled = false;
-      (async () => {
-        try {
-          const ph = await import('../api/posthog');
-          const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/activity_log/?limit=50`);
-          if (!cancelled) setLogs(res?.results ?? []);
-        } catch (e: any) {
-          if (!cancelled) setError(e?.message ?? 'Error al cargar registros');
-        } finally { if (!cancelled) setLoading(false); }
-      })();
-      return () => { cancelled = true; };
-    }, []);
+    const [userFilter, setUserFilter] = React.useState('');
+    const [dateFrom, setDateFrom] = React.useState('');
+    const [dateTo, setDateTo] = React.useState('');
+    const [page, setPage] = React.useState(0);
+    const [hasMore, setHasMore] = React.useState(false);
+    const [drawerLog, setDrawerLog] = React.useState<any | null>(null);
+    const LIMIT = 50;
+    async function loadPage(p: number) {
+      setLoading(true); setError('');
+      try {
+        const ph = await import('../api/posthog');
+        const params = new URLSearchParams();
+        params.set('limit', String(LIMIT));
+        params.set('offset', String(p * LIMIT));
+        if (userFilter) params.set('user', userFilter);
+        if (dateFrom) params.set('created_after', new Date(dateFrom).toISOString());
+        if (dateTo) params.set('created_before', new Date(dateTo).toISOString());
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/activity_log/?${params.toString()}`);
+        setLogs(res?.results ?? []);
+        setHasMore(!!res?.next);
+        setPage(p);
+      } catch (e: any) { setError(e?.message ?? 'Error al cargar registros'); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { loadPage(0); }, []);
     const scopes = React.useMemo(() => {
       const set = new Set<string>(logs.map(l => l.scope).filter(Boolean));
       return ['all', ...Array.from(set)];
@@ -50709,14 +50829,38 @@ function WASettingsView() {
                 <h2 className="text-[15px] font-bold text-[#1a1a1a]">Registros de actividad</h2>
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Auditoría de cambios realizados por miembros del equipo"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-[#646462]">Filtrar:</span>
-                <select value={scopeFilter} onChange={e => setScopeFilter(e.target.value)} className="h-7 px-2 pr-6 border border-[#e9eae6] rounded text-[12px] bg-white cursor-pointer">
+              <button onClick={() => loadPage(page)} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M13 8A5 5 0 112 8M13 4v4h-4"/></svg>
+                Refrescar
+              </button>
+            </div>
+            <p className="text-[13px] text-[#646462]">Consulta un registro de los cambios realizados en este entorno por los miembros del equipo.</p>
+
+            {/* Filtros */}
+            <div className="border border-[#e9eae6] rounded-[10px] p-3 grid grid-cols-4 gap-3 bg-[#fafaf9]">
+              <div>
+                <p className="text-[11px] font-semibold text-[#646462] mb-1">Scope</p>
+                <select value={scopeFilter} onChange={e => setScopeFilter(e.target.value)} className="w-full h-8 px-2 border border-[#e9eae6] rounded text-[12px] bg-white">
                   {scopes.map(s => <option key={s} value={s}>{s === 'all' ? 'Todos' : s}</option>)}
                 </select>
               </div>
+              <div>
+                <p className="text-[11px] font-semibold text-[#646462] mb-1">Usuario (email/uuid)</p>
+                <input value={userFilter} onChange={e => setUserFilter(e.target.value)} placeholder="usuario@empresa.com" className="w-full h-8 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-[#646462] mb-1">Desde</p>
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full h-8 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-[#646462] mb-1">Hasta</p>
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full h-8 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <div className="col-span-4 flex items-center gap-2 justify-end">
+                <button onClick={() => { setUserFilter(''); setDateFrom(''); setDateTo(''); setScopeFilter('all'); loadPage(0); }} className="h-7 px-3 border border-[#e9eae6] text-[#646462] text-[11px] rounded hover:bg-white">Limpiar</button>
+                <button onClick={() => loadPage(0)} className="h-7 px-3 border border-[#e8572a] text-[#e8572a] text-[11px] font-semibold rounded hover:bg-[#fff5f2]">Aplicar filtros</button>
+              </div>
             </div>
-            <p className="text-[13px] text-[#646462]">Consulta un registro de los cambios realizados en este entorno por los miembros del equipo.</p>
 
             <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
               {loading ? (
@@ -50733,23 +50877,74 @@ function WASettingsView() {
                       <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acción</th>
                       <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Recurso</th>
                       <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Cuándo</th>
+                      <th className="px-4 py-2.5"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#e9eae6]">
                     {visibleLogs.map((l: any, i: number) => (
-                      <tr key={l.id ?? i} className="hover:bg-[#fafaf9]">
+                      <tr key={l.id ?? i} className="hover:bg-[#fafaf9] cursor-pointer" onClick={() => setDrawerLog(l)}>
                         <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a]">{l.user?.first_name || l.user?.email || '—'}</td>
                         <td className="px-4 py-2.5 text-[12px] text-[#646462]">{l.activity ?? '—'}</td>
-                        <td className="px-4 py-2.5 text-[12px] text-[#646462]"><span className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[11px]">{l.scope ?? '—'}</span> {l.item_id ?? ''}</td>
-                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{l.created_at ? new Date(l.created_at).toLocaleString() : '—'}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]"><span className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[11px]">{l.scope ?? '—'}</span> {l.detail?.name ?? l.item_id ?? ''}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]" title={l.created_at}>{l.created_at ? humanFriendlyTime(new Date(l.created_at)) : '—'}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className="text-[11px] text-[#e8572a]">Ver →</span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
             </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] text-[#646462]">Página {page + 1}</span>
+              <div className="flex gap-2">
+                <button onClick={() => loadPage(page - 1)} disabled={page === 0 || loading} className="h-7 px-3 border border-[#e9eae6] text-[12px] rounded-lg hover:bg-[#f3f3f1] disabled:opacity-50">← Anterior</button>
+                <button onClick={() => loadPage(page + 1)} disabled={!hasMore || loading} className="h-7 px-3 border border-[#e9eae6] text-[12px] rounded-lg hover:bg-[#f3f3f1] disabled:opacity-50">Siguiente →</button>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* Detail drawer */}
+        {drawerLog && (
+          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-end" onClick={() => setDrawerLog(null)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white border-l border-[#e9eae6] shadow-2xl w-full max-w-lg h-full overflow-y-auto">
+              <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between sticky top-0 bg-white">
+                <h3 className="text-[15px] font-bold text-[#1a1a1a]">Detalle del registro</h3>
+                <button onClick={() => setDrawerLog(null)} className="text-[#646462] hover:text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+              <div className="p-5 space-y-3 text-[13px]">
+                <div><span className="text-[11px] font-semibold text-[#646462] uppercase block">Usuario</span><span className="text-[#1a1a1a]">{drawerLog.user?.first_name || drawerLog.user?.email || '—'}</span></div>
+                <div><span className="text-[11px] font-semibold text-[#646462] uppercase block">Acción</span><span className="text-[#1a1a1a]">{drawerLog.activity}</span></div>
+                <div><span className="text-[11px] font-semibold text-[#646462] uppercase block">Recurso</span><code className="text-[12px] font-mono">{drawerLog.scope} {drawerLog.item_id}</code></div>
+                <div><span className="text-[11px] font-semibold text-[#646462] uppercase block">Cuándo</span><span className="text-[#1a1a1a]">{drawerLog.created_at ? new Date(drawerLog.created_at).toLocaleString() : '—'}</span></div>
+                {drawerLog.detail?.changes && drawerLog.detail.changes.length > 0 && (
+                  <div>
+                    <span className="text-[11px] font-semibold text-[#646462] uppercase block mb-2">Cambios</span>
+                    <div className="space-y-2">
+                      {drawerLog.detail.changes.map((c: any, i: number) => (
+                        <div key={i} className="border border-[#e9eae6] rounded p-2 bg-[#fafaf9]">
+                          <p className="text-[11px] font-semibold text-[#1a1a1a] mb-1"><code className="font-mono">{c.field}</code></p>
+                          {c.before !== undefined && <p className="text-[11px] text-[#dc2626]"><span className="font-semibold">−</span> <code className="font-mono">{JSON.stringify(c.before)}</code></p>}
+                          {c.after !== undefined && <p className="text-[11px] text-[#16a34a]"><span className="font-semibold">+</span> <code className="font-mono">{JSON.stringify(c.after)}</code></p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <details className="mt-4">
+                  <summary className="text-[11px] text-[#646462] cursor-pointer">JSON crudo</summary>
+                  <pre className="mt-2 p-2 bg-[#1e1e2e] text-[#cdd6f4] rounded text-[10px] overflow-x-auto font-mono">{JSON.stringify(drawerLog, null, 2)}</pre>
+                </details>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -50760,33 +50955,58 @@ function WASettingsView() {
     const [requireFFApproval, setRequireFFApproval] = React.useState<boolean>(!!xs.approval_required_feature_flags);
     const [requireExpApproval, setRequireExpApproval] = React.useState<boolean>(!!xs.approval_required_experiments);
     const [requireInsightApproval, setRequireInsightApproval] = React.useState<boolean>(!!xs.approval_required_insights);
+    const [requireCohortApproval, setRequireCohortApproval] = React.useState<boolean>(!!xs.approval_required_cohorts);
+    const [minApprovers, setMinApprovers] = React.useState<number>(Number(xs.approval_min_approvers ?? 1));
+    const [allowSelfApproval, setAllowSelfApproval] = React.useState<boolean>(!!xs.approval_allow_self);
     const [savingKey, setSavingKey] = React.useState('');
     const [pendingChanges, setPendingChanges] = React.useState<any[]>([]);
     const [loadingPending, setLoadingPending] = React.useState(true);
+    const [drawerRequest, setDrawerRequest] = React.useState<any | null>(null);
     React.useEffect(() => {
       const s = team?.extra_settings || {};
       setRequireFFApproval(!!s.approval_required_feature_flags);
       setRequireExpApproval(!!s.approval_required_experiments);
       setRequireInsightApproval(!!s.approval_required_insights);
+      setRequireCohortApproval(!!s.approval_required_cohorts);
+      setMinApprovers(Number(s.approval_min_approvers ?? 1));
+      setAllowSelfApproval(!!s.approval_allow_self);
     }, [team?.id]);
-    React.useEffect(() => {
-      let cancelled = false;
-      (async () => {
-        try {
-          const ph = await import('../api/posthog');
-          // Try the approval-requests endpoint; ignore if not present
-          const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/approval_requests/?status=pending&limit=20`);
-          if (!cancelled) setPendingChanges(res?.results ?? []);
-        } catch { if (!cancelled) setPendingChanges([]); }
-        finally { if (!cancelled) setLoadingPending(false); }
-      })();
-      return () => { cancelled = true; };
-    }, []);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/approval_requests/?status=pending&limit=50`);
+        setPendingChanges(res?.results ?? []);
+      } catch { setPendingChanges([]); }
+      finally { setLoadingPending(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
     async function toggleApproval(field: string, v: boolean, key: string, setter: (b: boolean) => void) {
       setter(v); setSavingKey(key);
       const next = { ...(team?.extra_settings || {}), [field]: v };
       await patchTeam({ extra_settings: next });
       setSavingKey('');
+    }
+    async function saveMinApprovers(v: number) {
+      setMinApprovers(v); setSavingKey('min');
+      const next = { ...(team?.extra_settings || {}), approval_min_approvers: v };
+      await patchTeam({ extra_settings: next });
+      setSavingKey('');
+    }
+    async function approveRequest(id: string) {
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/projects/${ph.getTeamId()}/approval_requests/${id}/approve/`, {});
+        setDrawerRequest(null);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function rejectRequest(id: string, reason: string) {
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/projects/${ph.getTeamId()}/approval_requests/${id}/reject/`, { reason });
+        setDrawerRequest(null);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
     }
     return (
       <div className="flex-1 overflow-y-auto">
@@ -50807,6 +51027,7 @@ function WASettingsView() {
                 { label: 'Feature flags', field: 'approval_required_feature_flags', val: requireFFApproval, setter: setRequireFFApproval, key: 'ff' },
                 { label: 'Experimentos', field: 'approval_required_experiments', val: requireExpApproval, setter: setRequireExpApproval, key: 'exp' },
                 { label: 'Insights', field: 'approval_required_insights', val: requireInsightApproval, setter: setRequireInsightApproval, key: 'ins' },
+                { label: 'Cohortes', field: 'approval_required_cohorts', val: requireCohortApproval, setter: setRequireCohortApproval, key: 'coh' },
               ].map(row => (
                 <div key={row.field} className="flex items-center justify-between px-4 py-3">
                   <div>
@@ -50816,6 +51037,26 @@ function WASettingsView() {
                   <Toggle checked={row.val} onChange={(v: boolean) => toggleApproval(row.field, v, row.key, row.setter)}/>
                 </div>
               ))}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Mínimo de aprobadores {savingKey === 'min' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                  <p className="text-[12px] text-[#646462]">Número de personas que deben aprobar cada cambio.</p>
+                </div>
+                <input
+                  type="number" min="1" max="5"
+                  value={minApprovers}
+                  onChange={e => setMinApprovers(Number(e.target.value))}
+                  onBlur={() => saveMinApprovers(minApprovers)}
+                  className="w-16 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] text-right"
+                />
+              </div>
+              <div className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Permitir auto-aprobación {savingKey === 'self' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                  <p className="text-[12px] text-[#646462]">Si está activado, quien crea la solicitud puede aprobar la suya propia.</p>
+                </div>
+                <Toggle checked={allowSelfApproval} onChange={(v: boolean) => toggleApproval('approval_allow_self', v, 'self', setAllowSelfApproval)}/>
+              </div>
             </div>
           </div>
 
@@ -50831,19 +51072,61 @@ function WASettingsView() {
               ) : pendingChanges.length === 0 ? (
                 <div className="px-4 py-8 text-center text-[12px] text-[#646462]">No hay solicitudes pendientes.</div>
               ) : (
-                <div className="divide-y divide-[#e9eae6]">
-                  {pendingChanges.map((c: any) => (
-                    <div key={c.id} className="px-4 py-2.5 text-[13px] flex items-center gap-3">
-                      <span className="flex-1 truncate">{c.title ?? c.resource_type ?? 'Cambio'}</span>
-                      <span className="text-[11px] text-[#646462]">{c.requester?.email ?? '—'}</span>
-                      <span className="px-2 py-0.5 bg-[#fef3c7] text-[#92400e] rounded text-[11px] font-semibold">Pendiente</span>
-                    </div>
-                  ))}
-                </div>
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Recurso</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Solicitante</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Aprobaciones</th>
+                      <th className="px-4 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e9eae6]">
+                    {pendingChanges.map((c: any) => (
+                      <tr key={c.id} className="hover:bg-[#fafaf9]">
+                        <td className="px-4 py-2.5 text-[12px] font-medium text-[#1a1a1a]">{c.title ?? c.resource_type ?? 'Cambio'}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-[#646462]">{c.requester?.email ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-[#646462]">{c.approvals_count ?? 0}/{minApprovers}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button onClick={() => setDrawerRequest(c)} className="text-[#e8572a] text-[12px] hover:underline">Revisar →</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
         </div>
+
+        {/* Request review drawer */}
+        {drawerRequest && (
+          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-end" onClick={() => setDrawerRequest(null)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white border-l border-[#e9eae6] shadow-2xl w-full max-w-lg h-full overflow-y-auto">
+              <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between sticky top-0 bg-white">
+                <h3 className="text-[15px] font-bold text-[#1a1a1a]">Revisión de solicitud</h3>
+                <button onClick={() => setDrawerRequest(null)} className="text-[#646462] hover:text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+              <div className="p-5 space-y-3 text-[13px]">
+                <div><span className="text-[11px] font-semibold text-[#646462] uppercase block">Recurso</span><span className="text-[#1a1a1a]">{drawerRequest.title ?? drawerRequest.resource_type}</span></div>
+                <div><span className="text-[11px] font-semibold text-[#646462] uppercase block">Solicitante</span><span className="text-[#1a1a1a]">{drawerRequest.requester?.email ?? '—'}</span></div>
+                <div><span className="text-[11px] font-semibold text-[#646462] uppercase block">Solicitado</span><span className="text-[#1a1a1a]">{drawerRequest.created_at ? new Date(drawerRequest.created_at).toLocaleString() : '—'}</span></div>
+                {drawerRequest.proposed_changes && (
+                  <div>
+                    <span className="text-[11px] font-semibold text-[#646462] uppercase block mb-2">Cambios propuestos</span>
+                    <pre className="p-2 bg-[#1e1e2e] text-[#cdd6f4] rounded text-[10px] overflow-x-auto font-mono">{JSON.stringify(drawerRequest.proposed_changes, null, 2)}</pre>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-4 border-t border-[#e9eae6]">
+                  <button onClick={() => approveRequest(drawerRequest.id)} className="flex-1 h-9 bg-[#16a34a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#15803d]">✓ Aprobar</button>
+                  <button onClick={() => { const r = prompt('Motivo del rechazo:'); if (r !== null) rejectRequest(drawerRequest.id, r); }} className="flex-1 h-9 bg-[#dc2626] text-white text-[13px] font-semibold rounded-lg hover:bg-[#b91c1c]">✕ Rechazar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
