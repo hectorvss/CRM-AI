@@ -32258,15 +32258,275 @@ if (posthog.isFeatureEnabled('my-flag') ) {
 
       {tab === 'history' && (
         <div className="flex-1 flex items-center justify-center px-6 py-8">
-          <div className="border border-[#e9eae6] rounded-xl p-12 flex flex-col items-center text-center max-w-[500px] w-full">
-            <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-4">
-              <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="10" stroke="#9ca3af" strokeWidth="1.5"/><path d="M13 8v5l3 3" stroke="#9ca3af" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <div className="border border-[#e9eae6] rounded-xl p-12 flex flex-col items-center text-center max-w-[600px] w-full">
+            <div className="mb-5">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <rect x="8" y="14" width="28" height="4" rx="2" fill="#d97706" opacity="0.4"/>
+                <rect x="6" y="20" width="32" height="4" rx="2" fill="#d97706" opacity="0.6"/>
+                <rect x="4" y="26" width="36" height="4" rx="2" fill="#d97706" opacity="0.8"/>
+                <rect x="2" y="32" width="40" height="4" rx="2" fill="#d97706"/>
+              </svg>
             </div>
-            <h2 className="text-[15px] font-semibold text-[#1a1a1a] mb-2">No history yet</h2>
-            <p className="text-[13px] text-[#9ca3af] leading-relaxed">Feature flag activity will appear here once flags have been created and modified.</p>
+            <h2 className="text-[20px] font-bold text-[#1a1a1a] mb-3">Activity logs</h2>
+            <p className="text-[14px] text-[#646462] mb-2">See who in your organization has accessed or modified entities within PostHog.</p>
+            <p className="text-[14px] text-[#646462] mb-6">This feature is only available on PostHog Cloud.</p>
+            <button className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">
+              Move to PostHog Cloud
+            </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+
+// ── WAAppNotebooksView ────────────────────────────────────────────────────────
+function WAAppNotebooksView() {
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const [search, setSearch] = useState('');
+  const [selectedNotebook, setSelectedNotebook] = useState<string|null>(null);
+
+  // ── Notebook detail view ───────────────────────────────────────────────────
+  if (selectedNotebook !== null) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+        {/* Top bar */}
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0">
+          <button onClick={() => setSelectedNotebook(null)} className="text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          {/* TEMPLATE badge */}
+          <span className="text-[10px] font-bold px-2 py-0.5 border border-[#e8572a] rounded text-[#e8572a]">TEMPLATE</span>
+          <span className="text-[12px] text-[#9ca3af]">Last modified 3 years ago by</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 rounded-full bg-[#7c3aed] flex items-center justify-center text-white text-[10px] font-bold">P</div>
+            <span className="text-[12px] font-medium text-[#1a1a1a]">PostHog</span>
+          </div>
+
+          <div className="flex-1"/>
+
+          {/* Right actions */}
+          <div className="flex items-center gap-2">
+            <button className="text-[#9ca3af] hover:text-[#646462]">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="7" r="1.2" fill="currentColor"/><circle cx="11" cy="7" r="1.2" fill="currentColor"/></svg>
+            </button>
+            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f9f9f7] font-medium">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+              Guide
+            </button>
+            <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2" width="11" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1 5h11" stroke="currentColor" strokeWidth="1.1"/></svg>
+            </button>
+            <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="1" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.1"/><rect x="1" y="7" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="7" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.1"/></svg>
+            </button>
+            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f9f9f7] font-medium">
+              Open in context panel
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M4.5 7.5L8 4M8 4H5.5M8 4v2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Template banner */}
+        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-[#e9eae6] bg-[#fafaf8] flex-shrink-0">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          <p className="text-[13px] text-[#646462] flex-1">
+            <span className="font-semibold text-[#1a1a1a]">This is a template.</span> You can create a copy of it to edit and use as your own.
+          </p>
+          <button className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] flex-shrink-0">
+            Create copy
+          </button>
+        </div>
+
+        {/* Document content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[680px] mx-auto px-8 py-10">
+            <h1 className="text-[28px] font-bold text-[#1a1a1a] mb-4">Introducing Notebooks! 🎨</h1>
+            <p className="text-[14px] text-[#646462] leading-relaxed mb-5">
+              Notebooks are a powerful way to collate, analyze, and share PostHog data with others:
+            </p>
+
+            <ul className="flex flex-col gap-4 mb-6 pl-4">
+              {[
+                { bold: 'Investigating a bug report?', rest: ' Drag and drop session replays into a scratchpad and watch them as normal, or add timestamped comments to break things down.' },
+                { bold: 'Researching a new idea?', rest: ' Collect insights and add them to your proposal seamlessly, alongside survey results or cohorts.' },
+                { bold: 'Planning a launch?', rest: ' Embed the feature flags, events, persons, or cohorts you\'ll need to deploy changes and track success.' },
+              ].map((item, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#1a1a1a] flex-shrink-0 mt-2"/>
+                  <p className="text-[14px] text-[#646462] leading-relaxed">
+                    <span className="font-bold text-[#1a1a1a]">{item.bold}</span>{item.rest}
+                  </p>
+                </li>
+              ))}
+            </ul>
+
+            <p className="text-[14px] text-[#646462] leading-relaxed mb-8">
+              There's no limit to how many notebooks you can create, or how you can share them within your organization, though we block multiplayer editing to stop things getting messy.
+            </p>
+
+            <h2 className="text-[20px] font-bold text-[#1a1a1a] mb-3">Editing in notebooks</h2>
+            <p className="text-[14px] text-[#646462] leading-relaxed mb-4">
+              Notebooks support all sorts of typical text editing features such as headings, bold, italic, numbered and un-numbered lists etc:
+            </p>
+
+            <ul className="flex flex-col gap-2 pl-4">
+              {[
+                { text: '# Heading 1', plain: true },
+                { text: '## Heading 2', plain: true },
+                { text: '### Heading 3 ', italic: '(you get the idea...)', plain: true },
+                { text: '- List', plain: true },
+                { text: '1. Numbered list', plain: true },
+                { text: '**Bold**', plain: true },
+              ].map((item, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#1a1a1a] flex-shrink-0 mt-2"/>
+                  <p className="text-[14px] text-[#646462] font-mono">
+                    {item.text}
+                    {item.italic && <em className="font-sans not-italic text-[#9ca3af]">{item.italic}</em>}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Notebooks list ─────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-6 pt-5 pb-0 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          {/* notebook icon */}
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-[#1a1a1a]">
+            <rect x="3" y="2" width="12" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M6 6h6M6 9h6M6 12h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            <path d="M3 5h-1M3 9h-1M3 13h-1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Notebooks</h1>
+        </div>
+
+        {/* Top-right */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="7" r="1.2" fill="currentColor"/><circle cx="11" cy="7" r="1.2" fill="currentColor"/></svg>
+          </button>
+          <button className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+            New canvas
+          </button>
+          <button
+            onClick={() => setSelectedNotebook('new')}
+            className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors"
+          >
+            New notebook
+          </button>
+          <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4">
+        {/* Welcome banner */}
+        {!welcomeDismissed && (
+          <div className="flex items-center gap-3 border border-[#e9eae6] rounded-xl px-4 py-3 bg-white">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0"><circle cx="7" cy="7" r="6" stroke="#9ca3af" strokeWidth="1.2"/><path d="M7 6v4M7 4.5v.5" stroke="#9ca3af" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            <p className="text-[13px] text-[#646462] flex-1 leading-relaxed">
+              <span className="font-semibold text-[#1a1a1a]">Welcome to Notebooks</span> - a great way to bring Insights, Replays, Feature Flags and many more Clain products together into one place.
+            </p>
+            <button className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] flex-shrink-0 transition-colors">
+              Get started
+            </button>
+            <button onClick={() => setWelcomeDismissed(true)} className="text-[#9ca3af] hover:text-[#646462] flex-shrink-0">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        )}
+
+        {/* Search + filters */}
+        <div className="flex items-center gap-4">
+          <div className="relative w-64">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
+              <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search for notebooks" className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none placeholder-[#9ca3af]"/>
+          </div>
+          <div className="flex-1"/>
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-[#646462]">Containing:</span>
+            <button className="text-[12px] text-[#646462] hover:text-[#1a1a1a] font-medium">Any content</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-[#646462]">Created by:</span>
+            <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+              Any user
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="border-b border-[#e9eae6] bg-[#fafaf8]">
+                {[
+                  {l:'TITLE', s:true},
+                  {l:'CREATED BY', s:true},
+                  {l:'CREATED', s:true},
+                  {l:'LAST MODIFIED', s:true},
+                ].map(col=>(
+                  <th key={col.l} className="px-4 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">
+                    <span className="flex items-center gap-1">
+                      {col.l}
+                      {col.s && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 2v6M2.5 4.5L5 2l2.5 2.5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/><path d="M2.5 5.5L5 8l2.5-2.5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/></svg>}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* Template row */}
+              <tr
+                className="border-b border-[#e9eae6] hover:bg-[#fafaf8] cursor-pointer transition-colors"
+                onClick={() => setSelectedNotebook('introducing')}
+              >
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-semibold text-[#1a1a1a]">Introducing Notebooks! 🎨</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 border border-[#e8572a] rounded text-[#e8572a]">TEMPLATE</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#7c3aed] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">P</div>
+                    <span className="text-[13px] text-[#1a1a1a]">PostHog</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-[13px] text-[#646462]">3 years ago</td>
+                <td className="px-4 py-3 text-[13px] text-[#646462]">3 years ago</td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-end gap-2 px-4 py-2.5 border-t border-[#e9eae6]">
+            <span className="text-[12px] text-[#646462]">1 notebook on this page</span>
+            <button className="w-6 h-6 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7] disabled:opacity-40" disabled>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M6.5 2.5L4 5l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button className="w-6 h-6 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7] disabled:opacity-40" disabled>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2.5L6 5l-2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -40168,7 +40428,8 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
            appsSub === 'appSupport'         ? <WAAppSupportView /> :
            appsSub === 'appSurveys'         ? <WAAppSurveysView /> :
            appsSub === 'appExperiments'     ? <WAAppExperimentsView /> :
-           appsSub === 'appFeatureFlags'    ? <WAAppFeatureFlagsView /> : (
+           appsSub === 'appFeatureFlags'    ? <WAAppFeatureFlagsView /> :
+           appsSub === 'appNotebooks'       ? <WAAppNotebooksView /> : (
             <>
               <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
                 <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{appsSub.replace(/^app/, '').replace(/([A-Z])/g, ' $1').trim()}</h1>
