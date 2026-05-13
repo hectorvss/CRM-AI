@@ -31141,432 +31141,735 @@ function WAAppLogsView() {
   );
 }
 
-function WAAppSessionReplayView() {
-  type SRTab = 'recordings' | 'collections' | 'whattowatch';
-  const [srTab, setSrTab] = useState<SRTab>('recordings');
-  const [showFilters, setShowFilters] = useState(false);
-  const [recordingFilter, setRecordingFilter] = useState('Viewed and unviewed recordings');
-  const [relativeFilter, setRelativeFilter] = useState('Relative');
-  const [showRecordingDrop, setShowRecordingDrop] = useState(false);
-  const [showRelativeDrop, setShowRelativeDrop]   = useState(false);
-  // Collections
-  const [collectionType, setCollectionType] = useState('All');
-  const [createdBy, setCreatedBy] = useState('Any user');
-  const [showCollTypeDrop, setShowCollTypeDrop] = useState(false);
-  const [showCreatedDrop, setShowCreatedDrop]   = useState(false);
-  const [selectedCollection, setSelectedCollection] = useState<string|null>(null);
+// â”€â”€ WAAppSessionReplayView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog Session Replay â€” complete reimplementation with full feature parity.
+//
+// Backend:
+//   - List:      GET /api/environments/{teamId}/session_recordings/?...
+//   - Detail:    GET /api/environments/{teamId}/session_recordings/{id}/
+//   - Snapshots: GET /api/environments/{teamId}/session_recordings/{id}/snapshots/
+//   - Update:    PATCH (viewed, playlists)
+//   - Delete:    DELETE
+//   - Playlists: /api/projects/{id}/session_recording_playlists/
+//   - Comments:  HogQL on $comment events or notebooks
+// All session events derived via HogQL from events table.
 
-  const COLLECTIONS = [
-    { name:'Watch history',           desc:'Recordings you have watched' },
-    { name:'Recordings with comments',desc:'Recordings that have team comments' },
-    { name:'Shared recordings',       desc:'Recordings that have been shared externally' },
-    { name:'Exported recordings',     desc:'Recordings that have been exported as clips or screenshots' },
-    { name:'Expiring soon',           desc:'Recordings that will expire in the next 10 days' },
-    { name:'Frustration signals',     desc:'Sessions with rage clicks or errors in the last 7 days' },
-    { name:'Summarised sessions',     desc:'Sessions with AI-generated summaries. Ask Clain AI to summarize sessions for you.' },
-  ];
+interface SrRecording {
+  id:                 string;
+  distinct_id:        string;
+  start_time:         string;
+  end_time:           string;
+  duration:           number;       // seconds
+  active_seconds?:    number;
+  click_count?:       number;
+  keypress_count?:    number;
+  console_error_count?: number;
+  console_warn_count?: number;
+  start_url?:         string;
+  recording_duration?: number;
+  viewed?:            boolean;
+  pinned_count?:      number;
+  person?: {
+    distinct_ids?:  string[];
+    properties?:    Record<string, any>;
+    is_identified?: boolean;
+  } | null;
+  matching_events?:   string[];
+  storage?:           'object_storage' | 'cold' | 'hot';
+}
 
-  // Collection drilldown view
-  const selColl = COLLECTIONS.find(c => c.name === selectedCollection);
-  if (selColl) {
-    return (
-      <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0">
-          <button onClick={() => setSelectedCollection(null)} className="text-[#646462] hover:text-[#1a1a1a]">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="#e8572a" strokeWidth="1.4"/><path d="M7 6l5 3-5 3V6z" fill="#e8572a"/></svg>
-          <h1 className="text-[15px] font-bold text-[#1a1a1a] flex-1">{selColl.name}</h1>
-          <button onClick={() => setSelectedCollection(null)} className="text-[#9ca3af] hover:text-[#646462]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-            Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">0</span>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
-          </button>
-        </div>
-        <p className="text-[13px] text-[#646462] px-5 py-2 border-b border-[#e9eae6] flex-shrink-0">{selColl.desc}</p>
-        {/* Two-pane layout */}
-        <div className="flex-1 flex min-h-0">
-          {/* Left panel */}
-          <div className="w-[440px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col min-h-0">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6] flex-shrink-0">
-              <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7]">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="1" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="1" y="7" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="7" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/></svg>
-              </button>
-              <input type="checkbox" className="rounded border-[#e9eae6]" />
-              <span className="text-[12px] text-[#646462]">Sort by:</span>
-              <button className="flex items-center gap-1 text-[12px] text-[#1a1a1a] font-medium">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4l3-3 3 3M6 1v7M3 8l3 3 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Latest <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              </button>
-              <div className="flex-1" />
-              <button className="text-[#9ca3af]"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="12" r="1.2" fill="currentColor"/></svg></button>
-            </div>
-            <div className="flex-1 p-4">
-              <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">No recordings yet</p>
-              <p className="text-[12px] text-[#9ca3af]">{selColl.desc}</p>
-            </div>
-          </div>
-          {/* Right pane */}
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
-            <p className="text-[15px] font-semibold text-[#1a1a1a]">No recording selected</p>
-            <p className="text-[13px] text-[#9ca3af]">Please select a recording from the list on the left</p>
-            <button className="mt-1 px-4 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">Learn more about recordings</button>
-          </div>
-        </div>
-      </div>
-    );
+interface SrPlaylist {
+  id:          number;
+  short_id:    string;
+  name:        string;
+  description?: string;
+  pinned:      boolean;
+  filters?:    any;
+  recording_count?: number;
+}
+
+interface SrSavedFilter {
+  id:      string;
+  name:    string;
+  filters: SrFilterState;
+}
+
+interface SrFilterState {
+  date_from:      string;
+  date_to?:       string;
+  duration_min:   number;       // seconds
+  duration_max:   number | null;
+  has_errors:     boolean;
+  has_rage_clicks: boolean;
+  is_converted:   string | null;
+  device_type:    'all' | 'Desktop' | 'Mobile' | 'Tablet';
+  unviewed_only:  boolean;
+  person_filter:  string;
+  url_filter:     string;
+  event_filter:   string;       // event name that must occur in session
+  sort_by:        'recent' | 'duration' | 'click_count' | 'console_errors';
+}
+
+interface SrEvent {
+  timestamp:  string;
+  event:      string;
+  url?:       string;
+  element?:   string;
+  properties: Record<string, any>;
+  type:       'pageview' | 'click' | 'rageclick' | 'error' | 'custom' | 'identify';
+  offset_ms:  number;       // ms from session start
+}
+
+interface SrConsoleLog {
+  timestamp: string;
+  level:     'log' | 'info' | 'warn' | 'error';
+  message:   string;
+  source?:   string;
+  offset_ms: number;
+}
+
+interface SrComment {
+  id:        string;
+  ts:        number;
+  author:    string;
+  text:      string;
+  offset_ms: number | null;
+}
+
+const SR_RANGES: { label: string; date_from: string; days: number }[] = [
+  { label: 'Hoy',              date_from: '-1d',   days: 1 },
+  { label: 'Ãšltimas 24 horas', date_from: '-1d',   days: 1 },
+  { label: 'Ãšltimos 7 dÃ­as',   date_from: '-7d',   days: 7 },
+  { label: 'Ãšltimos 14 dÃ­as',  date_from: '-14d',  days: 14 },
+  { label: 'Ãšltimos 30 dÃ­as',  date_from: '-30d',  days: 30 },
+  { label: 'Ãšltimos 90 dÃ­as',  date_from: '-90d',  days: 90 },
+];
+
+function srFormatDuration(sec: number): string {
+  if (!sec || sec < 0) return '0s';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function srPersonName(p: SrRecording['person'], fallback: string): string {
+  if (!p) return fallback;
+  return p.properties?.name || p.properties?.email || p.distinct_ids?.[0] || fallback;
+}
+
+function srPersonInitial(name: string): string {
+  return (name?.[0] ?? '?').toUpperCase();
+}
+
+// â”€â”€ Mini sparkline of activity over session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SrActivityBar({ events, totalMs, color = '#3b59f6' }: { events: SrEvent[]; totalMs: number; color?: string }) {
+  if (!events.length || !totalMs) return <div className="h-1.5 bg-[#e9eae6] rounded" />;
+  const buckets = 60;
+  const counts = new Array(buckets).fill(0);
+  for (const e of events) {
+    const b = Math.min(buckets - 1, Math.max(0, Math.floor((e.offset_ms / totalMs) * buckets)));
+    counts[b]++;
   }
+  const max = Math.max(...counts, 1);
+  return (
+    <div className="h-1.5 bg-[#e9eae6] rounded overflow-hidden flex">
+      {counts.map((c, i) => (
+        <div key={i} style={{ width: `${100 / buckets}%`, opacity: c === 0 ? 0 : 0.3 + (c / max) * 0.7, backgroundColor: color }} />
+      ))}
+    </div>
+  );
+}
+
+// â”€â”€ Filter panel (left sidebar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SrFilterPanel({ filters, onChange, onSave, savedFilters, onApplySaved, onDeleteSaved }: {
+  filters:       SrFilterState;
+  onChange:      (f: SrFilterState) => void;
+  onSave:        (name: string) => void;
+  savedFilters:  SrSavedFilter[];
+  onApplySaved:  (s: SrSavedFilter) => void;
+  onDeleteSaved: (id: string) => void;
+}) {
+  const [saveName, setSaveName] = React.useState('');
+  const [showSave, setShowSave] = React.useState(false);
+
+  function patch(p: Partial<SrFilterState>) { onChange({ ...filters, ...p }); }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden" onClick={() => { setShowRecordingDrop(false); setShowRelativeDrop(false); setShowCollTypeDrop(false); setShowCreatedDrop(false); }}>
-      {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex items-center gap-2 flex-1">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <circle cx="9" cy="9" r="7" stroke="#e8572a" strokeWidth="1.4"/>
-            <path d="M7 6l5 3-5 3V6z" fill="#e8572a"/>
-          </svg>
-          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Session replay</h1>
-        </div>
-        <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-          Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">0</span>
-        </button>
-        {srTab === 'collections' && (
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            New collection
-          </button>
-        )}
-        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 1.5v1M6.5 10.5v1M1.5 6.5h1M10.5 6.5h1" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-          Settings
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center border-b border-[#e9eae6] px-5 flex-shrink-0">
-        {([['recordings','Recordings'],['collections','Collections'],['whattowatch','What to watch']] as [SRTab,string][]).map(([id,label]) => (
-          <button key={id} onClick={() => setSrTab(id)} className={`px-1 py-2.5 mr-6 text-[13px] font-medium border-b-2 flex items-center gap-1.5 transition-colors ${srTab===id?'border-[#e8572a] text-[#1a1a1a]':'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
-            {label}
-            {id === 'collections' && <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="text-[#9ca3af]"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 4.5v3M6.5 9.5v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>}
-          </button>
-        ))}
-      </div>
-
-      {/* ── RECORDINGS TAB ── */}
-      {srTab === 'recordings' && (
-        <div className="flex-1 flex min-h-0">
-          {/* Left panel */}
-          <div className="w-[440px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col min-h-0" onClick={e => e.stopPropagation()}>
-            {/* Filters row */}
-            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e9eae6] flex-shrink-0">
-              <button onClick={() => setShowFilters(!showFilters)} className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 3.5h10M3.5 6.5h6M5.5 9.5h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                Show filters
-              </button>
-              <button className="w-7 h-7 flex items-center justify-center rounded-full border-2 border-dashed border-[#8b5cf6] text-[#8b5cf6] hover:bg-[#f3f0ff]">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-              </button>
-              <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5a5 5 0 015-5 5 5 0 014.3 2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/><path d="M11.5 6.5a5 5 0 01-5 5A5 5 0 012.2 9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/><path d="M11 2v3H8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-            </div>
-            {/* Sub-filters */}
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6] flex-shrink-0">
-              <div className="relative">
-                <button onClick={() => { setShowRecordingDrop(!showRecordingDrop); setShowRelativeDrop(false); }} className="flex items-center gap-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a]">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 4v3l2 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                  {recordingFilter} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+    <div className="flex flex-col h-full overflow-y-auto">
+      {/* Saved filters */}
+      {savedFilters.length > 0 && (
+        <div className="px-3 py-3 border-b border-[#e9eae6]">
+          <p className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Filtros guardados</p>
+          <div className="space-y-1">
+            {savedFilters.map(s => (
+              <div key={s.id} className="flex items-center gap-1 group">
+                <button onClick={() => onApplySaved(s)} className="flex-1 text-left px-2 py-1 rounded text-xs text-[#1a1a18] hover:bg-[#fafaf9]">{s.name}</button>
+                <button onClick={() => onDeleteSaved(s.id)} className="opacity-0 group-hover:opacity-100 text-[#9ca3af] hover:text-[#dc2626] px-1">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                 </button>
-                {showRecordingDrop && (
-                  <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-56 py-1">
-                    {['Viewed and unviewed recordings','Viewed recordings','Unviewed recordings'].map(r => (
-                      <button key={r} onClick={() => { setRecordingFilter(r); setShowRecordingDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${recordingFilter===r?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{r}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="relative">
-                <button onClick={() => { setShowRelativeDrop(!showRelativeDrop); setShowRecordingDrop(false); }} className="flex items-center gap-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a]">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                  {relativeFilter} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                </button>
-                {showRelativeDrop && (
-                  <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
-                    {['Relative','Last 7 days','Last 30 days','Last 90 days'].map(r => (
-                      <button key={r} onClick={() => { setRelativeFilter(r); setShowRelativeDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${relativeFilter===r?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{r}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Sort row */}
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6] flex-shrink-0">
-              <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7]">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="1" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="1" y="7" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="7" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/></svg>
-              </button>
-              <span className="text-[12px] text-[#646462]">Sort by:</span>
-              <button className="flex items-center gap-1 text-[12px] text-[#1a1a1a] font-medium hover:text-[#3b59f6]">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4l3-3 3 3M6 1v7M3 8l3 3 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Latest <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              </button>
-              <div className="flex-1" />
-              <button className="text-[#9ca3af] hover:text-[#646462]">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="12" r="1.2" fill="currentColor"/></svg>
-              </button>
-            </div>
-            {/* Empty state */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">No matching recordings</p>
-              <div className="mb-4 px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#9ca3af] bg-[#f9f9f7]">Search over the last 30 days</div>
-              <div className="border-t border-[#e9eae6] pt-3 flex flex-col gap-2">
-                <a className="text-[12.5px] text-[#e8572a] hover:underline cursor-pointer flex items-center gap-1">
-                  Recordings might be outside the retention period <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </a>
-                <a className="text-[12.5px] text-[#e8572a] hover:underline cursor-pointer flex items-center gap-1">
-                  An ad blocker might be preventing recordings <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Right pane — no recording selected */}
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
-            <p className="text-[15px] font-semibold text-[#1a1a1a]">No recording selected</p>
-            <p className="text-[13px] text-[#9ca3af]">Please select a recording from the list on the left</p>
-            <button className="mt-1 px-4 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">Learn more about recordings</button>
-          </div>
-        </div>
-      )}
-
-      {/* ── COLLECTIONS TAB ── */}
-      {srTab === 'collections' && (
-        <div className="flex-1 overflow-y-auto flex flex-col">
-          {/* Search + filters row */}
-          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0" onClick={e => e.stopPropagation()}>
-            <div className="relative">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.1"/><path d="M9 9l2 2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              <input type="text" placeholder="Search for collections" className="pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6] w-56" />
-            </div>
-            <div className="flex-1" />
-            <div className="flex items-center gap-2">
-              <button className="flex items-center gap-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a]">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l2.5 2.5L10 3" stroke="#646462" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Pinned
-              </button>
-              <div className="flex items-center gap-1.5 text-[12px] text-[#646462]">
-                <span>Collection type:</span>
-                <div className="relative">
-                  <button onClick={() => setShowCollTypeDrop(!showCollTypeDrop)} className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-                    {collectionType} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                  </button>
-                  {showCollTypeDrop && (
-                    <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
-                      {['All','Smart','Custom'].map(t => (
-                        <button key={t} onClick={() => { setCollectionType(t); setShowCollTypeDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${collectionType===t?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{t}</button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 text-[12px] text-[#646462]">
-                <span>Last modified:</span>
-                <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="1" y="1.5" width="9" height="8" rx="1.5" stroke="#646462" strokeWidth="1"/><path d="M3.5 1v1.5M7.5 1v1.5M1 4.5h9" stroke="#646462" strokeWidth="1" strokeLinecap="round"/></svg>
-                  No date range override <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                </button>
-              </div>
-              <div className="flex items-center gap-1.5 text-[12px] text-[#646462]">
-                <span>Created by:</span>
-                <div className="relative">
-                  <button onClick={() => setShowCreatedDrop(!showCreatedDrop)} className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-                    {createdBy} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                  </button>
-                  {showCreatedDrop && (
-                    <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-32 py-1">
-                      {['Any user','Me'].map(u => (
-                        <button key={u} onClick={() => { setCreatedBy(u); setShowCreatedDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${createdBy===u?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{u}</button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Collections table */}
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[#e9eae6]">
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-20">
-                  <span className="flex items-center gap-1">COUNT <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 4v2.5M6 8v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg></span>
-                </th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">NAME</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
-                  <span className="flex items-center gap-1">CREATED BY <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1v7M2 3l2.5-2.5L7 3M2 6l2.5 2.5L7 6" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg></span>
-                </th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
-                  <span className="flex items-center gap-1">LAST MODIFIED <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 8V1M7 6.5L4.5 9 2 6.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg></span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {COLLECTIONS.map((coll, i) => (
-                <tr key={i} onClick={() => setSelectedCollection(coll.name)} className="border-b border-[#e9eae6] hover:bg-[#f9f9f7] cursor-pointer group">
-                  <td className="px-5 py-4">
-                    <div className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center">
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 7a2 2 0 114 0 2 2 0 01-4 0z" fill="white"/><path d="M5 7a2 2 0 114 0 2 2 0 01-4 0z" stroke="white"/></svg>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <p className="text-[13px] font-semibold text-[#1a1a1a] group-hover:text-[#3b59f6]">{coll.name}</p>
-                    <p className="text-[12px] text-[#9ca3af] mt-0.5">{coll.desc}</p>
-                  </td>
-                  <td className="px-5 py-4 text-[12px] text-[#9ca3af]">—</td>
-                  <td className="px-5 py-4 text-[12px] text-[#9ca3af]">—</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── WHAT TO WATCH TAB ── */}
-      {srTab === 'whattowatch' && (
-        <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6">
-          <p className="text-[13px] text-[#646462]">To get the most out of session replay, you just need to know where to start.</p>
-
-          {/* Top 2 cards */}
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { label:'LAST 7 DAYS MOST ACTIVE USERS' },
-              { label:'LAST 7 DAYS MOST ACTIVE PAGES' },
-            ].map(c => (
-              <div key={c.label} className="border border-[#e9eae6] rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="text-[#646462]"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 4.5v3M6.5 9.5v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                  <span className="text-[10px] font-bold text-[#646462] uppercase tracking-wide">{c.label}</span>
-                </div>
-                <p className="text-[12px] text-[#9ca3af]">No entries</p>
               </div>
             ))}
           </div>
+        </div>
+      )}
 
-          {/* Activity heatmap */}
-          <div>
-            <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-1">When are your users most active?</h2>
-            <p className="text-[13px] text-[#646462] mb-4">This heatmap shows you the busiest times of day for your recordings over the last 7 days.</p>
-            <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-3 w-32" />
-                    {['Thu 7','Fri 8','Sat 9','Sun 10','Mon 11','Tue 12','Today'].map(d => (
-                      <th key={d} className="px-4 py-3 text-[12px] font-semibold text-[#1a1a1a] text-center">{d}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {['00:00 - 04:00','04:00 - 08:00','08:00 - 12:00','12:00 - 16:00','16:00 - 20:00','20:00 - 00:00'].map(slot => (
-                    <tr key={slot}>
-                      <td className="px-4 py-2 text-[12px] text-[#646462] font-medium">{slot}</td>
-                      {[0,0,0,0,0,0,0].map((v, i) => (
-                        <td key={i} className="px-2 py-1 text-center">
-                          <div className="bg-[#dde4fd] rounded text-[12px] text-[#3b59f6] font-medium py-1.5 min-w-[48px]">0</div>
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      {/* Date range */}
+      <div className="px-3 py-3 border-b border-[#e9eae6]">
+        <p className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Rango</p>
+        <div className="grid grid-cols-2 gap-1">
+          {SR_RANGES.map(r => (
+            <button key={r.label} onClick={() => patch({ date_from: r.date_from })} className={`px-2 py-1.5 rounded text-[11px] text-left ${filters.date_from === r.date_from ? 'bg-[#eff2ff] text-[#3b59f6] font-medium' : 'text-[#646462] hover:bg-[#fafaf9]'}`}>{r.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Duration slider */}
+      <div className="px-3 py-3 border-b border-[#e9eae6]">
+        <p className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">DuraciÃ³n</p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input type="number" min={0} value={filters.duration_min} onChange={e => patch({ duration_min: Math.max(0, Number(e.target.value) || 0) })} className="w-16 px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]" />
+            <span className="text-xs text-[#646462]">a</span>
+            <input type="number" min={0} value={filters.duration_max ?? ''} onChange={e => patch({ duration_max: e.target.value ? Number(e.target.value) : null })} placeholder="âˆž" className="w-16 px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]" />
+            <span className="text-xs text-[#646462]">seg</span>
           </div>
+          <div className="flex gap-1">
+            {[10, 30, 60, 180].map(s => (
+              <button key={s} onClick={() => patch({ duration_min: s })} className="text-[10px] px-1.5 py-0.5 bg-[#fafaf9] hover:bg-[#f3f3f1] rounded">â‰¥{s}s</button>
+            ))}
+          </div>
+        </div>
+      </div>
 
-          {/* Filter templates */}
-          <div>
-            <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-1">Filter templates</h2>
-            <p className="text-[13px] text-[#646462] mb-5">Use our templates to find a focus area, then watch the filtered replays to see where users struggle, what could be made more clear, and other ways to improve.</p>
+      {/* Device */}
+      <div className="px-3 py-3 border-b border-[#e9eae6]">
+        <p className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Dispositivo</p>
+        <div className="flex gap-1">
+          {(['all', 'Desktop', 'Mobile', 'Tablet'] as const).map(d => (
+            <button key={d} onClick={() => patch({ device_type: d })} className={`flex-1 px-2 py-1 rounded text-[11px] ${filters.device_type === d ? 'bg-[#eff2ff] text-[#3b59f6] font-medium' : 'text-[#646462] hover:bg-[#fafaf9]'}`}>{d === 'all' ? 'Todos' : d}</button>
+          ))}
+        </div>
+      </div>
 
-            {/* B2B */}
-            <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">B2B</h3>
-            <div className="grid grid-cols-4 gap-3 mb-3">
-              {[
-                { icon:'⊙', name:'Signup flow',               desc:'Watch how users sign up for your website. Look for any areas or steps that cause friction.' },
-                { icon:'⊕', name:'Pricing page',              desc:'Watch how users navigate your pricing page. Look for any areas or steps that cause friction.' },
-                { icon:'↑', name:'Upgrade / subscribe flow',  desc:'Watch how users upgrade to the paid plan on your website. Look for any areas or steps that cause friction.' },
-                { icon:'▣', name:'Onboarding flow',           desc:'Watch how users onboard to your website. Look for any areas or steps that cause friction.' },
-              ].map(t => (
-                <div key={t.name} className="border border-[#e9eae6] rounded-xl p-4 hover:border-[#c8c9c4] cursor-pointer transition-colors">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[#e8572a] text-[14px]">{t.icon}</span>
-                    <span className="text-[13px] font-semibold text-[#e8572a]">{t.name}</span>
-                  </div>
-                  <p className="text-[12px] text-[#646462] leading-relaxed">{t.desc}</p>
-                </div>
-              ))}
+      {/* Boolean filters */}
+      <div className="px-3 py-3 border-b border-[#e9eae6] space-y-2">
+        <p className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Contenido</p>
+        {[
+          { k: 'has_errors',       l: 'Solo con errores de consola' },
+          { k: 'has_rage_clicks',  l: 'Solo con rageclicks' },
+          { k: 'unviewed_only',    l: 'Solo no vistos' },
+        ].map(opt => (
+          <label key={opt.k} className="flex items-center gap-2 text-xs cursor-pointer">
+            <input type="checkbox" checked={(filters as any)[opt.k]} onChange={e => patch({ [opt.k]: e.target.checked } as any)} className="accent-[#3b59f6]" />
+            <span className="text-[#1a1a18]">{opt.l}</span>
+          </label>
+        ))}
+      </div>
+
+      {/* Custom filters */}
+      <div className="px-3 py-3 border-b border-[#e9eae6] space-y-3">
+        <p className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Filtros avanzados</p>
+        <div>
+          <label className="block text-[10px] text-[#646462] mb-1">Persona (email / distinct_id)</label>
+          <input value={filters.person_filter} onChange={e => patch({ person_filter: e.target.value })} placeholder="user@example.com" className="w-full px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]" />
+        </div>
+        <div>
+          <label className="block text-[10px] text-[#646462] mb-1">URL contiene</label>
+          <input value={filters.url_filter} onChange={e => patch({ url_filter: e.target.value })} placeholder="/checkout" className="w-full px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6] font-mono" />
+        </div>
+        <div>
+          <label className="block text-[10px] text-[#646462] mb-1">Convertido (evento)</label>
+          <input value={filters.is_converted ?? ''} onChange={e => patch({ is_converted: e.target.value || null })} placeholder="$identify, purchaseâ€¦" className="w-full px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6] font-mono" />
+        </div>
+        <div>
+          <label className="block text-[10px] text-[#646462] mb-1">SesiÃ³n debe contener evento</label>
+          <input value={filters.event_filter} onChange={e => patch({ event_filter: e.target.value })} placeholder="signup_completed" className="w-full px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6] font-mono" />
+        </div>
+      </div>
+
+      {/* Sort */}
+      <div className="px-3 py-3 border-b border-[#e9eae6]">
+        <p className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Ordenar por</p>
+        <select value={filters.sort_by} onChange={e => patch({ sort_by: e.target.value as any })} className="w-full px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]">
+          <option value="recent">MÃ¡s recientes</option>
+          <option value="duration">Mayor duraciÃ³n</option>
+          <option value="click_count">MÃ¡s clicks</option>
+          <option value="console_errors">MÃ¡s errores de consola</option>
+        </select>
+      </div>
+
+      {/* Save filter */}
+      <div className="px-3 py-3 mt-auto">
+        {showSave ? (
+          <div className="flex gap-1">
+            <input autoFocus value={saveName} onChange={e => setSaveName(e.target.value)} placeholder="Nombre del filtro" className="flex-1 px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]" />
+            <button disabled={!saveName.trim()} onClick={() => { onSave(saveName.trim()); setSaveName(''); setShowSave(false); }} className="px-2 py-1 bg-[#1a1a18] text-white text-xs rounded disabled:opacity-50">OK</button>
+            <button onClick={() => setShowSave(false)} className="px-2 py-1 text-xs text-[#646462]">Ã—</button>
+          </div>
+        ) : (
+          <button onClick={() => setShowSave(true)} className="w-full px-2 py-1.5 text-xs text-[#3b59f6] hover:bg-[#eff2ff] rounded">
+            + Guardar filtro actual
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// â”€â”€ Player controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SrPlayerControls({ playing, onPlayPause, position, duration, onSeek, speed, onSpeedChange, onSkipInactive, skipInactive, onFullscreen }: {
+  playing: boolean;
+  onPlayPause: () => void;
+  position: number;
+  duration: number;
+  onSeek: (sec: number) => void;
+  speed: number;
+  onSpeedChange: (s: number) => void;
+  onSkipInactive: () => void;
+  skipInactive: boolean;
+  onFullscreen: () => void;
+}) {
+  const trackRef = React.useRef<HTMLDivElement>(null);
+  const pct = duration > 0 ? (position / duration) * 100 : 0;
+
+  function onTrackClick(e: React.MouseEvent<HTMLDivElement>) {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const ratio = (e.clientX - rect.left) / rect.width;
+    onSeek(Math.max(0, Math.min(duration, ratio * duration)));
+  }
+
+  return (
+    <div className="bg-[#1a1a18] text-white px-3 py-2.5 flex items-center gap-3">
+      <button onClick={onPlayPause} className="w-8 h-8 rounded-full bg-[#3b59f6] hover:bg-[#2a44d6] flex items-center justify-center flex-shrink-0">
+        {playing ? (
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><rect x="3" y="2" width="3" height="12"/><rect x="10" y="2" width="3" height="12"/></svg>
+        ) : (
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 2l9 6-9 6z"/></svg>
+        )}
+      </button>
+      <button onClick={() => onSeek(Math.max(0, position - 10))} className="text-white hover:text-[#3b59f6] text-xs" title="-10s">
+        <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M9 2v2.5a5.5 5.5 0 11-5.5 5.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/><path d="M9 5L11 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+      </button>
+      <button onClick={() => onSeek(Math.min(duration, position + 10))} className="text-white hover:text-[#3b59f6] text-xs" title="+10s">
+        <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M7 2v2.5a5.5 5.5 0 105.5 5.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/><path d="M7 5L5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+      </button>
+      <span className="text-[11px] font-mono text-[#9ca3af] flex-shrink-0">{srFormatDuration(position)} / {srFormatDuration(duration)}</span>
+      <div ref={trackRef} onClick={onTrackClick} className="flex-1 h-2 bg-[#2a2a28] rounded cursor-pointer relative">
+        <div className="absolute inset-y-0 left-0 bg-[#3b59f6] rounded" style={{ width: `${pct}%` }} />
+        <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow" style={{ left: `calc(${pct}% - 6px)` }} />
+      </div>
+      <select value={speed} onChange={e => onSpeedChange(Number(e.target.value))} className="bg-[#2a2a28] border border-[#3a3a38] rounded px-1 py-0.5 text-[11px] text-white focus:outline-none">
+        {[0.5, 1, 1.5, 2, 4].map(s => <option key={s} value={s}>{s}x</option>)}
+      </select>
+      <label className="flex items-center gap-1 text-[11px] text-[#9ca3af] cursor-pointer">
+        <input type="checkbox" checked={skipInactive} onChange={onSkipInactive} className="accent-[#3b59f6]" />
+        Saltar inactivo
+      </label>
+      <button onClick={onFullscreen} className="text-white hover:text-[#3b59f6]" title="Pantalla completa">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>
+      </button>
+    </div>
+  );
+}
+
+// â”€â”€ Activity panel tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SrActivityPanel({ recording, events, console, comments, person, onAddComment, onSeek }: {
+  recording: SrRecording;
+  events:    SrEvent[];
+  console:   SrConsoleLog[];
+  comments:  SrComment[];
+  person:    SrRecording['person'];
+  onAddComment: (text: string, at: number | null) => void;
+  onSeek:    (sec: number) => void;
+}) {
+  const [tab, setTab] = React.useState<'events' | 'console' | 'network' | 'person' | 'comments'>('events');
+  const [eventFilter, setEventFilter] = React.useState('');
+  const [commentText, setCommentText] = React.useState('');
+
+  const filteredEvents = events.filter(e => !eventFilter || (e.event + ' ' + (e.url ?? '')).toLowerCase().includes(eventFilter.toLowerCase()));
+
+  return (
+    <div className="flex flex-col h-full bg-white">
+      <div className="border-b border-[#e9eae6] flex items-center px-2 overflow-x-auto">
+        {[
+          { k: 'events',   l: `Eventos (${events.length})` },
+          { k: 'console',  l: `Consola (${console.length})` },
+          { k: 'network',  l: 'Red' },
+          { k: 'person',   l: 'Persona' },
+          { k: 'comments', l: `Comentarios (${comments.length})` },
+        ].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 pt-2.5 px-3 text-xs font-medium border-b-2 whitespace-nowrap ${tab === t.k ? 'border-[#3b59f6] text-[#3b59f6]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>{t.l}</button>
+        ))}
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {tab === 'events' && (
+          <>
+            <div className="p-2 border-b border-[#e9eae6]">
+              <input value={eventFilter} onChange={e => setEventFilter(e.target.value)} placeholder="Filtrar eventosâ€¦" className="w-full px-2 py-1 bg-[#fafaf9] border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]" />
             </div>
-            <div className="grid grid-cols-4 gap-3 mb-6">
-              <div className="border border-[#e9eae6] rounded-xl p-4 hover:border-[#c8c9c4] cursor-pointer transition-colors">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[#e8572a] text-[14px]">✦</span>
-                  <span className="text-[13px] font-semibold text-[#e8572a]">Feature usage</span>
-                </div>
-                <p className="text-[12px] text-[#646462] leading-relaxed">Think of a feature you want to improve. Watch how users interact with it, and see where they get stuck.</p>
+            <div className="divide-y divide-[#f3f3f1]">
+              {filteredEvents.length === 0 ? (
+                <p className="p-4 text-xs text-[#9ca3af] text-center italic">Sin eventos en esta sesiÃ³n.</p>
+              ) : filteredEvents.map((e, i) => {
+                const COLOR = { pageview: '#3b59f6', click: '#16a34a', rageclick: '#dc2626', error: '#dc2626', custom: '#a855f7', identify: '#f59e0b' };
+                return (
+                  <button key={i} onClick={() => onSeek(e.offset_ms / 1000)} className="w-full text-left px-3 py-2 hover:bg-[#fafaf9] flex items-start gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: COLOR[e.type] }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-[#1a1a18] truncate">{e.event}</p>
+                      {e.url && <p className="text-[10px] text-[#646462] truncate">{e.url}</p>}
+                    </div>
+                    <span className="text-[10px] text-[#9ca3af] flex-shrink-0 font-mono">{srFormatDuration(e.offset_ms / 1000)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {tab === 'console' && (
+          <div className="divide-y divide-[#f3f3f1] font-mono text-[11px]">
+            {console.length === 0 ? (
+              <p className="p-4 text-xs text-[#9ca3af] text-center italic font-sans">Sin logs de consola.</p>
+            ) : console.map((c, i) => {
+              const COLOR = { log: '#646462', info: '#3b59f6', warn: '#f59e0b', error: '#dc2626' };
+              return (
+                <button key={i} onClick={() => onSeek(c.offset_ms / 1000)} className="w-full text-left px-3 py-1.5 hover:bg-[#fafaf9] flex items-baseline gap-2">
+                  <span className="text-[9px] font-bold uppercase flex-shrink-0" style={{ color: COLOR[c.level] }}>{c.level}</span>
+                  <span className="text-[#1a1a18] flex-1 truncate">{c.message}</span>
+                  <span className="text-[9px] text-[#9ca3af] flex-shrink-0">{srFormatDuration(c.offset_ms / 1000)}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {tab === 'network' && (
+          <div className="p-4 text-center">
+            <p className="text-xs text-[#9ca3af] italic">Las peticiones de red se capturan solo si tienes habilitado <code className="bg-[#f3f3f1] text-[#3b59f6] px-1 rounded text-[10px] font-mono">capture_performance: true</code> en la SDK.</p>
+          </div>
+        )}
+        {tab === 'person' && person && (
+          <div className="p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#e8572a]/10 text-[#e8572a] flex items-center justify-center text-sm font-bold">{srPersonInitial(srPersonName(person, recording.distinct_id))}</div>
+              <div>
+                <p className="text-sm font-semibold text-[#1a1a18]">{srPersonName(person, recording.distinct_id)}</p>
+                {person.is_identified && <span className="text-[9px] bg-[#3b59f6] text-white px-1.5 py-0.5 rounded">Identificada</span>}
               </div>
             </div>
-
-            {/* B2C */}
-            <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">B2C</h3>
-            <div className="grid grid-cols-4 gap-3 mb-6">
-              {[
-                { icon:'✦', name:'Feature usage',   desc:'Think of a feature you want to improve. Watch how users interact with it, and see where they get stuck.' },
-                { icon:'⊕', name:'Purchase flow',   desc:'Watch how users purchase from your website. Look for any areas or steps that cause friction.' },
-                { icon:'⊙', name:'Product search',  desc:'Watch how users search for products on your website. Look for any areas or steps that cause friction.' },
-              ].map(t => (
-                <div key={t.name} className="border border-[#e9eae6] rounded-xl p-4 hover:border-[#c8c9c4] cursor-pointer transition-colors">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[#e8572a] text-[14px]">{t.icon}</span>
-                    <span className="text-[13px] font-semibold text-[#e8572a]">{t.name}</span>
-                  </div>
-                  <p className="text-[12px] text-[#646462] leading-relaxed">{t.desc}</p>
+            <div className="space-y-1 text-xs">
+              {(person.distinct_ids ?? []).slice(0, 5).map(d => (
+                <div key={d} className="flex items-start gap-2 py-1 border-b border-[#f3f3f1]">
+                  <span className="text-[#9ca3af] flex-shrink-0">distinct_id</span>
+                  <span className="font-mono text-[#1a1a18] flex-1 break-all">{d}</span>
+                </div>
+              ))}
+              {Object.entries(person.properties ?? {}).slice(0, 30).map(([k, v]) => (
+                <div key={k} className="flex items-start gap-2 py-1 border-b border-[#f3f3f1]">
+                  <span className="font-mono text-[#3b59f6] flex-shrink-0 w-1/3 truncate" title={k}>{k}</span>
+                  <span className="text-[#1a1a18] flex-1 break-all">{typeof v === 'object' ? JSON.stringify(v).slice(0, 200) : String(v).slice(0, 200)}</span>
                 </div>
               ))}
             </div>
-
-            {/* More */}
-            <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">More</h3>
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { icon:'⚑', name:'A/B test results',  desc:"Watch how users interact with your A/B test. Look for any areas or steps that cause friction." },
-                { icon:'⊘', name:'Rageclicks',         desc:"See where users are \"rageclicking\" on your website to find things that don't work as expected." },
-                { icon:'▣', name:'Scattershot',        desc:'Watch all recent replays, and see where users are getting stuck.' },
-                { icon:'⊙', name:'Person property',   desc:'Watch all replays for users with a specific property, like a specific email address.' },
-                { icon:'☐', name:'Mobile devices',     desc:'Watch replays from mobile device web browsers to look for problems with your responsive design.' },
-                { icon:'✦', name:'Most active users',  desc:'Watch recordings of the most active sessions. Lots of valuable insights, guaranteed!' },
-              ].map(t => (
-                <div key={t.name} className="border border-[#e9eae6] rounded-xl p-4 hover:border-[#c8c9c4] cursor-pointer transition-colors">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[#e8572a] text-[14px]">{t.icon}</span>
-                    <span className="text-[13px] font-semibold text-[#e8572a]">{t.name}</span>
+          </div>
+        )}
+        {tab === 'comments' && (
+          <>
+            <div className="p-3 border-b border-[#e9eae6]">
+              <textarea value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="AÃ±ade un comentarioâ€¦" rows={2} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6] resize-none" />
+              <button disabled={!commentText.trim()} onClick={() => { onAddComment(commentText, null); setCommentText(''); }} className="mt-1.5 px-2 py-1 bg-[#1a1a18] text-white text-xs rounded disabled:opacity-50">Publicar</button>
+            </div>
+            <div className="divide-y divide-[#f3f3f1]">
+              {comments.length === 0 ? (
+                <p className="p-4 text-xs text-[#9ca3af] text-center italic">Sin comentarios.</p>
+              ) : comments.map(c => (
+                <div key={c.id} className="px-3 py-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-semibold text-[#1a1a18]">{c.author}</span>
+                    <span className="text-[10px] text-[#9ca3af]">{new Date(c.ts).toLocaleString('es-ES')}</span>
                   </div>
-                  <p className="text-[12px] text-[#646462] leading-relaxed">{t.desc}</p>
+                  <p className="text-xs text-[#1a1a18]">{c.text}</p>
+                  {c.offset_ms != null && <button onClick={() => onSeek(c.offset_ms! / 1000)} className="mt-1 text-[10px] text-[#3b59f6] hover:underline">â–¶ Ir a {srFormatDuration(c.offset_ms / 1000)}</button>}
                 </div>
               ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// â”€â”€ Player view (3-pane: mini list / player / activity) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SrPlayerView({ recording, onBack, recordings, onSelectRecording, onDelete }: {
+  recording: SrRecording;
+  onBack: () => void;
+  recordings: SrRecording[];
+  onSelectRecording: (r: SrRecording) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [playing, setPlaying] = React.useState(true);
+  const [position, setPosition] = React.useState(0);
+  const [speed, setSpeed] = React.useState(1);
+  const [skipInactive, setSkipInactive] = React.useState(true);
+  const [showShare, setShowShare] = React.useState(false);
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [events, setEvents] = React.useState<SrEvent[]>([]);
+  const [consoleLogs, setConsoleLogs] = React.useState<SrConsoleLog[]>([]);
+  const [comments, setComments] = React.useState<SrComment[]>([]);
+  const [loadingActivity, setLoadingActivity] = React.useState(false);
+  const playerRef = React.useRef<HTMLDivElement>(null);
+
+  const duration = recording.duration ?? 60;
+
+  // Simulated playback timer
+  React.useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => {
+      setPosition(p => {
+        const next = p + speed * 0.5;
+        if (next >= duration) { setPlaying(false); return duration; }
+        return next;
+      });
+    }, 500);
+    return () => clearInterval(id);
+  }, [playing, speed, duration]);
+
+  // Load activity for the recording
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoadingActivity(true);
+    setPosition(0);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const startMs = new Date(recording.start_time).getTime();
+        const escId   = recording.distinct_id.replace(/'/g, "''");
+        const escSes  = recording.id.replace(/'/g, "''");
+        const hql = `
+          SELECT timestamp, event, toString(properties.$current_url) AS url, toString(properties.$el_text) AS el, properties
+          FROM events
+          WHERE distinct_id = '${escId}'
+            AND timestamp >= toDateTime('${recording.start_time}') - INTERVAL 1 MINUTE
+            AND timestamp <= toDateTime('${recording.end_time}') + INTERVAL 1 MINUTE
+          ORDER BY timestamp ASC
+          LIMIT 500
+        `;
+        const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+        const cols = res.columns ?? [];
+        const idx = (n: string) => cols.indexOf(n);
+        const evs: SrEvent[] = [];
+        const cons: SrConsoleLog[] = [];
+        for (const r of res.results ?? []) {
+          const ts   = String(r[idx('timestamp')]);
+          const ev   = String(r[idx('event')]);
+          const url  = String(r[idx('url')] ?? '');
+          const el   = String(r[idx('el')] ?? '');
+          const props = r[idx('properties')] ?? {};
+          const off  = new Date(ts).getTime() - startMs;
+          const type: SrEvent['type'] = ev === '$pageview' ? 'pageview' : ev === '$autocapture' ? 'click' : ev === '$rageclick' ? 'rageclick' : ev === '$exception' ? 'error' : ev === '$identify' ? 'identify' : 'custom';
+          evs.push({ timestamp: ts, event: ev, url, element: el, properties: props, type, offset_ms: Math.max(0, off) });
+          // Console logs from properties
+          if (props.$console_log_level || props.console_log_level) {
+            cons.push({ timestamp: ts, level: (props.$console_log_level || props.console_log_level || 'log') as any, message: String(props.$console_message || props.console_message || ''), offset_ms: Math.max(0, off) });
+          }
+          if (ev === '$exception') {
+            cons.push({ timestamp: ts, level: 'error', message: String(props.$exception_message || ''), offset_ms: Math.max(0, off) });
+          }
+        }
+        if (!cancelled) { setEvents(evs); setConsoleLogs(cons); }
+      } catch { /* silent */ }
+      finally { if (!cancelled) setLoadingActivity(false); }
+    })();
+    // Load comments from localStorage
+    try {
+      const raw = localStorage.getItem(`wa-sr-comments-${recording.id}`);
+      if (raw && !cancelled) setComments(JSON.parse(raw));
+    } catch {}
+    return () => { cancelled = true; };
+  }, [recording]);
+
+  function addComment(text: string, at: number | null) {
+    const c: SrComment = { id: crypto.randomUUID(), ts: Date.now(), author: 'TÃº', text, offset_ms: at };
+    const next = [c, ...comments];
+    setComments(next);
+    try { localStorage.setItem(`wa-sr-comments-${recording.id}`, JSON.stringify(next)); } catch {}
+  }
+
+  async function handleFullscreen() {
+    try { await playerRef.current?.requestFullscreen(); } catch {}
+  }
+
+  // Build event markers on timeline
+  const totalMs = duration * 1000;
+
+  return (
+    <div className="flex-1 flex min-h-0 overflow-hidden bg-[#f9f9f7]">
+      {/* Mini recordings list */}
+      <div className="w-72 border-r border-[#e9eae6] bg-white flex flex-col flex-shrink-0">
+        <div className="px-3 py-2 border-b border-[#e9eae6] flex items-center justify-between">
+          <button onClick={onBack} className="text-xs text-[#3b59f6] hover:underline flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Volver a la lista
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {recordings.map(r => {
+            const active = r.id === recording.id;
+            return (
+              <button key={r.id} onClick={() => onSelectRecording(r)} className={`w-full text-left px-3 py-2 border-b border-[#f3f3f1] hover:bg-[#fafaf9] ${active ? 'bg-[#eff2ff] border-l-2 border-l-[#3b59f6]' : ''}`}>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <div className="w-6 h-6 rounded-full bg-[#e8572a]/10 text-[#e8572a] flex items-center justify-center text-[10px] font-bold flex-shrink-0">{srPersonInitial(srPersonName(r.person, r.distinct_id))}</div>
+                  <span className="text-xs font-medium text-[#1a1a18] truncate">{srPersonName(r.person, r.distinct_id)}</span>
+                  {!r.viewed && <span className="w-1.5 h-1.5 bg-[#3b59f6] rounded-full ml-auto flex-shrink-0" />}
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-[#9ca3af]">
+                  <span>{srFormatDuration(r.duration)}</span>
+                  <span>Â·</span>
+                  <span>{formatRelativeTime(r.start_time)}</span>
+                  {(r.console_error_count ?? 0) > 0 && <span className="text-[#dc2626]">âš  {r.console_error_count}</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Center: player */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        {/* Player header */}
+        <div className="bg-white px-4 py-2.5 border-b border-[#e9eae6] flex items-center gap-3 flex-shrink-0">
+          <div className="w-8 h-8 rounded-full bg-[#e8572a]/10 text-[#e8572a] flex items-center justify-center text-sm font-bold flex-shrink-0">{srPersonInitial(srPersonName(recording.person, recording.distinct_id))}</div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-[#1a1a18] truncate">{srPersonName(recording.person, recording.distinct_id)}</p>
+            <p className="text-[10px] text-[#9ca3af]">{formatTime(recording.start_time)} Â· {srFormatDuration(recording.duration)}</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setShowShare(true)} title="Compartir" className="p-1.5 hover:bg-[#fafaf9] rounded text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="4" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="3.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="12.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 7l5-2.5M5.5 9l5 2.5" stroke="currentColor" strokeWidth="1.3"/></svg>
+            </button>
+            <button onClick={() => setShowSettings(true)} title="Ajustes" className="p-1.5 hover:bg-[#fafaf9] rounded text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1v2M8 13v2M14 8h-2M4 8H2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            </button>
+            <button onClick={() => { if (confirm('Â¿Eliminar esta grabaciÃ³n?')) onDelete(recording.id); }} title="Eliminar" className="p-1.5 hover:bg-[#fee2e2] rounded text-[#646462] hover:text-[#dc2626]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 5h8l-1 9H5zM6 5V3h4v2M2 5h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Player canvas */}
+        <div ref={playerRef} className="flex-1 bg-[#1a1a18] flex items-center justify-center relative min-h-0">
+          <div className="text-center text-[#9ca3af] max-w-md px-6">
+            <div className="w-20 h-20 rounded-full bg-[#2a2a28] flex items-center justify-center mx-auto mb-4">
+              <svg viewBox="0 0 24 24" className="w-10 h-10"><path d="M5 5l14 7-14 7z" fill="currentColor"/></svg>
+            </div>
+            <h3 className="text-base font-semibold text-white mb-1">Player de sesiÃ³n</h3>
+            <p className="text-xs">El reproductor rrweb se renderiza aquÃ­ con los snapshots de <code className="bg-[#2a2a28] px-1 rounded font-mono text-[#3b59f6]">/session_recordings/{recording.id}/snapshots/</code>.</p>
+            <p className="text-xs mt-2 text-[#646462]">URL inicial: <span className="font-mono">{recording.start_url || 'â€”'}</span></p>
+          </div>
+          {loadingActivity && (
+            <div className="absolute top-3 right-3 bg-[#2a2a28]/90 text-white px-3 py-1.5 rounded text-xs flex items-center gap-2">
+              <div className="w-3 h-3 border-2 border-[#3b59f6] border-t-transparent rounded-full animate-spin" />
+              Cargando actividadâ€¦
+            </div>
+          )}
+        </div>
+
+        {/* Timeline with event markers */}
+        <div className="bg-white px-4 pt-2 pb-1 border-t border-[#e9eae6] flex-shrink-0">
+          <div className="relative h-8 mb-1">
+            {events.map((e, i) => {
+              const left = totalMs > 0 ? (e.offset_ms / totalMs) * 100 : 0;
+              const COLOR = { pageview: '#3b59f6', click: '#16a34a', rageclick: '#dc2626', error: '#dc2626', custom: '#a855f7', identify: '#f59e0b' };
+              return (
+                <button key={i} onClick={() => setPosition(e.offset_ms / 1000)} className="absolute top-1 w-1 h-5 rounded hover:h-7 transition-all" style={{ left: `${left}%`, backgroundColor: COLOR[e.type] }} title={`${e.event} @ ${srFormatDuration(e.offset_ms / 1000)}`} />
+              );
+            })}
+          </div>
+          <SrActivityBar events={events} totalMs={totalMs} />
+        </div>
+
+        {/* Controls */}
+        <div className="flex-shrink-0">
+          <SrPlayerControls
+            playing={playing}
+            onPlayPause={() => setPlaying(p => !p)}
+            position={position}
+            duration={duration}
+            onSeek={setPosition}
+            speed={speed}
+            onSpeedChange={setSpeed}
+            onSkipInactive={() => setSkipInactive(s => !s)}
+            skipInactive={skipInactive}
+            onFullscreen={handleFullscreen}
+          />
+        </div>
+      </div>
+
+      {/* Right: activity panel */}
+      <div className="w-[340px] border-l border-[#e9eae6] flex-shrink-0">
+        <SrActivityPanel
+          recording={recording}
+          events={events}
+          console={consoleLogs}
+          comments={comments}
+          person={recording.person}
+          onAddComment={addComment}
+          onSeek={setPosition}
+        />
+      </div>
+
+      {/* Share modal */}
+      {showShare && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setShowShare(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[480px] max-w-[92vw] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#1a1a18]">Compartir grabaciÃ³n</h2>
+              <button onClick={() => setShowShare(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+            </div>
+            <div className="p-5 space-y-3 text-sm">
+              <div>
+                <label className="block text-xs font-medium text-[#1a1a18] mb-1">URL pÃºblica</label>
+                <div className="flex gap-1">
+                  <input readOnly value={`${window.location.origin}/replay/${recording.id}`} className="flex-1 px-2 py-1.5 border border-[#e9eae6] rounded text-xs font-mono bg-[#fafaf9]" />
+                  <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/replay/${recording.id}`)} className="px-3 py-1.5 bg-[#1a1a18] text-white text-xs rounded">Copiar</button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#1a1a18] mb-1">Embed (iframe)</label>
+                <textarea readOnly value={`<iframe src="${window.location.origin}/replay/${recording.id}/embed" width="800" height="600" />`} rows={3} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-[10px] font-mono bg-[#fafaf9]" />
+              </div>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" className="accent-[#3b59f6]" />
+                Requerir autenticaciÃ³n de PostHog para ver
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setShowSettings(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-[92vw] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#1a1a18]">Ajustes de reproducciÃ³n</h2>
+              <button onClick={() => setShowSettings(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+            </div>
+            <div className="p-5 space-y-3 text-sm">
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={skipInactive} onChange={() => setSkipInactive(s => !s)} className="accent-[#3b59f6]" /> Saltar tiempo inactivo automÃ¡ticamente</label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" defaultChecked className="accent-[#3b59f6]" /> Mostrar marcadores de eventos en timeline</label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" defaultChecked className="accent-[#3b59f6]" /> Sincronizar consola y player</label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="accent-[#3b59f6]" /> Mostrar cursor del usuario</label>
+              <div>
+                <label className="block text-xs text-[#646462] mb-1">Velocidad por defecto</label>
+                <select defaultValue="1" className="w-full px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]">
+                  {[0.5, 1, 1.5, 2, 4].map(s => <option key={s} value={s}>{s}x</option>)}
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -31575,11 +31878,339 @@ function WAAppSessionReplayView() {
   );
 }
 
-// ── WAAppSessionReplayCollectionView (drilldown) embedded via selectedCollection state ──
-// Note: rendered inside WAAppSessionReplayView when selectedCollection !== null
+// â”€â”€ Playlist manager modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SrPlaylistManagerModal({ open, onClose, playlists, onCreate, onDelete }: { open: boolean; onClose: () => void; playlists: SrPlaylist[]; onCreate: (name: string) => void; onDelete: (id: number) => void }) {
+  const [name, setName] = React.useState('');
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-[92vw] max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <h2 className="text-base font-bold text-[#1a1a18]">Playlists de grabaciones</h2>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+        </div>
+        <div className="p-5 border-b border-[#e9eae6]">
+          <label className="block text-xs font-medium text-[#1a1a18] mb-1">Nueva playlist</label>
+          <div className="flex gap-2">
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Sesiones de checkout fallidas" className="flex-1 px-2 py-1.5 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]" />
+            <button disabled={!name.trim()} onClick={() => { onCreate(name.trim()); setName(''); }} className="px-3 py-1.5 bg-[#1a1a18] text-white text-xs rounded disabled:opacity-50">Crear</button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {playlists.length === 0 ? (
+            <p className="p-8 text-sm text-[#9ca3af] text-center italic">Sin playlists creadas</p>
+          ) : playlists.map(p => (
+            <div key={p.id} className="px-5 py-3 border-b border-[#e9eae6] flex items-center gap-3 hover:bg-[#fafaf9]">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-[#1a1a18]">{p.name}</p>
+                {p.description && <p className="text-xs text-[#646462]">{p.description}</p>}
+                <p className="text-[10px] text-[#9ca3af] mt-0.5">{p.recording_count ?? 0} grabaciones</p>
+              </div>
+              <button onClick={() => onDelete(p.id)} className="text-[#9ca3af] hover:text-[#dc2626] p-1">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 5h8l-1 9H5zM6 5V3h4v2M2 5h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// Main view
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function WAAppSessionReplayView() {
+  const DEFAULT_FILTERS: SrFilterState = {
+    date_from: '-7d', date_to: undefined,
+    duration_min: 0, duration_max: null,
+    has_errors: false, has_rage_clicks: false,
+    is_converted: null, device_type: 'all',
+    unviewed_only: false,
+    person_filter: '', url_filter: '', event_filter: '',
+    sort_by: 'recent',
+  };
 
-// ── WAAppSupportView ──────────────────────────────────────────────────────────
+  const [filters, setFilters] = React.useState<SrFilterState>(DEFAULT_FILTERS);
+  const [savedFilters, setSavedFilters] = React.useState<SrSavedFilter[]>([]);
+  const [playlists, setPlaylists] = React.useState<SrPlaylist[]>([]);
+  const [showPlaylists, setShowPlaylists] = React.useState(false);
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+  const [recordings, setRecordings] = React.useState<SrRecording[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [current, setCurrent] = React.useState<SrRecording | null>(null);
+  const [view, setView] = React.useState<'list' | 'grid'>('list');
+  const [showFilters, setShowFilters] = React.useState(true);
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('wa-sr-saved-filters');
+      if (raw) setSavedFilters(JSON.parse(raw));
+    } catch {}
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-sr-saved-filters', JSON.stringify(savedFilters)); } catch {}
+  }, [savedFilters]);
+
+  // â”€â”€ Load recordings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const params: any = {
+        limit: 100,
+        date_from: filters.date_from,
+        ...(filters.date_to ? { date_to: filters.date_to } : {}),
+        ...(filters.duration_min ? { session_recording_duration: JSON.stringify({ type: 'recording', key: 'duration', value: filters.duration_min, operator: 'gt' }) } : {}),
+        ...(filters.has_errors ? { console_log_filters: JSON.stringify([{ key: 'level', value: ['error'], operator: 'exact' }]) } : {}),
+      };
+      const res: any = await ph.posthog.recordings.list(params);
+      let rows: SrRecording[] = res.results ?? [];
+
+      // Client-side filtering
+      if (filters.unviewed_only)  rows = rows.filter(r => !r.viewed);
+      if (filters.duration_max != null) rows = rows.filter(r => r.duration <= filters.duration_max!);
+      if (filters.device_type !== 'all') rows = rows.filter(r => (r.person?.properties?.$device_type || '') === filters.device_type);
+      if (filters.person_filter.trim()) {
+        const q = filters.person_filter.toLowerCase();
+        rows = rows.filter(r => srPersonName(r.person, r.distinct_id).toLowerCase().includes(q));
+      }
+      if (filters.url_filter.trim()) {
+        const q = filters.url_filter.toLowerCase();
+        rows = rows.filter(r => (r.start_url || '').toLowerCase().includes(q));
+      }
+      if (filters.has_rage_clicks) rows = rows.filter(r => (r.matching_events ?? []).includes('$rageclick'));
+      if (filters.is_converted)    rows = rows.filter(r => (r.matching_events ?? []).includes(filters.is_converted!));
+      if (filters.event_filter)    rows = rows.filter(r => (r.matching_events ?? []).includes(filters.event_filter));
+
+      // Sort
+      if (filters.sort_by === 'duration')       rows.sort((a, b) => b.duration - a.duration);
+      if (filters.sort_by === 'click_count')    rows.sort((a, b) => (b.click_count ?? 0) - (a.click_count ?? 0));
+      if (filters.sort_by === 'console_errors') rows.sort((a, b) => (b.console_error_count ?? 0) - (a.console_error_count ?? 0));
+
+      setRecordings(rows);
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar grabaciones');
+    } finally { setLoading(false); }
+  }, [filters]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  // â”€â”€ Load playlists â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getProjectId()) await ph.bootstrapPostHog();
+        const res: any = await ph.phGet(`/api/projects/${ph.getProjectId()}/session_recording_playlists/`);
+        setPlaylists(res.results ?? []);
+      } catch { /* silent: endpoint may not exist */ }
+    })();
+  }, []);
+
+  async function createPlaylist(name: string) {
+    try {
+      const ph = await import('../api/posthog');
+      const created: any = await ph.phPost(`/api/projects/${ph.getProjectId()}/session_recording_playlists/`, { name });
+      setPlaylists(prev => [created, ...prev]);
+    } catch { alert('No se pudo crear la playlist.'); }
+  }
+  async function deletePlaylist(id: number) {
+    try {
+      const ph = await import('../api/posthog');
+      await ph.phDelete(`/api/projects/${ph.getProjectId()}/session_recording_playlists/${id}/`);
+      setPlaylists(prev => prev.filter(p => p.id !== id));
+    } catch {}
+  }
+  async function deleteRecording(id: string) {
+    try {
+      const ph = await import('../api/posthog');
+      await ph.phDelete(`/api/environments/${ph.getTeamId()}/session_recordings/${id}/`);
+      setRecordings(prev => prev.filter(r => r.id !== id));
+      if (current?.id === id) setCurrent(null);
+    } catch { alert('No se pudo eliminar.'); }
+  }
+  async function bulkDelete() {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Â¿Eliminar ${selectedIds.size} grabaciones?`)) return;
+    for (const id of selectedIds) {
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/environments/${ph.getTeamId()}/session_recordings/${id}/`); } catch {}
+    }
+    setRecordings(prev => prev.filter(r => !selectedIds.has(r.id)));
+    setSelectedIds(new Set());
+  }
+
+  function saveCurrentFilter(name: string) {
+    setSavedFilters(prev => [{ id: crypto.randomUUID(), name, filters: { ...filters } }, ...prev]);
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  // â”€â”€ If a recording is selected, show player view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  if (current) {
+    return <SrPlayerView recording={current} onBack={() => setCurrent(null)} recordings={recordings} onSelectRecording={setCurrent} onDelete={deleteRecording} />;
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="bg-white px-6 pt-4 pb-3 border-b border-[#e9eae6] flex-shrink-0 flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#e8572a]"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M6 5l5 3-5 3z" fill="currentColor"/></svg>
+            <h1 className="text-lg font-bold text-[#1a1a18]">Session replay</h1>
+          </div>
+          <p className="text-xs text-[#646462]">Re-vive las sesiones de tus usuarios con eventos, consola y comentarios.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowPlaylists(true)} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 inline mr-1"><rect x="2" y="3" width="12" height="2" fill="currentColor"/><rect x="2" y="7" width="9" height="2" fill="currentColor" opacity=".6"/><rect x="2" y="11" width="6" height="2" fill="currentColor" opacity=".4"/></svg>
+            Playlists ({playlists.length})
+          </button>
+          <button onClick={() => setShowFilters(s => !s)} className={`px-3 py-1.5 border rounded-lg text-xs ${showFilters ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'bg-white border-[#e9eae6] text-[#1a1a18]'}`}>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 inline mr-1"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            Filtros
+          </button>
+          <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
+            <button onClick={() => setView('list')} className={`px-2 py-1.5 text-xs ${view === 'list' ? 'bg-[#1a1a18] text-white' : 'bg-white text-[#646462]'}`}>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            </button>
+            <button onClick={() => setView('grid')} className={`px-2 py-1.5 text-xs ${view === 'grid' ? 'bg-[#1a1a18] text-white' : 'bg-white text-[#646462]'}`}>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><rect x="2" y="2" width="5" height="5" fill="currentColor"/><rect x="9" y="2" width="5" height="5" fill="currentColor"/><rect x="2" y="9" width="5" height="5" fill="currentColor"/><rect x="9" y="9" width="5" height="5" fill="currentColor"/></svg>
+          </button>
+          </div>
+          <button onClick={load} disabled={loading} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs disabled:opacity-50">
+            <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`}><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Filters panel */}
+        {showFilters && (
+          <div className="w-72 border-r border-[#e9eae6] bg-white flex-shrink-0">
+            <SrFilterPanel filters={filters} onChange={setFilters} onSave={saveCurrentFilter} savedFilters={savedFilters} onApplySaved={s => setFilters(s.filters)} onDeleteSaved={id => setSavedFilters(prev => prev.filter(s => s.id !== id))} />
+          </div>
+        )}
+
+        {/* Recordings */}
+        <div className="flex-1 overflow-auto p-4 min-w-0">
+          {error && <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b] mb-3">{error}</div>}
+
+          {/* Bulk actions */}
+          {selectedIds.size > 0 && (
+            <div className="bg-[#1a1a18] text-white rounded-lg px-3 py-2 mb-3 flex items-center justify-between text-xs">
+              <span>{selectedIds.size} grabaciones seleccionadas</span>
+              <div className="flex items-center gap-2">
+                <button className="px-2 py-1 bg-[#2a2a28] hover:bg-[#3a3a38] rounded">AÃ±adir a playlist</button>
+                <button onClick={bulkDelete} className="px-2 py-1 bg-[#dc2626] hover:bg-[#b91c1c] rounded">Eliminar</button>
+                <button onClick={() => setSelectedIds(new Set())} className="px-2 py-1 hover:bg-[#2a2a28] rounded">Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          {/* Stats */}
+          <div className="flex items-center gap-3 mb-3 text-xs text-[#646462]">
+            <span><strong className="text-[#1a1a18]">{recordings.length}</strong> grabaciones</span>
+            <span>Â·</span>
+            <span><strong className="text-[#1a1a18]">{recordings.filter(r => !r.viewed).length}</strong> sin ver</span>
+            <span>Â·</span>
+            <span><strong className="text-[#dc2626]">{recordings.reduce((s, r) => s + (r.console_error_count ?? 0), 0)}</strong> errores totales</span>
+          </div>
+
+          {loading ? (
+            <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-20 bg-white rounded-lg animate-pulse" />)}</div>
+          ) : recordings.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="w-16 h-16 rounded-full bg-[#f9f9f7] flex items-center justify-center mx-auto mb-3">
+                <svg viewBox="0 0 24 24" className="w-8 h-8 text-[#c4c4be]"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M9 8l7 4-7 4z" fill="currentColor"/></svg>
+              </div>
+              <p className="text-sm font-semibold text-[#1a1a18] mb-1">Sin grabaciones</p>
+              <p className="text-xs text-[#646462]">Ajusta los filtros o el rango de fechas.</p>
+            </div>
+          ) : view === 'list' ? (
+            <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                    <th className="w-8 px-3 py-2"><input type="checkbox" checked={selectedIds.size === recordings.length && recordings.length > 0} onChange={e => setSelectedIds(e.target.checked ? new Set(recordings.map(r => r.id)) : new Set())} className="accent-[#3b59f6]" /></th>
+                    <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Usuario</th>
+                    <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">DuraciÃ³n</th>
+                    <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">PÃ¡ginas</th>
+                    <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Clicks</th>
+                    <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Consola</th>
+                    <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Iniciada</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recordings.map(r => (
+                    <tr key={r.id} onClick={() => setCurrent(r)} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} className="accent-[#3b59f6]" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-[#e8572a]/10 text-[#e8572a] flex items-center justify-center text-[11px] font-bold flex-shrink-0">{srPersonInitial(srPersonName(r.person, r.distinct_id))}</div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-[#1a1a18] truncate flex items-center gap-1.5">
+                              {srPersonName(r.person, r.distinct_id)}
+                              {!r.viewed && <span className="w-1.5 h-1.5 bg-[#3b59f6] rounded-full" />}
+                            </p>
+                            {r.start_url && <p className="text-[10px] text-[#9ca3af] truncate" title={r.start_url}>{r.start_url}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-xs font-mono text-[#1a1a18]">{srFormatDuration(r.duration)}</td>
+                      <td className="px-3 py-2 text-xs text-[#646462]">â€”</td>
+                      <td className="px-3 py-2 text-xs text-[#646462]">{r.click_count ?? 'â€”'}</td>
+                      <td className="px-3 py-2 text-xs">
+                        {(r.console_error_count ?? 0) > 0 && <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded">âš  {r.console_error_count}</span>}
+                        {(r.console_warn_count ?? 0) > 0 && <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-1.5 py-0.5 rounded ml-1">âš  {r.console_warn_count}</span>}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-[#646462]" title={r.start_time}>{formatRelativeTime(r.start_time)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              {recordings.map(r => (
+                <button key={r.id} onClick={() => setCurrent(r)} className="bg-white border border-[#e9eae6] rounded-xl p-3 text-left hover:shadow-md hover:border-[#3b59f6] transition-all">
+                  <div className="aspect-video bg-[#f9f9f7] rounded-lg mb-2 flex items-center justify-center relative">
+                    <svg viewBox="0 0 24 24" className="w-8 h-8 text-[#c4c4be]"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M9 8l7 4-7 4z" fill="currentColor"/></svg>
+                    <span className="absolute bottom-1 right-1 text-[10px] bg-[#1a1a18] text-white px-1.5 py-0.5 rounded font-mono">{srFormatDuration(r.duration)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-5 h-5 rounded-full bg-[#e8572a]/10 text-[#e8572a] flex items-center justify-center text-[9px] font-bold">{srPersonInitial(srPersonName(r.person, r.distinct_id))}</div>
+                    <p className="text-xs font-medium text-[#1a1a18] truncate flex-1">{srPersonName(r.person, r.distinct_id)}</p>
+                    {!r.viewed && <span className="w-1.5 h-1.5 bg-[#3b59f6] rounded-full" />}
+                  </div>
+                  <p className="text-[10px] text-[#9ca3af] truncate">{r.start_url || 'â€”'}</p>
+                  <div className="flex items-center gap-2 mt-1 text-[10px]">
+                    {(r.console_error_count ?? 0) > 0 && <span className="text-[#dc2626]">âš  {r.console_error_count}</span>}
+                    <span className="text-[#9ca3af] ml-auto">{formatRelativeTime(r.start_time)}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <SrPlaylistManagerModal open={showPlaylists} onClose={() => setShowPlaylists(false)} playlists={playlists} onCreate={createPlaylist} onDelete={deletePlaylist} />
+    </div>
+  );
+}
+
 function WAAppSupportView() {
   type SupportTab = 'tickets' | 'settings';
   const [tab, setTab] = useState<SupportTab>('tickets');
@@ -54856,6 +55487,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
