@@ -50081,22 +50081,13 @@ function WASettingsView() {
           </div>
 
           {/* Custom channel type */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tipo de canal personalizado</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-            </div>
-            <p className="text-[13px] text-[#646462]">Define reglas personalizadas para categorizar las fuentes de tráfico en canales.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
-            <p className="text-[13px] text-[#646462]">Puedes crear tipos de canal personalizados definiendo reglas que coincidan con los eventos entrantes. Se usa la primera regla que coincida, y si ninguna regla coincide (o si no hay ninguna definida), se usa el <a href="#" className="text-[#e8572a] hover:underline">tipo de canal predeterminado</a>.</p>
-            <p className="text-[13px] text-[#646462]">Para depurar, prueba la <a href="#" className="text-[#e8572a] hover:underline">herramienta de exploración de atribución de sesiones ↗</a>.</p>
-            <div className="flex items-center gap-2 justify-end">
-              <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-                Añadir regla
-              </button>
-              <button className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar reglas de tipo de canal</button>
-            </div>
-          </div>
+          <CustomChannelRulesSection/>
+
+          {/* Conversion goals */}
+          <ConversionGoalsSection/>
+
+          {/* Pre-aggregated tables */}
+          <PreAggregatedTablesSection/>
 
           {/* Cookieless server hash mode */}
           <div className="space-y-3">
@@ -50168,6 +50159,223 @@ function WASettingsView() {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── CustomChannelRulesSection ──────────────────────────────────────────────
+  function CustomChannelRulesSection() {
+    const initial = team?.modifiers?.custom_channel_type_rules ?? [];
+    const [rules, setRules] = React.useState<any[]>(initial);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [name, setName] = React.useState('');
+    const [propName, setPropName] = React.useState('utm_source');
+    const [op, setOp] = React.useState<'icontains' | 'exact' | 'regex'>('icontains');
+    const [value, setValue] = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setRules(team?.modifiers?.custom_channel_type_rules ?? []); }, [team?.id]);
+    async function persist(next: any[]) {
+      setSaving(true);
+      const mods = { ...(team?.modifiers || {}), custom_channel_type_rules: next };
+      await patchTeam({ modifiers: mods });
+      setSaving(false);
+    }
+    async function add() {
+      if (!name.trim() || !value.trim()) return;
+      const next = [...rules, { channel_type: name.trim(), conditions: [{ key: propName, value: value.trim(), op }] }];
+      await persist(next);
+      setName(''); setValue(''); setShowAdd(false);
+    }
+    async function remove(i: number) {
+      await persist(rules.filter((_, idx) => idx !== i));
+    }
+    async function moveUp(i: number) {
+      if (i === 0) return;
+      const next = [...rules]; [next[i - 1], next[i]] = [next[i], next[i - 1]];
+      await persist(next);
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tipo de canal personalizado</h2>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Reglas para clasificar tráfico en canales personalizados"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          {saving && <span className="text-[11px] text-[#646462]">guardando…</span>}
+        </div>
+        <p className="text-[13px] text-[#646462]">Define reglas para categorizar fuentes de tráfico en canales propios. La primera regla que coincide gana.{' '}<a href="https://posthog.com/docs/web-analytics/dashboard#channel-type-rules" target="_blank" rel="noopener noreferrer" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+
+        {rules.length > 0 && (
+          <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-3 py-2.5 w-8"></th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Canal</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Condición</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {rules.map((r: any, i: number) => {
+                  const cond = r.conditions?.[0] ?? {};
+                  return (
+                    <tr key={i} className="hover:bg-[#fafaf9]">
+                      <td className="px-3 py-2.5">
+                        <button onClick={() => moveUp(i)} disabled={i === 0} className="text-[#646462] hover:text-[#1a1a1a] disabled:opacity-30">▲</button>
+                      </td>
+                      <td className="px-4 py-2.5 text-[12px] font-medium text-[#1a1a1a]">{r.channel_type}</td>
+                      <td className="px-4 py-2.5 text-[12px] text-[#646462]"><code className="font-mono">{cond.key} {cond.op} "{cond.value}"</code></td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button onClick={() => remove(i)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 grid grid-cols-2 gap-3 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Nombre del canal</p>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Affiliate" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Propiedad</p>
+              <input value={propName} onChange={e => setPropName(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Operador</p>
+              <select value={op} onChange={e => setOp(e.target.value as any)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none">
+                <option value="icontains">Contiene</option>
+                <option value="exact">Igual a</option>
+                <option value="regex">Regex</option>
+              </select>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Valor</p>
+              <input value={value} onChange={e => setValue(e.target.value)} placeholder="ref-partner" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div className="col-span-2 flex justify-end gap-2">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={add} disabled={!name.trim() || !value.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">Añadir regla</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir regla de canal</button>
+        )}
+      </div>
+    );
+  }
+
+  // ── ConversionGoalsSection ─────────────────────────────────────────────────
+  function ConversionGoalsSection() {
+    const goals = (team?.conversion_goals ?? []) as any[];
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [name, setName] = React.useState('');
+    const [eventName, setEventName] = React.useState('');
+    const [eventDefs, setEventDefs] = React.useState<any[]>([]);
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => {
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/event_definitions/?limit=50`);
+          setEventDefs(res?.results ?? []);
+        } catch {}
+      })();
+    }, []);
+    async function persist(next: any[]) {
+      setSaving(true);
+      await patchTeam({ conversion_goals: next });
+      setSaving(false);
+    }
+    async function add() {
+      if (!name.trim() || !eventName.trim()) return;
+      await persist([...goals, { name: name.trim(), event: eventName.trim() }]);
+      setName(''); setEventName(''); setShowAdd(false);
+    }
+    async function remove(i: number) {
+      await persist(goals.filter((_, idx) => idx !== i));
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Objetivos de conversión</h2>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Eventos que cuentan como conversión en Web Analytics"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          {saving && <span className="text-[11px] text-[#646462]">guardando…</span>}
+        </div>
+        <p className="text-[13px] text-[#646462]">Define qué eventos cuentan como conversión en los reportes de Web Analytics.</p>
+        {goals.length > 0 && (
+          <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Evento</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {goals.map((g: any, i: number) => (
+                  <tr key={i} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px] font-medium text-[#1a1a1a]">{g.name}</td>
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono">{g.event}</code></td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => remove(i)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 space-y-2 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Nombre del objetivo</p>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Sign up" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Evento</p>
+              <input list="conv-event-list" value={eventName} onChange={e => setEventName(e.target.value)} placeholder="user_signed_up" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+              <datalist id="conv-event-list">
+                {eventDefs.map((d: any) => <option key={d.id} value={d.name}/>)}
+              </datalist>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={add} disabled={!name.trim() || !eventName.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">Añadir</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir objetivo</button>
+        )}
+      </div>
+    );
+  }
+
+  // ── PreAggregatedTablesSection ─────────────────────────────────────────────
+  function PreAggregatedTablesSection() {
+    const [enabled, setEnabled] = React.useState<boolean>(team?.web_analytics_pre_aggregated_tables_enabled !== false);
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setEnabled(team?.web_analytics_pre_aggregated_tables_enabled !== false); }, [team?.id]);
+    async function toggle(v: boolean) {
+      setEnabled(v); setSaving(true);
+      await patchTeam({ web_analytics_pre_aggregated_tables_enabled: v });
+      setSaving(false);
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tablas pre-agregadas</h2>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Acelera las consultas de Web Analytics con tablas pre-computadas"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+        </div>
+        <p className="text-[13px] text-[#646462]">Cuando está activado, Web Analytics usa tablas pre-agregadas para consultas más rápidas. Desactívalo si necesitas datos en tiempo real.</p>
+        <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+          <span className="text-[13px] font-medium text-[#1a1a1a]">Usar tablas pre-agregadas {saving && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+          <Toggle checked={enabled} onChange={toggle}/>
         </div>
       </div>
     );
