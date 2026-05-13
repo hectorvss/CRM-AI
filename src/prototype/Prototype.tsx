@@ -45879,14 +45879,22 @@ function WASettingsView() {
     }
   }
 
+  const [showResetTokenModal, setShowResetTokenModal] = React.useState(false);
+  const [resetConfirmText, setResetConfirmText] = React.useState('');
+
+  function openResetTokenModal() {
+    setResetConfirmText('');
+    setShowResetTokenModal(true);
+  }
+
   async function resetProjectToken() {
-    if (!confirm('¿Regenerar el token del proyecto?\n\nEl token actual quedará inválido inmediatamente. Tendrás que actualizar todas tus SDKs.')) return;
+    if (resetConfirmText !== 'RESET') return;
     setResettingToken(true);
     try {
       const ph = await import('../api/posthog');
       const res: any = await ph.phPost(`/api/environments/${ph.getTeamId()}/reset_token/`, {});
       setTeam((t: any) => ({ ...t, api_token: res.api_token ?? res.token ?? t?.api_token }));
-      alert('Token regenerado. Actualiza tus SDKs.');
+      setShowResetTokenModal(false);
     } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
     finally { setResettingToken(false); }
   }
@@ -46142,7 +46150,7 @@ function WASettingsView() {
                         Descargar como <code className="text-[#3b59f6]">.json</code>
                       </button>
                       <div className="border-t border-[#f3f3f1] my-1" />
-                      <button onClick={() => { setShowTokenDownloadDrop(false); resetProjectToken(); }} disabled={resettingToken} className="w-full text-left px-3 py-1.5 text-xs hover:bg-[#fee2e2] text-[#dc2626] flex items-center gap-2 disabled:opacity-50">
+                      <button onClick={() => { setShowTokenDownloadDrop(false); openResetTokenModal(); }} disabled={resettingToken} className="w-full text-left px-3 py-1.5 text-xs hover:bg-[#fee2e2] text-[#dc2626] flex items-center gap-2 disabled:opacity-50">
                         <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${resettingToken ? 'animate-spin' : ''}`}><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
                         Regenerar token
                       </button>
@@ -46238,7 +46246,141 @@ function WASettingsView() {
               <a href="https://posthog.com/docs" target="_blank" rel="noreferrer" className="text-[12px] text-[#e8572a] font-medium hover:underline">Docs ↗</a>
             </div>
           </div>
+
+          {/* Authorized URLs */}
+          <AuthorizedUrlsSection />
+
+          {/* JS snippet version pin */}
+          <SnippetVersionPinSection />
         </div>
+
+        {/* Reset token modal */}
+        {showResetTokenModal && (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4" onClick={() => !resettingToken && setShowResetTokenModal(false)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white border-2 border-[#dc2626] rounded-[12px] shadow-2xl w-full max-w-md p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#dc2626]"><path d="M8 1L1 14h14L8 1zm0 5v4M8 12h.01" stroke="#dc2626" strokeWidth="1.5" fill="none"/></svg>
+                <h3 className="text-[15px] font-bold text-[#dc2626]">Regenerar token del proyecto</h3>
+              </div>
+              <p className="text-[13px] text-[#1a1a1a]">El token actual quedará <strong>inválido inmediatamente</strong> y todas tus SDKs dejarán de capturar eventos hasta que las actualices con el nuevo token.</p>
+              <p className="text-[12px] text-[#646462]">Para confirmar, escribe <code className="px-1.5 py-0.5 bg-[#f3f3f1] rounded font-mono text-[11px] font-bold text-[#dc2626]">RESET</code> abajo:</p>
+              <input
+                autoFocus
+                type="text"
+                value={resetConfirmText}
+                onChange={e => setResetConfirmText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && resetConfirmText === 'RESET') resetProjectToken(); }}
+                placeholder="RESET"
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] font-mono outline-none focus:border-[#dc2626]"
+              />
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => setShowResetTokenModal(false)} disabled={resettingToken} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+                <button
+                  onClick={resetProjectToken}
+                  disabled={resetConfirmText !== 'RESET' || resettingToken}
+                  className="h-8 px-4 bg-[#dc2626] text-white text-[12px] font-semibold rounded-lg hover:bg-[#b91c1c] disabled:opacity-50 disabled:cursor-not-allowed"
+                >{resettingToken ? 'Regenerando…' : 'Regenerar token'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Authorized URLs (project) ─────────────────────────────────────────────
+  function AuthorizedUrlsSection() {
+    const [urls, setUrls] = React.useState<string[]>(team?.app_urls ?? []);
+    const [newUrl, setNewUrl] = React.useState('');
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setUrls(team?.app_urls ?? []); }, [team?.id]);
+    async function add() {
+      const v = newUrl.trim(); if (!v) return;
+      const next = [...urls, v];
+      setUrls(next); setNewUrl(''); setShowAdd(false); setSaving(true);
+      await patchTeam({ app_urls: next }); setSaving(false);
+    }
+    async function remove(u: string) {
+      const next = urls.filter(x => x !== u);
+      setUrls(next); setSaving(true);
+      await patchTeam({ app_urls: next }); setSaving(false);
+    }
+    return (
+      <div className="pt-6 border-t border-[#e9eae6]">
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="text-[14px] font-bold text-[#1a1a1a]">URLs autorizadas</h3>
+          <span title="Las URLs autorizadas se usan en la barra de herramientas, experimentos web y analítica web." className="cursor-help">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+          </span>
+          {saving && <span className="text-[11px] text-[#646462]">guardando…</span>}
+        </div>
+        <p className="text-[13px] text-[#646462] mb-3">Define qué dominios pueden usar la barra de herramientas, experimentos y analítica web. Permite comodines con <code className="text-[11px] bg-[#f3f3f1] px-1 rounded">*</code>.</p>
+        {urls.length === 0 ? (
+          <p className="text-[12px] text-[#9ca3af] italic mb-3">Sin URLs autorizadas todavía.</p>
+        ) : (
+          <div className="border border-[#e9eae6] rounded-lg divide-y divide-[#e9eae6] mb-3">
+            {urls.map(u => (
+              <div key={u} className="flex items-center gap-3 px-3 py-2">
+                <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] truncate">{u}</code>
+                <button onClick={() => remove(u)} className="text-[#646462] hover:text-[#dc2626]" title="Eliminar">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {showAdd ? (
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              type="url"
+              value={newUrl}
+              onChange={e => setNewUrl(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') add(); if (e.key === 'Escape') { setShowAdd(false); setNewUrl(''); } }}
+              placeholder="https://ejemplo.com"
+              className="flex-1 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+            />
+            <button onClick={add} disabled={!newUrl.trim() || saving} className="h-9 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">Añadir</button>
+            <button onClick={() => { setShowAdd(false); setNewUrl(''); }} className="h-9 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Añadir URL autorizada</button>
+        )}
+      </div>
+    );
+  }
+
+  // ── JS Snippet Version Pin ────────────────────────────────────────────────
+  function SnippetVersionPinSection() {
+    const xs = team?.extra_settings || {};
+    const [pinned, setPinned] = React.useState<string>(xs.js_snippet_version ?? 'latest');
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setPinned(team?.extra_settings?.js_snippet_version ?? 'latest'); }, [team?.id]);
+    const versions = ['latest', '1.226.0', '1.225.0', '1.224.0', '1.223.0', '1.222.0', '1.221.0', '1.220.0'];
+    async function pick(v: string) {
+      setPinned(v); setSaving(true);
+      const next = { ...(team?.extra_settings || {}), js_snippet_version: v === 'latest' ? null : v };
+      await patchTeam({ extra_settings: next });
+      setSaving(false);
+    }
+    return (
+      <div className="pt-6 border-t border-[#e9eae6]">
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="text-[14px] font-bold text-[#1a1a1a]">Versión del snippet JS</h3>
+          <span title="Fija el snippet a una versión específica de posthog-js. 'latest' siempre carga la última." className="cursor-help">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+          </span>
+          {saving && <span className="text-[11px] text-[#646462]">guardando…</span>}
+        </div>
+        <p className="text-[13px] text-[#646462] mb-3">Por defecto cargamos la última versión. Fija una versión si quieres congelar el snippet (no recomendado salvo para reproducir bugs).</p>
+        <select
+          value={pinned}
+          onChange={e => pick(e.target.value)}
+          className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] cursor-pointer min-w-[200px]"
+        >
+          {versions.map(v => <option key={v} value={v}>{v === 'latest' ? 'latest (recomendado)' : v}</option>)}
+        </select>
       </div>
     );
   }
@@ -46684,10 +46826,27 @@ function WASettingsView() {
     const [saving, setSaving] = useState(false);
     const [savedMsg, setSavedMsg] = useState('');
     const [clearing, setClearing] = useState(false);
+    const [me, setMe] = React.useState<any>(null);
+    const [changelogEnabled, setChangelogEnabled] = React.useState<boolean>(!!(team?.extra_settings?.ai_changelog_enabled ?? true));
+    const [savingChangelog, setSavingChangelog] = React.useState(false);
     React.useEffect(() => {
       const v = (team?.extra_settings?.ai_memory as string) ?? '';
       setAiMemory(v);
+      setChangelogEnabled(team?.extra_settings?.ai_changelog_enabled !== false);
     }, [team?.id]);
+    React.useEffect(() => {
+      (async () => {
+        try { const ph = await import('../api/posthog'); setMe(await ph.posthog.me()); } catch {}
+      })();
+    }, []);
+    const myMembership = (me?.organization?.membership_level ?? me?.organization_memberships?.[0]?.level ?? 0);
+    const isAdmin = myMembership >= 8;
+    async function toggleChangelog(v: boolean) {
+      setChangelogEnabled(v); setSavingChangelog(true);
+      const next = { ...(team?.extra_settings || {}), ai_changelog_enabled: v };
+      await patchTeam({ extra_settings: next });
+      setSavingChangelog(false);
+    }
     async function saveMemory() {
       setSaving(true);
       const next = { ...(team?.extra_settings || {}), ai_memory: aiMemory };
@@ -46716,14 +46875,15 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462] mb-1.5">Clain AI recuerda automáticamente detalles sobre tu empresa y producto. Este contexto ayuda a nuestro asistente de IA a proporcionar respuestas y sugerencias relevantes. Si hay detalles que no quieres que Clain AI recuerde, puedes editarlos o eliminarlos a continuación.</p>
             <p className="text-[13px] text-[#646462] mb-4">Cuando la memoria supera los 5.000 caracteres, solo los primeros y últimos 2.500 caracteres son visibles para Clain AI. El tamaño máximo de memoria es de 10.000 caracteres.</p>
-            <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Memoria de Clain AI</p>
-            <div className="relative border border-[#e9eae6] rounded-lg overflow-hidden">
+            <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Memoria de Clain AI {!isAdmin && <span className="ml-2 px-1.5 py-0.5 bg-[#f3f3f1] text-[#646462] rounded text-[10px] font-normal">Solo admin</span>}</p>
+            <div className={`relative border border-[#e9eae6] rounded-lg overflow-hidden ${!isAdmin ? 'opacity-60' : ''}`}>
               <textarea
                 value={aiMemory}
                 onChange={e => setAiMemory(e.target.value.slice(0, maxChars))}
-                placeholder="¿Qué debería saber Clain AI sobre el Proyecto por defecto?"
+                placeholder={isAdmin ? '¿Qué debería saber Clain AI sobre el Proyecto por defecto?' : 'Solo los administradores pueden editar la memoria.'}
                 rows={5}
-                className="w-full px-3 py-2.5 text-[13px] outline-none resize-none bg-white"
+                disabled={!isAdmin}
+                className="w-full px-3 py-2.5 text-[13px] outline-none resize-none bg-white disabled:cursor-not-allowed"
               />
               <div className="flex justify-end px-3 py-1.5 border-t border-[#e9eae6] bg-[#fafaf9]">
                 <span className="text-[11px] text-[#646462]">{aiMemory.length} / {maxChars}</span>
@@ -46732,12 +46892,12 @@ function WASettingsView() {
             <div className="mt-3 flex items-center gap-3">
               <button
                 onClick={saveMemory}
-                disabled={saving || !dirty}
+                disabled={saving || !dirty || !isAdmin}
                 className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50 disabled:cursor-not-allowed"
               >{saving ? 'Guardando…' : 'Guardar memoria'}</button>
               <button
                 onClick={clearMemory}
-                disabled={clearing || !aiMemory}
+                disabled={clearing || !aiMemory || !isAdmin}
                 className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1] disabled:opacity-50 disabled:cursor-not-allowed"
               >{clearing ? 'Vaciando…' : 'Vaciar memoria'}</button>
               {savedMsg && <span className="text-[12px] text-[#16a34a]">✓ {savedMsg}</span>}
@@ -46750,7 +46910,28 @@ function WASettingsView() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
             </div>
             <p className="text-[13px] text-[#646462] mb-3">Consulta las últimas funcionalidades de Clain AI y controla si el registro de cambios aparece en la interfaz principal.</p>
-            <p className="text-[13px] text-[#9ca3af] italic">No hay entradas de registro disponibles. Vuelve más tarde para ver actualizaciones de las funcionalidades de Clain AI.</p>
+            <div className="flex items-center gap-2.5 mb-4">
+              <Toggle val={changelogEnabled} set={toggleChangelog}/>
+              <span className="text-[13px] text-[#1a1a1a]">Mostrar el botón "Novedades" en la interfaz principal {savingChangelog && <span className="text-[11px] text-[#646462]">guardando…</span>}</span>
+            </div>
+            <p className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide mt-4 mb-2">Últimas novedades</p>
+            <div className="border border-[#e9eae6] rounded-lg divide-y divide-[#e9eae6]">
+              {[
+                { tag: 'NUEVO', title: 'Generación de SQL con HogQL', desc: 'Clain AI ahora puede generar consultas HogQL desde lenguaje natural.', date: '2026-05-08' },
+                { tag: 'MEJORA', title: 'Memoria persistente entre sesiones', desc: 'El contexto guardado persiste entre todas tus conversaciones con Clain AI.', date: '2026-04-29' },
+                { tag: 'BETA', title: 'Análisis de cohortes asistido', desc: 'Clain AI sugiere cohortes basándose en patrones de comportamiento detectados.', date: '2026-04-12' },
+              ].map((entry, i) => (
+                <div key={i} className="px-4 py-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${entry.tag === 'NUEVO' ? 'bg-[#fff5f2] text-[#e8572a]' : entry.tag === 'BETA' ? 'bg-[#fef3c7] text-[#92400e]' : 'bg-[#f0f4ff] text-[#3b59f6]'}`}>{entry.tag}</span>
+                    <span className="text-[13px] font-semibold text-[#1a1a1a]">{entry.title}</span>
+                    <span className="text-[11px] text-[#646462] ml-auto">{entry.date}</span>
+                  </div>
+                  <p className="text-[12px] text-[#646462]">{entry.desc}</p>
+                </div>
+              ))}
+            </div>
+            <a href="https://posthog.com/changelog" target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-[12px] text-[#e8572a] hover:underline">Ver registro completo ↗</a>
           </div>
         </div>
       </div>
@@ -46759,10 +46940,13 @@ function WASettingsView() {
 
   // ── MCP Page ──────────────────────────────────────────────────────────────────
   function MCPPage() {
-    const [copied, setCopied] = React.useState(false);
+    const [copied, setCopied] = React.useState<string>('');
+    const [authMethod, setAuthMethod] = React.useState<'oauth' | 'apikey'>('oauth');
     const cmd = 'npx @clain/wizard mcp add';
-    async function copyCmd() {
-      try { await navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.example.com';
+    const mcpUrl = `${origin}/mcp`;
+    async function copyText(text: string, key: string) {
+      try { await navigator.clipboard.writeText(text); setCopied(key); setTimeout(() => setCopied(''), 2000); } catch {}
     }
     const clients = [
       { name: 'Claude Desktop', supported: true },
@@ -46770,7 +46954,11 @@ function WASettingsView() {
       { name: 'Cursor', supported: true },
       { name: 'VS Code', supported: true },
       { name: 'Zed', supported: true },
-      { name: 'Windsurf', supported: false },
+      { name: 'Windsurf', supported: true },
+      { name: 'Codex', supported: true },
+      { name: 'Lovable', supported: true },
+      { name: 'Replit', supported: true },
+      { name: 'v0', supported: true },
     ];
     return (
       <div className="flex-1 overflow-y-auto">
@@ -46788,11 +46976,52 @@ function WASettingsView() {
           <p className="text-[13px] text-[#646462]">Puedes instalar el servidor MCP de Clain en Cursor, Claude Code, Claude Desktop, VS Code y Zed ejecutando el siguiente comando:</p>
           <div className="flex items-center border border-[#e9eae6] rounded-lg bg-white overflow-hidden">
             <code className="flex-1 px-4 py-2.5 text-[13px] font-mono text-[#1a1a1a]">{cmd}</code>
-            <button onClick={copyCmd} title="Copiar al portapapeles" className="px-3 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] flex items-center gap-1.5">
+            <button onClick={() => copyText(cmd, 'cmd')} title="Copiar al portapapeles" className="px-3 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] flex items-center gap-1.5">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
-              {copied && <span className="text-[11px] text-[#16a34a]">✓</span>}
+              {copied === 'cmd' && <span className="text-[11px] text-[#16a34a]">✓</span>}
             </button>
           </div>
+
+          {/* MCP server URL */}
+          <div className="border border-[#e9eae6] rounded-lg p-4 bg-white">
+            <p className="text-[12px] font-semibold text-[#1a1a1a] mb-2">URL del servidor MCP</p>
+            <p className="text-[12px] text-[#646462] mb-2">Configura tu cliente MCP para conectarse a esta URL:</p>
+            <div className="flex items-center gap-2 bg-[#f3f3f1] rounded px-3 py-2">
+              <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] truncate">{mcpUrl}</code>
+              <button onClick={() => copyText(mcpUrl, 'url')} className="text-[#e8572a] text-[12px] hover:underline">{copied === 'url' ? '✓ Copiado' : 'Copiar'}</button>
+            </div>
+          </div>
+
+          {/* Auth method */}
+          <div className="border border-[#e9eae6] rounded-lg p-4 bg-white">
+            <p className="text-[12px] font-semibold text-[#1a1a1a] mb-2">Método de autenticación</p>
+            <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden mb-3 w-fit">
+              <button
+                onClick={() => setAuthMethod('oauth')}
+                className={`h-8 px-4 text-[12px] font-semibold ${authMethod === 'oauth' ? 'bg-[#fff5f2] text-[#e8572a]' : 'bg-white text-[#646462] hover:bg-[#f3f3f1]'}`}
+              >OAuth</button>
+              <button
+                onClick={() => setAuthMethod('apikey')}
+                className={`h-8 px-4 text-[12px] font-semibold border-l border-[#e9eae6] ${authMethod === 'apikey' ? 'bg-[#fff5f2] text-[#e8572a]' : 'bg-white text-[#646462] hover:bg-[#f3f3f1]'}`}
+              >API Key</button>
+            </div>
+            {authMethod === 'oauth' ? (
+              <p className="text-[12px] text-[#646462]">Tu cliente MCP iniciará un flujo OAuth contra Clain — sin necesidad de configurar tokens manualmente. Recomendado.</p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[12px] text-[#646462]">Usa una clave API personal con el preset <strong>"MCP Server"</strong>. Crea una en Cuenta → Claves API personales.</p>
+                <div className="bg-[#fafaf9] border border-[#e9eae6] rounded p-2.5 space-y-1.5">
+                  <p className="text-[11px] font-semibold text-[#646462]">Cabeceras requeridas:</p>
+                  <code className="block text-[11px] font-mono text-[#1a1a1a]">Authorization: Bearer phx_…</code>
+                  <code className="block text-[11px] font-mono text-[#1a1a1a]">x-posthog-organization-id: {organization?.id ?? '<org_id>'}</code>
+                  <code className="block text-[11px] font-mono text-[#1a1a1a]">x-posthog-project-id: {team?.id ?? '<project_id>'}</code>
+                </div>
+                <p className="text-[12px] text-[#646462]">Opcional: filtra por features/tools con query params:</p>
+                <code className="block text-[11px] font-mono text-[#1a1a1a] bg-[#fafaf9] border border-[#e9eae6] rounded px-2.5 py-1.5">?features=insights,flags&tools=insight-create,flag-update</code>
+              </div>
+            )}
+          </div>
+
           {/* Compatibility list */}
           <div className="border border-[#e9eae6] rounded-lg p-4 bg-[#fafaf9]">
             <p className="text-[12px] font-semibold text-[#1a1a1a] mb-2">Clientes compatibles</p>
@@ -46810,12 +47039,16 @@ function WASettingsView() {
             <p className="text-[12px] font-semibold text-[#1a1a1a] mb-2">Datos de conexión</p>
             <div className="space-y-1.5 text-[12px]">
               <div className="flex items-center gap-2">
-                <span className="text-[#646462] w-24">Project ID:</span>
+                <span className="text-[#646462] w-28">Project ID:</span>
                 <code className="flex-1 px-2 py-1 bg-[#f3f3f1] rounded font-mono text-[11px]">{team?.id ?? '—'}</code>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[#646462] w-24">Host:</span>
-                <code className="flex-1 px-2 py-1 bg-[#f3f3f1] rounded font-mono text-[11px] truncate">{typeof window !== 'undefined' ? window.location.origin : '—'}</code>
+                <span className="text-[#646462] w-28">Organization ID:</span>
+                <code className="flex-1 px-2 py-1 bg-[#f3f3f1] rounded font-mono text-[11px]">{organization?.id ?? '—'}</code>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[#646462] w-28">Host:</span>
+                <code className="flex-1 px-2 py-1 bg-[#f3f3f1] rounded font-mono text-[11px] truncate">{origin}</code>
               </div>
             </div>
           </div>
@@ -48978,13 +49211,17 @@ function WASettingsView() {
     const [subscriptions, setSubscriptions] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [showNewModal, setShowNewModal] = React.useState(false);
+    const [me, setMe] = React.useState<any>(null);
     React.useEffect(() => {
       let cancelled = false;
       (async () => {
         try {
           const ph = await import('../api/posthog');
-          const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/subscriptions/`);
-          if (!cancelled) setSubscriptions(res?.results ?? []);
+          const [subs, u] = await Promise.all([
+            ph.phGet(`/api/projects/${ph.getTeamId()}/subscriptions/`),
+            ph.posthog.me(),
+          ]);
+          if (!cancelled) { setSubscriptions((subs as any)?.results ?? []); setMe(u); }
         } catch { if (!cancelled) setSubscriptions([]); }
         finally { if (!cancelled) setLoading(false); }
       })();
@@ -48993,7 +49230,7 @@ function WASettingsView() {
     const filteredSubs = subscriptions.filter(s => {
       if (search && !((s.title ?? '').toLowerCase().includes(search.toLowerCase()))) return false;
       if (!showPaused && s.deleted) return false;
-      if (createdBy === 'me' && s.created_by?.email !== team?.created_by?.email && s.created_by?.uuid !== team?.created_by?.uuid) return false;
+      if (createdBy === 'me' && me && s.created_by?.email !== me.email && s.created_by?.uuid !== me.uuid) return false;
       return true;
     });
     return (
@@ -49122,7 +49359,7 @@ function WASettingsView() {
   function OrgGeneralPage() {
     const [orgName, setOrgName] = useState<string>(organization?.name ?? 'Hector prueba');
     const [aiAnalysis, setAiAnalysis] = useState<boolean>(!!organization?.is_ai_data_processing_approved);
-    const [discardIPDefault, setDiscardIPDefault] = useState<boolean>(!!organization?.default_experiment_stats_method);
+    const [discardIPDefault, setDiscardIPDefault] = useState<boolean>(!!organization?.default_discard_client_ip_data);
     const [savingName, setSavingName] = React.useState(false);
     const [nameSaved, setNameSaved] = React.useState(false);
     const [savingAI, setSavingAI] = React.useState(false);
@@ -50391,7 +50628,14 @@ function WASettingsView() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
             </div>
             <p className="text-[13px] text-[#646462]">Cuando detectamos que estás usando un nuevo producto, lo añadiremos automáticamente a tu barra lateral como sugerencia. También podemos sugerir productos relacionados cuando lancemos uno nuevo.</p>
-            <Toggle label="Sugerir nuevas aplicaciones automáticamente" checked={suggestApps} onChange={setSuggestApps} />
+            <Toggle label="Sugerir nuevas aplicaciones automáticamente" checked={suggestApps} onChange={async (v: boolean) => {
+              setSuggestApps(v); setSavingKey('app_suggestions');
+              try {
+                const next = { ...(me?.partial_notification_settings || {}), app_suggestions: v };
+                await patchUser({ partial_notification_settings: next });
+              } catch {}
+              setSavingKey('');
+            }} />
           </div>
 
           {/* Hedgehog / mascot mode */}
@@ -50426,11 +50670,11 @@ function WASettingsView() {
               <div>
                 <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">opciones</p>
                 <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a]">
-                  <input type="checkbox" checked={freeRoam} onChange={e => setFreeRoam(e.target.checked)} className="w-4 h-4 accent-[#3b59f6] rounded"/>
+                  <input type="checkbox" checked={freeRoam} onChange={e => { setFreeRoam(e.target.checked); patchHedgehog({ free_movement: e.target.checked }); }} className="w-4 h-4 accent-[#3b59f6] rounded"/>
                   Libre movimiento
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a] mt-1">
-                  <input type="checkbox" checked={keyboardControls} onChange={e => setKeyboardControls(e.target.checked)} className="w-4 h-4 accent-[#3b59f6] rounded"/>
+                  <input type="checkbox" checked={keyboardControls} onChange={e => { setKeyboardControls(e.target.checked); patchHedgehog({ controls_enabled: e.target.checked }); }} className="w-4 h-4 accent-[#3b59f6] rounded"/>
                   Controles de teclado (WASD / flechas)
                 </label>
               </div>
