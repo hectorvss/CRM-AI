@@ -49238,30 +49238,18 @@ function WASettingsView() {
               </div>
 
               <h3 className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Límites de grabación</h3>
-              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden divide-y divide-[#e9eae6]">
-                {[
-                  { label: 'Muestreo', note: '100% (por defecto)' },
-                  { label: 'Duración mínima', note: 'Sin mínimo' },
-                ].map((row, i) => (
-                  <div key={i} className="flex items-center gap-3 px-4 py-3">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
-                    <span className="flex items-center justify-center w-9 h-5 bg-[#fff0ec] border border-[#f9b4a0] rounded text-[10px] font-bold text-[#e8572a]">AND</span>
-                    <span className="text-[13px] text-[#1a1a1a] flex-1">{row.label}</span>
-                    <span className="text-[12px] text-[#646462]">{row.note}</span>
-                  </div>
-                ))}
-              </div>
+              <SessionReplayLimits/>
 
               <h3 className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Exclusiones de grabación</h3>
-              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
-                  <span className="text-[13px] text-[#1a1a1a] flex-1">Lista de bloqueo de URLs</span>
-                  <span className="text-[12px] text-[#646462]">No configurado</span>
-                </div>
-              </div>
+              <SessionReplayURLBlocklist/>
+
+              <h3 className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Activadores de grabación</h3>
+              <SessionReplayTriggers/>
             </div>
           </div>
+
+          {/* AI session summaries */}
+          <SessionReplayAISummaries/>
 
           {/* Privacy and masking */}
           <div className="space-y-3">
@@ -49358,6 +49346,266 @@ function WASettingsView() {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SessionReplayLimits ───────────────────────────────────────────────────
+  function SessionReplayLimits() {
+    const [sampleRate, setSampleRate] = React.useState<number>(Number(team?.session_recording_sample_rate ?? 1));
+    const [minDuration, setMinDuration] = React.useState<number>(Number(team?.session_recording_minimum_duration_milliseconds ?? 0));
+    const [saving, setSaving] = React.useState<string>('');
+    React.useEffect(() => {
+      setSampleRate(Number(team?.session_recording_sample_rate ?? 1));
+      setMinDuration(Number(team?.session_recording_minimum_duration_milliseconds ?? 0));
+    }, [team?.id]);
+    async function saveSample(v: number) {
+      setSampleRate(v); setSaving('sample');
+      await patchTeam({ session_recording_sample_rate: v });
+      setSaving('');
+    }
+    async function saveMin(v: number) {
+      setMinDuration(v); setSaving('min');
+      await patchTeam({ session_recording_minimum_duration_milliseconds: v });
+      setSaving('');
+    }
+    return (
+      <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden divide-y divide-[#e9eae6]">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+          <span className="flex items-center justify-center w-9 h-5 bg-[#fff0ec] border border-[#f9b4a0] rounded text-[10px] font-bold text-[#e8572a]">AND</span>
+          <span className="text-[13px] text-[#1a1a1a] flex-1">Tasa de muestreo</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="range" min="0.01" max="1" step="0.01"
+              value={sampleRate}
+              onChange={e => setSampleRate(Number(e.target.value))}
+              onMouseUp={() => saveSample(sampleRate)}
+              onTouchEnd={() => saveSample(sampleRate)}
+              className="w-32 accent-[#e8572a]"
+            />
+            <span className="text-[12px] font-mono font-semibold text-[#1a1a1a] w-12 text-right">{Math.round(sampleRate * 100)}%</span>
+            {saving === 'sample' && <span className="text-[11px] text-[#646462]">…</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+          <span className="flex items-center justify-center w-9 h-5 bg-[#fff0ec] border border-[#f9b4a0] rounded text-[10px] font-bold text-[#e8572a]">AND</span>
+          <span className="text-[13px] text-[#1a1a1a] flex-1">Duración mínima</span>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number" min="0" step="1000"
+              value={minDuration}
+              onChange={e => setMinDuration(Number(e.target.value))}
+              onBlur={() => saveMin(minDuration)}
+              className="w-24 h-8 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6] text-right"
+            />
+            <span className="text-[11px] text-[#646462]">ms</span>
+            {saving === 'min' && <span className="text-[11px] text-[#646462]">…</span>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SessionReplayURLBlocklist ──────────────────────────────────────────────
+  function SessionReplayURLBlocklist() {
+    const [list, setList] = React.useState<any[]>(team?.session_recording_url_blocklist_config ?? []);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [matching, setMatching] = React.useState<'regex' | 'exact'>('regex');
+    const [url, setUrl] = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setList(team?.session_recording_url_blocklist_config ?? []); }, [team?.id]);
+    async function persist(next: any[]) {
+      setSaving(true);
+      await patchTeam({ session_recording_url_blocklist_config: next });
+      setSaving(false);
+    }
+    async function add() {
+      if (!url.trim()) return;
+      const next = [...list, { url: url.trim(), matching }];
+      await persist(next);
+      setUrl(''); setShowAdd(false);
+    }
+    async function remove(i: number) {
+      await persist(list.filter((_, idx) => idx !== i));
+    }
+    return (
+      <div className="space-y-2">
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          {list.length === 0 ? (
+            <div className="flex items-center gap-3 px-4 py-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+              <span className="text-[13px] text-[#1a1a1a] flex-1">Lista de bloqueo de URLs</span>
+              <span className="text-[12px] text-[#646462]">No configurado {saving && <span className="ml-1">…</span>}</span>
+            </div>
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">URL / patrón</th>
+                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Matching</th>
+                  <th className="px-4 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {list.map((row: any, i: number) => (
+                  <tr key={i}>
+                    <td className="px-4 py-2 text-[12px]"><code className="font-mono">{row.url}</code></td>
+                    <td className="px-4 py-2 text-[11px] text-[#646462]"><span className="px-1.5 py-0.5 bg-[#f3f3f1] rounded font-semibold">{row.matching}</span></td>
+                    <td className="px-4 py-2 text-right">
+                      <button onClick={() => remove(i)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 flex gap-2 items-end bg-[#fafaf9]">
+            <div className="flex-1">
+              <p className="text-[11px] font-semibold text-[#646462] mb-1">URL o regex</p>
+              <input value={url} onChange={e => setUrl(e.target.value)} placeholder="/admin/*" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <select value={matching} onChange={e => setMatching(e.target.value as any)} className="h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+              <option value="regex">Regex</option>
+              <option value="exact">Exacto</option>
+            </select>
+            <button onClick={add} disabled={!url.trim()} className="h-9 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">Añadir</button>
+            <button onClick={() => { setShowAdd(false); setUrl(''); }} className="h-9 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">×</button>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="text-[12px] text-[#e8572a] hover:underline">+ Añadir URL al blocklist</button>
+        )}
+      </div>
+    );
+  }
+
+  // ── SessionReplayTriggers ──────────────────────────────────────────────────
+  function SessionReplayTriggers() {
+    const [urlTriggers, setUrlTriggers] = React.useState<any[]>(team?.session_recording_url_trigger_config ?? []);
+    const [eventTriggers, setEventTriggers] = React.useState<any[]>(team?.session_recording_event_trigger_config ?? []);
+    const [linkedFlag, setLinkedFlag] = React.useState<string>(team?.session_recording_linked_flag?.id ?? '');
+    const [flags, setFlags] = React.useState<any[]>([]);
+    const [saving, setSaving] = React.useState<string>('');
+    const [newUrl, setNewUrl] = React.useState('');
+    const [newEvent, setNewEvent] = React.useState('');
+    React.useEffect(() => {
+      setUrlTriggers(team?.session_recording_url_trigger_config ?? []);
+      setEventTriggers(team?.session_recording_event_trigger_config ?? []);
+      setLinkedFlag(team?.session_recording_linked_flag?.id ?? '');
+    }, [team?.id]);
+    React.useEffect(() => {
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/feature_flags/?limit=50`);
+          setFlags(res?.results ?? []);
+        } catch {}
+      })();
+    }, []);
+    async function addUrl() {
+      if (!newUrl.trim()) return;
+      const next = [...urlTriggers, { url: newUrl.trim(), matching: 'regex' }];
+      setUrlTriggers(next); setSaving('url');
+      await patchTeam({ session_recording_url_trigger_config: next });
+      setSaving(''); setNewUrl('');
+    }
+    async function addEvent() {
+      if (!newEvent.trim()) return;
+      const next = [...eventTriggers, { id: newEvent.trim() }];
+      setEventTriggers(next); setSaving('event');
+      await patchTeam({ session_recording_event_trigger_config: next });
+      setSaving(''); setNewEvent('');
+    }
+    async function pickFlag(id: string) {
+      setLinkedFlag(id); setSaving('flag');
+      const flag = flags.find(f => String(f.id) === id);
+      await patchTeam({ session_recording_linked_flag: flag ? { id: flag.id, key: flag.key } : null });
+      setSaving('');
+    }
+    return (
+      <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden divide-y divide-[#e9eae6]">
+        <div className="px-4 py-3 space-y-2">
+          <div className="flex items-center gap-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+            <span className="text-[13px] text-[#1a1a1a] flex-1">Patrón URL para iniciar grabación</span>
+            {saving === 'url' && <span className="text-[11px] text-[#646462]">…</span>}
+          </div>
+          {urlTriggers.length > 0 && (
+            <div className="space-y-1 ml-7">
+              {urlTriggers.map((t: any, i: number) => (
+                <div key={i} className="flex items-center gap-2 bg-[#fafaf9] px-2 py-1 rounded">
+                  <code className="text-[11px] font-mono text-[#1a1a1a] flex-1">{t.url}</code>
+                  <button onClick={async () => { const next = urlTriggers.filter((_, idx) => idx !== i); setUrlTriggers(next); await patchTeam({ session_recording_url_trigger_config: next }); }} className="text-[#dc2626] text-[11px] hover:underline">×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2 ml-7">
+            <input value={newUrl} onChange={e => setNewUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addUrl(); }} placeholder="/checkout/.*" className="flex-1 h-7 px-2 border border-[#e9eae6] rounded text-[11px] outline-none focus:border-[#3b59f6] font-mono"/>
+            <button onClick={addUrl} disabled={!newUrl.trim()} className="text-[11px] text-[#e8572a] hover:underline disabled:opacity-50">Añadir</button>
+          </div>
+        </div>
+        <div className="px-4 py-3 space-y-2">
+          <div className="flex items-center gap-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+            <span className="text-[13px] text-[#1a1a1a] flex-1">Evento que dispara grabación</span>
+            {saving === 'event' && <span className="text-[11px] text-[#646462]">…</span>}
+          </div>
+          {eventTriggers.length > 0 && (
+            <div className="space-y-1 ml-7">
+              {eventTriggers.map((t: any, i: number) => (
+                <div key={i} className="flex items-center gap-2 bg-[#fafaf9] px-2 py-1 rounded">
+                  <code className="text-[11px] font-mono text-[#1a1a1a] flex-1">{t.id}</code>
+                  <button onClick={async () => { const next = eventTriggers.filter((_, idx) => idx !== i); setEventTriggers(next); await patchTeam({ session_recording_event_trigger_config: next }); }} className="text-[#dc2626] text-[11px] hover:underline">×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2 ml-7">
+            <input value={newEvent} onChange={e => setNewEvent(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addEvent(); }} placeholder="$pageview, signup_completed…" className="flex-1 h-7 px-2 border border-[#e9eae6] rounded text-[11px] outline-none focus:border-[#3b59f6] font-mono"/>
+            <button onClick={addEvent} disabled={!newEvent.trim()} className="text-[11px] text-[#e8572a] hover:underline disabled:opacity-50">Añadir</button>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4-3 4 3M4 10l4 3 4-3"/></svg>
+          <span className="text-[13px] text-[#1a1a1a] flex-1">Feature flag vinculado</span>
+          <select value={linkedFlag} onChange={e => pickFlag(e.target.value)} className="h-7 px-2 border border-[#e9eae6] rounded text-[11px] bg-white outline-none min-w-[180px]">
+            <option value="">— Sin flag —</option>
+            {flags.map(f => <option key={f.id} value={f.id}>{f.key}</option>)}
+          </select>
+          {saving === 'flag' && <span className="text-[11px] text-[#646462]">…</span>}
+        </div>
+      </div>
+    );
+  }
+
+  // ── SessionReplayAISummaries ───────────────────────────────────────────────
+  function SessionReplayAISummaries() {
+    const xs = team?.extra_settings || {};
+    const [enabled, setEnabled] = React.useState<boolean>(!!xs.session_summaries_enabled);
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setEnabled(!!(team?.extra_settings?.session_summaries_enabled)); }, [team?.id]);
+    async function toggle(v: boolean) {
+      setEnabled(v); setSaving(true);
+      const next = { ...(team?.extra_settings || {}), session_summaries_enabled: v };
+      await patchTeam({ extra_settings: next });
+      setSaving(false);
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Resúmenes IA de sesión</h2>
+          <span className="px-1.5 py-0.5 bg-[#fef3c7] text-[#92400e] text-[10px] font-bold rounded border border-[#fde68a] uppercase">BETA</span>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Clain AI genera resúmenes automáticos de cada grabación"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+        </div>
+        <p className="text-[13px] text-[#646462]">Clain AI genera un resumen en lenguaje natural de cada sesión grabada, identificando objetivos del usuario y fricciones.</p>
+        <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+          <span className="text-[13px] font-medium text-[#1a1a1a]">Activar resúmenes IA {saving && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+          <Toggle checked={enabled} onChange={toggle}/>
         </div>
       </div>
     );
