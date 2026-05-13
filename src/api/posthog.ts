@@ -362,8 +362,20 @@ export const posthog = {
   organization: {
     get: () =>
       phGet(`/api/organizations/@current/`),
+    update: (data: any) =>
+      phPatch(`/api/organizations/@current/`, data),
     members: () =>
       phGet(`/api/organizations/@current/members/`),
+    invites: () =>
+      phGet(`/api/organizations/@current/invites/`),
+    invite: (data: any) =>
+      phPost(`/api/organizations/@current/invites/`, data),
+    deleteInvite: (id: string) =>
+      phDelete(`/api/organizations/@current/invites/${id}/`),
+    deleteMember: (uuid: string) =>
+      phDelete(`/api/organizations/@current/members/${uuid}/`),
+    updateMember: (uuid: string, data: any) =>
+      phPatch(`/api/organizations/@current/members/${uuid}/`, data),
   },
 
   // ── Actions ───────────────────────────────────────────────────────────────

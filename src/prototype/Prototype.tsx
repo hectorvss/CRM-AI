@@ -45815,6 +45815,28 @@ function WASettingsView() {
   const [team, setTeam] = React.useState<any | null>(null);
   const [teamLoading, setTeamLoading] = React.useState(true);
   const [teamError, setTeamError] = React.useState<string | null>(null);
+  const [organization, setOrganization] = React.useState<any | null>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const org: any = await (ph.posthog as any).organization?.get?.();
+        if (org) setOrganization(org);
+      } catch {}
+    })();
+  }, []);
+  async function patchOrganization(patch: any): Promise<boolean> {
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await (ph.posthog as any).organization?.update?.(patch);
+      if (updated) setOrganization(updated);
+      return true;
+    } catch (e: any) {
+      alert('Error al guardar la organización: ' + (e?.message ?? ''));
+      return false;
+    }
+  }
 
   React.useEffect(() => {
     let cancelled = false;
@@ -49098,9 +49120,35 @@ function WASettingsView() {
 
   // ── OrgGeneralPage ────────────────────────────────────────────────────────
   function OrgGeneralPage() {
-    const [orgName, setOrgName] = useState('Hector prueba');
-    const [aiAnalysis, setAiAnalysis] = useState(false);
-    const [discardIPDefault, setDiscardIPDefault] = useState(false);
+    const [orgName, setOrgName] = useState<string>(organization?.name ?? 'Hector prueba');
+    const [aiAnalysis, setAiAnalysis] = useState<boolean>(!!organization?.is_ai_data_processing_approved);
+    const [discardIPDefault, setDiscardIPDefault] = useState<boolean>(!!organization?.default_experiment_stats_method);
+    const [savingName, setSavingName] = React.useState(false);
+    const [nameSaved, setNameSaved] = React.useState(false);
+    const [savingAI, setSavingAI] = React.useState(false);
+    const [savingIP, setSavingIP] = React.useState(false);
+    React.useEffect(() => {
+      setOrgName(organization?.name ?? 'Hector prueba');
+      setAiAnalysis(!!organization?.is_ai_data_processing_approved);
+      setDiscardIPDefault(!!organization?.default_discard_client_ip_data ?? false);
+    }, [organization?.id]);
+    async function saveName() {
+      if (!orgName.trim() || orgName.trim() === (organization?.name || '')) return;
+      setSavingName(true);
+      const ok = await patchOrganization({ name: orgName.trim() });
+      setSavingName(false);
+      if (ok) { setNameSaved(true); setTimeout(() => setNameSaved(false), 2000); }
+    }
+    async function toggleAI(v: boolean) {
+      setAiAnalysis(v); setSavingAI(true);
+      await patchOrganization({ is_ai_data_processing_approved: v });
+      setSavingAI(false);
+    }
+    async function toggleIP(v: boolean) {
+      setDiscardIPDefault(v); setSavingIP(true);
+      await patchOrganization({ default_discard_client_ip_data: v });
+      setSavingIP(false);
+    }
 
     return (
       <div className="flex-1 overflow-y-auto">
@@ -49127,9 +49175,17 @@ function WASettingsView() {
                   type="text"
                   value={orgName}
                   onChange={e => setOrgName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveName(); }}
                   className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
                 />
-                <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={saveName}
+                    disabled={savingName || !orgName.trim() || orgName.trim() === (organization?.name || '')}
+                    className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >{savingName ? 'Guardando…' : 'Guardar'}</button>
+                  {nameSaved && <span className="text-[12px] text-[#16a34a]">✓ Guardado</span>}
+                </div>
               </div>
             </div>
           </div>
@@ -49150,8 +49206,8 @@ function WASettingsView() {
               Esta función no cumple con HIPAA y no está destinada al procesamiento de Información de Salud Protegida ("PHI"). Cualquier Acuerdo de Socio Comercial ("BAA") que hayas firmado con Clain no aplica a esta funcionalidad. Eres responsable de garantizar que tu uso cumple con las leyes y regulaciones aplicables.
             </p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar funciones de análisis de datos de Clain AI</span>
-              <Toggle checked={aiAnalysis} onChange={setAiAnalysis}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar funciones de análisis de datos de Clain AI {savingAI && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={aiAnalysis} onChange={toggleAI}/>
             </div>
           </div>
 
@@ -49165,8 +49221,8 @@ function WASettingsView() {
               Cuando está activado, los nuevos proyectos tendrán automáticamente activado "Descartar datos IP del cliente". Esto se recomienda para el cumplimiento del RGPD. Los proyectos existentes no se ven afectados.
             </p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente por defecto en nuevos proyectos</span>
-              <Toggle checked={discardIPDefault} onChange={setDiscardIPDefault}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente por defecto en nuevos proyectos {savingIP && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={discardIPDefault} onChange={toggleIP}/>
             </div>
           </div>
         </div>
@@ -49177,6 +49233,72 @@ function WASettingsView() {
   // ── OrgMembersPage ────────────────────────────────────────────────────────
   function OrgMembersPage() {
     const [memberSearch, setMemberSearch] = useState('');
+    const [members, setMembers] = React.useState<any[]>([]);
+    const [invites, setInvites] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [showInviteModal, setShowInviteModal] = React.useState(false);
+    const [inviteEmail, setInviteEmail] = React.useState('');
+    const [inviteLevel, setInviteLevel] = React.useState<number>(1);
+    const [inviting, setInviting] = React.useState(false);
+    const [me, setMe] = React.useState<any>(null);
+
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const [m, i, u] = await Promise.all([
+          (ph.posthog as any).organization.members(),
+          (ph.posthog as any).organization.invites().catch(() => ({ results: [] })),
+          ph.posthog.me(),
+        ]);
+        setMembers(m?.results ?? m ?? []);
+        setInvites(i?.results ?? i ?? []);
+        setMe(u);
+      } catch {}
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+
+    async function sendInvite() {
+      if (!inviteEmail.trim()) return;
+      setInviting(true);
+      try {
+        const ph = await import('../api/posthog');
+        await (ph.posthog as any).organization.invite({ target_email: inviteEmail.trim(), level: inviteLevel });
+        setShowInviteModal(false); setInviteEmail(''); setInviteLevel(1);
+        await refresh();
+      } catch (e: any) { alert('No se pudo invitar: ' + (e?.message ?? '')); }
+      finally { setInviting(false); }
+    }
+    async function deleteInvite(id: string) {
+      if (!confirm('¿Eliminar invitación?')) return;
+      try {
+        const ph = await import('../api/posthog');
+        await (ph.posthog as any).organization.deleteInvite(id);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function copyInviteLink(invite: any) {
+      const url = invite.invite_link || `${window.location.origin}/signup/${invite.id}`;
+      try { await navigator.clipboard.writeText(url); alert('Enlace copiado al portapapeles'); } catch {}
+    }
+    async function downloadMembers() {
+      const csv = ['Nombre,Email,Rol'].concat(members.map((m: any) => {
+        const u = m.user || m;
+        const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email || '';
+        const role = (m.level ?? 1) >= 15 ? 'Owner' : (m.level ?? 1) >= 8 ? 'Admin' : 'Member';
+        return `"${name}","${u.email ?? ''}","${role}"`;
+      })).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'miembros.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+    const filteredMembers = members.filter((m: any) => {
+      if (!memberSearch) return true;
+      const u = m.user || m;
+      const q = memberSearch.toLowerCase();
+      return (u.email ?? '').toLowerCase().includes(q) || (u.first_name ?? '').toLowerCase().includes(q) || (u.last_name ?? '').toLowerCase().includes(q);
+    });
 
     const PremiumCard = ({ title, desc }: { title: string; desc: string }) => (
       <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
@@ -49222,14 +49344,34 @@ function WASettingsView() {
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Enlace de invitación</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr>
-                    <td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462]">No hay invitaciones pendientes. Puedes invitar a otro miembro del equipo arriba.</td>
-                  </tr>
+                <tbody className="divide-y divide-[#e9eae6]">
+                  {loading ? (
+                    <tr><td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462] text-center">Cargando…</td></tr>
+                  ) : invites.length === 0 ? (
+                    <tr><td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462]">No hay invitaciones pendientes. Puedes invitar a otro miembro del equipo arriba.</td></tr>
+                  ) : (
+                    invites.map((inv: any) => {
+                      const role = (inv.level ?? 1) >= 15 ? 'Owner' : (inv.level ?? 1) >= 8 ? 'Admin' : 'Member';
+                      return (
+                        <tr key={inv.id} className="hover:bg-[#fafaf9]">
+                          <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a]">{inv.target_email ?? '—'}</td>
+                          <td className="px-4 py-2.5"><span className="px-2 py-0.5 bg-[#f3f3f1] rounded text-[11px] font-semibold">{role}</span></td>
+                          <td className="px-4 py-2.5 text-[12px] text-[#646462]">{inv.created_by?.email ?? '—'}</td>
+                          <td className="px-4 py-2.5 text-[12px] text-[#646462]">{inv.created_at ? new Date(inv.created_at).toLocaleDateString() : '—'}</td>
+                          <td className="px-4 py-2.5 text-[12px]">
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => copyInviteLink(inv)} className="text-[#e8572a] hover:underline">Copiar enlace</button>
+                              <button onClick={() => deleteInvite(inv.id)} className="text-[#dc2626] hover:underline">Eliminar</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
-            <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+            <button onClick={() => setShowInviteModal(true)} className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
               Invitar miembro del equipo
             </button>
           </div>
@@ -49246,7 +49388,7 @@ function WASettingsView() {
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
                 <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Buscar miembros..." className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
               </div>
-              <button className="ml-auto h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Descargar lista de miembros</button>
+              <button onClick={downloadMembers} className="ml-auto h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Descargar lista de miembros</button>
             </div>
             <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
               <table className="w-full text-[13px]">
@@ -49259,20 +49401,38 @@ function WASettingsView() {
                     ))}
                   </tr>
                 </thead>
-                <tbody>
-                  <tr className="border-b border-[#e9eae6] hover:bg-[#fafaf9]">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-[#a78bfa] flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0">H</div>
-                        <span className="text-[13px] text-[#1a1a1a] font-medium">Hector <span className="text-[#646462] font-normal">(tú)</span></span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-[#646462]">hectorvidal0411@gmail.com</td>
-                    <td className="px-4 py-3"><span className="px-2 py-0.5 bg-[#f3f3f1] rounded text-[12px] font-semibold text-[#1a1a1a]">Propietario</span></td>
-                    <td className="px-4 py-3"><span className="px-2 py-0.5 bg-[#fef3c7] border border-[#fde68a] rounded text-[11px] font-semibold text-[#92400e]">2FA no activado</span></td>
-                    <td className="px-4 py-3 text-[#646462]">hace 4 días</td>
-                    <td className="px-4 py-3 text-[#646462]">hace un momento</td>
-                  </tr>
+                <tbody className="divide-y divide-[#e9eae6]">
+                  {loading ? (
+                    <tr><td colSpan={6} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando miembros…</td></tr>
+                  ) : filteredMembers.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-4 text-[12px] text-[#646462]">Sin miembros.</td></tr>
+                  ) : (
+                    filteredMembers.map((m: any) => {
+                      const u = m.user || m;
+                      const level = m.level ?? 1;
+                      const roleText = level >= 15 ? 'Propietario' : level >= 8 ? 'Admin' : 'Miembro';
+                      const isMe = me && (u.uuid === me.uuid || u.email === me.email);
+                      const initials = ((u.first_name || u.email || '?').charAt(0)).toUpperCase();
+                      const has2fa = !!u.is_2fa_enabled;
+                      return (
+                        <tr key={u.id ?? u.uuid ?? u.email} className="hover:bg-[#fafaf9]">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-[#a78bfa] flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0">{initials}</div>
+                              <span className="text-[13px] text-[#1a1a1a] font-medium">{u.first_name || u.email}{isMe && <span className="text-[#646462] font-normal"> (tú)</span>}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-[#646462]">{u.email}</td>
+                          <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded text-[12px] font-semibold ${level >= 15 ? 'bg-[#fff5f2] text-[#e8572a]' : level >= 8 ? 'bg-[#f0f4ff] text-[#3b59f6]' : 'bg-[#f3f3f1] text-[#1a1a1a]'}`}>{roleText}</span></td>
+                          <td className="px-4 py-3">{has2fa
+                            ? <span className="px-2 py-0.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded text-[11px] font-semibold text-[#16a34a]">2FA activo</span>
+                            : <span className="px-2 py-0.5 bg-[#fef3c7] border border-[#fde68a] rounded text-[11px] font-semibold text-[#92400e]">2FA no activado</span>}</td>
+                          <td className="px-4 py-3 text-[#646462]">{m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}</td>
+                          <td className="px-4 py-3 text-[#646462]">{u.last_login ? new Date(u.last_login).toLocaleDateString() : '—'}</td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -49296,6 +49456,35 @@ function WASettingsView() {
             <PremiumCard title="Ajustes de seguridad de la organización" desc="Configura los permisos de seguridad para los miembros de la organización."/>
           </div>
         </div>
+
+        {/* Invite modal */}
+        {showInviteModal && (
+          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center px-4" onClick={() => setShowInviteModal(false)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white border border-[#e9eae6] rounded-[12px] shadow-2xl w-full max-w-md p-5">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">Invitar miembro del equipo</h3>
+              <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Email</label>
+              <input
+                autoFocus
+                type="email"
+                value={inviteEmail}
+                onChange={e => setInviteEmail(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') sendInvite(); }}
+                placeholder="persona@ejemplo.com"
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] mb-3"
+              />
+              <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Nivel</label>
+              <select value={inviteLevel} onChange={e => setInviteLevel(Number(e.target.value))} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] mb-4 cursor-pointer">
+                <option value={1}>Miembro</option>
+                <option value={8}>Admin</option>
+                <option value={15}>Propietario</option>
+              </select>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowInviteModal(false)} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+                <button onClick={sendInvite} disabled={inviting || !inviteEmail.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{inviting ? 'Enviando…' : 'Enviar invitación'}</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -49303,7 +49492,41 @@ function WASettingsView() {
   // ── OrgRolesPage ──────────────────────────────────────────────────────────
   function OrgRolesPage() {
     const [showRoleDropdown, setShowRoleDropdown] = useState(false);
-    const [defaultRole, setDefaultRole] = useState('none');
+    const [defaultRole, setDefaultRole] = useState<string>(organization?.default_role ?? 'none');
+    const [roles, setRoles] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [newRoleName, setNewRoleName] = React.useState('');
+    const [creating, setCreating] = React.useState(false);
+    const [savingDefault, setSavingDefault] = React.useState(false);
+
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/organizations/@current/roles/`);
+        setRoles(res?.results ?? []);
+      } catch { setRoles([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    React.useEffect(() => { setDefaultRole(organization?.default_role ?? 'none'); }, [organization?.id]);
+
+    async function addRole() {
+      if (!newRoleName.trim()) return;
+      setCreating(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/organizations/@current/roles/`, { name: newRoleName.trim() });
+        setNewRoleName(''); setShowAdd(false);
+        await refresh();
+      } catch (e: any) { alert('No se pudo crear el rol: ' + (e?.message ?? '')); }
+      finally { setCreating(false); }
+    }
+    async function pickDefault(v: string) {
+      setDefaultRole(v); setShowRoleDropdown(false); setSavingDefault(true);
+      await patchOrganization({ default_role: v === 'none' ? null : v });
+      setSavingDefault(false);
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-8">
@@ -49322,17 +49545,42 @@ function WASettingsView() {
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Miembros</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr>
-                    <td colSpan={2} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td>
-                  </tr>
+                <tbody className="divide-y divide-[#e9eae6]">
+                  {loading ? (
+                    <tr><td colSpan={2} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando…</td></tr>
+                  ) : roles.length === 0 ? (
+                    <tr><td colSpan={2} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td></tr>
+                  ) : (
+                    roles.map((r: any) => (
+                      <tr key={r.id} className="hover:bg-[#fafaf9]">
+                        <td className="px-4 py-2.5 text-[13px] text-[#1a1a1a]">{r.name}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{r.members_count ?? r.members?.length ?? 0}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
-            <button className="flex items-center gap-1.5 h-8 px-3 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-              Añadir un rol
-            </button>
+            {showAdd ? (
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  type="text"
+                  value={newRoleName}
+                  onChange={e => setNewRoleName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addRole(); if (e.key === 'Escape') { setShowAdd(false); setNewRoleName(''); } }}
+                  placeholder="Nombre del rol"
+                  className="flex-1 max-w-xs h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                />
+                <button onClick={addRole} disabled={creating || !newRoleName.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{creating ? 'Creando…' : 'Crear'}</button>
+                <button onClick={() => { setShowAdd(false); setNewRoleName(''); }} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              </div>
+            ) : (
+              <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 h-8 px-3 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Añadir un rol
+              </button>
+            )}
           </div>
 
           {/* Default role */}
@@ -49344,14 +49592,20 @@ function WASettingsView() {
             <p className="text-[13px] text-[#646462]">Asigna automáticamente un rol a los nuevos miembros cuando se unan a la organización. Los nuevos usuarios heredarán todos los permisos de este rol.</p>
             <div className="relative w-56">
               <button onClick={() => setShowRoleDropdown(d => !d)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]">
-                <span className="text-[#646462]">{defaultRole === 'none' ? 'Sin rol predeterminado' : defaultRole}</span>
+                <span className={defaultRole === 'none' ? 'text-[#646462]' : 'text-[#1a1a1a]'}>
+                  {defaultRole === 'none' ? 'Sin rol predeterminado' : (roles.find(r => r.id === defaultRole)?.name ?? defaultRole)}
+                  {savingDefault && <span className="text-[11px] text-[#646462] ml-2">guardando…</span>}
+                </span>
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
               </button>
               {showRoleDropdown && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowRoleDropdown(false)}/>
                   <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
-                    <button onClick={() => { setDefaultRole('none'); setShowRoleDropdown(false); }} className="w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] text-[#646462]">Sin rol predeterminado</button>
+                    <button onClick={() => pickDefault('none')} className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${defaultRole === 'none' ? 'bg-[#f3f3f1] font-medium' : 'text-[#646462]'}`}>Sin rol predeterminado</button>
+                    {roles.map((r: any) => (
+                      <button key={r.id} onClick={() => pickDefault(r.id)} className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${defaultRole === r.id ? 'bg-[#f3f3f1] font-medium' : 'text-[#1a1a1a]'}`}>{r.name}</button>
+                    ))}
                   </div>
                 </>
               )}
