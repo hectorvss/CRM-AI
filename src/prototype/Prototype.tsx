@@ -30177,6 +30177,526 @@ function WAAppSupportView() {
 
 
 
+// ── WAAppSurveysView ──────────────────────────────────────────────────────────
+function WAAppSurveysView() {
+  type SurveysTab = 'active' | 'archived' | 'notifications' | 'history' | 'settings';
+  const [tab, setTab] = useState<SurveysTab>('active');
+  const [surveysEnabled, setSurveysEnabled] = useState(false);
+  const [selectedTheme, setSelectedTheme] = useState('clean');
+  const [notifSearch, setNotifSearch] = useState('');
+  const [showPaused, setShowPaused] = useState(false);
+  const [delaySeconds, setDelaySeconds] = useState('');
+  const [hidebranding, setHideBranding] = useState(false);
+  const [shuffleQ, setShuffleQ] = useState(false);
+  const [positionIdx, setPositionIdx] = useState(8); // 0-8, 8=bottom-right
+
+  const positionLabels = ['Top Left','Top Center','Top Right','Center Left','Center','Center Right','Bottom Left','Bottom Center','Bottom Right'];
+
+  // amber warning banner — shown when surveys disabled, only on notifications/history tabs
+  const showWarning = !surveysEnabled && (tab === 'notifications' || tab === 'history');
+
+  const themes = [
+    { id: 'clean',    label: 'Clean',    sub: 'Light & professional', bg: '#f5f5f5', accent: '#6b7280', btn: '#9ca3af' },
+    { id: 'ocean',    label: 'Ocean',    sub: 'Cool & calming',        bg: '#eff6ff', accent: '#3b82f6', btn: '#60a5fa' },
+    { id: 'sunset',   label: 'Sunset',   sub: 'Warm & energetic',      bg: '#fff7ed', accent: '#f97316', btn: '#fb923c' },
+    { id: 'carbon',   label: 'Carbon',   sub: 'Dark & neutral',        bg: '#1f2937', accent: '#6b7280', btn: '#374151' },
+    { id: 'midnight', label: 'Midnight', sub: 'Dark & sophisticated',  bg: '#1e1b4b', accent: '#818cf8', btn: '#6366f1' },
+    { id: 'noir',     label: 'Noir',     sub: 'Pure black & white',    bg: '#000000', accent: '#ffffff', btn: '#374151' },
+  ];
+
+  // ── Template gallery (Active / Archived) ────────────────────────────────────
+  const TemplateGallery = () => (
+    <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+      <div>
+        <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-1">Create your first survey</h2>
+        <p className="text-[13px] text-[#646462]">Choose from our most popular templates to get started quickly, or create your own from scratch.</p>
+      </div>
+
+      {/* Announcement card — full width, "New template!" badge */}
+      <div className="relative border-2 border-dashed border-[#e9eae6] rounded-xl overflow-visible">
+        {/* New template! badge */}
+        <div className="absolute -top-3 left-4 z-10 bg-[#e8572a] text-white text-[11px] font-bold px-3 py-1 rounded-full">New template!</div>
+        <div className="flex items-center min-h-[140px] px-8 py-6 gap-8">
+          {/* left */}
+          <div className="flex flex-col gap-1 flex-1">
+            <span className="text-[16px] font-bold text-[#1a1a1a]">Announcement</span>
+            <span className="text-[13px] text-[#e8572a]">Tell users about a new product or feature</span>
+          </div>
+          {/* right: preview popup */}
+          <div className="flex-shrink-0">
+            <div className="bg-white rounded-xl shadow-lg border border-[#e9eae6] w-52 p-4 relative">
+              <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] text-[10px]">×</button>
+              <p className="text-[12px] font-bold text-[#1a1a1a] mb-1">Hog mode is now available!</p>
+              <p className="text-[11px] text-[#646462] mb-3">You can never have too many hedgehogs.</p>
+              <button className="w-full bg-[#1a1a1a] text-white text-[11px] font-semibold py-1.5 rounded-lg mb-3">Check it out 🔥</button>
+              <div className="flex items-center justify-center gap-1">
+                <span className="text-[9px] text-[#9ca3af]">Survey by</span>
+                <span className="text-[9px] text-[#9ca3af] font-semibold">🦔 PostHog</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3 template cards */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* Open feedback */}
+        <div className="relative border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col">
+          <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+            <div>
+              <p className="text-[13px] font-bold text-[#1a1a1a]">Open feedback</p>
+              <p className="text-[12px] text-[#646462] mt-0.5">Let your users share what's on their mind.</p>
+            </div>
+            <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-[#e9eae6] text-[10px] font-semibold text-[#646462]">General</span>
+          </div>
+          {/* preview */}
+          <div className="flex-1 flex items-end justify-center bg-[#f9f9f7] px-4 pt-3 pb-0 min-h-[180px]">
+            <div className="bg-white rounded-t-xl shadow border border-[#e9eae6] border-b-0 w-full p-4 relative">
+              <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] text-[10px]">×</button>
+              <p className="text-[11px] font-bold text-[#1a1a1a] mb-2 pr-6">What can we do to improve our product?</p>
+              <textarea className="w-full h-16 border border-[#e9eae6] rounded text-[10px] text-[#9ca3af] p-1.5 resize-none" placeholder="Start typing..." readOnly/>
+              <button className="w-full mt-2 bg-[#1a1a1a] text-white text-[10px] font-semibold py-1.5 rounded-lg">Submit</button>
+              <div className="flex items-center justify-center gap-1 mt-2">
+                <span className="text-[8px] text-[#9ca3af]">Survey by 🦔 PostHog</span>
+              </div>
+            </div>
+          </div>
+          {/* Most popular badge */}
+          <div className="absolute bottom-0 right-0 bg-[#e8572a] text-white text-[10px] font-bold px-3 py-1 rounded-tl-xl">Most popular</div>
+        </div>
+
+        {/* NPS */}
+        <div className="border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col">
+          <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+            <div>
+              <p className="text-[13px] font-bold text-[#1a1a1a]">Net promoter score (NPS)</p>
+              <p className="text-[12px] text-[#646462] mt-0.5">Measure customer loyalty with the 0-10 recommend scale.</p>
+            </div>
+            <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-[#22c55e] text-[10px] font-semibold text-[#22c55e]">Metrics</span>
+          </div>
+          <div className="flex-1 flex items-end justify-center bg-[#f9f9f7] px-4 pt-3 pb-0 min-h-[180px]">
+            <div className="bg-white rounded-t-xl shadow border border-[#e9eae6] border-b-0 w-full p-4 relative">
+              <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] text-[10px]">×</button>
+              <p className="text-[11px] font-bold text-[#1a1a1a] mb-3 pr-6">How likely are you to recommend us to a friend?</p>
+              <div className="flex gap-0.5 mb-1">
+                {[0,1,2,3,4,5,6,7,8,9,10].map(n => (
+                  <button key={n} className="flex-1 border border-[#e9eae6] rounded text-[9px] text-[#1a1a1a] py-1 hover:bg-[#f3f4f6]">{n}</button>
+                ))}
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[8px] text-[#9ca3af]">Unlikely</span>
+                <span className="text-[8px] text-[#9ca3af]">Very likely</span>
+              </div>
+              <div className="flex items-center justify-center gap-1 mt-2">
+                <span className="text-[8px] text-[#9ca3af]">Survey by 🦔 PostHog</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* CSAT */}
+        <div className="border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col">
+          <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+            <div>
+              <p className="text-[13px] font-bold text-[#1a1a1a]">Customer satisfaction score (CSAT)</p>
+              <p className="text-[12px] text-[#646462] mt-0.5">Measure satisfaction with a specific experience.</p>
+            </div>
+            <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-[#22c55e] text-[10px] font-semibold text-[#22c55e]">Metrics</span>
+          </div>
+          <div className="flex-1 flex items-end justify-center bg-[#f9f9f7] px-4 pt-3 pb-0 min-h-[180px]">
+            <div className="bg-white rounded-t-xl shadow border border-[#e9eae6] border-b-0 w-full p-4 relative">
+              <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] text-[10px]">×</button>
+              <p className="text-[11px] font-bold text-[#1a1a1a] mb-3 pr-6">How satisfied are you with PostHog surveys?</p>
+              <div className="flex justify-between mb-1 px-1">
+                {['😡','😢','😐','😊','😄'].map((emoji, i) => (
+                  <button key={i} className="text-[20px] hover:scale-110 transition-transform">{emoji}</button>
+                ))}
+              </div>
+              <div className="flex justify-between px-1">
+                <span className="text-[8px] text-[#9ca3af]">Very dissatisfied</span>
+                <span className="text-[8px] text-[#9ca3af]">Very satisfied</span>
+              </div>
+              <div className="flex items-center justify-center gap-1 mt-2">
+                <span className="text-[8px] text-[#9ca3af]">Survey by 🦔 PostHog</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom CTAs */}
+      <div className="flex items-center gap-3 pb-2">
+        <button className="flex items-center gap-2 px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.2 3.8L12 7l-3.8 1.2L7 13l-1.2-3.8L2 7l3.8-1.2L7 1z" fill="#f59e0b"/></svg>
+          Create your own custom survey with PostHog AI
+        </button>
+        <button className="flex items-center gap-2 px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+          See all other templates
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-6 pt-5 pb-0 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          {/* speech bubble icon */}
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-[#e8572a]">
+            <path d="M2 3a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H6l-4 3V3z" fill="currentColor" opacity="0.9"/>
+          </svg>
+          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Surveys</h1>
+          {(tab === 'notifications' || tab === 'history' || tab === 'settings') && (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="#646462" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          )}
+        </div>
+
+        {/* Top-right actions */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Quick start
+            <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">0</span>
+          </button>
+          <button className="text-[13px] font-medium text-[#1a1a1a] hover:text-[#e8572a] transition-colors">Feedback</button>
+          <button className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">New survey</button>
+          <button className="relative w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a5 5 0 015 5v2.5l1.5 2H1.5L3 9V6.5a5 5 0 015-5zM6.5 13a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#e8572a] text-white text-[8px] font-bold flex items-center justify-center leading-none">1</span>
+          </button>
+          <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Subtitle (notifications/history/settings tabs) */}
+      {(tab === 'notifications' || tab === 'history' || tab === 'settings') && (
+        <p className="px-6 mt-1 text-[13px] text-[#646462] flex-shrink-0">Create surveys to collect feedback from your users</p>
+      )}
+
+      {/* Amber warning banner */}
+      {showWarning && (
+        <div className="mx-6 mt-3 flex items-start gap-3 px-4 py-3 bg-[#fffbeb] border border-[#fde68a] rounded-lg flex-shrink-0">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5"><path d="M7 1L1 13h12L7 1z" stroke="#d97706" strokeWidth="1.2" strokeLinejoin="round"/><path d="M7 5.5v3M7 10v.5" stroke="#d97706" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          <p className="text-[12px] text-[#1a1a1a] flex-1 leading-relaxed">
+            Surveys are currently disabled for this project. Re-enable them in the settings, otherwise surveys will not be rendered in your app (either automatically or{' '}
+            <span className="text-[#e8572a] cursor-pointer hover:underline">using the renderSurvey function</span>
+            ). Surveys API is enabled if you are{' '}
+            <span className="text-[#e8572a] cursor-pointer hover:underline">fetching and rendering them manually ↗</span>.
+          </p>
+          <button
+            onClick={() => setTab('settings')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="2" stroke="#646462" strokeWidth="1.1"/><path d="M6 1v1.5M6 9.5V11M1 6h1.5M9.5 6H11M2.6 2.6l1 1M8.4 8.4l1 1M9.4 2.6l-1 1M3.6 8.4l-1 1" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            Configure
+          </button>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex items-center px-6 mt-3 border-b border-[#e9eae6] flex-shrink-0">
+        {(['active','archived','notifications','history','settings'] as SurveysTab[]).map(t => {
+          const labels: Record<SurveysTab,string> = { active:'Active', archived:'Archived', notifications:'Notifications', history:'History', settings:'Settings' };
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+                tab === t ? 'border-[#e8572a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+              }`}
+            >
+              {labels[t]}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Active / Archived ── */}
+      {(tab === 'active' || tab === 'archived') && <TemplateGallery />}
+
+      {/* ── Notifications ── */}
+      {tab === 'notifications' && (
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-6 pt-5">
+          <p className="text-[13px] text-[#1a1a1a] mb-4 flex-shrink-0">Get notified whenever a survey result is submitted</p>
+
+          {/* Filter row */}
+          <div className="flex items-center gap-3 mb-4 flex-shrink-0">
+            <div className="relative flex-1 max-w-[260px]">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
+                <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
+                <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+              <input value={notifSearch} onChange={e=>setNotifSearch(e.target.value)} placeholder="Search..." className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none placeholder-[#9ca3af]"/>
+            </div>
+            <span className="text-[12px] text-[#646462]">Can't find what you're looking for?</span>
+            <div className="flex-1"/>
+            <span className="text-[12px] text-[#646462]">Created by:</span>
+            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+              Any user
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            </button>
+            <button
+              onClick={() => setShowPaused(!showPaused)}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]"
+            >
+              <div className={`w-7 h-4 rounded-full relative transition-colors ${showPaused ? 'bg-[#e8572a]' : 'bg-[#e9eae6]'}`}>
+                <div className={`w-3 h-3 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${showPaused ? 'left-3.5' : 'left-0.5'}`}/>
+              </div>
+              Show paused
+            </button>
+            <button className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#2d2d2d]">New notification</button>
+          </div>
+
+          {/* Table */}
+          <div className="border border-[#e9eae6] rounded-xl overflow-hidden flex-1 min-h-0">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6] bg-[#fafaf8]">
+                  {[{l:'NAME',s:true},{l:'CREATED BY',s:true},{l:'UPDATED',s:true},{l:'LAST 7 DAYS',s:false},{l:'STATUS',s:true}].map(col=>(
+                    <th key={col.l} className="px-4 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">
+                      <span className="flex items-center gap-1">
+                        {col.l}
+                        {col.s && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 2v6M2.5 4.5L5 2l2.5 2.5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/><path d="M2.5 5.5L5 8l2.5-2.5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/></svg>}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-[13px] text-[#9ca3af]">No destinations found</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div className="h-4 flex-shrink-0"/>
+        </div>
+      )}
+
+      {/* ── History ── */}
+      {tab === 'history' && (
+        <div className="flex-1 flex items-center justify-center px-6 py-8">
+          <div className="border border-[#e9eae6] rounded-xl p-12 flex flex-col items-center text-center max-w-[600px] w-full">
+            {/* stacked pages icon */}
+            <div className="mb-5">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <rect x="8" y="14" width="28" height="4" rx="2" fill="#d97706" opacity="0.4"/>
+                <rect x="6" y="20" width="32" height="4" rx="2" fill="#d97706" opacity="0.6"/>
+                <rect x="4" y="26" width="36" height="4" rx="2" fill="#d97706" opacity="0.8"/>
+                <rect x="2" y="32" width="40" height="4" rx="2" fill="#d97706"/>
+              </svg>
+            </div>
+            <h2 className="text-[20px] font-bold text-[#1a1a1a] mb-3">Activity logs</h2>
+            <p className="text-[14px] text-[#646462] mb-2">See who in your organization has accessed or modified entities within PostHog.</p>
+            <p className="text-[14px] text-[#646462] mb-6">This feature is only available on PostHog Cloud.</p>
+            <button className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+              Move to PostHog Cloud
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Settings ── */}
+      {tab === 'settings' && (
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* Enable surveys toggle */}
+          <div className="flex items-center gap-3 mb-5">
+            <button
+              onClick={() => setSurveysEnabled(!surveysEnabled)}
+              className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${surveysEnabled ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
+            >
+              <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-0.75 shadow-sm transition-all ${surveysEnabled ? 'left-4.5' : 'left-0.75'}`} style={{top:'3px', left: surveysEnabled ? '18px' : '3px'}}/>
+            </button>
+            <span className="text-[13px] font-medium text-[#1a1a1a]">Enable surveys</span>
+          </div>
+
+          {/* Custom colors cloud card */}
+          <div className="border border-[#e9eae6] rounded-xl p-8 flex flex-col items-center text-center mb-6">
+            <div className="mb-3">
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                <rect x="4" y="12" width="24" height="4" rx="2" fill="#d97706" opacity="0.4"/>
+                <rect x="2" y="18" width="28" height="4" rx="2" fill="#d97706" opacity="0.6"/>
+                <rect x="0" y="24" width="32" height="4" rx="2" fill="#d97706" opacity="0.8"/>
+              </svg>
+            </div>
+            <h3 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Custom colors & positioning</h3>
+            <p className="text-[13px] text-[#646462] mb-1">
+              Customize the colors of your surveys to match your brand and set survey position.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Learn more.</span>
+            </p>
+            <p className="text-[13px] text-[#646462] mb-4">This feature is only available on PostHog Cloud.</p>
+            <button className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+              Move to PostHog Cloud
+            </button>
+          </div>
+
+          {/* Theme */}
+          <div className="mb-6">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-1">Theme</h3>
+            <p className="text-[12px] text-[#646462] mb-3">Start with a preset, then fine-tune individual colors below.</p>
+            <div className="grid grid-cols-6 gap-3">
+              {themes.map(theme => (
+                <button
+                  key={theme.id}
+                  onClick={() => setSelectedTheme(theme.id)}
+                  className={`border-2 rounded-xl p-3 flex flex-col items-center gap-2 transition-colors ${
+                    selectedTheme === theme.id ? 'border-[#e8572a]' : 'border-[#e9eae6] hover:border-[#d1d5db]'
+                  }`}
+                >
+                  {/* mini preview */}
+                  <div className="w-full h-14 rounded-lg flex flex-col gap-1 p-2 overflow-hidden" style={{background: theme.bg}}>
+                    <div className="h-1.5 rounded-full w-3/4" style={{background: theme.id === 'noir' ? '#ffffff' : theme.accent, opacity: 0.7}}/>
+                    <div className="flex gap-1 mt-0.5">
+                      <div className="h-2 rounded w-3" style={{background: theme.btn}}/>
+                      <div className="h-2 rounded w-2" style={{background: theme.btn, opacity: 0.4}}/>
+                    </div>
+                    <div className="mt-auto h-1.5 rounded-full w-full" style={{background: theme.btn}}/>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[11px] font-semibold text-[#1a1a1a]">{theme.label}</p>
+                    <p className="text-[9px] text-[#9ca3af]">{theme.sub}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Colors */}
+          <div className="mb-6">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-3">Colors</h3>
+            <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+              {[
+                { label: 'Survey background', value: '#eeeded', dark: false },
+                { label: 'Question text',     value: '#000000 or var(--color)', dark: false },
+                { label: 'Border',            value: '#c9c6c6', dark: false },
+                { label: 'Input background',  value: 'white', dark: false },
+                { label: 'Input text',        value: '#000000 or var(--color)', dark: false },
+                { label: 'Selected rating',   value: 'black', dark: true },
+                { label: 'Button background', value: 'black', dark: true },
+                { label: 'Button text',       value: 'white', dark: false },
+                { label: 'Placeholder text',  value: 'Start typing...', dark: false, placeholder: true },
+              ].map(c => (
+                <div key={c.label}>
+                  <p className="text-[12px] font-semibold text-[#1a1a1a] mb-1">{c.label}</p>
+                  <div className="flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 py-2 bg-white">
+                    {!c.placeholder && (
+                      <div className={`w-4 h-4 rounded-full border border-[#e9eae6] flex-shrink-0 ${c.dark ? 'bg-[#1a1a1a]' : 'bg-white border-[#d1d5db]'}`}/>
+                    )}
+                    <span className={`text-[12px] ${c.placeholder ? 'text-[#9ca3af]' : 'text-[#1a1a1a]'}`}>{c.value}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Layout */}
+          <div className="mb-6">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-1">Layout</h3>
+            <p className="text-[12px] mb-3">
+              <span className="text-[#646462]">Container, placement, and typography. </span>
+              <span className="text-[#e8572a]">Only applied in web surveys, not native mobile apps.</span>
+            </p>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 mb-4">
+              {[
+                { label: 'Survey width', value: '300px', info: true },
+                { label: 'Box padding', value: '20px 24px', info: false },
+                { label: 'Border radius', value: '10px', info: false },
+                { label: 'Box shadow', value: '0 4px 12px rgba(0, 0, 0, 0.15)', info: false },
+              ].map(f => (
+                <div key={f.label}>
+                  <div className="flex items-center gap-1 mb-1">
+                    <span className="text-[12px] font-semibold text-[#1a1a1a]">{f.label}</span>
+                    {f.info && (
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#9ca3af" strokeWidth="1"/><path d="M6 5.5v3M6 4v.5" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>
+                    )}
+                  </div>
+                  <input defaultValue={f.value} className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6]"/>
+                </div>
+              ))}
+              <div>
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-[12px] font-semibold text-[#1a1a1a]">Font family</span>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#9ca3af" strokeWidth="1"/><path d="M6 5.5v3M6 4v.5" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>
+                </div>
+                <div className="flex items-center justify-between border border-[#e9eae6] rounded-lg px-3 py-2 bg-white">
+                  <span className="text-[12px] text-[#1a1a1a]">inherit (your website font)</span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-[12px] font-semibold text-[#1a1a1a]">z-index</span>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#9ca3af" strokeWidth="1"/><path d="M6 5.5v3M6 4v.5" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>
+                </div>
+                <input defaultValue="2147482647" className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6]"/>
+              </div>
+            </div>
+
+            {/* Position */}
+            <div className="mb-4">
+              <p className="text-[12px] font-semibold text-[#1a1a1a] mb-2">Position</p>
+              <div className="flex items-start gap-4">
+                {/* 3×3 grid picker */}
+                <div className="grid grid-cols-3 gap-1 w-24 h-24 border border-[#e9eae6] rounded-lg p-2 bg-[#fafaf8]">
+                  {[0,1,2,3,4,5,6,7,8].map(i => (
+                    <button
+                      key={i}
+                      onClick={() => setPositionIdx(i)}
+                      className={`rounded transition-colors ${positionIdx === i ? 'bg-[#e8572a]' : 'bg-[#e9eae6] hover:bg-[#d1d5db]'}`}
+                    />
+                  ))}
+                </div>
+                {/* Dropdown */}
+                <div className="flex items-center justify-between border border-[#e9eae6] rounded-lg px-3 py-2 bg-white w-40 cursor-pointer hover:bg-[#f9f9f7]">
+                  <span className="text-[12px] text-[#1a1a1a]">{positionLabels[positionIdx]}</span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Full-screen survey editor */}
+            <button className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-[#e9eae6] rounded-xl text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.9 2.9l1 1M10.1 10.1l1 1M11.1 2.9l-1 1M4.9 10.1l-1 1" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+              Full-screen survey editor
+            </button>
+          </div>
+
+          {/* Behavior */}
+          <div className="mb-8">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-3">Behavior</h3>
+            <div className="flex flex-col gap-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={hidebranding} onChange={e=>setHideBranding(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/>
+                <span className="text-[13px] text-[#1a1a1a]">Hide PostHog branding</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={shuffleQ} onChange={e=>setShuffleQ(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/>
+                <span className="text-[13px] text-[#1a1a1a]">Shuffle questions</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer flex-wrap">
+                <input type="checkbox" className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/>
+                <span className="text-[13px] text-[#1a1a1a]">Delay survey popup by at least</span>
+                <input
+                  type="number"
+                  value={delaySeconds}
+                  onChange={e=>setDelaySeconds(e.target.value)}
+                  className="w-16 border border-[#e9eae6] rounded-lg px-2 py-1 text-[12px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6]"
+                />
+                <span className="text-[13px] text-[#1a1a1a]">seconds once the display conditions are met.</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
 // ── WADataSidebar — identical pattern to ReportsSidebar / KnowledgeSidebar ──
 function WADataSidebar({ sub, onSelect }: { sub: WADataSubView; onSelect: (s: WADataSubView) => void }) {
   const [open, setOpen] = useState<Record<string, boolean>>({
@@ -38069,7 +38589,8 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
            appsSub === 'appHeatmaps'        ? <WAAppHeatmapsView /> :
            appsSub === 'appLogs'            ? <WAAppLogsView /> :
            appsSub === 'appSessionReplay'   ? <WAAppSessionReplayView /> :
-           appsSub === 'appSupport'         ? <WAAppSupportView /> : (
+           appsSub === 'appSupport'         ? <WAAppSupportView /> :
+           appsSub === 'appSurveys'         ? <WAAppSurveysView /> : (
             <>
               <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
                 <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{appsSub.replace(/^app/, '').replace(/([A-Z])/g, ' $1').trim()}</h1>
