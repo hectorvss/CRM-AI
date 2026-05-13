@@ -30720,6 +30720,15 @@ function WAAppExperimentsView() {
   // List filters
   const [search, setSearch] = useState('');
   const [smSearch, setSmSearch] = useState('');
+  const [showNewSharedMetric, setShowNewSharedMetric] = useState(false);
+  const [sharedMetricType, setSharedMetricType] = useState<'funnel'|'mean'|'ratio'|'retention'>('funnel');
+  const [smName, setSmName] = useState('');
+  const [smDesc, setSmDesc] = useState('');
+  const [smConvWindow, setSmConvWindow] = useState<'experiment'|'time'>('experiment');
+  const [showAddHoldout, setShowAddHoldout] = useState(false);
+  const [holdoutRollout, setHoldoutRollout] = useState(10);
+  const [statMethod, setStatMethod] = useState<'bayesian'|'frequentist'>('bayesian');
+  const [requireConvWindow, setRequireConvWindow] = useState(false);
 
   // ── Step indicator ─────────────────────────────────────────────────────────
   const StepIndicator = () => {
@@ -31097,6 +31106,168 @@ function WAAppExperimentsView() {
     );
   }
 
+  // ── New Shared Metric full-page ────────────────────────────────────────────
+  if (showNewSharedMetric) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[#fafaf8] overflow-hidden">
+        {/* Top bar */}
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] bg-white flex-shrink-0">
+          <button onClick={() => setShowNewSharedMetric(false)} className="text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#7c3aed] flex-shrink-0"><path d="M8 2l-6 12h12L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="8" cy="10" r="1" fill="currentColor"/></svg>
+          <input
+            value={smName}
+            onChange={e => setSmName(e.target.value)}
+            placeholder="Enter name"
+            className="flex-1 text-[16px] font-semibold text-[#1a1a1a] bg-transparent border-0 outline-none placeholder-[#9ca3af]"
+          />
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Quick start
+              <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">0</span>
+            </button>
+            <button className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">Save</button>
+            <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Description */}
+        <div className="border-b border-[#e9eae6] flex-shrink-0 bg-white">
+          <input
+            value={smDesc}
+            onChange={e => setSmDesc(e.target.value)}
+            placeholder="Enter description (optional)"
+            className="w-full px-6 py-2.5 text-[13px] text-[#1a1a1a] bg-transparent border-0 outline-none placeholder-[#9ca3af]"
+          />
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Shared metric type */}
+          <div className="px-6 py-6 border-b border-[#e9eae6] bg-white">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-4">Shared metric type</h2>
+            <div className="flex flex-col gap-4">
+              {([
+                { id: 'funnel' as const, label: 'Funnel', desc: 'Calculates the percentage of users exposed to the experiment who completed the funnel. Useful for measuring conversion rates.' },
+                { id: 'mean' as const, label: 'Mean', desc: 'Calculates the value per user exposed to the experiment. Useful for measuring count of clicks, revenue or other numeric values.' },
+                { id: 'ratio' as const, label: 'Ratio', desc: 'Calculates the ratio between two metrics. Useful when you want to use a different denominator than users exposed to the experiment.' },
+                { id: 'retention' as const, label: 'Retention', desc: 'Calculates the retention rate of users exposed to the experiment. Useful for measuring the percentage of users who return to the app after a certain period of time.' },
+              ]).map(opt => (
+                <label key={opt.id} className="flex items-start gap-3 cursor-pointer">
+                  <div className="mt-0.5 flex-shrink-0">
+                    <input type="radio" name="smType" checked={sharedMetricType === opt.id} onChange={() => setSharedMetricType(opt.id)} className="sr-only"/>
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${sharedMetricType === opt.id ? 'border-[#e8572a]' : 'border-[#d1d5db]'}`}>
+                      {sharedMetricType === opt.id && <div className="w-2 h-2 rounded-full bg-[#e8572a]"/>}
+                    </div>
+                  </div>
+                  <div>
+                    <p className={`text-[13px] font-semibold ${sharedMetricType === opt.id ? 'text-[#e8572a]' : 'text-[#1a1a1a]'}`}>{opt.label}</p>
+                    <p className="text-[12px] text-[#646462] leading-relaxed mt-0.5">{opt.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Metric */}
+          <div className="px-6 py-6 border-b border-[#e9eae6] bg-white mt-2">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-4">Metric</h2>
+            <div className="border border-[#e9eae6] rounded-xl overflow-hidden max-w-xl">
+              {/* Info row */}
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-[#fafaf8] border-b border-[#e9eae6]">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                <span className="text-[12px] text-[#646462]">Counts only after exposure event (</span>
+                <span className="text-[11px] font-mono bg-[#ede9fe] text-[#7c3aed] px-1.5 py-0.5 rounded">$feature_flag_called</span>
+                <span className="text-[12px] text-[#646462]">by default)</span>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+              </div>
+              {/* Pageview row */}
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6]">
+                <div className="flex items-center gap-2 flex-1 border border-[#e9eae6] rounded-lg px-3 py-2 bg-white">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#646462" strokeWidth="1.1"/><circle cx="6.5" cy="6.5" r="2.5" stroke="#646462" strokeWidth="1.1"/></svg>
+                  <span className="text-[13px] text-[#1a1a1a] flex-1">Pageview</span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                </div>
+                <button className="w-7 h-7 flex items-center justify-center text-[#9ca3af] hover:text-[#646462]">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 4h9M2 6.5h9M2 9h9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                </button>
+                <button className="w-7 h-7 flex items-center justify-center text-[#9ca3af] hover:text-[#646462]">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="3" r="1"/><circle cx="6.5" cy="6.5" r="1"/><circle cx="6.5" cy="10" r="1"/></svg>
+                </button>
+              </div>
+              {/* Add step */}
+              <button className="flex items-center gap-2 px-4 py-3 text-[13px] font-medium text-[#646462] hover:bg-[#f9f9f7] w-full transition-colors">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                Add step
+              </button>
+            </div>
+          </div>
+
+          {/* Goal */}
+          <div className="px-6 py-6 border-b border-[#e9eae6] bg-white mt-2">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-3">Goal</h2>
+            <div className="flex items-center justify-between border border-[#e9eae6] rounded-lg px-3 py-2.5 bg-white max-w-xl mb-2">
+              <span className="text-[13px] text-[#1a1a1a]">Increase</span>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            </div>
+            <p className="text-[12px] text-[#9ca3af]">For example, conversion rates should increase, while bounce rates should decrease.</p>
+          </div>
+
+          {/* Conversion window limit */}
+          <div className="px-6 py-6 border-b border-[#e9eae6] bg-white mt-2">
+            <div className="flex items-center gap-1.5 mb-3">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Conversion window limit</h2>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            </div>
+            <div className="flex items-center gap-6">
+              {([{id:'experiment' as const, label:'Experiment duration'},{id:'time' as const, label:'Time window'}]).map(opt=>(
+                <label key={opt.id} className="flex items-center gap-2 cursor-pointer">
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${smConvWindow===opt.id?'border-[#e8572a]':'border-[#d1d5db]'}`}>
+                    {smConvWindow===opt.id && <div className="w-2 h-2 rounded-full bg-[#e8572a]"/>}
+                  </div>
+                  <span className="text-[13px] text-[#1a1a1a]">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Step order */}
+          <div className="px-6 py-6 border-b border-[#e9eae6] bg-white mt-2">
+            <div className="flex items-center gap-1.5 mb-3">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Step order</h2>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            </div>
+            <div className="flex items-center justify-between border border-[#e9eae6] rounded-lg px-3 py-2.5 bg-white max-w-xl">
+              <span className="text-[13px] text-[#1a1a1a]">Sequential</span>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            </div>
+          </div>
+
+          {/* Recent activity */}
+          <div className="px-6 py-6 bg-white mt-2">
+            <div className="flex items-center gap-1.5 mb-3">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Recent activity</h2>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            </div>
+            <div className="border border-[#e9eae6] rounded-xl px-5 py-4 max-w-xl">
+              <p className="text-[28px] font-bold text-[#1a1a1a] leading-none">0</p>
+              <p className="text-[13px] text-[#9ca3af] mt-1">No recent activity</p>
+            </div>
+            <div className="mt-6">
+              <button className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Main view ──────────────────────────────────────────────────────────────
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
@@ -31308,7 +31479,7 @@ function WAAppExperimentsView() {
               <input value={smSearch} onChange={e=>setSmSearch(e.target.value)} placeholder="Search shared metrics..." className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none placeholder-[#9ca3af]"/>
             </div>
             <div className="flex-1"/>
-            <button className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+            <button onClick={() => setShowNewSharedMetric(true)} className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
               New shared metric
             </button>
           </div>
@@ -31349,17 +31520,166 @@ function WAAppExperimentsView() {
         </div>
       )}
 
-      {/* ── Other tabs placeholder ── */}
-      {(tab === 'holdoutGroups' || tab === 'history' || tab === 'settings') && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-1">
-            <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-              <path d="M6 4h14a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="#9ca3af" strokeWidth="1.4"/>
-              <path d="M9 10h8M9 13h8M9 16h5" stroke="#9ca3af" strokeWidth="1.2" strokeLinecap="round"/>
-            </svg>
+      {/* ── Holdout groups tab ── */}
+      {tab === 'holdoutGroups' && (
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+          {/* Info banner */}
+          <div className="flex items-start gap-3 border border-[#e9eae6] rounded-xl px-4 py-3 bg-white">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5"><circle cx="7" cy="7" r="6" stroke="#9ca3af" strokeWidth="1.2"/><path d="M7 6v4M7 4.5v.5" stroke="#9ca3af" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            <p className="text-[12px] text-[#646462] leading-relaxed">
+              Holdouts are stable groups of users excluded from experiment variations. They act as a baseline, helping you see how users behave without any changes applied. This lets you directly compare their behavior to those exposed to the experiment variations. Once a holdout is configured, you can apply it to an experiment during creation.
+            </p>
           </div>
-          <h2 className="text-[15px] font-semibold text-[#1a1a1a]">{tab === 'holdoutGroups' ? 'Holdout groups' : tab === 'history' ? 'History' : 'Settings'}</h2>
-          <p className="text-[13px] text-[#9ca3af] max-w-[340px] leading-relaxed">No content yet.</p>
+
+          {/* New holdout button */}
+          <div className="flex justify-end">
+            <button onClick={() => setShowAddHoldout(true)} className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">
+              New holdout
+            </button>
+          </div>
+
+          {/* Table */}
+          <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6] bg-[#fafaf8]">
+                  {['NAME','DESCRIPTION','ROLLOUT PERCENTAGE','ACTIONS'].map(col=>(
+                    <th key={col} className="px-4 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-[13px] text-[#9ca3af]">You have not created any holdouts yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Add holdout modal */}
+          {showAddHoldout && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl shadow-2xl w-[480px] p-6 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a]">Add holdout</h2>
+                  <button onClick={() => setShowAddHoldout(false)} className="text-[#9ca3af] hover:text-[#646462]">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">Name</label>
+                  <input placeholder="e.g. 'Frontend holdout group 1'" className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af]"/>
+                </div>
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">Description</label>
+                  <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <p className="text-[12px] text-[#646462] leading-relaxed border border-[#e9eae6] rounded-lg p-3 bg-[#fafaf8]">
+                  Specify the percentage population that should be included in this holdout group. This is stable across experiments.
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-[13px] text-[#1a1a1a] flex-shrink-0">Roll out to</span>
+                  <div className="relative flex-1 flex items-center">
+                    <div className="w-full h-1.5 bg-[#e9eae6] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#e8572a] rounded-full" style={{ width: `${holdoutRollout}%` }}/>
+                    </div>
+                    <input type="range" min={0} max={100} value={holdoutRollout} onChange={e=>setHoldoutRollout(Number(e.target.value))} className="absolute inset-0 opacity-0 cursor-pointer w-full"/>
+                    <div className="absolute w-4 h-4 bg-[#e8572a] rounded-full shadow border-2 border-white" style={{ left: `calc(${holdoutRollout}% - 8px)` }}/>
+                  </div>
+                  <input type="number" value={holdoutRollout} onChange={e=>setHoldoutRollout(Math.min(100,Math.max(0,Number(e.target.value))))} className="w-14 border border-[#e9eae6] rounded-lg px-2 py-1.5 text-[13px] text-center focus:outline-none"/>
+                  <span className="text-[13px] text-[#646462]">%</span>
+                  <span className="text-[13px] text-[#1a1a1a]">of total users.</span>
+                </div>
+                <div className="flex items-center justify-end gap-3 pt-1 border-t border-[#e9eae6]">
+                  <button onClick={() => setShowAddHoldout(false)} className="px-4 py-2 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] transition-colors">Cancel</button>
+                  <button className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">Save</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── History tab ── */}
+      {tab === 'history' && (
+        <div className="flex-1 flex items-center justify-center px-6 py-8">
+          <div className="border border-[#e9eae6] rounded-xl p-12 flex flex-col items-center text-center max-w-[500px] w-full">
+            <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-4">
+              <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="10" stroke="#9ca3af" strokeWidth="1.5"/><path d="M13 8v5l3 3" stroke="#9ca3af" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <h2 className="text-[15px] font-semibold text-[#1a1a1a] mb-2">No history yet</h2>
+            <p className="text-[13px] text-[#9ca3af] leading-relaxed">Experiment history will appear here once you create and run experiments.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Settings tab ── */}
+      {tab === 'settings' && (
+        <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-0 divide-y divide-[#e9eae6]">
+          {/* Default statistical method */}
+          <div className="pb-6">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-1">Default statistical method</h2>
+            <p className="text-[13px] text-[#646462] mb-4 leading-relaxed">
+              Choose the default statistical method for experiment analysis. This setting applies to all new experiments in this environment and can be overridden per experiment.
+            </p>
+            <div className="grid grid-cols-2 gap-3 max-w-2xl">
+              {([
+                { id: 'bayesian' as const, label: 'Bayesian', desc: 'Gives you a clear win probability, showing how likely one variant is to be better than another. Great for product engineers new to experimentation.' },
+                { id: 'frequentist' as const, label: 'Frequentist', desc: 'Uses p-values to determine statistical significance. Often preferred by data scientists and teams experienced with traditional A/B testing.' },
+              ]).map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setStatMethod(m.id)}
+                  className={`p-5 rounded-xl border-2 text-left transition-colors ${statMethod === m.id ? 'border-[#e8572a] bg-white' : 'border-[#e9eae6] bg-white hover:border-[#d1d5db]'}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[14px] font-bold text-[#1a1a1a]">{m.label}</span>
+                    {statMethod === m.id && (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#e8572a" strokeWidth="1.3"/><path d="M8 5v4M8 11v.5" stroke="#e8572a" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    )}
+                  </div>
+                  <p className="text-[12px] text-[#646462] leading-relaxed">{m.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Default confidence level */}
+          <div className="py-6">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-1">Default confidence level</h2>
+            <p className="text-[13px] text-[#646462] mb-3 leading-relaxed">
+              Higher confidence level reduces false positives but requires more data.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Can be overridden per experiment.</span>
+            </p>
+            <button className="flex items-center gap-2 px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+              95%
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+
+          {/* Daily recalculation time */}
+          <div className="py-6">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-1">Daily recalculation time</h2>
+            <p className="text-[13px] text-[#646462] mb-3 leading-relaxed">
+              Select the time of day when experiment metrics should be recalculated. This time is in your project's timezone.
+            </p>
+            <button className="flex items-center gap-2 px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+              02:00
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+
+          {/* Default conversion window filter */}
+          <div className="py-6">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a] mb-1">Default conversion window filter</h2>
+            <p className="text-[13px] text-[#646462] mb-3 leading-relaxed">
+              When enabled, new experiments will only count participants whose full conversion window has elapsed. Can be overridden per experiment.
+            </p>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={requireConvWindow} onChange={e=>setRequireConvWindow(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/>
+              <span className="text-[13px] text-[#1a1a1a]">Require completed conversion window</span>
+            </label>
+          </div>
         </div>
       )}
     </div>
