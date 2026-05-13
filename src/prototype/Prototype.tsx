@@ -46808,7 +46808,14 @@ function WASettingsView() {
 
   // ── Error Tracking Page ───────────────────────────────────────────────────────
   function ErrorTrackingPage() {
-    const [exceptionCapture, setExceptionCapture] = useState(false);
+    const [exceptionCapture, setExceptionCapture] = useState<boolean>(!!team?.autocapture_exceptions_opt_in);
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setExceptionCapture(!!team?.autocapture_exceptions_opt_in); }, [team?.id]);
+    async function toggleException(v: boolean) {
+      setExceptionCapture(v); setSaving(true);
+      await patchTeam({ autocapture_exceptions_opt_in: v });
+      setSaving(false);
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <InfoBanner />
@@ -46842,8 +46849,9 @@ function WASettingsView() {
               <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
             </p>
             <div className="flex items-center gap-2.5">
-              <Toggle val={exceptionCapture} set={setExceptionCapture}/>
+              <Toggle val={exceptionCapture} set={toggleException}/>
               <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura de excepciones</span>
+              {saving && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </div>
           </div>
           {/* Integrations */}
@@ -46855,17 +46863,20 @@ function WASettingsView() {
             <p className="text-[13px] text-[#646462] mb-4">Conecta el seguimiento de errores con servicios externos como GitHub o Linear.</p>
             <div className="space-y-5">
               {[
-                { name: 'Linear', action: 'Conectar espacio de trabajo', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><rect width="24" height="24" rx="5" fill="#1a1a1a"/><path d="M5 17.5L14 5l5 5-8.5 9H5z" fill="white"/></svg> },
-                { name: 'GitHub', action: 'Conectar organización', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><path d="M12 2C6.48 2 2 6.58 2 12.22c0 4.54 2.87 8.4 6.84 9.77.5.09.68-.22.68-.49v-1.71c-2.78.62-3.37-1.38-3.37-1.38-.45-1.28-1.11-1.62-1.11-1.62-.91-.64.07-.63.07-.63.99.07 1.52 1.05 1.52 1.05.89 1.57 2.33 1.11 2.9.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.09 0-1.13.39-2.05 1.02-2.77-.1-.26-.44-1.31.1-2.73 0 0 .84-.28 2.75 1.05A9.26 9.26 0 0112 7.56c.85 0 1.7.12 2.5.34 1.9-1.33 2.74-1.05 2.74-1.05.54 1.42.2 2.47.1 2.73.63.72 1.02 1.64 1.02 2.77 0 3.96-2.35 4.83-4.58 5.08.36.32.68.95.68 1.91v2.84c0 .27.18.59.69.49A10.23 10.23 0 0022 12.22C22 6.58 17.52 2 12 2z" fill="#1a1a1a"/></svg> },
-                { name: 'GitLab', action: 'Conectar proyecto', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 01-.3-.94L2.27 9.67l2.29-7.03a.42.42 0 01.79 0l2.29 7.03H16.36l2.29-7.03a.42.42 0 01.79 0l2.29 7.03 1.22 3.78a.84.84 0 01-.3.94z" fill="#E24329"/></svg> },
-                { name: 'Jira', action: 'Conectar sitio', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><path d="M12 0L2 10l4 4 6-6 6 6 4-4L12 0zm0 12l-4 4 4 4 4-4-4-4z" fill="#2684FF"/></svg> },
-              ].map(({ name, action, logo }) => (
+                { name: 'Linear', action: 'Conectar espacio de trabajo', docs: 'https://posthog.com/docs/error-tracking/integrations/linear', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><rect width="24" height="24" rx="5" fill="#1a1a1a"/><path d="M5 17.5L14 5l5 5-8.5 9H5z" fill="white"/></svg> },
+                { name: 'GitHub', action: 'Conectar organización', docs: 'https://posthog.com/docs/error-tracking/integrations/github', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><path d="M12 2C6.48 2 2 6.58 2 12.22c0 4.54 2.87 8.4 6.84 9.77.5.09.68-.22.68-.49v-1.71c-2.78.62-3.37-1.38-3.37-1.38-.45-1.28-1.11-1.62-1.11-1.62-.91-.64.07-.63.07-.63.99.07 1.52 1.05 1.52 1.05.89 1.57 2.33 1.11 2.9.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.09 0-1.13.39-2.05 1.02-2.77-.1-.26-.44-1.31.1-2.73 0 0 .84-.28 2.75 1.05A9.26 9.26 0 0112 7.56c.85 0 1.7.12 2.5.34 1.9-1.33 2.74-1.05 2.74-1.05.54 1.42.2 2.47.1 2.73.63.72 1.02 1.64 1.02 2.77 0 3.96-2.35 4.83-4.58 5.08.36.32.68.95.68 1.91v2.84c0 .27.18.59.69.49A10.23 10.23 0 0022 12.22C22 6.58 17.52 2 12 2z" fill="#1a1a1a"/></svg> },
+                { name: 'GitLab', action: 'Conectar proyecto', docs: 'https://posthog.com/docs/error-tracking/integrations/gitlab', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 01-.3-.94L2.27 9.67l2.29-7.03a.42.42 0 01.79 0l2.29 7.03H16.36l2.29-7.03a.42.42 0 01.79 0l2.29 7.03 1.22 3.78a.84.84 0 01-.3.94z" fill="#E24329"/></svg> },
+                { name: 'Jira', action: 'Conectar sitio', docs: 'https://posthog.com/docs/error-tracking/integrations/jira', logo: <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0"><path d="M12 0L2 10l4 4 6-6 6 6 4-4L12 0zm0 12l-4 4 4 4 4-4-4-4z" fill="#2684FF"/></svg> },
+              ].map(({ name, action, docs, logo }) => (
                 <div key={name}>
                   <div className="flex items-center gap-2 mb-2">
                     {logo}
                     <span className="text-[14px] font-semibold text-[#1a1a1a]">{name}</span>
                   </div>
-                  <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">{action}</button>
+                  <button
+                    onClick={() => window.open(docs, '_blank', 'noopener,noreferrer')}
+                    className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] inline-flex items-center gap-1.5"
+                  >{action} <span className="text-[#646462]">↗</span></button>
                 </div>
               ))}
             </div>
@@ -46877,10 +46888,26 @@ function WASettingsView() {
 
   // ── Experiments Page ──────────────────────────────────────────────────────────
   function ExperimentsPage() {
-    const [statMethod, setStatMethod] = useState<'bayesian'|'frequentist'>('bayesian');
-    const [confidence, setConfidence] = useState('95%');
-    const [recalcTime, setRecalcTime] = useState('02:00');
-    const [requireConversion, setRequireConversion] = useState(false);
+    const xs = team?.extra_settings || {};
+    const [statMethod, setStatMethod] = useState<'bayesian'|'frequentist'>(xs.experiments_stat_method ?? 'bayesian');
+    const [confidence, setConfidence] = useState<string>(xs.experiments_confidence ?? '95%');
+    const [recalcTime, setRecalcTime] = useState<string>(xs.experiments_recalc_time ?? '02:00');
+    const [requireConversion, setRequireConversion] = useState<boolean>(!!xs.experiments_require_conversion);
+    const [savingKey, setSavingKey] = React.useState('');
+    React.useEffect(() => {
+      const s = team?.extra_settings || {};
+      setStatMethod(s.experiments_stat_method ?? 'bayesian');
+      setConfidence(s.experiments_confidence ?? '95%');
+      setRecalcTime(s.experiments_recalc_time ?? '02:00');
+      setRequireConversion(!!s.experiments_require_conversion);
+    }, [team?.id]);
+    async function saveExp(field: string, value: any, localSetter?: (v: any) => void) {
+      if (localSetter) localSetter(value);
+      setSavingKey(field);
+      const next = { ...(team?.extra_settings || {}), [field]: value };
+      await patchTeam({ extra_settings: next });
+      setSavingKey('');
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <InfoBanner />
@@ -46897,7 +46924,7 @@ function WASettingsView() {
             </p>
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => setStatMethod('bayesian')}
+                onClick={() => saveExp('experiments_stat_method', 'bayesian', setStatMethod)}
                 className={`p-4 rounded-xl border-2 text-left transition-colors ${statMethod === 'bayesian' ? 'border-[#e8572a] bg-[#fff5f2]' : 'border-[#e9eae6] hover:border-[#d1d5db]'}`}
               >
                 <div className="flex items-center justify-between mb-1.5">
@@ -46909,7 +46936,7 @@ function WASettingsView() {
                 <p className="text-[12px] text-[#646462] leading-[18px]">Ofrece una probabilidad de ganancia clara, mostrando qué tan probable es que una variante sea mejor que otra. Ideal para ingenieros de producto nuevos en la experimentación.</p>
               </button>
               <button
-                onClick={() => setStatMethod('frequentist')}
+                onClick={() => saveExp('experiments_stat_method', 'frequentist', setStatMethod)}
                 className={`p-4 rounded-xl border-2 text-left transition-colors ${statMethod === 'frequentist' ? 'border-[#e8572a] bg-[#fff5f2]' : 'border-[#e9eae6] hover:border-[#d1d5db]'}`}
               >
                 <div className="flex items-center justify-between mb-1.5">
@@ -46929,9 +46956,16 @@ function WASettingsView() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
             </div>
             <p className="text-[13px] text-[#646462] mb-3">Un nivel de confianza más alto reduce los falsos positivos pero requiere más datos. Se puede cambiar por experimento.</p>
-            <select value={confidence} onChange={e => setConfidence(e.target.value)} className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none cursor-pointer">
-              {['90%','95%','99%'].map(v => <option key={v}>{v}</option>)}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={confidence}
+                onChange={e => saveExp('experiments_confidence', e.target.value, setConfidence)}
+                className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none cursor-pointer"
+              >
+                {['90%','95%','99%'].map(v => <option key={v}>{v}</option>)}
+              </select>
+              {savingKey === 'experiments_confidence' && <span className="text-[11px] text-[#646462]">guardando…</span>}
+            </div>
           </div>
           {/* Daily recalculation time */}
           <div className="pb-6 border-b border-[#e9eae6]">
@@ -46940,9 +46974,16 @@ function WASettingsView() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
             </div>
             <p className="text-[13px] text-[#646462] mb-3">Selecciona la hora del día en que se recalcularán las métricas del experimento. Esta hora está en la zona horaria de tu proyecto.</p>
-            <select value={recalcTime} onChange={e => setRecalcTime(e.target.value)} className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none cursor-pointer">
-              {['00:00','02:00','04:00','06:00','08:00','10:00','12:00'].map(v => <option key={v}>{v}</option>)}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={recalcTime}
+                onChange={e => saveExp('experiments_recalc_time', e.target.value, setRecalcTime)}
+                className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none cursor-pointer"
+              >
+                {Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2,'0')}:00`).map(v => <option key={v}>{v}</option>)}
+              </select>
+              {savingKey === 'experiments_recalc_time' && <span className="text-[11px] text-[#646462]">guardando…</span>}
+            </div>
           </div>
           {/* Conversion window */}
           <div>
@@ -46952,8 +46993,14 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462] mb-3">Cuando está activado, los nuevos experimentos solo contarán participantes cuya ventana de conversión completa haya transcurrido. Se puede cambiar por experimento.</p>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={requireConversion} onChange={e => setRequireConversion(e.target.checked)} className="w-4 h-4 border-2 border-[#d1d5db] rounded accent-[#e8572a]"/>
+              <input
+                type="checkbox"
+                checked={requireConversion}
+                onChange={e => saveExp('experiments_require_conversion', e.target.checked, setRequireConversion)}
+                className="w-4 h-4 border-2 border-[#d1d5db] rounded accent-[#e8572a]"
+              />
               <span className="text-[13px] text-[#1a1a1a]">Requerir ventana de conversión completada</span>
+              {savingKey === 'experiments_require_conversion' && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </label>
           </div>
         </div>
@@ -46963,9 +47010,52 @@ function WASettingsView() {
 
   // ── Feature Flags Page ────────────────────────────────────────────────────────
   function FeatureFlagsPage() {
-    const [flagPersistence, setFlagPersistence] = useState(false);
-    const [flagConfirmation, setFlagConfirmation] = useState(false);
-    const [defaultRelease, setDefaultRelease] = useState(false);
+    const xs = team?.extra_settings || {};
+    const [flagPersistence, setFlagPersistence] = useState<boolean>(!!(team?.flags_persistence_default ?? xs.flags_persistence_default));
+    const [flagConfirmation, setFlagConfirmation] = useState<boolean>(!!xs.flags_confirmation);
+    const [defaultRelease, setDefaultRelease] = useState<boolean>(!!xs.flags_default_release);
+    const [savingKey, setSavingKey] = React.useState('');
+    const [secureKey, setSecureKey] = useState<string>(team?.secret_api_token ?? '');
+    const [secureKeyCopied, setSecureKeyCopied] = React.useState(false);
+    const [rotating, setRotating] = React.useState(false);
+    React.useEffect(() => {
+      const s = team?.extra_settings || {};
+      setFlagPersistence(!!(team?.flags_persistence_default ?? s.flags_persistence_default));
+      setFlagConfirmation(!!s.flags_confirmation);
+      setDefaultRelease(!!s.flags_default_release);
+      setSecureKey(team?.secret_api_token ?? '');
+    }, [team?.id]);
+    async function togglePersistence(v: boolean) {
+      setFlagPersistence(v); setSavingKey('persistence');
+      // Try real field first, fall back to extra_settings
+      let ok = false;
+      try { ok = await patchTeam({ flags_persistence_default: v }); } catch { ok = false; }
+      if (!ok) {
+        const next = { ...(team?.extra_settings || {}), flags_persistence_default: v };
+        await patchTeam({ extra_settings: next });
+      }
+      setSavingKey('');
+    }
+    async function toggleExtra(field: string, v: boolean, setter: (b: boolean) => void) {
+      setter(v); setSavingKey(field);
+      const next = { ...(team?.extra_settings || {}), [field]: v };
+      await patchTeam({ extra_settings: next }); setSavingKey('');
+    }
+    async function copySecure() {
+      if (!secureKey) return;
+      try { await navigator.clipboard.writeText(secureKey); setSecureKeyCopied(true); setTimeout(() => setSecureKeyCopied(false), 2000); } catch {}
+    }
+    async function rotateSecure() {
+      if (!confirm('¿Rotar la clave segura de feature flags?\n\nLa clave primaria actual pasará a ser de respaldo. Actualiza tus SDKs antes de que expire.')) return;
+      setRotating(true);
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phPost(`/api/environments/${ph.getTeamId()}/rotate_secret_token/`, {});
+        const newKey = res.secret_api_token ?? res.token ?? '';
+        if (newKey) { setSecureKey(newKey); setTeam((t: any) => ({ ...t, secret_api_token: newKey })); }
+      } catch (e: any) { alert('No se pudo rotar la clave: ' + (e?.message ?? '')); }
+      setRotating(false);
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <InfoBanner />
@@ -46981,8 +47071,9 @@ function WASettingsView() {
               <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
             </p>
             <div className="flex items-center gap-2.5">
-              <Toggle val={flagPersistence} set={setFlagPersistence}/>
+              <Toggle val={flagPersistence} set={togglePersistence}/>
               <span className="text-[13px] text-[#1a1a1a]">Activar persistencia de flags por defecto</span>
+              {savingKey === 'persistence' && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </div>
           </div>
           {/* Flag change confirmation */}
@@ -46993,8 +47084,9 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462] mb-3">Muestra un modal de confirmación antes de guardar cambios en feature flags existentes, ayudando a prevenir cambios accidentales en las condiciones de publicación.</p>
             <div className="flex items-center gap-2.5">
-              <Toggle val={flagConfirmation} set={setFlagConfirmation}/>
+              <Toggle val={flagConfirmation} set={(v: boolean) => toggleExtra('flags_confirmation', v, setFlagConfirmation)}/>
               <span className="text-[13px] text-[#1a1a1a]">Requerir confirmación para cambios en feature flags</span>
+              {savingKey === 'flags_confirmation' && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </div>
           </div>
           {/* Default release conditions */}
@@ -47005,8 +47097,9 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462] mb-3">Aplica automáticamente condiciones de publicación predeterminadas a los feature flags recién creados. Los usuarios aún pueden modificarlas durante la creación del flag.</p>
             <div className="flex items-center gap-2.5">
-              <Toggle val={defaultRelease} set={setDefaultRelease}/>
+              <Toggle val={defaultRelease} set={(v: boolean) => toggleExtra('flags_default_release', v, setDefaultRelease)}/>
               <span className="text-[13px] text-[#1a1a1a]">Aplicar condiciones de publicación por defecto a nuevos flags</span>
+              {savingKey === 'flags_default_release' && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </div>
           </div>
           {/* Secure API key */}
@@ -47019,14 +47112,19 @@ function WASettingsView() {
               Usa esta clave para la evaluación local de feature flags o ajustes de configuración remota. Reemplaza las API keys personales para la evaluación local.{' '}
               <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
             </p>
-            <p className="text-[12px] text-[#646462] mb-1.5">Clave primaria <span className="text-[#16a34a] font-medium">(Activa)</span></p>
+            <p className="text-[12px] text-[#646462] mb-1.5">Clave primaria {secureKey ? <span className="text-[#16a34a] font-medium">(Activa)</span> : <span className="text-[#9ca3af] font-medium">(No generada)</span>}</p>
             <div className="flex items-center border border-[#e9eae6] rounded-lg bg-white overflow-hidden mb-1.5">
-              <p className="flex-1 px-4 py-2.5 text-[12px] text-[#9ca3af] italic">Haz clic en el botón de rotación a la derecha para generar una nueva clave.</p>
-              <button className="px-2.5 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1]">
+              {secureKey ? (
+                <code className="flex-1 px-4 py-2.5 text-[12px] font-mono text-[#1a1a1a] truncate">{secureKey}</code>
+              ) : (
+                <p className="flex-1 px-4 py-2.5 text-[12px] text-[#9ca3af] italic">Haz clic en el botón de rotación a la derecha para generar una nueva clave.</p>
+              )}
+              <button onClick={rotateSecure} disabled={rotating} title="Rotar clave" className="px-2.5 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] disabled:opacity-50">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M13 3a6.5 6.5 0 11-2.5 12.5M13 3V7h-4"/></svg>
               </button>
-              <button className="px-2.5 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1]">
+              <button onClick={copySecure} disabled={!secureKey} title="Copiar clave" className="px-2.5 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] disabled:opacity-50 inline-flex items-center gap-1">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                {secureKeyCopied && <span className="text-[11px] text-[#16a34a]">✓</span>}
               </button>
             </div>
             <p className="text-[12px] text-[#646462]">Al rotar la clave, la clave primaria actual pasará a ser de respaldo para que puedas migrar de forma segura.</p>
