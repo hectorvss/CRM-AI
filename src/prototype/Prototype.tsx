@@ -50808,6 +50808,47 @@ function WASettingsView() {
     const [orgAccess, setOrgAccess] = useState<'all'|'orgs'|'projects'>('all');
     const [scopeSearch, setScopeSearch] = useState('');
     const [scopes, setScopes] = useState<Record<string, 'none'|'read'|'write'>>({});
+    const [keys, setKeys] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [creating, setCreating] = React.useState(false);
+    const [newKeyShown, setNewKeyShown] = React.useState<string | null>(null);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/personal_api_keys/`);
+        setKeys(res?.results ?? res ?? []);
+      } catch { setKeys([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function createKey() {
+      if (!label.trim()) return;
+      setCreating(true);
+      try {
+        const ph = await import('../api/posthog');
+        const scopesArr: string[] = [];
+        Object.entries(scopes).forEach(([n, v]) => {
+          if (v !== 'none') scopesArr.push(`${n.toLowerCase().replace(/ /g, '_')}:${v}`);
+        });
+        const res: any = await ph.phPost(`/api/personal_api_keys/`, {
+          label: label.trim(),
+          scopes: scopesArr.length ? scopesArr : ['*'],
+          scoped_organizations: orgAccess === 'orgs' ? [] : undefined,
+          scoped_teams: orgAccess === 'projects' ? [] : undefined,
+        });
+        const tok = res?.value ?? res?.key;
+        if (tok) setNewKeyShown(tok);
+        setShowModal(false);
+        await refresh();
+      } catch (e: any) { alert('No se pudo crear la clave: ' + (e?.message ?? '')); }
+      finally { setCreating(false); }
+    }
+    async function deleteKey(id: string) {
+      if (!confirm('¿Eliminar clave?')) return;
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/personal_api_keys/${id}/`); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function copyKey(t: string) { try { await navigator.clipboard.writeText(t); } catch {} }
 
     type ScopeEntry = { name: string; noWrite?: boolean; orange?: boolean; info?: boolean };
     const allScopes: ScopeEntry[] = [
@@ -50877,24 +50918,46 @@ function WASettingsView() {
             <span className="text-[15px] leading-none">+</span> Crear clave API personal
           </button>
 
+          {newKeyShown && (
+            <div className="border border-[#fde68a] bg-[#fffbeb] rounded-[10px] p-4 space-y-2">
+              <p className="text-[13px] font-semibold text-[#92400e]">⚠️ Clave generada — guárdala ahora, no podrás verla de nuevo</p>
+              <div className="flex items-center gap-2 bg-white border border-[#e9eae6] rounded px-3 py-2">
+                <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] break-all">{newKeyShown}</code>
+                <button onClick={() => copyKey(newKeyShown)} className="text-[#e8572a] text-[12px] hover:underline">Copiar</button>
+              </div>
+              <button onClick={() => setNewKeyShown(null)} className="text-[12px] text-[#646462] hover:underline">Cerrar</button>
+            </div>
+          )}
+
           <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Etiqueta</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Clave secreta</th>
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Alcances</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acceso org. y proyecto</th>
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Último uso</th>
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Última renovación</th>
+                  <th className="px-4 py-2.5"></th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td colSpan={8} className="px-4 py-3 text-[13px] text-[#646462]">Sin claves API personales</td>
-                </tr>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {loading ? (
+                  <tr><td colSpan={5} className="px-4 py-3 text-center text-[12px] text-[#646462]">Cargando claves…</td></tr>
+                ) : keys.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-3 text-[13px] text-[#646462]">Sin claves API personales</td></tr>
+                ) : (
+                  keys.map((k: any) => (
+                    <tr key={k.id} className="hover:bg-[#fafaf9]">
+                      <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a] font-medium">{k.label ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-[11px] text-[#646462]">{(k.scopes ?? []).slice(0, 3).join(', ')}{(k.scopes ?? []).length > 3 ? ` +${k.scopes.length - 3}` : ''}</td>
+                      <td className="px-4 py-2.5 text-[11px] text-[#646462]">{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Nunca'}</td>
+                      <td className="px-4 py-2.5 text-[11px] text-[#646462]">{k.created_at ? new Date(k.created_at).toLocaleDateString() : '—'}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button onClick={() => deleteKey(k.id)} className="text-[#dc2626] text-[11px] hover:underline">Eliminar</button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -50999,7 +51062,7 @@ function WASettingsView() {
               {/* Footer */}
               <div className="border-t border-[#e9eae6] px-6 py-4 flex justify-end gap-2">
                 <button onClick={() => setShowModal(false)} className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
-                <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">Crear clave</button>
+                <button onClick={createKey} disabled={creating || !label.trim()} className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white disabled:opacity-50">{creating ? 'Creando…' : 'Crear clave'}</button>
               </div>
             </div>
           </div>
@@ -51010,22 +51073,51 @@ function WASettingsView() {
 
   // ── AccountDangerZonePage ─────────────────────────────────────────────────
   function AccountDangerZonePage() {
+    const [me, setMe] = React.useState<any>(null);
+    const [confirmEmail, setConfirmEmail] = React.useState('');
+    const [deleting, setDeleting] = React.useState(false);
+    React.useEffect(() => { (async () => { try { const ph = await import('../api/posthog'); setMe(await ph.posthog.me()); } catch {} })(); }, []);
+    async function deleteAccount() {
+      if (!me?.email || confirmEmail !== me.email) { alert('El email no coincide'); return; }
+      if (!confirm('¿Eliminar tu cuenta de Clain DEFINITIVAMENTE?')) return;
+      setDeleting(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phDelete(`/api/users/@me/`);
+        alert('Cuenta eliminada.');
+        window.location.href = '/';
+      } catch (e: any) { alert('No se pudo eliminar: ' + (e?.message ?? '')); setDeleting(false); }
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-4">
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Eliminar cuenta</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <h2 className="text-[15px] font-bold text-[#dc2626]">Eliminar cuenta</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#dc2626]"><path d="M8 1L1 14h14L8 1zm0 5v4M8 12h.01" stroke="#dc2626" strokeWidth="1.5" fill="none"/></svg>
             </div>
             <p className="text-[13px] text-[#646462]">Elimina permanentemente tu cuenta de Clain. Esta acción no se puede deshacer.</p>
-            <p className="text-[13px] text-[#e8572a]">
+            <p className="text-[13px] text-[#dc2626]">
               Esto es <strong>irreversible</strong>. Por favor, asegúrate.
             </p>
-            <button className="flex items-center gap-2 h-9 px-4 border border-[#e8572a] rounded-lg text-[13px] font-semibold text-[#e8572a] hover:bg-[#fef2f0] bg-white">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#e8572a]"><path d="M6 2a1 1 0 00-1 1v1H3a1 1 0 000 2h.08l.6 7.2A2 2 0 005.67 15h4.66a2 2 0 001.99-1.8L12.92 6H13a1 1 0 000-2h-2V3a1 1 0 00-1-1H6zm1 2h2v1H7V4zm-2.08 2h6.16l-.57 6.87a.5.5 0 01-.5.13H5.99a.5.5 0 01-.5-.13L4.92 6z"/></svg>
-              Eliminar tu cuenta
-            </button>
+            <div className="border-2 border-[#dc2626] rounded-[10px] p-4 space-y-3">
+              <p className="text-[12px] text-[#646462]">Para confirmar, escribe tu email <strong className="text-[#1a1a1a]">{me?.email ?? '…'}</strong>:</p>
+              <input
+                type="email"
+                value={confirmEmail}
+                onChange={e => setConfirmEmail(e.target.value)}
+                placeholder={me?.email ?? ''}
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#dc2626] font-mono"
+              />
+              <button
+                onClick={deleteAccount}
+                disabled={deleting || !me?.email || confirmEmail !== me.email}
+                className="flex items-center gap-2 h-9 px-4 bg-[#dc2626] text-white text-[13px] font-semibold rounded-lg hover:bg-[#b91c1c] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white"><path d="M6 2a1 1 0 00-1 1v1H3a1 1 0 000 2h.08l.6 7.2A2 2 0 005.67 15h4.66a2 2 0 001.99-1.8L12.92 6H13a1 1 0 000-2h-2V3a1 1 0 00-1-1H6zm1 2h2v1H7V4zm-2.08 2h6.16l-.57 6.87a.5.5 0 01-.5.13H5.99a.5.5 0 01-.5-.13L4.92 6z"/></svg>
+                {deleting ? 'Eliminando…' : 'Eliminar tu cuenta definitivamente'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
