@@ -48412,13 +48412,64 @@ function WASettingsView() {
 
   // ── WebAnalyticsSettingsPage ──────────────────────────────────────────────
   function WebAnalyticsSettingsPage() {
-    const [cookieless, setCookieless] = useState('disabled');
-    const [bounceRate, setBounceRate] = useState('10');
-    const [webVitals, setWebVitals] = useState(false);
-    const [cls, setCls] = useState(true);
-    const [fcp, setFcp] = useState(true);
-    const [lcp, setLcp] = useState(true);
-    const [inp, setInp] = useState(true);
+    const initialAllowed: string[] = team?.autocapture_web_vitals_allowed_metrics ?? ['CLS','FCP','LCP','INP'];
+    const [cookieless, setCookieless] = useState<string>(team?.cookieless_server_hash_mode === 1 || team?.cookieless_server_hash_mode === 'stateful' ? 'enabled' : 'disabled');
+    const [bounceRate, setBounceRate] = useState<string>(String(team?.web_analytics_pre_aggregated_tables_enabled_bounce_seconds ?? team?.session_recording_minimum_duration_milliseconds ?? '10'));
+    const [webVitals, setWebVitalsLocal] = useState<boolean>(!!team?.autocapture_web_vitals_opt_in);
+    const [cls, setCls] = useState<boolean>(initialAllowed.includes('CLS'));
+    const [fcp, setFcp] = useState<boolean>(initialAllowed.includes('FCP'));
+    const [lcp, setLcp] = useState<boolean>(initialAllowed.includes('LCP'));
+    const [inp, setInp] = useState<boolean>(initialAllowed.includes('INP'));
+    const [savingKey, setSavingKey] = React.useState('');
+    const [authUrls, setAuthUrls] = useState<string[]>(team?.app_urls ?? []);
+    const [newUrl, setNewUrl] = useState('');
+    const [showAddUrl, setShowAddUrl] = useState(false);
+    React.useEffect(() => {
+      setAuthUrls(team?.app_urls ?? []);
+      setCookieless(team?.cookieless_server_hash_mode === 1 || team?.cookieless_server_hash_mode === 'stateful' ? 'enabled' : 'disabled');
+      setBounceRate(String(team?.web_analytics_pre_aggregated_tables_enabled_bounce_seconds ?? '10'));
+      setWebVitalsLocal(!!team?.autocapture_web_vitals_opt_in);
+      const a = team?.autocapture_web_vitals_allowed_metrics ?? ['CLS','FCP','LCP','INP'];
+      setCls(a.includes('CLS')); setFcp(a.includes('FCP')); setLcp(a.includes('LCP')); setInp(a.includes('INP'));
+    }, [team?.id]);
+
+    async function addUrl() {
+      const v = newUrl.trim(); if (!v) return;
+      const next = [...authUrls, v];
+      setAuthUrls(next); setNewUrl(''); setShowAddUrl(false); setSavingKey('urls');
+      await patchTeam({ app_urls: next }); setSavingKey('');
+    }
+    async function removeUrl(u: string) {
+      const next = authUrls.filter(x => x !== u);
+      setAuthUrls(next); setSavingKey('urls');
+      await patchTeam({ app_urls: next }); setSavingKey('');
+    }
+    async function saveCookieless() {
+      setSavingKey('cookieless');
+      await patchTeam({ cookieless_server_hash_mode: cookieless === 'enabled' ? 1 : 0 });
+      setSavingKey('');
+    }
+    async function saveBounce() {
+      setSavingKey('bounce');
+      await patchTeam({ web_analytics_pre_aggregated_tables_enabled_bounce_seconds: Number(bounceRate) || 10 });
+      setSavingKey('');
+    }
+    async function toggleWV(v: boolean) {
+      setWebVitalsLocal(v); setSavingKey('wv');
+      await patchTeam({ autocapture_web_vitals_opt_in: v });
+      setSavingKey('');
+    }
+    async function toggleMetric(metric: 'CLS'|'FCP'|'LCP'|'INP', v: boolean) {
+      const map: Record<string, [boolean, (b: boolean) => void]> = {
+        CLS: [cls, setCls], FCP: [fcp, setFcp], LCP: [lcp, setLcp], INP: [inp, setInp],
+      };
+      map[metric][1](v);
+      const next: Record<string, boolean> = { CLS: cls, FCP: fcp, LCP: lcp, INP: inp, [metric]: v };
+      const arr = (['CLS','FCP','LCP','INP'] as const).filter(m => next[m]);
+      setSavingKey('m-' + metric);
+      await patchTeam({ autocapture_web_vitals_allowed_metrics: arr });
+      setSavingKey('');
+    }
 
     return (
       <div className="flex-1 overflow-y-auto">
@@ -48437,28 +48488,46 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462]">Configura qué dominios se rastrean en web analytics. No se permiten comodines — las URLs deben ser concretas y accesibles.</p>
 
-            {/* No URLs card */}
-            <div className="border border-[#e9eae6] rounded-[10px] p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">No hay URLs autorizadas.</p>
-                  <p className="text-[13px] text-[#646462] mt-1">Añade una para empezar. Cuando nos envíes eventos te sugeriremos las que deberías autorizar. Esto te permitirá usar estas URLs en web analytics, experimentos web y nuestra barra de herramientas.</p>
-                </div>
-                <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] whitespace-nowrap">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 2.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/></svg>
-                    Buscar sugerencias
-                  </button>
-                  <span className="text-[11px] text-[#646462] whitespace-nowrap">¿Enviaste un evento? Volver a buscar sugerencias.</span>
-                </div>
+            {/* URLs list */}
+            {authUrls.length === 0 ? (
+              <div className="border border-[#e9eae6] rounded-[10px] p-4">
+                <p className="text-[13px] font-semibold text-[#1a1a1a]">No hay URLs autorizadas.</p>
+                <p className="text-[13px] text-[#646462] mt-1">Añade una para empezar. Esto te permitirá usar estas URLs en web analytics, experimentos web y nuestra barra de herramientas. {savingKey === 'urls' && <span className="text-[11px] text-[#646462]">guardando…</span>}</p>
               </div>
-            </div>
+            ) : (
+              <div className="border border-[#e9eae6] rounded-[10px] divide-y divide-[#e9eae6]">
+                {authUrls.map(u => (
+                  <div key={u} className="flex items-center gap-3 px-4 py-2.5">
+                    <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] truncate">{u}</code>
+                    <button onClick={() => removeUrl(u)} className="text-[#646462] hover:text-[#e8572a]" title="Eliminar">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
-            {/* Add URL button */}
-            <button className="w-full flex items-center justify-center gap-2 h-10 border border-dashed border-[#e9eae6] rounded-[10px] text-[13px] font-medium text-[#646462] hover:bg-[#f3f3f1] hover:border-[#1a1a1a] hover:text-[#1a1a1a]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-              Añadir nueva URL autorizada
-            </button>
+            {/* Add URL */}
+            {showAddUrl ? (
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  type="url"
+                  value={newUrl}
+                  onChange={e => setNewUrl(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addUrl(); if (e.key === 'Escape') { setShowAddUrl(false); setNewUrl(''); } }}
+                  placeholder="https://ejemplo.com"
+                  className="flex-1 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                />
+                <button onClick={addUrl} className="h-9 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Añadir</button>
+                <button onClick={() => { setShowAddUrl(false); setNewUrl(''); }} className="h-9 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              </div>
+            ) : (
+              <button onClick={() => setShowAddUrl(true)} className="w-full flex items-center justify-center gap-2 h-10 border border-dashed border-[#e9eae6] rounded-[10px] text-[13px] font-medium text-[#646462] hover:bg-[#f3f3f1] hover:border-[#1a1a1a] hover:text-[#1a1a1a]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Añadir nueva URL autorizada
+              </button>
+            )}
           </div>
 
           {/* Custom channel type */}
@@ -48488,15 +48557,15 @@ function WASettingsView() {
             <p className="text-[13px] text-[#646462]">Activa el tracking sin cookies usando un hash que preserva la privacidad para contar usuarios únicos sin cookies. Debes activarlo aquí antes de activar cookieless en clain-js.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="space-y-2">
               {[{v:'enabled',label:'Activado'},{v:'disabled',label:'Desactivado'}].map(opt => (
-                <label key={opt.v} className="flex items-center gap-2.5 cursor-pointer">
-                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${cookieless === opt.v ? 'border-[#e8572a] bg-[#e8572a]' : 'border-[#d1d5db]'}`} onClick={() => setCookieless(opt.v)}>
+                <label key={opt.v} onClick={() => setCookieless(opt.v)} className="flex items-center gap-2.5 cursor-pointer">
+                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${cookieless === opt.v ? 'border-[#e8572a] bg-[#e8572a]' : 'border-[#d1d5db]'}`}>
                     {cookieless === opt.v && <div className="w-1.5 h-1.5 rounded-full bg-white"/>}
                   </div>
                   <span className="text-[13px] text-[#1a1a1a]">{opt.label}</span>
                 </label>
               ))}
             </div>
-            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+            <button onClick={saveCookieless} disabled={savingKey === 'cookieless'} className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] disabled:opacity-50">{savingKey === 'cookieless' ? 'Guardando…' : 'Guardar'}</button>
           </div>
 
           {/* Bounce rate duration */}
@@ -48515,7 +48584,7 @@ function WASettingsView() {
                 </button>
               )}
             </div>
-            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+            <button onClick={saveBounce} disabled={savingKey === 'bounce'} className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] disabled:opacity-50">{savingKey === 'bounce' ? 'Guardando…' : 'Guardar'}</button>
           </div>
 
           {/* Web vitals autocapture */}
@@ -48531,20 +48600,20 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462]">Captura las métricas de web vitals de Google Chrome para el seguimiento del rendimiento en web analytics.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar autocaptura de web vitals</span>
-              <Toggle checked={webVitals} onChange={setWebVitals}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar autocaptura de web vitals {savingKey === 'wv' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={webVitals} onChange={toggleWV}/>
             </div>
             <p className="text-[13px] text-[#646462]">También puedes elegir capturar solo métricas específicas de web vitals. Por defecto, se capturan las cuatro métricas principales: CLS, FCP, LCP e INP.</p>
             <div className="grid grid-cols-2 gap-x-8 gap-y-3 max-w-xs">
-              {[
-                { label: 'Capturar CLS', v: cls, set: setCls },
-                { label: 'Capturar FCP', v: fcp, set: setFcp },
-                { label: 'Capturar LCP', v: lcp, set: setLcp },
-                { label: 'Capturar INP', v: inp, set: setInp },
-              ].map(item => (
+              {([
+                { label: 'Capturar CLS', metric: 'CLS' as const, v: cls },
+                { label: 'Capturar FCP', metric: 'FCP' as const, v: fcp },
+                { label: 'Capturar LCP', metric: 'LCP' as const, v: lcp },
+                { label: 'Capturar INP', metric: 'INP' as const, v: inp },
+              ]).map(item => (
                 <div key={item.label} className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-medium text-[#1a1a1a]">{item.label}</span>
-                  <Toggle checked={item.v} onChange={item.set}/>
+                  <span className="text-[13px] font-medium text-[#1a1a1a]">{item.label} {savingKey === 'm-' + item.metric && <span className="text-[11px] text-[#646462] font-normal">…</span>}</span>
+                  <Toggle checked={item.v} onChange={(v: boolean) => toggleMetric(item.metric, v)}/>
                 </div>
               ))}
             </div>
@@ -48556,7 +48625,19 @@ function WASettingsView() {
 
   // ── PrivacyPage ───────────────────────────────────────────────────────────
   function PrivacyPage() {
-    const [discardIP, setDiscardIP] = useState(false);
+    const [discardIP, setDiscardIP] = useState<boolean>(!!team?.discard_client_ip_data);
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setDiscardIP(!!team?.discard_client_ip_data); }, [team?.id]);
+    async function toggleDiscardIP(v: boolean) {
+      setDiscardIP(v); setSaving(true);
+      // Try field on team, fall back to extra_settings
+      try { const ok = await patchTeam({ discard_client_ip_data: v }); if (!ok) throw new Error('no'); }
+      catch {
+        const next = { ...(team?.extra_settings || {}), discard_client_ip_data: v };
+        await patchTeam({ extra_settings: next });
+      }
+      setSaving(false);
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-8">
@@ -48574,8 +48655,8 @@ function WASettingsView() {
               <a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a>
             </p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente</span>
-              <Toggle checked={discardIP} onChange={setDiscardIP}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente {saving && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={discardIP} onChange={toggleDiscardIP}/>
             </div>
           </div>
         </div>
@@ -48585,6 +48666,27 @@ function WASettingsView() {
 
   // ── AccessControlPage ─────────────────────────────────────────────────────
   function AccessControlPage() {
+    const [members, setMembers] = React.useState<any[]>([]);
+    const [loadingMembers, setLoadingMembers] = React.useState(true);
+    const [accessLevel, setAccessLevel] = React.useState<'member' | 'admin'>(team?.access_control ? 'admin' : 'member');
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const res: any = await (ph.posthog as any).organization?.members?.();
+          if (!cancelled) setMembers(res?.results ?? res ?? []);
+        } catch {}
+        finally { if (!cancelled) setLoadingMembers(false); }
+      })();
+      return () => { cancelled = true; };
+    }, []);
+    async function toggleProjectAccess(v: boolean) {
+      setSaving(true); setAccessLevel(v ? 'admin' : 'member');
+      await patchTeam({ access_control: v });
+      setSaving(false);
+    }
     const PremiumCard = ({ title, desc }: { title: string; desc: string }) => (
       <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
         <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
@@ -48606,20 +48708,55 @@ function WASettingsView() {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <h2 className="text-[15px] font-bold text-[#1a1a1a]">Control de acceso</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Configuración de quién puede acceder a este proyecto"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
             </div>
-            <p className="text-[13px] text-[#646462]">Gestiona quién tiene acceso a este entorno y qué pueden hacer.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
-            <button className="flex items-center gap-2 h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
-              Probar la nueva UI
-            </button>
+            <p className="text-[13px] text-[#646462]">Gestiona quién tiene acceso a este entorno y qué pueden hacer.{' '}<a href="https://posthog.com/docs/settings/access-control" target="_blank" rel="noopener noreferrer" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
           </div>
 
-          {/* Project permissions */}
+          {/* Project-level access toggle */}
           <div className="space-y-3">
-            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Permisos de proyecto</h3>
-            <p className="text-[13px] text-[#646462]">Usa los permisos de proyecto para asignar acceso a todo el proyecto para personas y roles.</p>
-            <PremiumCard title="Control de acceso" desc="Controla quién puede acceder y modificar datos y funciones dentro de tu organización."/>
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Acceso al proyecto</h3>
+            <p className="text-[13px] text-[#646462]">Cuando está restringido, sólo los administradores y los miembros explícitamente añadidos pueden acceder al proyecto.</p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <div>
+                <p className="text-[13px] font-medium text-[#1a1a1a]">Restringir acceso al proyecto {saving && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                <p className="text-[12px] text-[#646462]">Solo administradores y miembros añadidos podrán entrar.</p>
+              </div>
+              <Toggle checked={accessLevel === 'admin'} onChange={toggleProjectAccess}/>
+            </div>
+          </div>
+
+          {/* Members list */}
+          <div className="space-y-3">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Miembros con acceso ({members.length})</h3>
+            <p className="text-[13px] text-[#646462]">Lista de miembros de la organización que tienen acceso a este proyecto.</p>
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              {loadingMembers ? (
+                <div className="px-4 py-6 text-center text-[12px] text-[#646462]">Cargando miembros…</div>
+              ) : members.length === 0 ? (
+                <div className="px-4 py-6 text-center text-[12px] text-[#646462]">Sin miembros</div>
+              ) : (
+                <div className="divide-y divide-[#e9eae6]">
+                  {members.map((m: any) => {
+                    const u = m.user || m;
+                    const level = m.level ?? 1;
+                    const role = level >= 15 ? 'Owner' : level >= 8 ? 'Admin' : 'Member';
+                    return (
+                      <div key={u.id ?? u.uuid ?? u.email} className="flex items-center gap-3 px-4 py-2.5">
+                        <div className="w-7 h-7 rounded-full bg-[#fff5f2] flex items-center justify-center text-[12px] font-semibold text-[#e8572a]">
+                          {(u.first_name || u.email || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-medium text-[#1a1a1a] truncate">{u.first_name || u.last_name ? `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() : u.email}</p>
+                          <p className="text-[12px] text-[#646462] truncate">{u.email}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${role === 'Owner' ? 'bg-[#fff5f2] text-[#e8572a]' : role === 'Admin' ? 'bg-[#f0f4ff] text-[#3b59f6]' : 'bg-[#f3f3f1] text-[#646462]'}`}>{role}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Resource permissions */}
