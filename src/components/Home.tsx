@@ -2,6 +2,7 @@ import React from 'react';
 import { useApi } from '../api/hooks';
 import { casesApi, approvalsApi, reportsApi, workspacesApi } from '../api/client';
 import type { NavigateFn } from '../types';
+import PersonalProfileView from './profile/PersonalProfileView';
 
 interface HomeProps {
   onNavigate?: NavigateFn;
@@ -112,6 +113,11 @@ export default function Home({ onNavigate }: HomeProps) {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{wsName}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{today}</p>
+        </div>
+
+        {/* Personal profile screen — same component rendered in Settings > Personal. */}
+        <div className="-mx-2 mb-6">
+          <PersonalProfileView onNavigate={onNavigate} showHeader={false} />
         </div>
 
         {/* KPI row */}

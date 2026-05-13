@@ -1,0 +1,389 @@
+  // ── HeatmapsPage ─────────────────────────────────────────────────────────
+  function HeatmapsPage() {
+    const [heatmapsWeb, setHeatmapsWeb] = useState(false);
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Heatmaps section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Mapas de calor</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#1a1a1a]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11zm.75 8.5h-1.5v-1.5h1.5v1.5zm0-3h-1.5c0-2.25 2.25-2.063 2.25-3.375 0-.75-.563-1.125-1.125-1.125-.688 0-1.125.375-1.125.938H5.25C5.25 2.812 6.187 2 7.5 2c1.25 0 2.25.875 2.25 2 0 1.5-2.25 1.688-2.25 3.5z"/></svg>
+              <div className="flex items-center gap-1.5 ml-1">
+                <span className="text-[11px] font-semibold text-[#646462]">Plataformas compatibles:</span>
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded-full text-[11px] font-semibold text-[#16a34a]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a]"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5z"/></svg>
+                  Web
+                </span>
+              </div>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Captura clics generales, movimientos del ratón y scroll para crear mapas de calor. No se crean eventos adicionales. Los mapas de calor se generan basándose en las posiciones generales del ratón o toque, útil para entender el comportamiento general de los usuarios.{' '}
+              <a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a>
+            </p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar mapas de calor para web</span>
+              <Toggle checked={heatmapsWeb} onChange={setHeatmapsWeb}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ProductAnalyticsPage ──────────────────────────────────────────────────
+  function ProductAnalyticsPage() {
+    const [filterEnabled, setFilterEnabled] = useState(false);
+    const [filterRevenue, setFilterRevenue] = useState(false);
+    const [personMode, setPersonMode] = useState<'event'|'query'|'ids'>('query');
+    const [lastSeen, setLastSeen] = useState(false);
+    const [humanPeriods, setHumanPeriods] = useState(false);
+    const [displayTags, setDisplayTags] = useState(['email', 'name', 'username']);
+    const [excludedEventProps, setExcludedEventProps] = useState('');
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Filter internal users */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Filtrar usuarios internos y de prueba</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <a href="#" className="text-[12px] text-[#e8572a] hover:underline">Docs ↗</a>
+            </div>
+            {/* Info note */}
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-[#f0f4ff] border border-[#c7d2fe] rounded-[10px]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              <p className="text-[12px] text-[#1a1a1a] leading-relaxed">
+                Al filtrar usuarios internos, los filtros de propiedad de persona en línea (p. ej., "el email no contiene tu-dominio.com") funcionan en todos lados, incluidos los destinos CDP en tiempo real. Alternativamente, puedes crear una cohorte y añadirla con un operador "not in" — esto funciona bien para consultas de análisis (insights, dashboards) y también en destinos CDP si la cohorte contiene <strong>exclusivamente filtros de propiedades de persona</strong>. Las cohortes con filtros de comportamiento o sin propiedades definidas harán que los destinos CDP fallen.
+              </p>
+            </div>
+            {/* Filter chips */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 h-7 px-2.5 bg-[#f0f4ff] border border-[#c7d2fe] rounded-lg text-[12px] text-[#3b59f6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6a5 5 0 0110 0H3z"/></svg>
+                <span>Usuario no en Inte...al / Usuarios de prueba</span>
+                <button className="ml-1 text-[#3b59f6] hover:text-[#1a3de0]">✕</button>
+              </div>
+              <button className="flex items-center gap-1 h-7 px-2.5 border border-dashed border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Filtro
+              </button>
+            </div>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar este filtro en todos los nuevos insights</span>
+              <Toggle checked={filterEnabled} onChange={setFilterEnabled}/>
+            </div>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Filtrar usuarios internos y de prueba en revenue analytics</span>
+              <Toggle checked={filterRevenue} onChange={setFilterRevenue}/>
+            </div>
+          </div>
+
+          {/* Chart color themes */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Temas de color de gráficos</h2>
+              <span className="px-1.5 py-0.5 bg-[#fef3c7] text-[#92400e] text-[10px] font-bold rounded border border-[#fde68a] uppercase">BETA</span>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Personaliza la paleta de colores usada en gráficos y visualizaciones.</p>
+            {/* Premium upsell */}
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Colores de gráficos personalizables</h3>
+              <p className="text-[13px] text-[#646462]">Personaliza la apariencia de los insights con temas de color.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+          </div>
+
+          {/* Person properties mode */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Modo de propiedades de persona</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Elige el comportamiento de los filtros de propiedad de persona. Para mejor rendimiento, usa propiedades de persona del momento del evento.</p>
+            <div className="space-y-3">
+              {[
+                { v: 'event', label: 'Usar propiedades de persona del momento del evento', badge: 'RECOMENDADO', sub: 'Consultas rápidas. Si la propiedad de persona se actualiza, los resultados de consultas en datos pasados no cambiarán.' },
+                { v: 'query', label: 'Usar propiedades de persona al ejecutar la consulta', badge: '', sub: 'Consultas más lentas. Si la propiedad de persona se actualiza, los resultados de consultas en datos pasados cambiarán.' },
+                { v: 'ids',   label: 'Usar IDs de persona y propiedades de persona del momento del evento', badge: '', sub: 'Consultas más rápidas, pero los embudos y los conteos de usuarios únicos serán imprecisos. Si la propiedad de persona se actualiza, los resultados de consultas en datos pasados no cambiarán.' },
+              ].map(opt => (
+                <label key={opt.v} className="flex items-start gap-2.5 cursor-pointer group">
+                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center ${personMode === opt.v ? 'border-[#e8572a] bg-[#e8572a]' : 'border-[#d1d5db] group-hover:border-[#9ca3af]'}`} onClick={() => setPersonMode(opt.v as any)}>
+                    {personMode === opt.v && <div className="w-1.5 h-1.5 rounded-full bg-white"/>}
+                  </div>
+                  <div>
+                    <span className="text-[13px] font-medium text-[#1a1a1a]">{opt.label}</span>
+                    {opt.badge && <span className="ml-2 text-[10px] font-bold text-[#646462] tracking-wide">{opt.badge}</span>}
+                    <p className="text-[12px] text-[#646462] mt-0.5">{opt.sub}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+          </div>
+
+          {/* Correlation analysis exclusions */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Exclusiones de análisis de correlación</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">El análisis de correlación detecta automáticamente señales relevantes para la conversión. Excluye eventos o propiedades que no aporten señales útiles.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="border border-[#e9eae6] rounded-[10px] divide-y divide-[#e9eae6]">
+              {[
+                { icon: 'M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6a5 5 0 0110 0H3z', label: 'Propiedades de persona excluidas' },
+                { icon: 'M3 3h10v2H3zm0 4h10v2H3zm0 4h7v2H3z', label: 'Eventos excluidos' },
+                { icon: 'M3 3h10v2H3zm0 4h10v2H3zm0 4h7v2H3z', label: 'Propiedades de evento excluidas' },
+              ].map((row, i) => (
+                <div key={i} className="p-3 space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d={row.icon}/></svg>
+                    <span className="text-[13px] font-semibold text-[#1a1a1a]">{row.label}</span>
+                  </div>
+                  {i < 2 ? (
+                    <button className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                      Añadir exclusión
+                    </button>
+                  ) : (
+                    <input
+                      type="text"
+                      value={excludedEventProps}
+                      onChange={e => setExcludedEventProps(e.target.value)}
+                      className="w-full h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Person display name */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Nombre visible de persona</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Elige qué propiedades de persona se usan para mostrar nombres en la interfaz (p. ej., email, nombre, usuario).{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {displayTags.map(tag => (
+                <div key={tag} className="flex items-center gap-1 h-6 px-2 bg-[#f3f3f1] border border-[#e9eae6] rounded-md text-[12px] text-[#1a1a1a]">
+                  {tag}
+                  <button onClick={() => setDisplayTags(t => t.filter(x => x !== tag))} className="text-[#646462] hover:text-[#1a1a1a]">✕</button>
+                </div>
+              ))}
+              <button className="flex items-center gap-1 h-6 px-2 border border-dashed border-[#e9eae6] rounded-md text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Añadir
+              </button>
+            </div>
+            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+          </div>
+
+          {/* Person last seen tracking */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Seguimiento de última vez visto</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Cuando está activado, Clain registra cuándo estuvo activo por última vez cada usuario. El valor se actualiza cada hora y es visible en la lista de Personas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Registrar cuándo se vio por última vez a una persona</span>
+              <Toggle checked={lastSeen} onChange={setLastSeen}/>
+            </div>
+          </div>
+
+          {/* Path cleaning rules */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Reglas de limpieza de rutas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Define reglas de expresión regular para normalizar URLs en análisis de rutas. Útil para eliminar IDs o parámetros de consulta de las rutas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <p className="text-[13px] text-[#646462]">La limpieza avanzada de rutas es una función premium. Consulta <a href="#" className="text-[#e8572a] hover:underline">la documentación de reglas de limpieza de rutas</a> para saber más.</p>
+          </div>
+
+          {/* Human friendly comparison periods */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Períodos de comparación comprensibles</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Al comparar con un mes o año anterior, compara con el mismo día de la semana en lugar de la misma fecha del calendario. Una comparación anual pasa a ser 52 semanas y una mensual pasa a ser 4 semanas.</p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Usar períodos de comparación comprensibles</span>
+              <Toggle checked={humanPeriods} onChange={setHumanPeriods}/>
+            </div>
+          </div>
+
+          {/* Group analytics */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Analíticas de grupo</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura tipos de grupo para analizar el comportamiento de usuarios a nivel de empresa o equipo.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Analíticas de grupo</h3>
+              <p className="text-[13px] text-[#646462]">Asocia eventos con un grupo —como una empresa, comunidad o proyecto— y analízalos en ese contexto.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RevenueAnalyticsSettingsPage ──────────────────────────────────────────
+  function RevenueAnalyticsSettingsPage() {
+    const [currency, setCurrency] = useState('USD');
+    const [filterInternal, setFilterInternal] = useState(false);
+    const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
+    const currencies = [
+      { code: 'USD', label: 'Dólar americano (USD)', flag: '🇺🇸' },
+      { code: 'EUR', label: 'Euro (EUR)', flag: '🇪🇺' },
+      { code: 'GBP', label: 'Libra esterlina (GBP)', flag: '🇬🇧' },
+      { code: 'JPY', label: 'Yen japonés (JPY)', flag: '🇯🇵' },
+    ];
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Info banner */}
+          <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+            <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
+          </div>
+
+          {/* Base currency */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Moneda base</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Clain convertirá todos los valores de moneda de todo el equipo a esta moneda antes de mostrártelos. Si no podemos detectar correctamente tu moneda, asumiremos que también está en esta moneda.
+            </p>
+            <div className="relative w-56">
+              <button
+                onClick={() => setShowCurrencyDropdown(d => !d)}
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]"
+              >
+                <span>{currencies.find(c => c.code === currency)?.flag} {currencies.find(c => c.code === currency)?.label}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+              {showCurrencyDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowCurrencyDropdown(false)}/>
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                    {currencies.map(c => (
+                      <button key={c.code} onClick={() => { setCurrency(c.code); setShowCurrencyDropdown(false); }}
+                        className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] flex items-center gap-2 ${c.code === currency ? 'bg-[#f3f3f1] font-medium' : ''}`}>
+                        <span>{c.flag}</span><span>{c.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Filter internal and test users */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Filtrar usuarios internos y de prueba en revenue analytics</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Excluye las cuentas de prueba de los cálculos e informes de ingresos.</p>
+            <div className="border border-[#e9eae6] rounded-[10px] p-4 space-y-2">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Filtrar usuarios internos y de prueba en revenue analytics</h3>
+              <p className="text-[13px] text-[#646462]">Cuando está activado, los eventos de cuentas de prueba se excluirán de Revenue Analytics. Puedes configurar estas cuentas de prueba <a href="#" className="text-[#e8572a] hover:underline">aquí</a>.</p>
+              <div className="flex items-center justify-between pt-2 border-t border-[#e9eae6]">
+                <span className="text-[13px] font-medium text-[#1a1a1a]">Filtrar usuarios internos y de prueba</span>
+                <Toggle checked={filterInternal} onChange={setFilterInternal}/>
+              </div>
+            </div>
+          </div>
+
+          {/* Revenue goals */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Objetivos de ingresos</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Establece objetivos de ingresos para hacer seguimiento del rendimiento frente a tus metas de negocio.</p>
+            <div className="space-y-2">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Objetivos</h3>
+              <p className="text-[13px] text-[#646462] leading-relaxed">
+                Establece objetivos de ingresos para fechas concretas y haz seguimiento de tu progreso. Puedes hacer seguimiento de objetivos basándote en tus metas mensuales/trimestrales/anuales. ¡Estos se pueden mostrar en los gráficos de MRR/ARR o ingresos brutos del panel de revenue analytics!
+              </p>
+              <div className="flex justify-end">
+                <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Añadir objetivo
+                </button>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre del objetivo</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">Fecha límite <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
+                      </th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">Importe objetivo (USD) <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
+                      </th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">MRR o ingresos brutos <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">No hay objetivos configurados aún.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Revenue events */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Eventos de ingresos</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <a href="#" className="text-[12px] text-[#e8572a] hover:underline">Docs ↗</a>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura qué eventos representan acciones de generación de ingresos.</p>
+            <div className="border border-[#e9eae6] rounded-[10px] p-4 space-y-2">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Configuración de eventos</h3>
+              <p className="text-[13px] text-[#646462] leading-relaxed">
+                Clain puede mostrar datos de ingresos en el producto Revenue Analytics desde cualquier evento. Puedes configurar tantos eventos como quieras y especificar la propiedad de ingresos y la moneda.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+

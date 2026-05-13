@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
+import { broadcastSSE } from './sse.js';
 import {
   createCaseRepository,
   createConversationRepository,
@@ -583,9 +584,151 @@ router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
       'case.updated',
       { caseId: req.params.id, status, previousStatus: oldStatus, reason: reason ?? null, customerId: bundle.case.customer_id },
     );
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId: req.params.id, change: 'status', status, previousStatus: oldStatus }, req.workspaceId!);
     res.json({ success: true, status });
   } catch (error) {
     console.error('Error updating status:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── PATCH /cases/:id/tags ────────────────────────────────────────────────────
+//
+// Inline tag CRUD. Three modes selected by `mode`:
+//   • "set"     — replace the whole tag list with `tags: string[]`
+//   • "add"     — append the items in `tags`, dedupe, no reorder
+//   • "remove"  — remove the items in `tags`
+// All modes write to cases.tags and emit a workflow event so subscribers
+// (analytics, automation rules, etc.) can react to tag changes.
+router.patch('/:id/tags', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const { mode = 'set', tags } = req.body ?? {};
+    if (!Array.isArray(tags)) {
+      return res.status(400).json({ error: 'tags must be an array of strings' });
+    }
+    const sanitized = tags
+      .map((t: any) => String(t || '').trim())
+      .filter((t: string) => t.length > 0 && t.length <= 60)
+      .slice(0, 50);
+
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+
+    const current: string[] = Array.isArray(bundle.case.tags) ? bundle.case.tags : [];
+    let next: string[];
+    if (mode === 'add') {
+      next = Array.from(new Set([...current, ...sanitized]));
+    } else if (mode === 'remove') {
+      const drop = new Set(sanitized);
+      next = current.filter(t => !drop.has(t));
+    } else {
+      // 'set' is default
+      next = Array.from(new Set(sanitized));
+    }
+
+    await caseRepository.update(scope, req.params.id, {
+      tags: next,
+      last_activity_at: new Date().toISOString(),
+    });
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CASE_TAGS_UPDATE',
+      entityType: 'case',
+      entityId: req.params.id,
+      oldValue: { tags: current },
+      newValue: { tags: next },
+      metadata: { mode },
+    });
+
+    await fireWorkflowEvent(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      'case.updated',
+      { caseId: req.params.id, tags: next, change: 'tags' },
+    );
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId: req.params.id, change: 'tags', tags: next }, req.workspaceId!);
+
+    res.json({ success: true, tags: next });
+  } catch (error) {
+    console.error('Error updating tags:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Star (favorite) — per-user, persisted in case_stars ─────────────────────
+router.get('/:id/star', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const userId = req.userId || 'user_local';
+    const starred = await caseRepository.isStarred(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId },
+      req.params.id,
+    );
+    res.json({ starred });
+  } catch (error) {
+    console.error('Error reading star:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/:id/star', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const userId = req.userId || 'user_local';
+    await caseRepository.starCase(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId },
+      req.params.id,
+    );
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: userId,
+      action: 'CASE_STARRED',
+      entityType: 'case',
+      entityId: req.params.id,
+    });
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId: req.params.id, change: 'star', userId, starred: true }, req.workspaceId!);
+    res.json({ success: true, starred: true });
+  } catch (error) {
+    console.error('Error starring case:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/:id/star', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const userId = req.userId || 'user_local';
+    await caseRepository.unstarCase(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId },
+      req.params.id,
+    );
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: userId,
+      action: 'CASE_UNSTARRED',
+      entityType: 'case',
+      entityId: req.params.id,
+    });
+    res.json({ success: true, starred: false });
+  } catch (error) {
+    console.error('Error unstarring case:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /cases/starred — list ids the current user has starred. Lightweight
+// payload (just ids) so the inbox sidebar can highlight them client-side.
+router.get('/starred/ids', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const userId = req.userId || 'user_local';
+    const ids = await caseRepository.listStarredCaseIds(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId },
+    );
+    res.json({ ids });
+  } catch (error) {
+    console.error('Error listing starred ids:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -594,10 +737,14 @@ router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
     const { user_id, team_id } = req.body;
+    const now = new Date().toISOString();
 
     await caseRepository.update(scope, req.params.id, {
       assigned_user_id: user_id || null,
-      assigned_team_id: team_id || null
+      assigned_team_id: team_id || null,
+      // Track when the case was first (or re-) assigned so responsiveness
+      // KPIs (assign→first-response, assign→close) have a baseline timestamp.
+      assigned_at: user_id ? now : null,
     });
 
     await auditRepository.log({
@@ -615,6 +762,7 @@ router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
       'case.updated',
       { caseId: req.params.id, assignedUserId: user_id ?? null, assignedTeamId: team_id ?? null, change: 'assignment' },
     );
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId: req.params.id, change: 'assignment', assignedUserId: user_id ?? null, assignedTeamId: team_id ?? null }, req.workspaceId!);
     res.json({ success: true });
   } catch (error) {
     console.error('Error assigning case:', error);
@@ -696,12 +844,78 @@ router.post('/:id/internal-note', handleInternalNote);
 // /:id/notes is an alias for /:id/internal-note
 router.post('/:id/notes', handleInternalNote);
 
+// PATCH /cases/:id/internal-notes/:noteId — update existing note content.
+router.patch('/:id/internal-notes/:noteId', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const content = String(req.body?.content || '').trim();
+    if (!content) return res.status(400).json({ error: 'content is required' });
+    if (content.length > 4000) return res.status(400).json({ error: 'content too long (max 4000)' });
+
+    const updated = await conversationRepository.updateInternalNote(scope, req.params.id, req.params.noteId, content);
+    if (!updated) return res.status(404).json({ error: 'Note not found' });
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CASE_INTERNAL_NOTE_UPDATE',
+      entityType: 'internal_note',
+      entityId: req.params.noteId,
+      metadata: { caseId: req.params.id },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating internal note:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /cases/:id/internal-notes/:noteId — remove a note.
+router.delete('/:id/internal-notes/:noteId', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    await conversationRepository.deleteInternalNote(scope, req.params.id, req.params.noteId);
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CASE_INTERNAL_NOTE_DELETE',
+      entityType: 'internal_note',
+      entityId: req.params.noteId,
+      metadata: { caseId: req.params.id },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting internal note:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const { content, draft_reply_id } = req.body;
-    if (!content || !String(content).trim()) {
-      return res.status(400).json({ error: 'Reply content is required' });
+    const { content, draft_reply_id, attachments } = req.body;
+    const trimmedContent = String(content || '').trim();
+    const incomingAttachments = Array.isArray(attachments) ? attachments : [];
+    // Either the body must be non-empty OR there must be at least one attachment
+    // (a "send file with no caption" reply is legitimate).
+    if (!trimmedContent && incomingAttachments.length === 0) {
+      return res.status(400).json({ error: 'Reply content or attachments are required' });
     }
+    // Defensive shape: only keep fields we expect, normalize types.
+    const safeAttachments = incomingAttachments.slice(0, 10).map((att: any, i: number) => ({
+      id: String(att?.id || `att-${Date.now()}-${i}`),
+      name: String(att?.name || `attachment-${i + 1}`),
+      size: Number.isFinite(att?.size) ? Number(att.size) : 0,
+      type: String(att?.type || 'application/octet-stream'),
+      // dataUrl can be huge — cap at ~5 MB encoded so a malicious or
+      // accidental upload of a 50 MB blob doesn't bloat the messages row.
+      dataUrl: typeof att?.dataUrl === 'string' && att.dataUrl.length < 5_500_000 ? att.dataUrl : undefined,
+      url: typeof att?.url === 'string' ? att.url : undefined,
+    }));
 
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
     const bundle = await caseRepository.getBundle(scope, req.params.id);
@@ -720,11 +934,12 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
       direction: 'outbound',
       senderId: req.userId || 'user_local',
       senderName: 'Alex Morgan',
-      content: String(content).trim(),
+      content: trimmedContent || (safeAttachments.length === 1 ? `Adjunto: ${safeAttachments[0].name}` : `${safeAttachments.length} adjuntos`),
       channel,
       externalMessageId: `queued_${queuedMessageId}`,
       draftReplyId: draft_reply_id || null,
       sentAt: now,
+      attachments: safeAttachments.length > 0 ? safeAttachments : undefined,
     });
 
     if (draft_reply_id) {
@@ -738,9 +953,10 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
         caseId: req.params.id,
         conversationId: conversation.id,
         channel,
-        content: String(content).trim(),
+        content: trimmedContent,
         queuedMessageId,
         draftReplyId: draft_reply_id || undefined,
+        attachments: safeAttachments.length > 0 ? safeAttachments : undefined,
       },
       {
         tenantId: req.tenantId!,
@@ -749,6 +965,39 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
         priority: 4,
       },
     );
+
+    // ── KPI tracking ──────────────────────────────────────────────────────────
+    const supabase = getSupabaseAdmin();
+    const caseId = req.params.id;
+    const tenantId = req.tenantId!;
+    const agentUserId = req.userId || null;
+
+    // 1. Set first_response_at on the case if this is the first human reply
+    if (!bundle.case.first_response_at && agentUserId) {
+      await caseRepository.update(scope, caseId, { first_response_at: now });
+    }
+
+    // 2. Record this reply in case_replies for subsequent-response median tracking.
+    //    reply_number is 1-indexed: count existing replies for this case first.
+    try {
+      const { count } = await supabase
+        .from('case_replies')
+        .select('*', { count: 'exact', head: true })
+        .eq('case_id', caseId)
+        .eq('tenant_id', tenantId);
+      const replyNumber = (count ?? 0) + 1;
+      await supabase.from('case_replies').insert({
+        case_id: caseId,
+        tenant_id: tenantId,
+        user_id: agentUserId,
+        reply_number: replyNumber,
+        replied_at: now,
+      });
+    } catch (trackErr) {
+      // Non-fatal: tracking failure must never block a reply
+      console.warn('[reply-tracking] case_replies insert failed:', trackErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     await auditRepository.log({
       tenantId: req.tenantId!,
@@ -762,8 +1011,11 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
         channel,
         queuedMessageId,
         draftReplyId: draft_reply_id || null,
+        attachmentCount: safeAttachments.length,
       },
     });
+
+    broadcastSSE(req.tenantId!, 'case:reply', { caseId: req.params.id, messageId: queuedMessageId, channel, attachmentCount: safeAttachments.length }, req.workspaceId!);
 
     res.status(202).json({
       success: true,
@@ -774,9 +1026,10 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
         type: 'agent',
         direction: 'outbound',
         sender_name: 'Alex Morgan',
-        content: String(content).trim(),
+        content: trimmedContent,
         channel,
         sent_at: now,
+        attachments: safeAttachments,
       },
     });
   } catch (error) {
@@ -1251,6 +1504,90 @@ router.post('/:id/merge', validate({ body: MergeBodySchema }), async (req: Multi
     res.json({ ok: true, targetId, sourceId });
   } catch (err: any) {
     console.error('Error merging cases:', err);
+    res.status(500).json({ error: err.message ?? 'Internal server error' });
+  }
+});
+
+// ── CSAT Survey endpoints ──────────────────────────────────────────────────
+// POST /api/cases/:id/survey/send
+// Records that a CSAT survey was sent for this case.
+router.post('/:id/survey/send', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const caseId = req.params.id;
+    const bundle = await caseRepository.getBundle(scope, caseId);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+
+    const supabase = getSupabaseAdmin();
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('cases')
+      .update({ survey_sent_at: now, surveyed_by: req.userId || 'system' })
+      .eq('id', caseId)
+      .eq('tenant_id', req.tenantId!);
+    if (error) throw error;
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CSAT_SURVEY_SENT',
+      entityType: 'case',
+      entityId: caseId,
+      newValue: { survey_sent_at: now },
+    });
+
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId, change: 'survey_sent' }, req.workspaceId!);
+    res.json({ success: true, survey_sent_at: now });
+  } catch (err: any) {
+    console.error('Error sending survey:', err);
+    res.status(500).json({ error: err.message ?? 'Internal server error' });
+  }
+});
+
+// POST /api/cases/:id/survey/respond  { score: 1-5, comment?: string }
+// Records a customer CSAT response.
+router.post('/:id/survey/respond', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const caseId = req.params.id;
+    const { score, comment } = req.body;
+
+    const parsedScore = Number(score);
+    if (!score || isNaN(parsedScore) || parsedScore < 1 || parsedScore > 5) {
+      return res.status(400).json({ error: 'score must be an integer between 1 and 5' });
+    }
+
+    const bundle = await caseRepository.getBundle(scope, caseId);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+
+    const supabase = getSupabaseAdmin();
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('cases')
+      .update({
+        satisfaction_score: parsedScore,
+        survey_responded_at: now,
+        // Store comment in existing metadata or a dedicated field if available
+      })
+      .eq('id', caseId)
+      .eq('tenant_id', req.tenantId!);
+    if (error) throw error;
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CSAT_SURVEY_RESPONDED',
+      entityType: 'case',
+      entityId: caseId,
+      newValue: { satisfaction_score: parsedScore, survey_responded_at: now, comment: comment || null },
+    });
+
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId, change: 'survey_responded', score: parsedScore }, req.workspaceId!);
+    res.json({ success: true, satisfaction_score: parsedScore, survey_responded_at: now });
+  } catch (err: any) {
+    console.error('Error recording survey response:', err);
     res.status(500).json({ error: err.message ?? 'Internal server error' });
   }
 });

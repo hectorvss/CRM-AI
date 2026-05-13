@@ -1,0 +1,511 @@
+// ── WorkflowBuilder ──────────────────────────────────────────────────────────
+// PostHog Workflows builder. Visual DAG editor con React Flow.
+// Backend: hog_functions con type='destination' y inputs.workflow.value=DAG JSON
+
+interface WfNode {
+  id:    string;
+  type:  'trigger' | 'action_email' | 'action_slack' | 'action_webhook' | 'action_function' | 'condition' | 'delay' | 'exit';
+  label: string;
+  config: any;
+  position: { x: number; y: number };
+}
+interface WfEdge {
+  id: string; source: string; target: string;
+  branch?: 'yes' | 'no'; label?: string;
+}
+interface WfData { nodes: WfNode[]; edges: WfEdge[]; }
+
+const WF_NODE_META: Record<WfNode['type'], { label: string; color: string; bg: string; icon: React.ReactNode; description: string; defaultConfig: any }> = {
+  trigger: {
+    label: 'Trigger', color: '#16a34a', bg: '#dcfce7',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 2l9 6-9 6z" fill="currentColor"/></svg>,
+    description: 'Cuando un evento ocurre',
+    defaultConfig: { event: '$pageview', filters: [] },
+  },
+  action_email: {
+    label: 'Enviar Email', color: '#3b59f6', bg: '#eff2ff',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><rect x="1" y="3" width="14" height="10" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M1 4l7 5 7-5" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>,
+    description: 'Enviar correo al usuario',
+    defaultConfig: { to: '{{ person.properties.email }}', subject: '', body: '' },
+  },
+  action_slack: {
+    label: 'Enviar Slack', color: '#a855f7', bg: '#f5f3ff',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><rect x="3" y="3" width="2.5" height="2.5" fill="currentColor"/><rect x="10.5" y="3" width="2.5" height="2.5" fill="currentColor"/><rect x="3" y="10.5" width="2.5" height="2.5" fill="currentColor"/><rect x="10.5" y="10.5" width="2.5" height="2.5" fill="currentColor"/></svg>,
+    description: 'Notificación en Slack',
+    defaultConfig: { channel: '#general', message: '' },
+  },
+  action_webhook: {
+    label: 'Webhook', color: '#06b6d4', bg: '#cffafe',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M2 8L6 4M6 4L10 8M6 4v8" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/><circle cx="13" cy="4" r="2" fill="currentColor"/></svg>,
+    description: 'POST a una URL externa',
+    defaultConfig: { url: '', method: 'POST', headers: '{}', body: '{}' },
+  },
+  action_function: {
+    label: 'Hog Function', color: '#e8572a', bg: '#fff7ed',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M3 4l3 4-3 4M8 12h5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+    description: 'Ejecutar código Hog',
+    defaultConfig: { code: '// Hog code\nposthog.capture("workflow_step", { ... })' },
+  },
+  condition: {
+    label: 'Condición', color: '#f59e0b', bg: '#fef3c7',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M8 2v3M8 11v3M8 5l4 3-4 3M8 5L4 8l4 3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+    description: 'Branch yes/no',
+    defaultConfig: { property: 'email', operator: 'is_set', value: '' },
+  },
+  delay: {
+    label: 'Esperar', color: '#9ca3af', bg: '#f3f3f1',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/></svg>,
+    description: 'Pausar N tiempo',
+    defaultConfig: { duration: 1, unit: 'hour' },
+  },
+  exit: {
+    label: 'Salir', color: '#dc2626', bg: '#fee2e2',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><rect x="3" y="3" width="10" height="10" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>,
+    description: 'Fin del workflow',
+    defaultConfig: {},
+  },
+};
+
+const WorkflowNodeCard: React.FC<any> = ({ data, selected }) => {
+  const m = WF_NODE_META[data.type as WfNode['type']];
+  return (
+    <div className={`relative bg-white border-2 rounded-xl shadow-sm hover:shadow-md transition-all w-56 ${selected ? 'border-[#3b59f6] shadow-md' : 'border-[#e9eae6]'}`}>
+      {data.type !== 'trigger' && (
+        <RFHandle type="target" position={RFPosition.Top} className="!w-2 !h-2 !bg-[#9ca3af] !border-2 !border-white" />
+      )}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[#f3f3f1]">
+        <span className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: m.bg, color: m.color }}>{m.icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: m.color }}>{m.label}</p>
+          <p className="text-[10px] text-[#646462] truncate">{data.label || m.description}</p>
+        </div>
+      </div>
+      <div className="px-3 py-2 text-[10px] text-[#646462]">
+        {data.type === 'trigger'         && <span className="font-mono text-[#3b59f6]">{data.config?.event ?? '$pageview'}</span>}
+        {data.type === 'action_email'    && <span className="truncate block">📧 {(data.config?.subject || 'Sin asunto').slice(0, 28)}</span>}
+        {data.type === 'action_slack'    && <span className="truncate block">💬 {(data.config?.channel || '#general')}</span>}
+        {data.type === 'action_webhook'  && <span className="truncate block font-mono">{(data.config?.method || 'POST')} {(data.config?.url || 'URL').slice(0, 22)}</span>}
+        {data.type === 'action_function' && <span className="italic">Hog function</span>}
+        {data.type === 'condition'       && <span className="font-mono">{data.config?.property ?? 'prop'} {data.config?.operator ?? '='} {data.config?.value ?? ''}</span>}
+        {data.type === 'delay'           && <span>⏱ {data.config?.duration ?? 1} {data.config?.unit ?? 'hour'}</span>}
+        {data.type === 'exit'            && <span className="italic">Fin del flujo</span>}
+      </div>
+      {data.type !== 'exit' && (
+        <RFHandle type="source" position={RFPosition.Bottom} className="!w-2 !h-2 !bg-[#9ca3af] !border-2 !border-white" />
+      )}
+      {data.type === 'condition' && (
+        <>
+          <span className="absolute -bottom-1 left-8 text-[9px] font-bold text-[#16a34a]">SI</span>
+          <span className="absolute -bottom-1 right-8 text-[9px] font-bold text-[#dc2626]">NO</span>
+        </>
+      )}
+    </div>
+  );
+};
+
+const wfNodeTypes = { workflowNode: WorkflowNodeCard };
+
+function WfPalette({ onDragStart }: { onDragStart: (e: React.DragEvent, type: WfNode['type']) => void }) {
+  const groups: { title: string; types: WfNode['type'][] }[] = [
+    { title: 'Triggers',     types: ['trigger'] },
+    { title: 'Actions',      types: ['action_email', 'action_slack', 'action_webhook', 'action_function'] },
+    { title: 'Flow control', types: ['condition', 'delay', 'exit'] },
+  ];
+  return (
+    <div className="w-60 border-r border-[#e9eae6] bg-white flex flex-col overflow-y-auto">
+      <div className="px-3 py-3 border-b border-[#e9eae6]"><p className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af]">Arrastra al canvas</p></div>
+      {groups.map(g => (
+        <div key={g.title} className="px-3 py-3 border-b border-[#e9eae6]">
+          <p className="text-[10px] font-semibold text-[#646462] uppercase tracking-widest mb-2">{g.title}</p>
+          <div className="space-y-1">
+            {g.types.map(t => {
+              const m = WF_NODE_META[t];
+              return (
+                <div key={t} draggable onDragStart={e => onDragStart(e, t)} className="flex items-center gap-2 p-2 border border-[#e9eae6] rounded-lg cursor-grab hover:shadow-sm hover:border-[#3b59f6] active:cursor-grabbing bg-white">
+                  <span className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: m.bg, color: m.color }}>{m.icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[#1a1a18] truncate">{m.label}</p>
+                    <p className="text-[10px] text-[#9ca3af] truncate">{m.description}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WfNodeConfigPanel({ node, onChange, onDelete }: { node: WfNode; onChange: (patch: Partial<WfNode>) => void; onDelete: () => void }) {
+  const m = WF_NODE_META[node.type];
+  return (
+    <div className="w-80 border-l border-[#e9eae6] bg-white flex flex-col overflow-y-auto">
+      <div className="px-4 py-3 border-b border-[#e9eae6]">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="w-7 h-7 rounded flex items-center justify-center" style={{ backgroundColor: m.bg, color: m.color }}>{m.icon}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: m.color }}>{m.label}</p>
+            <input value={node.label || m.label} onChange={e => onChange({ label: e.target.value })} className="w-full text-sm font-semibold text-[#1a1a18] bg-transparent border-0 focus:outline-none" />
+          </div>
+          <button onClick={onDelete} className="text-[#9ca3af] hover:text-[#dc2626] p-1" title="Eliminar nodo"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 5h8l-1 9H5zM6 5V3h4v2" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/></svg></button>
+        </div>
+        <p className="text-[10px] text-[#9ca3af]">{m.description}</p>
+      </div>
+      <div className="flex-1 p-4 space-y-3">
+        {node.type === 'trigger' && (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-[#1a1a18] mb-1">Evento</label>
+              <input value={node.config?.event ?? '$pageview'} onChange={e => onChange({ config: { ...node.config, event: e.target.value } })} placeholder="$pageview" className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs font-mono focus:outline-none focus:border-[#16a34a]" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#1a1a18] mb-1">Filtros (JSON opcional)</label>
+              <textarea value={JSON.stringify(node.config?.filters ?? [], null, 2)} onChange={e => { try { onChange({ config: { ...node.config, filters: JSON.parse(e.target.value) } }); } catch {} }} rows={4} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-[10px] font-mono focus:outline-none focus:border-[#16a34a] resize-y" />
+            </div>
+          </>
+        )}
+        {node.type === 'action_email' && (
+          <>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Para (To)</label>
+              <input value={node.config?.to ?? ''} onChange={e => onChange({ config: { ...node.config, to: e.target.value } })} placeholder="{{ person.properties.email }}" className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs font-mono focus:outline-none focus:border-[#3b59f6]" /></div>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Asunto</label>
+              <input value={node.config?.subject ?? ''} onChange={e => onChange({ config: { ...node.config, subject: e.target.value } })} placeholder="Bienvenido {{ person.properties.name }}" className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]" /></div>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Cuerpo (HTML)</label>
+              <textarea value={node.config?.body ?? ''} onChange={e => onChange({ config: { ...node.config, body: e.target.value } })} rows={8} placeholder="<h1>Hola {{ person.properties.name }}!</h1>" className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs font-mono focus:outline-none focus:border-[#3b59f6] resize-y" /></div>
+            <p className="text-[10px] text-[#9ca3af]">Plantillas Liquid: <code className="bg-[#f3f3f1] px-1 rounded">{`{{ person.properties.X }}`}</code></p>
+          </>
+        )}
+        {node.type === 'action_slack' && (
+          <>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Canal</label>
+              <input value={node.config?.channel ?? '#general'} onChange={e => onChange({ config: { ...node.config, channel: e.target.value } })} placeholder="#general" className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs font-mono focus:outline-none focus:border-[#a855f7]" /></div>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Mensaje</label>
+              <textarea value={node.config?.message ?? ''} onChange={e => onChange({ config: { ...node.config, message: e.target.value } })} rows={6} placeholder=":tada: {{ person.properties.email }} se registró" className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#a855f7] resize-y" /></div>
+          </>
+        )}
+        {node.type === 'action_webhook' && (
+          <>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">URL</label>
+              <input value={node.config?.url ?? ''} onChange={e => onChange({ config: { ...node.config, url: e.target.value } })} placeholder="https://api.example.com/hook" className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs font-mono focus:outline-none focus:border-[#06b6d4]" /></div>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Método</label>
+              <select value={node.config?.method ?? 'POST'} onChange={e => onChange({ config: { ...node.config, method: e.target.value } })} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#06b6d4]">
+                {['GET','POST','PUT','PATCH','DELETE'].map(mm => <option key={mm} value={mm}>{mm}</option>)}
+              </select></div>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Headers (JSON)</label>
+              <textarea value={node.config?.headers ?? '{}'} onChange={e => onChange({ config: { ...node.config, headers: e.target.value } })} rows={3} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-[10px] font-mono focus:outline-none focus:border-[#06b6d4] resize-y" /></div>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Body (JSON)</label>
+              <textarea value={node.config?.body ?? '{}'} onChange={e => onChange({ config: { ...node.config, body: e.target.value } })} rows={5} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-[10px] font-mono focus:outline-none focus:border-[#06b6d4] resize-y" /></div>
+          </>
+        )}
+        {node.type === 'action_function' && (
+          <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Código Hog</label>
+            <textarea value={node.config?.code ?? ''} onChange={e => onChange({ config: { ...node.config, code: e.target.value } })} rows={12} placeholder={`// Hog code\nlet user := event.person\nposthog.capture('action_done', { user_email: user.properties.email })`} className="w-full px-2 py-1.5 bg-[#1a1a18] text-[#e9eae6] rounded text-[11px] font-mono focus:outline-none resize-y" /></div>
+        )}
+        {node.type === 'condition' && (
+          <>
+            <p className="text-[10px] text-[#9ca3af] mb-2">El flujo se bifurca según la condición.</p>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Propiedad</label>
+              <input value={node.config?.property ?? ''} onChange={e => onChange({ config: { ...node.config, property: e.target.value } })} placeholder="email / plan / country" className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs font-mono focus:outline-none focus:border-[#f59e0b]" /></div>
+            <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Operador</label>
+              <select value={node.config?.operator ?? 'is_set'} onChange={e => onChange({ config: { ...node.config, operator: e.target.value } })} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#f59e0b]">
+                <option value="is_set">está definido</option>
+                <option value="is_not_set">no definido</option>
+                <option value="exact">igual a</option>
+                <option value="is_not">no es</option>
+                <option value="icontains">contiene</option>
+                <option value="gt">mayor que</option>
+                <option value="lt">menor que</option>
+              </select></div>
+            {!['is_set','is_not_set'].includes(node.config?.operator) && (
+              <div><label className="block text-xs font-medium text-[#1a1a18] mb-1">Valor</label>
+                <input value={node.config?.value ?? ''} onChange={e => onChange({ config: { ...node.config, value: e.target.value } })} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#f59e0b]" /></div>
+            )}
+            <p className="text-[10px] text-[#9ca3af] mt-2">Conecta 2 salidas para SÍ (verde) y NO (rojo).</p>
+          </>
+        )}
+        {node.type === 'delay' && (
+          <>
+            <div className="flex gap-2">
+              <div className="flex-1"><label className="block text-xs font-medium text-[#1a1a18] mb-1">Duración</label>
+                <input type="number" min={1} value={node.config?.duration ?? 1} onChange={e => onChange({ config: { ...node.config, duration: Number(e.target.value) } })} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#9ca3af]" /></div>
+              <div className="flex-1"><label className="block text-xs font-medium text-[#1a1a18] mb-1">Unidad</label>
+                <select value={node.config?.unit ?? 'hour'} onChange={e => onChange({ config: { ...node.config, unit: e.target.value } })} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#9ca3af]">
+                  <option value="minute">minuto(s)</option><option value="hour">hora(s)</option>
+                  <option value="day">día(s)</option><option value="week">semana(s)</option>
+                </select></div>
+            </div>
+          </>
+        )}
+        {node.type === 'exit' && (
+          <p className="text-xs text-[#646462] italic">Este nodo finaliza el workflow para el usuario.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const WF_TEMPLATES: Record<string, { name: string; build: () => WfData }> = {
+  blank: { name: 'Empty Workflow', build: () => ({
+    nodes: [{ id: 'n1', type: 'trigger', label: 'Nuevo evento', position: { x: 250, y: 50 }, config: { event: '$pageview' } }],
+    edges: [],
+  })},
+  welcome_email: { name: 'Welcome Email Sequence', build: () => ({
+    nodes: [
+      { id: 'n1', type: 'trigger',      label: 'Signup',     position: { x: 250, y: 20 },  config: { event: '$identify' } },
+      { id: 'n2', type: 'action_email', label: 'Bienvenida', position: { x: 250, y: 140 }, config: { to: '{{ person.properties.email }}', subject: '¡Bienvenido!', body: '<h1>Hola {{ person.properties.name }}!</h1>' } },
+      { id: 'n3', type: 'delay',        label: '3 días',     position: { x: 250, y: 260 }, config: { duration: 3, unit: 'day' } },
+      { id: 'n4', type: 'action_email', label: 'Día 3',      position: { x: 250, y: 380 }, config: { to: '{{ person.properties.email }}', subject: 'Tips para empezar', body: '<p>Estos son tips para sacar el máximo provecho...</p>' } },
+      { id: 'n5', type: 'exit',         label: 'Fin',        position: { x: 250, y: 500 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2' },
+      { id: 'e2', source: 'n2', target: 'n3' },
+      { id: 'e3', source: 'n3', target: 'n4' },
+      { id: 'e4', source: 'n4', target: 'n5' },
+    ],
+  })},
+  feature_announce: { name: 'Announce a New Feature', build: () => ({
+    nodes: [
+      { id: 'n1', type: 'trigger',      label: 'Login',     position: { x: 250, y: 20 },  config: { event: '$pageview' } },
+      { id: 'n2', type: 'condition',    label: 'Plan paid?', position: { x: 250, y: 140 }, config: { property: 'plan', operator: 'exact', value: 'paid' } },
+      { id: 'n3', type: 'action_email', label: 'Anuncio paid', position: { x: 80, y: 280 }, config: { to: '{{ person.properties.email }}', subject: '¡Nueva funcionalidad!', body: '<p>Descubre la nueva feature...</p>' } },
+      { id: 'n4', type: 'action_email', label: 'Anuncio free', position: { x: 420, y: 280 }, config: { to: '{{ person.properties.email }}', subject: '¡Nueva funcionalidad (upgrade)!', body: '<p>Para acceder, actualiza tu plan.</p>' } },
+      { id: 'n5', type: 'exit',         label: 'Fin',       position: { x: 250, y: 420 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2' },
+      { id: 'e2', source: 'n2', target: 'n3', branch: 'yes', label: 'SÍ' },
+      { id: 'e3', source: 'n2', target: 'n4', branch: 'no',  label: 'NO' },
+      { id: 'e4', source: 'n3', target: 'n5' },
+      { id: 'e5', source: 'n4', target: 'n5' },
+    ],
+  })},
+  trial_upgrade: { name: 'Trial Started – Upgrade Nudge', build: () => ({
+    nodes: [
+      { id: 'n1', type: 'trigger',       label: 'Trial start',  position: { x: 250, y: 20 },  config: { event: 'trial_started' } },
+      { id: 'n2', type: 'delay',         label: '5 días',       position: { x: 250, y: 140 }, config: { duration: 5, unit: 'day' } },
+      { id: 'n3', type: 'action_email',  label: 'Nudge upgrade', position: { x: 250, y: 260 }, config: { to: '{{ person.properties.email }}', subject: '¿Cómo va tu trial?', body: '<p>Te quedan 2 días. Te recomendamos hacer upgrade.</p>' } },
+      { id: 'n4', type: 'action_slack',  label: 'Notif sales',  position: { x: 250, y: 380 }, config: { channel: '#sales', message: '🎯 Usuario {{ person.properties.email }} en trial' } },
+      { id: 'n5', type: 'exit',          label: 'Fin',          position: { x: 250, y: 500 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2' },
+      { id: 'e2', source: 'n2', target: 'n3' },
+      { id: 'e3', source: 'n3', target: 'n4' },
+      { id: 'e4', source: 'n4', target: 'n5' },
+    ],
+  })},
+  high_intent: { name: 'Notify Sales for High Intent Users', build: () => ({
+    nodes: [
+      { id: 'n1', type: 'trigger',      label: 'Pricing visit', position: { x: 250, y: 20 },  config: { event: '$pageview', filters: [{ key: '$current_url', value: '/pricing' }] } },
+      { id: 'n2', type: 'action_slack', label: 'Alerta sales',  position: { x: 250, y: 160 }, config: { channel: '#sales-leads', message: '🚨 Lead caliente: {{ person.properties.email }}' } },
+      { id: 'n3', type: 'exit',         label: 'Fin',           position: { x: 250, y: 280 }, config: {} },
+    ],
+    edges: [{ id: 'e1', source: 'n1', target: 'n2' }, { id: 'e2', source: 'n2', target: 'n3' }],
+  })},
+  re_engage: { name: 'Re-Engagement Workflow for Inactive Users', build: () => ({
+    nodes: [
+      { id: 'n1', type: 'trigger',       label: '14 días sin actividad', position: { x: 250, y: 20 },  config: { event: 'inactive_user' } },
+      { id: 'n2', type: 'action_email',  label: 'Te echamos de menos',   position: { x: 250, y: 140 }, config: { to: '{{ person.properties.email }}', subject: 'Te echamos de menos', body: '<p>Vuelve y descubre las novedades</p>' } },
+      { id: 'n3', type: 'delay',         label: '7 días',                position: { x: 250, y: 260 }, config: { duration: 7, unit: 'day' } },
+      { id: 'n4', type: 'condition',     label: '¿Volvió?',              position: { x: 250, y: 380 }, config: { property: 'last_seen_at', operator: 'is_set' } },
+      { id: 'n5', type: 'exit',          label: 'Volvió',                position: { x: 80,  y: 520 }, config: {} },
+      { id: 'n6', type: 'action_email',  label: 'Última oferta',         position: { x: 420, y: 520 }, config: { to: '{{ person.properties.email }}', subject: '¡Oferta especial!', body: '<p>20% de descuento por tu retorno.</p>' } },
+      { id: 'n7', type: 'exit',          label: 'Fin',                   position: { x: 420, y: 660 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2' },
+      { id: 'e2', source: 'n2', target: 'n3' },
+      { id: 'e3', source: 'n3', target: 'n4' },
+      { id: 'e4', source: 'n4', target: 'n5', branch: 'yes', label: 'SÍ' },
+      { id: 'e5', source: 'n4', target: 'n6', branch: 'no',  label: 'NO' },
+      { id: 'e6', source: 'n6', target: 'n7' },
+    ],
+  })},
+};
+
+const WF_TEMPLATE_TITLE_MAP: Record<string, string> = {
+  'Empty Workflow':                            'blank',
+  'Announce a New Feature':                    'feature_announce',
+  'Welcome Email Sequence':                    'welcome_email',
+  'Trial Started – Upgrade Nudge':             'trial_upgrade',
+  'Notify Sales for High Intent Users':        'high_intent',
+  'Re-Engagement Workflow for Inactive Users': 're_engage',
+};
+
+function WorkflowBuilder({ workflowId, templateKey, onBack, onSaved }: { workflowId?: string | null; templateKey?: string | null; onBack: () => void; onSaved: (wf: any) => void }) {
+  const [name, setName]       = React.useState('Untitled workflow');
+  const [enabled, setEnabled] = React.useState(false);
+  const [saving, setSaving]   = React.useState(false);
+  const [loading, setLoading] = React.useState(!!workflowId);
+  const [showJson, setShowJson] = React.useState(false);
+
+  const initial = React.useMemo<WfData>(() => {
+    if (templateKey && WF_TEMPLATES[templateKey]) return WF_TEMPLATES[templateKey].build();
+    return WF_TEMPLATES.blank.build();
+  }, [templateKey]);
+
+  const [nodes, setNodes, onNodesChange] = rfUseNodesState(
+    initial.nodes.map(n => ({ id: n.id, type: 'workflowNode', position: n.position, data: { type: n.type, label: n.label, config: n.config } }))
+  );
+  const [edges, setEdges, onEdgesChange] = rfUseEdgesState(
+    initial.edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label, animated: false, style: { stroke: e.branch === 'no' ? '#dc2626' : e.branch === 'yes' ? '#16a34a' : '#646462', strokeWidth: 1.5 }, type: 'smoothstep' }))
+  );
+  const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!workflowId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getProjectId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.hogFunctions.get(workflowId);
+        if (cancelled) return;
+        setName(res.name ?? 'Untitled workflow');
+        setEnabled(!!res.enabled);
+        const wfData: WfData = res.inputs?.workflow?.value ?? initial;
+        setNodes((wfData.nodes ?? []).map((n: any) => ({ id: n.id, type: 'workflowNode', position: n.position, data: { type: n.type, label: n.label, config: n.config } })));
+        setEdges((wfData.edges ?? []).map((e: any) => ({ id: e.id, source: e.source, target: e.target, label: e.label, animated: false, style: { stroke: e.branch === 'no' ? '#dc2626' : e.branch === 'yes' ? '#16a34a' : '#646462', strokeWidth: 1.5 }, type: 'smoothstep' })));
+      } catch {}
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowId]);
+
+  const onConnect = React.useCallback((params: any) => {
+    setEdges((eds: any) => rfAddEdge({ ...params, animated: false, style: { stroke: '#646462', strokeWidth: 1.5 }, type: 'smoothstep' }, eds));
+  }, [setEdges]);
+
+  function handleDragStart(e: React.DragEvent, type: WfNode['type']) {
+    e.dataTransfer.setData('application/wf-node-type', type);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('application/wf-node-type') as WfNode['type'];
+    if (!type) return;
+    const reactFlowBounds = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const position = { x: e.clientX - reactFlowBounds.left - 100, y: e.clientY - reactFlowBounds.top - 30 };
+    const m = WF_NODE_META[type];
+    const newId = `n${Date.now()}`;
+    setNodes((nds: any) => [...nds, { id: newId, type: 'workflowNode', position, data: { type, label: m.label, config: { ...m.defaultConfig } } }]);
+  }
+
+  function updateNode(id: string, patch: Partial<WfNode>) {
+    setNodes((nds: any) => nds.map((n: any) => n.id === id ? { ...n, data: { ...n.data, ...(patch.label !== undefined ? { label: patch.label } : {}), ...(patch.config !== undefined ? { config: patch.config } : {}) } } : n));
+  }
+  function deleteSelectedNode() {
+    if (!selectedNodeId) return;
+    setNodes((nds: any) => nds.filter((n: any) => n.id !== selectedNodeId));
+    setEdges((eds: any) => eds.filter((e: any) => e.source !== selectedNodeId && e.target !== selectedNodeId));
+    setSelectedNodeId(null);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const ph = await import('../api/posthog');
+      const wfData: WfData = {
+        nodes: nodes.map((n: any) => ({ id: n.id, type: n.data.type, label: n.data.label, position: n.position, config: n.data.config })),
+        edges: edges.map((e: any) => ({ id: e.id, source: e.source, target: e.target, label: e.label, branch: e.style?.stroke === '#16a34a' ? 'yes' : e.style?.stroke === '#dc2626' ? 'no' : undefined })),
+      };
+      const payload: any = {
+        name, enabled,
+        type:    'destination',
+        hog:     '// Auto-generated workflow code\nfn(event)',
+        inputs:  { workflow: { value: wfData } },
+      };
+      let result: any;
+      if (workflowId) result = await ph.posthog.hogFunctions.update(workflowId, payload);
+      else result = await ph.posthog.hogFunctions.create(payload);
+      onSaved(result);
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    finally { setSaving(false); }
+  }
+
+  const selectedNode = nodes.find((n: any) => n.id === selectedNodeId);
+  const selectedNodeForPanel: WfNode | null = selectedNode ? { id: selectedNode.id, type: selectedNode.data.type, label: selectedNode.data.label, config: selectedNode.data.config, position: selectedNode.position } : null;
+
+  if (loading) return (
+    <div className="flex-1 flex items-center justify-center bg-[#f9f9f7]">
+      <div className="flex items-center gap-2 text-[#646462]"><div className="w-4 h-4 border-2 border-[#f59e0b] border-t-transparent rounded-full animate-spin" /> Cargando workflow…</div>
+    </div>
+  );
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] bg-white flex-shrink-0">
+        <button onClick={onBack} className="text-[#646462] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg></button>
+        <div className="w-7 h-7 rounded-lg bg-[#fef3c7] flex items-center justify-center"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#d97706]" fill="currentColor"><path d="M2 4a2 2 0 012-2h3a2 2 0 012 2v1h2V4a2 2 0 012-2h3a2 2 0 012 2v3a2 2 0 01-2 2h-3a2 2 0 01-2-2V6H9v1a2 2 0 01-2 2H4a2 2 0 01-2-2V4zm2 0v3h3V4H4zm9 0v3h3V4h-3zM2 13a2 2 0 012-2h3a2 2 0 012 2v3a2 2 0 01-2 2H4a2 2 0 01-2-2v-3zm2 0v3h3v-3H4z"/></svg></div>
+        <input value={name} onChange={e => setName(e.target.value)} className="flex-1 text-sm font-semibold text-[#1a1a18] bg-transparent border-0 focus:outline-none" />
+        <button onClick={() => setEnabled(e => !e)} className={`flex items-center gap-2 px-2 py-1 rounded text-xs ${enabled ? 'bg-[#dcfce7] text-[#16a34a]' : 'bg-[#f3f3f1] text-[#9ca3af]'}`}>
+          <div className={`relative w-7 h-4 rounded-full transition-colors ${enabled ? 'bg-[#16a34a]' : 'bg-[#d1d5db]'}`}>
+            <div className="w-3 h-3 bg-white rounded-full absolute shadow-sm top-[2px]" style={{ left: enabled ? '14px' : '2px' }} />
+          </div>
+          {enabled ? 'Enabled' : 'Disabled'}
+        </button>
+        <button onClick={() => setShowJson(s => !s)} className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]" title="Ver/exportar JSON">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 inline mr-1"><path d="M5 6L2 8l3 2M11 6l3 2-3 2M9 4l-2 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+          JSON
+        </button>
+        <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-[#f59e0b] hover:bg-[#d97706] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
+          {saving ? 'Guardando…' : (workflowId ? 'Guardar cambios' : 'Crear workflow')}
+        </button>
+      </div>
+
+      <div className="flex-1 flex min-h-0">
+        <WfPalette onDragStart={handleDragStart} />
+
+        <div className="flex-1 relative" onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
+          <RFReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={(_evt: any, n: any) => setSelectedNodeId(n.id)}
+            onPaneClick={() => setSelectedNodeId(null)}
+            nodeTypes={wfNodeTypes}
+            fitView
+            proOptions={{ hideAttribution: true }}
+          >
+            <RFBackground gap={16} size={1} color="#e9eae6" />
+            <RFControls className="!shadow-md" />
+            <RFMiniMap nodeColor={(n: any) => WF_NODE_META[n.data?.type as WfNode['type']]?.color ?? '#646462'} maskColor="rgba(20,20,20,0.05)" />
+          </RFReactFlow>
+          {nodes.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <p className="text-sm text-[#9ca3af]">Arrastra nodos del panel izquierdo para empezar</p>
+            </div>
+          )}
+        </div>
+
+        {selectedNodeForPanel && (
+          <WfNodeConfigPanel
+            node={selectedNodeForPanel}
+            onChange={patch => updateNode(selectedNodeForPanel.id, patch)}
+            onDelete={deleteSelectedNode}
+          />
+        )}
+      </div>
+
+      {showJson && (
+        <div className="fixed inset-0 bg-[#1a1a18]/50 z-50 flex items-center justify-center" onClick={() => setShowJson(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[720px] max-w-[92vw] max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#1a1a18]">Inspeccionar JSON</h2>
+              <button onClick={() => setShowJson(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+            </div>
+            <pre className="flex-1 overflow-auto p-4 text-[11px] font-mono bg-[#fafaf9]">{JSON.stringify({
+              nodes: nodes.map((n: any) => ({ id: n.id, type: n.data.type, label: n.data.label, position: n.position, config: n.data.config })),
+              edges: edges.map((e: any) => ({ id: e.id, source: e.source, target: e.target, label: e.label })),
+            }, null, 2)}</pre>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

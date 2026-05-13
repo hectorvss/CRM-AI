@@ -369,7 +369,27 @@ export async function sweepScheduledWorkflows(tenantId: string, workspaceId: str
 
       // Simple cron evaluation: parse the 5 cron fields and check if "now" matches
       if (cronMatchesNow(cron, now)) {
-        logger.info(`Schedule sweep: triggering workflow ${version.workflow_id} (cron: ${cron})`);
+        // ── Distributed lock ──────────────────────────────────────────────────
+        // Multiple replicas may tick the sweeper at the same minute. Acquire a
+        // (workflow_id, fire_minute) row in `workflow_cron_locks` via INSERT;
+        // PK conflict means another replica won — silently skip.
+        const fireMinute = new Date(Math.floor(now.getTime() / 60_000) * 60_000).toISOString();
+        const replicaId = process.env.VERCEL_REGION || process.env.HOSTNAME || (await import('os')).hostname() || 'local';
+        const { error: lockError } = await supabase
+          .from('workflow_cron_locks')
+          .insert({
+            workflow_id: version.workflow_id,
+            fire_minute: fireMinute,
+            replica_id: replicaId,
+          });
+        if (lockError) {
+          // PK conflict (23505) is the expected "another replica won" path
+          if ((lockError as any).code !== '23505') {
+            logger.warn('cron lock insert failed', { workflowId: version.workflow_id, error: lockError.message });
+          }
+          continue;
+        }
+        logger.info(`Schedule sweep: triggering workflow ${version.workflow_id} (cron: ${cron}, replica: ${replicaId})`);
         await fireWorkflowEvent(
           { tenantId, workspaceId },
           'trigger.schedule',
@@ -377,6 +397,15 @@ export async function sweepScheduledWorkflows(tenantId: string, workspaceId: str
         );
       }
     } catch { /* skip this workflow, try next */ }
+  }
+
+  // Periodic cleanup: prune lock rows older than 24h. Cheap (indexed delete) and
+  // bounded so the table stays small even after millions of cron fires.
+  try {
+    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from('workflow_cron_locks').delete().lt('acquired_at', cutoff);
+  } catch (pruneErr: any) {
+    logger.warn('cron lock prune failed', { error: pruneErr?.message ?? String(pruneErr) });
   }
 }
 

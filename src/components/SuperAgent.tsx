@@ -178,6 +178,9 @@ type StreamActivity = {
 interface SuperAgentProps {
   onNavigate?: NavigateFn;
   activeTarget?: NavigationTarget;
+  /** When true, the component renders without its own outer page chrome so it
+   * fits inside another shell (e.g. Fin AI Agent → Studio → Super Agent). */
+  embedded?: boolean;
 }
 
 type SuperAgentMode = 'investigate' | 'operate';
@@ -777,7 +780,12 @@ function StreamingStepsComponent({ steps }: { steps: StreamStep[] }) {
   );
 }
 
-export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps) {
+export default function SuperAgent({ onNavigate, activeTarget, embedded: _embedded = false }: SuperAgentProps) {
+  // The `embedded` prop currently has no effect on the SuperAgent body — it
+  // already renders as a single column. Reserved for future tweaks (e.g.
+  // dropping outer padding when nested in another shell). Suppress unused
+  // warning while keeping the prop in the public surface.
+  void _embedded;
   const activeSection = activeTarget?.section || 'command-center';
 
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);

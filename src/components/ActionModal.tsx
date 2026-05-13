@@ -3,7 +3,7 @@
  *
  * Rich confirmation modal used across Orders, Payments and Returns.
  * Design language matches Settings / Upgrade cards:
- *   rounded-2xl · border-gray-200 · shadow-card
+ *   rounded-[12px] · border-[#e9eae6] · shadow-[0px_1px_2px_rgba(20,20,20,0.04)]
  */
 
 import React from 'react';
@@ -65,32 +65,32 @@ const variantMap: Record<ModalVariant, {
   considerationBorder: string;
 }> = {
   default: {
-    iconBg:             'bg-indigo-50 dark:bg-indigo-900/20',
-    iconColor:          'text-indigo-600 dark:text-indigo-400',
-    confirmBtn:         'bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100',
-    badge:              'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300 border-indigo-100 dark:border-indigo-800/30',
-    stepDot:            'bg-indigo-500',
-    considerationBg:    'bg-blue-50 dark:bg-blue-950/20',
+    iconBg:             'bg-[#f8f8f7] dark:bg-[#f8f8f7]',
+    iconColor:          'text-[#1a1a1a] dark:text-[#1a1a1a]',
+    confirmBtn:         'bg-[#1a1a1a] text-white hover:bg-gray-800 dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#ededea]',
+    badge:              'bg-[#f8f8f7] text-[#1a1a1a] dark:bg-[#f8f8f7] dark:text-[#1a1a1a] border-indigo-100 dark:border-indigo-800/30',
+    stepDot:            'bg-[#f8f8f7]0',
+    considerationBg:    'bg-[#f8f8f7] dark:bg-blue-950/20',
     considerationText:  'text-blue-800 dark:text-blue-300',
     considerationBorder:'border-blue-100 dark:border-blue-900/30',
   },
   warning: {
-    iconBg:             'bg-amber-50 dark:bg-amber-900/20',
-    iconColor:          'text-amber-600 dark:text-amber-400',
-    confirmBtn:         'bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600',
-    badge:              'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 border-amber-100 dark:border-amber-800/30',
-    stepDot:            'bg-amber-500',
-    considerationBg:    'bg-amber-50 dark:bg-amber-950/20',
+    iconBg:             'bg-[#f8f8f7] dark:bg-amber-900/20',
+    iconColor:          'text-[#1a1a1a] dark:text-[#1a1a1a]',
+    confirmBtn:         'bg-[#1a1a1a] text-white hover:bg-[#1a1a1a] dark:bg-[#1a1a1a] dark:hover:bg-[#1a1a1a]',
+    badge:              'bg-[#f8f8f7] text-[#1a1a1a] dark:bg-amber-900/20 dark:text-amber-300 border-amber-100 dark:border-amber-800/30',
+    stepDot:            'bg-[#1a1a1a]',
+    considerationBg:    'bg-[#f8f8f7] dark:bg-amber-950/20',
     considerationText:  'text-amber-800 dark:text-amber-300',
     considerationBorder:'border-amber-100 dark:border-amber-900/30',
   },
   danger: {
-    iconBg:             'bg-red-50 dark:bg-red-900/20',
-    iconColor:          'text-red-600 dark:text-red-400',
-    confirmBtn:         'bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600',
-    badge:              'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 border-red-100 dark:border-red-800/30',
-    stepDot:            'bg-red-500',
-    considerationBg:    'bg-red-50 dark:bg-red-950/20',
+    iconBg:             'bg-[#f8f8f7] dark:bg-red-900/20',
+    iconColor:          'text-[#1a1a1a] dark:text-[#1a1a1a]',
+    confirmBtn:         'bg-[#1a1a1a] text-white hover:bg-[#1a1a1a] dark:bg-[#1a1a1a] dark:hover:bg-[#1a1a1a]',
+    badge:              'bg-[#f8f8f7] text-[#1a1a1a] dark:bg-red-900/20 dark:text-red-300 border-red-100 dark:border-red-800/30',
+    stepDot:            'bg-[#1a1a1a]',
+    considerationBg:    'bg-[#f8f8f7] dark:bg-red-950/20',
     considerationText:  'text-red-800 dark:text-red-300',
     considerationBorder:'border-red-100 dark:border-red-900/30',
   },
@@ -136,23 +136,23 @@ export function ActionModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full max-w-[520px] overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-2xl dark:border-white/10 dark:bg-[#171717]"
+            className="w-full max-w-[520px] overflow-hidden rounded-[12px] border border-[#e9eae6] bg-white shadow-2xl"
           >
             {/* ── Header ── */}
-            <div className="flex items-start justify-between gap-4 border-b border-black/5 px-6 py-5 dark:border-white/10">
+            <div className="flex items-start justify-between gap-4 border-b border-[#e9eae6] px-6 py-5">
               <div className="flex items-center gap-3">
-                <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${c.iconBg}`}>
+                <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[12px] ${c.iconBg}`}>
                   <span className={`material-symbols-outlined text-[22px] ${c.iconColor}`}>{icon}</span>
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Action</p>
-                  <h2 className="text-lg font-semibold leading-tight text-gray-950 dark:text-white">{title}</h2>
-                  <p className="mt-0.5 text-[12px] leading-snug text-gray-500 dark:text-gray-400">{subtitle}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#a4a4a2]">Action</p>
+                  <h2 className="text-[14px] font-bold leading-tight text-[#1a1a1a]">{title}</h2>
+                  <p className="mt-0.5 text-[12px] leading-snug text-[#646462] dark:text-[#a4a4a2]">{subtitle}</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950 dark:hover:bg-white/5 dark:hover:text-white"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#646462] transition hover:bg-[#ededea] hover:text-[#1a1a1a] dark:hover:text-white"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
@@ -163,15 +163,15 @@ export function ActionModal({
 
               {/* Context: current record state */}
               {context && context.length > 0 && (
-                <div className="overflow-hidden rounded-2xl border border-black/5 bg-gray-50/70 dark:border-white/10 dark:bg-white/[0.03]">
-                  <div className="border-b border-black/5 px-4 py-2.5 dark:border-white/10">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Current state</p>
+                <div className="overflow-hidden rounded-[12px] border border-[#e9eae6] bg-[#f8f8f7]/70">
+                  <div className="border-b border-[#e9eae6] px-4 py-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#a4a4a2]">Current state</p>
                   </div>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-3.5">
                     {context.map((item) => (
                       <div key={item.label}>
-                        <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">{item.label}</p>
-                        <p className={`truncate text-[13px] font-semibold ${item.accent ? 'text-red-600 dark:text-red-400' : 'text-gray-950 dark:text-white'}`}>{item.value}</p>
+                        <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#a4a4a2]">{item.label}</p>
+                        <p className={`truncate text-[13px] font-semibold ${item.accent ? 'text-[#1a1a1a] dark:text-[#1a1a1a]' : 'text-[#1a1a1a]'}`}>{item.value}</p>
                       </div>
                     ))}
                   </div>
@@ -180,7 +180,7 @@ export function ActionModal({
 
               {/* Steps: what will happen */}
               <div>
-                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">What will happen</p>
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#a4a4a2]">What will happen</p>
                 <div className="space-y-2.5">
                   {steps.map((step, i) => (
                     <div key={i} className="flex gap-3">
@@ -193,9 +193,9 @@ export function ActionModal({
                         )}
                       </div>
                       <div className="min-w-0 pb-1">
-                        <p className="text-[13px] font-semibold leading-snug text-gray-950 dark:text-white">{step.text}</p>
+                        <p className="text-[13px] font-semibold leading-snug text-[#1a1a1a]">{step.text}</p>
                         {step.detail && (
-                          <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">{step.detail}</p>
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-[#646462] dark:text-[#a4a4a2]">{step.detail}</p>
                         )}
                       </div>
                     </div>
@@ -205,7 +205,7 @@ export function ActionModal({
 
               {/* Considerations */}
               {considerations && considerations.length > 0 && (
-                <div className={`rounded-2xl border p-4 ${c.considerationBg} ${c.considerationBorder}`}>
+                <div className={`rounded-[12px] border p-4 ${c.considerationBg} ${c.considerationBorder}`}>
                   <div className="mb-2.5 flex items-center gap-2">
                     <span className={`material-symbols-outlined text-[16px] ${c.iconColor}`}>
                       {variant === 'danger' ? 'warning' : 'info'}
@@ -228,7 +228,7 @@ export function ActionModal({
               {/* Optional note textarea */}
               {noteLabel !== undefined && (
                 <div>
-                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#646462]">
                     {noteLabel}
                   </label>
                   <textarea
@@ -236,17 +236,17 @@ export function ActionModal({
                     value={noteValue ?? ''}
                     onChange={(e) => onNoteChange?.(e.target.value)}
                     placeholder={notePlaceholder}
-                    className="w-full resize-none rounded-2xl border border-black/10 bg-white px-3.5 py-2.5 text-[13px] text-gray-950 placeholder-gray-400 outline-none transition focus:border-gray-950 dark:border-white/10 dark:bg-[#1b1b1b] dark:text-white dark:focus:border-white"
+                    className="w-full resize-none rounded-[12px] border border-[#e9eae6] bg-white px-3.5 py-2.5 text-[13px] text-[#1a1a1a] placeholder-gray-400 outline-none transition focus:border-gray-950 dark:focus:border-white"
                   />
                 </div>
               )}
             </div>
 
             {/* ── Footer ── */}
-            <div className="flex items-center justify-between gap-3 border-t border-black/5 bg-gray-50/50 px-6 py-4 dark:border-white/10 dark:bg-white/[0.02]">
+            <div className="flex items-center justify-between gap-3 border-t border-[#e9eae6] bg-[#f8f8f7]/50 px-6 py-4 dark:bg-white/[0.02]">
               <button
                 onClick={onClose}
-                className="rounded-full px-4 py-2 text-[13px] font-medium text-gray-600 transition hover:text-gray-950 dark:text-gray-300 dark:hover:text-white"
+                className="rounded-full px-4 py-2 text-[13px] font-medium text-[#646462] transition hover:text-[#1a1a1a] dark:text-[#c4c4c2] dark:hover:text-white"
               >
                 ← Back
               </button>

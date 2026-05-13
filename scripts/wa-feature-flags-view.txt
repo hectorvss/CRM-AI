@@ -1,0 +1,584 @@
+// ── WAAppFeatureFlagsView ─────────────────────────────────────────────────────
+function WAAppFeatureFlagsView() {
+  type FFTab = 'overview' | 'history';
+  const [tab, setTab] = useState<FFTab>('overview');
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const [showNewFF, setShowNewFF] = useState(false);
+
+  // New FF form state
+  const [ffName, setFfName] = useState('Unnamed');
+  const [ffKey, setFfKey] = useState('');
+  const [ffDesc, setFfDesc] = useState('');
+  const [servedValue, setServedValue] = useState<'boolean'|'variants'|'remote'>('boolean');
+  const [matchBy, setMatchBy] = useState<'user'|'device'|'group'>('user');
+  const [rolloutPct, setRolloutPct] = useState(0);
+  const [enableFlag, setEnableFlag] = useState(true);
+  const [persistAuth, setPersistAuth] = useState(false);
+  const [showPayloadOpt, setShowPayloadOpt] = useState(false);
+  const [showBootstrapOpt, setShowBootstrapOpt] = useState(false);
+  const [showLocalOpt, setShowLocalOpt] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Search/filter state
+  const [ffSearch, setFfSearch] = useState('');
+
+  // ── New Feature Flag full-page ─────────────────────────────────────────────
+  if (showNewFF) {
+    const codeSnippet = `// Ensure flags are loaded before usage.
+// You'll only need to call this on the code for when the first time a user visits.
+posthog.onFeatureFlags(function() {
+    // feature flags should be available at this point
+    if (posthog.isFeatureEnabled('my-flag') ) {
+        // do something
+    }
+})
+
+// Otherwise, you can just do:
+if (posthog.isFeatureEnabled('my-flag') ) {
+    // do something
+}`;
+
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[#fafaf8] overflow-hidden">
+        {/* Top bar */}
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] bg-white flex-shrink-0">
+          <button onClick={() => setShowNewFF(false)} className="text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          {/* Toggle icon */}
+          <div className="w-8 h-5 rounded-full bg-[#3b59f6] flex items-center px-0.5 flex-shrink-0">
+            <div className="w-4 h-4 bg-white rounded-full ml-auto shadow-sm"/>
+          </div>
+          <input
+            value={ffName}
+            onChange={e => setFfName(e.target.value)}
+            className="flex-1 text-[16px] font-bold text-[#1a1a1a] bg-transparent border-0 outline-none"
+          />
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Quick start
+              <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">?</span>
+            </button>
+            <button onClick={() => setShowNewFF(false)} className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#646462] hover:bg-[#f9f9f7]">Cancel</button>
+            <button className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7]">Save</button>
+            <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-6 py-8 flex flex-col gap-8">
+
+            {/* Key */}
+            <div>
+              <h2 className="text-[14px] font-bold text-[#1a1a1a] mb-2">Key</h2>
+              <input
+                value={ffKey}
+                onChange={e => setFfKey(e.target.value)}
+                placeholder="examples: new-landing-page, betaFeature, ab_test_1"
+                className="w-full border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af]"
+              />
+              <p className="text-[12px] text-[#e8572a] mt-1.5">Feature flag keys must be unique</p>
+            </div>
+
+            {/* Description */}
+            <div>
+              <h2 className="text-[14px] font-bold text-[#1a1a1a] mb-2">Description</h2>
+              <textarea
+                value={ffDesc}
+                onChange={e => setFfDesc(e.target.value)}
+                rows={4}
+                className="w-full border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#3b59f6] resize-none"
+              />
+            </div>
+
+            {/* Served value */}
+            <div className="border-t border-[#e9eae6] pt-6">
+              <h2 className="text-[14px] font-bold text-[#1a1a1a] mb-3">Served value</h2>
+              <div className="flex gap-0">
+                {([
+                  { id: 'boolean' as const, label: 'Release toggle (boolean)' },
+                  { id: 'variants' as const, label: 'Multiple variants with rollout percentages (A/B/n test)' },
+                  { id: 'remote' as const, label: 'Remote config (single payload)' },
+                ]).map((opt, i) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setServedValue(opt.id)}
+                    className={`px-4 py-2 text-[12px] font-medium border transition-colors ${
+                      i === 0 ? 'rounded-l-lg' : i === 2 ? 'rounded-r-lg' : ''
+                    } ${servedValue === opt.id
+                      ? 'border-[#f59e0b] bg-[#fef3c7] text-[#1a1a1a] z-10 relative'
+                      : 'border-[#e9eae6] bg-white text-[#646462] hover:bg-[#f9f9f7]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[13px] text-[#646462] mt-3">
+                Users will be served <code className="font-mono font-bold text-[#1a1a1a]">true</code> if they match one or more release condition groups.
+              </p>
+            </div>
+
+            {/* Payload */}
+            <div className="border-t border-[#e9eae6] pt-6">
+              <h2 className="text-[14px] font-bold text-[#1a1a1a] mb-2">Payload</h2>
+              <p className="text-[13px] text-[#646462] mb-3 leading-relaxed">
+                Optionally specify a valid JSON payload to be returned when the served value is <code className="font-mono font-bold text-[#1a1a1a]">true</code>. Read more in the{' '}
+                <span className="text-[#e8572a] cursor-pointer hover:underline">payload documentation</span>.
+              </p>
+              <textarea
+                rows={2}
+                placeholder={`Examples: "A string", 2500, {"key": "value"}`}
+                className="w-full border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[12px] font-mono focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af] resize-none bg-white"
+              />
+            </div>
+
+            {/* Release conditions */}
+            <div className="border-t border-[#e9eae6] pt-6">
+              <h2 className="text-[14px] font-bold text-[#1a1a1a] mb-2">Release conditions</h2>
+              <p className="text-[13px] text-[#646462] mb-4 leading-relaxed">
+                Specify users for flag release. Condition sets are evaluated top to bottom - the first matching set is used. A condition matches when all property filters pass AND the target falls within the rollout percentage.
+              </p>
+
+              {/* Match by */}
+              <div className="mb-4">
+                <div className="flex items-center gap-1.5 mb-3">
+                  <span className="text-[13px] font-semibold text-[#1a1a1a]">Match by</span>
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {([
+                    { id: 'user' as const, label: 'User', desc: 'Stable assignment for logged-in users based on their distinct ID.', beta: false },
+                    { id: 'device' as const, label: 'Device', desc: 'Stable assignment per device. Good fit for experiments on anonymous users.', beta: true },
+                    { id: 'group' as const, label: 'Group', desc: 'Stable assignment for everyone in an organization, company, or other custom group type.', beta: false },
+                  ]).map(opt => (
+                    <label key={opt.id} className="flex items-start gap-3 cursor-pointer">
+                      <div className="mt-0.5 flex-shrink-0">
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${matchBy === opt.id ? 'border-[#e8572a]' : 'border-[#d1d5db]'}`}
+                             onClick={() => setMatchBy(opt.id)}>
+                          {matchBy === opt.id && <div className="w-2 h-2 rounded-full bg-[#e8572a]"/>}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-semibold text-[#1a1a1a]">{opt.label}</span>
+                          {opt.beta && <span className="text-[9px] font-bold px-1.5 py-0.5 border border-[#f59e0b] rounded text-[#92400e]">BETA</span>}
+                        </div>
+                        <p className="text-[12px] text-[#646462] mt-0.5">
+                          {opt.desc}
+                          {opt.beta && <span className="text-[#e8572a] cursor-pointer hover:underline ml-1">Learn more ↗</span>}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Condition Set 1 */}
+              <div className="border border-[#e9eae6] rounded-xl p-4 mb-3">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[13px] text-[#646462]">
+                    <span className="font-semibold text-[#1a1a1a]">Set 1</span> Condition set will match <span className="font-semibold text-[#1a1a1a]">all users</span>
+                  </span>
+                  <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#9ca3af] hover:text-[#646462]">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="3" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.1"/><path d="M3 3V2a1 1 0 011-1h5a1 1 0 011 1v5a1 1 0 01-1 1h-1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+                <p className="text-[12px] text-[#9ca3af] italic mb-3 flex items-center gap-1.5">
+                  Description (optional)
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1 9l3-3m0 0l2 2 3-5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </p>
+                <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] mb-4 transition-colors">
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  Add condition
+                </button>
+                {/* Rollout slider */}
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-[12px] text-[#646462] flex-shrink-0">Roll out to</span>
+                  <div className="relative flex-1 flex items-center">
+                    <div className="w-full h-1.5 bg-[#e9eae6] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#e8572a] rounded-full" style={{ width: `${rolloutPct}%` }}/>
+                    </div>
+                    <input type="range" min={0} max={100} value={rolloutPct} onChange={e=>setRolloutPct(Number(e.target.value))} className="absolute inset-0 opacity-0 cursor-pointer w-full"/>
+                    <div className="absolute w-4 h-4 bg-[#e8572a] rounded-full shadow border-2 border-white" style={{ left: `calc(${rolloutPct}% - 8px)` }}/>
+                  </div>
+                  <input type="number" value={rolloutPct} onChange={e=>setRolloutPct(Math.min(100,Math.max(0,Number(e.target.value))))} className="w-16 border border-[#e9eae6] rounded-lg px-2 py-1 text-[12px] text-right focus:outline-none"/>
+                  <span className="text-[12px] text-[#646462]">%</span>
+                  <span className="text-[12px] text-[#646462]">of users</span>
+                </div>
+                <p className="text-[12px] text-[#646462]">
+                  in this set. Will match approximately <strong>0%</strong> (0 / 0) of total users.{' '}
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="inline"><circle cx="6" cy="6" r="5" stroke="#9ca3af" strokeWidth="1"/><path d="M6 5.5v3M6 4v.5" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>
+                </p>
+              </div>
+
+              {/* Add condition set */}
+              <button className="flex items-center gap-2 px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                Add condition set
+              </button>
+            </div>
+
+            {/* Enable feature flag */}
+            <label className="flex items-start gap-3 border border-[#e9eae6] rounded-xl p-4 cursor-pointer hover:bg-[#fafaf8]">
+              <input type="checkbox" checked={enableFlag} onChange={e=>setEnableFlag(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-[#e8572a] flex-shrink-0"/>
+              <div>
+                <p className="text-[13px] font-semibold text-[#1a1a1a]">Enable feature flag</p>
+                <p className="text-[12px] text-[#646462] mt-0.5 leading-relaxed">
+                  When enabled, this flag evaluates according to your release conditions. When disabled, this flag will not be evaluated and PostHog SDKs default to returning <code className="font-mono text-[11px] bg-[#f3f4f6] px-1 rounded">false</code>.
+                </p>
+              </div>
+            </label>
+
+            {/* Persist flag */}
+            <label className="flex items-start gap-3 border border-[#e9eae6] rounded-xl p-4 cursor-pointer hover:bg-[#fafaf8]">
+              <input type="checkbox" checked={persistAuth} onChange={e=>setPersistAuth(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-[#e8572a] flex-shrink-0"/>
+              <div>
+                <p className="text-[13px] font-semibold text-[#1a1a1a]">Persist flag across authentication steps</p>
+                <p className="text-[12px] text-[#646462] mt-0.5 leading-relaxed">
+                  If your feature flag is applied before identifying the user, use this to ensure that the flag value remains consistent for the same user. Depending on your setup, this option might not always be suitable. This feature requires creating profiles for anonymous users.{' '}
+                  <span className="text-[#e8572a] cursor-pointer hover:underline">Learn more ↗</span>
+                </p>
+              </div>
+            </label>
+
+            {/* Tags */}
+            <div className="border-t border-[#e9eae6] pt-6">
+              <h2 className="text-[14px] font-bold text-[#1a1a1a] mb-3">Tags</h2>
+              <button className="flex items-center gap-1.5 text-[13px] text-[#646462] hover:text-[#1a1a1a] transition-colors">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                Add tag
+              </button>
+            </div>
+
+            {/* How to implement */}
+            <div className="border-t border-[#e9eae6] pt-6">
+              <h2 className="text-[14px] font-bold text-[#1a1a1a] mb-1">How to implement</h2>
+              <p className="text-[13px] text-[#646462] mb-4">Use the following code to implement this feature flag.</p>
+
+              {/* Language + options */}
+              <div className="flex items-center gap-4 mb-3 flex-wrap">
+                <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                  JavaScript
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                </button>
+                {[
+                  { state: showPayloadOpt, setter: setShowPayloadOpt, label: 'Show payload option' },
+                  { state: showBootstrapOpt, setter: setShowBootstrapOpt, label: 'Show bootstrap option' },
+                  { state: showLocalOpt, setter: setShowLocalOpt, label: 'Show local evaluation option' },
+                ].map(opt => (
+                  <label key={opt.label} className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={opt.state} onChange={e=>opt.setter(e.target.checked)} className="w-3.5 h-3.5 rounded border-[#d1d5db] accent-[#e8572a]"/>
+                    <span className="text-[12px] text-[#646462]">{opt.label}</span>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#9ca3af" strokeWidth="1"/><path d="M6 5.5v3M6 4v.5" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>
+                  </label>
+                ))}
+              </div>
+
+              {/* Code block */}
+              <div className="relative bg-[#1e2030] rounded-xl p-5 font-mono text-[12px] leading-relaxed">
+                <button className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-[#9ca3af] hover:text-white border border-[#374151] rounded-lg">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="3" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.1"/><path d="M3 3V2a1 1 0 011-1h5a1 1 0 011 1v5a1 1 0 01-1 1h-1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                </button>
+                <pre className="whitespace-pre-wrap text-left">
+                  <span className="text-[#6a9955]">{'// Ensure flags are loaded before usage.'}</span>{'\n'}
+                  <span className="text-[#6a9955]">{'// You\'ll only need to call this on the code for when the first time a user visits.'}</span>{'\n'}
+                  <span className="text-[#dcdcaa]">posthog</span>
+                  <span className="text-[#d4d4d4]">.</span>
+                  <span className="text-[#dcdcaa]">onFeatureFlags</span>
+                  <span className="text-[#d4d4d4]">(</span>
+                  <span className="text-[#569cd6]">function</span>
+                  <span className="text-[#d4d4d4]">() {'{'}</span>{'\n'}
+                  <span className="text-[#d4d4d4]">{'    '}</span>
+                  <span className="text-[#6a9955]">{'// feature flags should be available at this point'}</span>{'\n'}
+                  <span className="text-[#d4d4d4]">{'    '}</span>
+                  <span className="text-[#c586c0]">if</span>
+                  <span className="text-[#d4d4d4]"> (</span>
+                  <span className="text-[#dcdcaa]">posthog</span>
+                  <span className="text-[#d4d4d4]">.</span>
+                  <span className="text-[#dcdcaa]">isFeatureEnabled</span>
+                  <span className="text-[#d4d4d4]">(</span>
+                  <span className="text-[#ce9178]">'my-flag'</span>
+                  <span className="text-[#d4d4d4]">) ) {'{'}</span>{'\n'}
+                  <span className="text-[#d4d4d4]">{'        '}</span>
+                  <span className="text-[#6a9955]">{'// do something'}</span>{'\n'}
+                  <span className="text-[#d4d4d4]">{'    }'}</span>{'\n'}
+                  <span className="text-[#d4d4d4]">{'})'}</span>{'\n\n'}
+                  <span className="text-[#6a9955]">{'// Otherwise, you can just do:'}</span>{'\n'}
+                  <span className="text-[#c586c0]">if</span>
+                  <span className="text-[#d4d4d4]"> (</span>
+                  <span className="text-[#dcdcaa]">posthog</span>
+                  <span className="text-[#d4d4d4]">.</span>
+                  <span className="text-[#dcdcaa]">isFeatureEnabled</span>
+                  <span className="text-[#d4d4d4]">(</span>
+                  <span className="text-[#ce9178]">'my-flag'</span>
+                  <span className="text-[#d4d4d4]">) ) {'{'}</span>{'\n'}
+                  <span className="text-[#d4d4d4]">{'    '}</span>
+                  <span className="text-[#6a9955]">{'// do something'}</span>{'\n'}
+                  <span className="text-[#d4d4d4]">{'}'}</span>
+                </pre>
+              </div>
+
+              <p className="text-[13px] text-[#646462] mt-3">
+                Need more information?{' '}
+                <span className="text-[#e8572a] cursor-pointer hover:underline font-medium">Check the docs ↗</span>
+              </p>
+            </div>
+
+            {/* Advanced settings */}
+            <div className="border-t border-[#e9eae6] pt-6">
+              <button
+                onClick={() => setAdvancedOpen(!advancedOpen)}
+                className="flex items-center justify-between w-full"
+              >
+                <div>
+                  <h2 className="text-[14px] font-bold text-[#1a1a1a] text-left">Advanced settings</h2>
+                  <p className="text-[13px] text-[#646462] mt-0.5">Define who can modify this flag.</p>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={`transition-transform ${advancedOpen ? 'rotate-180' : ''}`}>
+                  <path d="M4 6l4 4 4-4" stroke="#646462" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              {advancedOpen && (
+                <div className="mt-4 border border-[#e9eae6] rounded-xl p-4">
+                  <p className="text-[13px] text-[#9ca3af]">No advanced settings configured.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Save/Cancel */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#e9eae6]">
+              <button onClick={() => setShowNewFF(false)} className="px-4 py-2 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] transition-colors">Cancel</button>
+              <button className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Feature Flags list ─────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-6 pt-5 pb-0 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          {/* toggle on icon */}
+          <div className="w-8 h-5 rounded-full bg-[#3b59f6] flex items-center px-0.5 flex-shrink-0">
+            <div className="w-4 h-4 bg-white rounded-full ml-auto shadow-sm"/>
+          </div>
+          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Feature flags</h1>
+          <button className="text-[#9ca3af] hover:text-[#646462]">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Top-right */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Quick start
+            <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">?</span>
+          </button>
+          {/* + New split button */}
+          <div className="flex items-center">
+            <button
+              onClick={() => setShowNewFF(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-l-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] border-r-0"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              New
+            </button>
+            <button className="px-2 py-1.5 border border-[#e9eae6] rounded-r-lg text-[#646462] hover:bg-[#f9f9f7]">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+          <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Subtitle */}
+      <p className="px-6 mt-1 text-[13px] text-[#646462]">
+        Use feature flags to safely deploy and roll back new features in an easy-to-manage way. Roll variants out to certain groups, a percentage of users, or everyone all at once.
+      </p>
+
+      {/* Tabs */}
+      <div className="flex items-center px-6 mt-3 border-b border-[#e9eae6] flex-shrink-0">
+        {(['overview','history'] as FFTab[]).map(t => {
+          const labels: Record<FFTab,string> = { overview:'Overview', history:'History' };
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+                tab === t ? 'border-[#e8572a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+              }`}
+            >
+              {labels[t]}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === 'overview' && (
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+          {/* Welcome card */}
+          {!welcomeDismissed && (
+            <div className="border-2 border-dashed border-[#e9eae6] rounded-xl flex items-center gap-6 px-8 py-6 relative">
+              <button
+                onClick={() => setWelcomeDismissed(true)}
+                className="absolute top-3 right-3 text-[#9ca3af] hover:text-[#646462]"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              </button>
+
+              {/* Hedgehog with beret & overalls */}
+              <div className="flex-shrink-0 w-32 h-32 flex items-center justify-center">
+                <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+                  {/* body */}
+                  <ellipse cx="60" cy="80" rx="22" ry="18" fill="#92400e"/>
+                  {/* overalls */}
+                  <rect x="46" y="76" width="28" height="22" rx="4" fill="#3b59f6" opacity="0.85"/>
+                  <rect x="50" y="72" width="8" height="10" rx="2" fill="#3b59f6" opacity="0.85"/>
+                  <rect x="62" y="72" width="8" height="10" rx="2" fill="#3b59f6" opacity="0.85"/>
+                  <circle cx="60" cy="79" r="2" fill="#1a3a9e"/>
+                  {/* head */}
+                  <ellipse cx="60" cy="55" rx="16" ry="14" fill="#d97706"/>
+                  {/* snout */}
+                  <ellipse cx="60" cy="61" rx="8" ry="5" fill="#fde68a"/>
+                  {/* eyes with glasses */}
+                  <circle cx="53.5" cy="52" r="5" fill="none" stroke="#1a1a1a" strokeWidth="1.2"/>
+                  <circle cx="66.5" cy="52" r="5" fill="none" stroke="#1a1a1a" strokeWidth="1.2"/>
+                  <path d="M58.5 52h3" stroke="#1a1a1a" strokeWidth="1.2"/>
+                  <circle cx="53.5" cy="52" r="2.5" fill="#1a1a1a"/>
+                  <circle cx="66.5" cy="52" r="2.5" fill="#1a1a1a"/>
+                  <circle cx="54.2" cy="51.3" r="0.8" fill="white"/>
+                  <circle cx="67.2" cy="51.3" r="0.8" fill="white"/>
+                  <path d="M48 52h-3M75 52h3" stroke="#1a1a1a" strokeWidth="1.2" strokeLinecap="round"/>
+                  {/* nose */}
+                  <ellipse cx="60" cy="59.5" rx="2" ry="1.3" fill="#92400e"/>
+                  {/* beret */}
+                  <ellipse cx="60" cy="43" rx="14" ry="5" fill="#e8572a"/>
+                  <ellipse cx="60" cy="40" rx="12" ry="6" fill="#e8572a"/>
+                  <circle cx="68" cy="39" r="2" fill="#c23e1a"/>
+                  {/* spines */}
+                  <path d="M46 51c-4-6-5-12-2-17M50 45c-3-7-2-13 2-17M55 42c0-7 3-12 7-15M65 43c3-7 6-11 10-14M69 49c6-5 10-9 13-15" stroke="#78350f" strokeWidth="1.8" strokeLinecap="round"/>
+                </svg>
+              </div>
+
+              {/* Text */}
+              <div className="flex-1">
+                <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-2">Welcome to Feature flags!</h2>
+                <p className="text-[13px] text-[#646462] leading-relaxed mb-2">
+                  Use feature flags to safely deploy and roll back new features in an easy-to-manage way. Roll variants out to certain groups, a percentage of users,{' '}
+                  <span className="text-[#e8572a] cursor-pointer hover:underline">or everyone all at once</span>.
+                </p>
+                <p className="text-[13px] text-[#646462] leading-relaxed mb-4">
+                  Your team is already using Feature flags. You can take a look at what they're doing,{' '}
+                  <span className="text-[#e8572a] cursor-pointer hover:underline">or get started yourself</span>.
+                </p>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setShowNewFF(true)}
+                    className="flex items-center gap-2 px-4 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    Create feature flag
+                  </button>
+                  <button className="flex items-center gap-1.5 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] transition-colors">
+                    Learn more
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 8.5L9 4M9 4H5.5M9 4v3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Filter row */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[240px] max-w-[340px]">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
+                <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
+                <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+              <input value={ffSearch} onChange={e=>setFfSearch(e.target.value)} placeholder="Search for feature flags (or experiment keys)" className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none placeholder-[#9ca3af]"/>
+            </div>
+            {[
+              { label: 'Type', value: 'All' },
+              { label: 'Status', value: 'All' },
+              { label: 'Created by', value: 'Any user' },
+              { label: 'Tags', value: 'Any tags' },
+            ].map(f => (
+              <div key={f.label} className="flex items-center gap-1.5">
+                <span className="text-[12px] text-[#646462]">{f.label}</span>
+                <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                  {f.value}
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Table */}
+          <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6] bg-[#fafaf8]">
+                  <th className="px-3 py-2.5 w-8">
+                    <input type="checkbox" className="w-3.5 h-3.5 rounded border-[#d1d5db]"/>
+                  </th>
+                  {[
+                    {l:'KEY', s:true},
+                    {l:'TAGS', s:false},
+                    {l:'CREATED BY', s:true},
+                    {l:'CREATED', s:true, desc:true},
+                    {l:'UPDATED', s:true},
+                    {l:'RELEASE CONDITIONS', s:false},
+                    {l:'STATUS', s:true},
+                  ].map(col=>(
+                    <th key={col.l} className="px-3 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">
+                      <span className="flex items-center gap-1">
+                        {col.l}
+                        {col.s && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 2v6M2.5 4.5L5 2l2.5 2.5" stroke={col.desc?'#e8572a':'#d1d5db'} strokeWidth="1" strokeLinecap="round"/><path d="M2.5 5.5L5 8l2.5-2.5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/></svg>}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={8} className="px-4 py-4 text-[13px] text-[#646462]">
+                    No results for this filter,{' '}
+                    <span className="text-[#e8572a] cursor-pointer hover:underline">change filter</span>
+                    {' '}or{' '}
+                    <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => setShowNewFF(true)}>create a new flag</span>.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="flex-1 flex items-center justify-center px-6 py-8">
+          <div className="border border-[#e9eae6] rounded-xl p-12 flex flex-col items-center text-center max-w-[500px] w-full">
+            <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-4">
+              <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="10" stroke="#9ca3af" strokeWidth="1.5"/><path d="M13 8v5l3 3" stroke="#9ca3af" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <h2 className="text-[15px] font-semibold text-[#1a1a1a] mb-2">No history yet</h2>
+            <p className="text-[13px] text-[#9ca3af] leading-relaxed">Feature flag activity will appear here once flags have been created and modified.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+

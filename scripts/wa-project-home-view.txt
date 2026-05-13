@@ -1,0 +1,687 @@
+
+// ── WAProjectHomeView ─────────────────────────────────────────────────────────
+// PostHog AI-first project homepage with Max AI chat, search, pinned/recent/starred.
+// Connects to self-hosted PostHog via src/api/posthog.ts
+
+// ── Minimal markdown renderer (bold, inline code, links) ─────────────────────
+function renderMarkdown(text: string): React.ReactNode[] {
+  const lines = text.split('\n');
+  return lines.map((line, li) => {
+    const parts: React.ReactNode[] = [];
+    let i = 0;
+    let key = 0;
+    while (i < line.length) {
+      // Bold **text**
+      if (line[i] === '*' && line[i+1] === '*') {
+        const end = line.indexOf('**', i + 2);
+        if (end !== -1) {
+          parts.push(<strong key={key++}>{line.slice(i + 2, end)}</strong>);
+          i = end + 2; continue;
+        }
+      }
+      // Inline code `text`
+      if (line[i] === '`') {
+        const end = line.indexOf('`', i + 1);
+        if (end !== -1) {
+          parts.push(<code key={key++} className="bg-[#f3f3f1] text-[#e8572a] px-1 rounded text-xs font-mono">{line.slice(i + 1, end)}</code>);
+          i = end + 1; continue;
+        }
+      }
+      // Find next special char
+      let next = line.length;
+      for (const ch of ['**', '`']) {
+        const idx = line.indexOf(ch, i);
+        if (idx !== -1 && idx < next) next = idx;
+      }
+      parts.push(<span key={key++}>{line.slice(i, next)}</span>);
+      i = next;
+    }
+    return (
+      <React.Fragment key={li}>
+        {parts}
+        {li < lines.length - 1 && <br />}
+      </React.Fragment>
+    );
+  });
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface HomeMessage {
+  role: 'user' | 'assistant' | 'thinking';
+  content: string;
+  status: 'loading' | 'done' | 'error';
+}
+
+interface PinnedItem {
+  id: number | string;
+  name: string;
+  type: 'dashboard' | 'insight';
+}
+
+interface RecentItem {
+  id: number | string;
+  name: string;
+  type: 'dashboard' | 'insight' | 'feature_flag' | 'survey' | 'experiment' | 'notebook';
+  short_id?: string;
+}
+
+type HomeMode = 'idle' | 'ai' | 'search';
+
+// ── Icon helpers ──────────────────────────────────────────────────────────────
+function ItemTypeIcon({ type }: { type: RecentItem['type'] }) {
+  const cls = 'w-4 h-4 flex-shrink-0';
+  switch (type) {
+    case 'dashboard':
+      return <svg viewBox="0 0 16 16" className={cls}><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" fill="#3b59f6" opacity=".8"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1" fill="#3b59f6" opacity=".5"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1" fill="#3b59f6" opacity=".5"/><rect x="9" y="9" width="5.5" height="5.5" rx="1" fill="#3b59f6" opacity=".3"/></svg>;
+    case 'insight':
+      return <svg viewBox="0 0 16 16" className={cls}><path d="M1 13l3-4 3 2 3-5 3 3" stroke="#3b59f6" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+    case 'feature_flag':
+      return <svg viewBox="0 0 16 16" className={cls}><path d="M3 2v12M3 2l9 4-9 4" stroke="#e8572a" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+    case 'survey':
+      return <svg viewBox="0 0 16 16" className={cls}><rect x="2" y="1.5" width="12" height="13" rx="2" fill="none" stroke="#646462" strokeWidth="1.3"/><path d="M5 5.5h6M5 8h6M5 10.5h3.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>;
+    case 'experiment':
+      return <svg viewBox="0 0 16 16" className={cls}><path d="M6 1v5.5L2.5 13.5h11L10 6.5V1" stroke="#646462" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/><path d="M4.5 1h7" stroke="#646462" strokeWidth="1.3" strokeLinecap="round"/></svg>;
+    case 'notebook':
+      return <svg viewBox="0 0 16 16" className={cls}><rect x="3" y="1" width="10" height="14" rx="1.5" fill="none" stroke="#646462" strokeWidth="1.3"/><path d="M6 5h5M6 8h5M6 11h3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>;
+    default:
+      return <svg viewBox="0 0 16 16" className={cls}><circle cx="8" cy="8" r="5.5" fill="none" stroke="#646462" strokeWidth="1.3"/></svg>;
+  }
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+function WAProjectHomeView() {
+  const [mode, setMode]               = React.useState<HomeMode>('idle');
+  const [query, setQuery]             = React.useState('');
+  const [messages, setMessages]       = React.useState<HomeMessage[]>([]);
+  const [conversationId, setConvId]   = React.useState<string | null>(null);
+  const [isStreaming, setIsStreaming]  = React.useState(false);
+  const [thinkingMsg, setThinkingMsg] = React.useState('Pensando...');
+  const [searchResults, setSearchRes] = React.useState<RecentItem[]>([]);
+  const [searchLoading, setSearchLoading] = React.useState(false);
+
+  // Data from PostHog
+  const [username, setUsername]       = React.useState('');
+  const [pinned, setPinned]           = React.useState<PinnedItem[]>([]);
+  const [recents, setRecents]         = React.useState<RecentItem[]>([]);
+  const [starred, setStarred]         = React.useState<PinnedItem[]>([]);
+  const [dataLoading, setDataLoading] = React.useState(true);
+
+  const inputRef     = React.useRef<HTMLTextAreaElement>(null);
+  const chatBottomRef = React.useRef<HTMLDivElement>(null);
+  const abortRef     = React.useRef<AbortController | null>(null);
+  const searchTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Bootstrap: load user + PostHog data ──────────────────────────────────
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        // Lazy-import to avoid circular deps at module level
+        const ph = await import('../api/posthog');
+
+        // Bootstrap if not already done
+        if (!ph.getTeamId()) {
+          await ph.bootstrapPostHog();
+        }
+
+        if (cancelled) return;
+
+        const user = ph.getCurrentUser();
+        if (user) {
+          setUsername(user.first_name || user.email?.split('@')[0] || 'Usuario');
+        }
+
+        const projectId = ph.getProjectId();
+        const teamId    = ph.getTeamId();
+        if (!projectId || !teamId) { setDataLoading(false); return; }
+
+        // Pinned dashboards
+        ph.phGet(`/api/projects/${projectId}/dashboards/`, { pinned: true, limit: 6 })
+          .then((res: any) => {
+            if (!cancelled) setPinned((res.results ?? []).map((d: any) => ({ id: d.id, name: d.name, type: 'dashboard' as const })));
+          }).catch(() => {});
+
+        // Recent insights
+        ph.phGet(`/api/environments/${teamId}/insights/`, { saved: true, order: '-last_viewed_at', limit: 6 })
+          .then((res: any) => {
+            if (!cancelled) setRecents((res.results ?? []).map((i: any) => ({ id: i.id, name: i.name || i.derived_name || 'Sin nombre', type: 'insight' as const })));
+          }).catch(() => {});
+
+        // Starred dashboards (use bookmarked = true)
+        ph.phGet(`/api/projects/${projectId}/dashboards/`, { limit: 6 })
+          .then((res: any) => {
+            if (!cancelled) {
+              const bookmarked = (res.results ?? []).filter((d: any) => d.is_shared || d.starred);
+              setStarred(bookmarked.map((d: any) => ({ id: d.id, name: d.name, type: 'dashboard' as const })));
+            }
+          }).catch(() => {});
+
+      } catch (err) {
+        console.warn('[WAProjectHome] PostHog load error:', err);
+      } finally {
+        if (!cancelled) setDataLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Focus input on idle ────────────────────────────────────────────────────
+  React.useEffect(() => {
+    if (mode === 'idle') {
+      const t = setTimeout(() => inputRef.current?.focus(), 120);
+      return () => clearTimeout(t);
+    }
+  }, [mode]);
+
+  // ── Auto-scroll chat ───────────────────────────────────────────────────────
+  React.useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // ── Search ─────────────────────────────────────────────────────────────────
+  const runSearch = React.useCallback(async (q: string) => {
+    if (!q.trim()) { setSearchRes([]); return; }
+    setSearchLoading(true);
+    try {
+      const ph = await import('../api/posthog');
+      const projectId = ph.getProjectId();
+      if (!projectId) return;
+      const res: any = await ph.phGet(`/api/projects/${projectId}/search/`, { q, limit: 10 });
+      const items: RecentItem[] = (res.results ?? []).map((r: any) => ({
+        id: r.result_id,
+        name: r.name || r.derived_name || r.key || 'Sin nombre',
+        type: (r.type === 'dashboard' ? 'dashboard'
+          : r.type === 'insight'   ? 'insight'
+          : r.type === 'feature_flag' ? 'feature_flag'
+          : r.type === 'survey'    ? 'survey'
+          : r.type === 'experiment'? 'experiment'
+          : r.type === 'notebook'  ? 'notebook'
+          : 'insight') as RecentItem['type'],
+      }));
+      setSearchRes(items);
+    } catch { setSearchRes([]); }
+    finally { setSearchLoading(false); }
+  }, []);
+
+  // ── Send message to Max AI ─────────────────────────────────────────────────
+  const sendMessage = React.useCallback(async (text: string) => {
+    if (!text.trim() || isStreaming) return;
+
+    setMode('ai');
+    setIsStreaming(true);
+    setThinkingMsg(
+      ['Pensando...', 'Analizando tus datos...', 'Consultando PostHog...', 'Dame un momento...'][
+        Math.floor(Math.random() * 4)
+      ]
+    );
+
+    // Add user message immediately
+    setMessages(prev => [...prev, { role: 'user', content: text, status: 'done' }]);
+
+    // Add placeholder assistant message
+    setMessages(prev => [...prev, { role: 'thinking', content: '', status: 'loading' }]);
+
+    let accContent = '';
+    let gotFirstChunk = false;
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+
+      await ph.phStream(
+        `/api/environments/${ph.getTeamId()}/conversations/`,
+        {
+          content:      text,
+          conversation: conversationId ?? undefined,
+          trace_id:     crypto.randomUUID(),
+        },
+        (event) => {
+          if (abort.signal.aborted) return;
+
+          // Conversation created / updated
+          if (event.type === 'conversation' && event.data?.id) {
+            setConvId(event.data.id);
+          }
+
+          // AI message (complete or chunk)
+          if (event.type === 'message' || event.type === 'ai_message') {
+            const msg = event.data;
+            if (msg?.type === 'ai' && typeof msg.content === 'string') {
+              accContent = msg.content;
+              gotFirstChunk = true;
+              setMessages(prev => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                if (last?.role === 'thinking' || last?.role === 'assistant') {
+                  next[next.length - 1] = { role: 'assistant', content: accContent, status: 'loading' };
+                } else {
+                  next.push({ role: 'assistant', content: accContent, status: 'loading' });
+                }
+                return next;
+              });
+            }
+          }
+
+          // Status events (thinking, generating, etc.)
+          if (event.type === 'status' && event.data?.status) {
+            const s = event.data.status;
+            if (s === 'thinking') setThinkingMsg('Analizando tus datos...');
+            if (s === 'generating') setThinkingMsg('Escribiendo respuesta...');
+          }
+
+          // Streaming text chunks
+          if (event.type === 'ai_message_chunk' && typeof event.data?.content === 'string') {
+            accContent += event.data.content;
+            gotFirstChunk = true;
+            setMessages(prev => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'thinking' || last?.role === 'assistant') {
+                next[next.length - 1] = { role: 'assistant', content: accContent, status: 'loading' };
+              } else {
+                next.push({ role: 'assistant', content: accContent, status: 'loading' });
+              }
+              return next;
+            });
+          }
+        },
+        abort.signal,
+      );
+
+      // Finalize
+      setMessages(prev => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last && (last.role === 'assistant' || last.role === 'thinking')) {
+          next[next.length - 1] = {
+            role: 'assistant',
+            content: gotFirstChunk ? accContent : 'No pude obtener respuesta. Por favor, inténtalo de nuevo.',
+            status: 'done',
+          };
+        }
+        return next;
+      });
+
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      console.error('[Max] stream error:', err);
+      setMessages(prev => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last && (last.role === 'thinking' || last.role === 'assistant')) {
+          next[next.length - 1] = { role: 'assistant', content: '⚠️ Error al conectar con PostHog. Comprueba tu configuración.', status: 'error' };
+        }
+        return next;
+      });
+    } finally {
+      setIsStreaming(false);
+      abortRef.current = null;
+    }
+  }, [conversationId, isStreaming]);
+
+  // ── Input submit handler ───────────────────────────────────────────────────
+  const handleSubmit = React.useCallback((e?: React.FormEvent) => {
+    e?.preventDefault();
+    const text = query.trim();
+    if (!text) return;
+    setQuery('');
+    sendMessage(text);
+  }, [query, sendMessage]);
+
+  const handleKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+    if (e.key === 'Tab' && query.trim()) {
+      e.preventDefault();
+      setMode('search');
+      runSearch(query);
+    }
+    if (e.key === 'Escape') {
+      if (mode !== 'idle') { setMode('idle'); setQuery(''); setSearchRes([]); }
+    }
+  }, [handleSubmit, mode, query, runSearch]);
+
+  const handleQueryChange = React.useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+
+    if (mode === 'search') {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+      searchTimeout.current = setTimeout(() => runSearch(val), 300);
+    }
+  }, [mode, runSearch]);
+
+  const stopStreaming = React.useCallback(() => {
+    abortRef.current?.abort();
+    setIsStreaming(false);
+    setMessages(prev => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (last?.status === 'loading') {
+        next[next.length - 1] = { ...last, status: 'done', role: 'assistant' };
+      }
+      return next;
+    });
+  }, []);
+
+  // ── Pinned / recent item icon for the three columns ────────────────────────
+  const PinnedIcon = () => (
+    <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#e8572a] flex-shrink-0">
+      <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+      <circle cx="8" cy="8" r="2" fill="currentColor"/>
+    </svg>
+  );
+  const StarredIcon = () => (
+    <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#f59e0b] flex-shrink-0">
+      <path d="M8 1.5l1.5 4H14l-3.5 2.6 1.3 4L8 9.8l-3.8 2.3 1.3-4L2 5.5h4.5z" fill="currentColor"/>
+    </svg>
+  );
+
+  // ── RENDER: AI chat mode ───────────────────────────────────────────────────
+  if (mode === 'ai') {
+    return (
+      <div className="flex-1 flex flex-col bg-white min-h-0">
+        {/* Chat header */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0">
+          <button
+            onClick={() => { setMode('idle'); setQuery(''); }}
+            className="flex items-center gap-1.5 text-sm text-[#646462] hover:text-[#1a1a18] transition-colors"
+          >
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Inicio del proyecto
+          </button>
+          <span className="text-[#e9eae6]">/</span>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded bg-gradient-to-br from-[#3b59f6] to-[#6366f1] flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M8 2c.8 0 1.5.3 2 .8L13.2 6c.5.5.8 1.2.8 2s-.3 1.5-.8 2l-3.2 3.2c-.5.5-1.2.8-2 .8s-1.5-.3-2-.8L2.8 10C2.3 9.5 2 8.8 2 8s.3-1.5.8-2L6 2.8C6.5 2.3 7.2 2 8 2z"/></svg>
+            </div>
+            <span className="text-sm font-medium text-[#1a1a18]">Max</span>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => { setMessages([]); setConvId(null); }}
+              className="text-xs text-[#646462] hover:text-[#1a1a18] px-2 py-1 rounded hover:bg-[#f3f3f1] transition-colors"
+            >
+              Nueva conversación
+            </button>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6 space-y-6">
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3b59f6] to-[#6366f1] flex items-center justify-center mb-4 shadow-md">
+                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white"><path d="M12 3c1.2 0 2.3.4 3.2 1.2L19.8 9c.8.8 1.2 1.9 1.2 3.2s-.4 2.3-1.2 3.2l-4.6 4.6c-.9.8-2 1.2-3.2 1.2s-2.3-.4-3.2-1.2L4.2 15.4C3.4 14.5 3 13.4 3 12.2S3.4 9.9 4.2 9L8.8 4.2C9.7 3.4 10.8 3 12 3z"/></svg>
+              </div>
+              <h3 className="text-lg font-semibold text-[#1a1a18] mb-1">Max IA</h3>
+              <p className="text-sm text-[#646462] max-w-xs">Hazme preguntas sobre tus datos, usuarios, experimentos o cualquier métrica de tu proyecto.</p>
+            </div>
+          )}
+
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              {(msg.role === 'assistant' || msg.role === 'thinking') && (
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#3b59f6] to-[#6366f1] flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M8 2c.8 0 1.5.3 2 .8L13.2 6c.5.5.8 1.2.8 2s-.3 1.5-.8 2l-3.2 3.2c-.5.5-1.2.8-2 .8s-1.5-.3-2-.8L2.8 10C2.3 9.5 2 8.8 2 8s.3-1.5.8-2L6 2.8C6.5 2.3 7.2 2 8 2z"/></svg>
+                </div>
+              )}
+              <div className={`max-w-[72%] ${msg.role === 'user' ? 'bg-[#1a1a18] text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm' : 'bg-transparent text-[#1a1a18] text-sm leading-relaxed'}`}>
+                {msg.role === 'thinking' && msg.status === 'loading' ? (
+                  <div className="flex items-center gap-2 text-[#646462]">
+                    <span className="text-sm">{thinkingMsg}</span>
+                    <span className="flex gap-0.5">
+                      {[0,1,2].map(j => (
+                        <span key={j} className="w-1.5 h-1.5 bg-[#646462] rounded-full animate-bounce" style={{ animationDelay: `${j * 0.15}s` }} />
+                      ))}
+                    </span>
+                  </div>
+                ) : msg.role === 'user' ? (
+                  <span>{msg.content}</span>
+                ) : (
+                  <div className="prose prose-sm max-w-none">
+                    {renderMarkdown(msg.content)}
+                    {msg.status === 'loading' && (
+                      <span className="inline-block w-0.5 h-4 bg-[#3b59f6] animate-pulse ml-0.5 align-text-bottom" />
+                    )}
+                  </div>
+                )}
+              </div>
+              {msg.role === 'user' && (
+                <div className="w-7 h-7 rounded-lg bg-[#e8572a] flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-white text-xs font-bold">{username?.[0]?.toUpperCase() || 'U'}</span>
+                </div>
+              )}
+            </div>
+          ))}
+          <div ref={chatBottomRef} />
+        </div>
+
+        {/* Input bar */}
+        <div className="px-6 pb-5 pt-3 border-t border-[#e9eae6] flex-shrink-0">
+          <form onSubmit={handleSubmit} className="relative">
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={query}
+              onChange={handleQueryChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Hazme una pregunta sobre tus datos..."
+              disabled={isStreaming}
+              className="w-full resize-none bg-[#f9f9f7] border border-[#e9eae6] rounded-xl px-4 py-3 pr-20 text-sm text-[#1a1a18] placeholder-[#9ca3af] focus:outline-none focus:border-[#3b59f6] focus:ring-1 focus:ring-[#3b59f6] transition-colors disabled:opacity-60"
+              style={{ minHeight: 48, maxHeight: 160 }}
+            />
+            <div className="absolute right-3 bottom-3 flex items-center gap-1.5">
+              {isStreaming ? (
+                <button type="button" onClick={stopStreaming} className="p-1.5 rounded-lg bg-[#fee2e2] text-[#dc2626] hover:bg-[#fecaca] transition-colors">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><rect x="3.5" y="3.5" width="9" height="9" rx="1"/></svg>
+                </button>
+              ) : (
+                <button type="submit" disabled={!query.trim()} className="p-1.5 rounded-lg bg-[#1a1a18] text-white hover:bg-[#333] disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M2 14l6-12 6 12-6-3.5L2 14z"/></svg>
+                </button>
+              )}
+            </div>
+          </form>
+          <p className="text-[10px] text-[#9ca3af] mt-1.5 text-center">Max puede cometer errores. Verifica información importante.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RENDER: Search mode ────────────────────────────────────────────────────
+  if (mode === 'search') {
+    return (
+      <div className="flex-1 flex flex-col bg-white min-h-0">
+        {/* Search header */}
+        <div className="px-6 pt-6 pb-0 flex-shrink-0">
+          <form onSubmit={e => { e.preventDefault(); }} className="relative">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            <input
+              autoFocus
+              value={query}
+              onChange={e => { setQuery(e.target.value); runSearch(e.target.value); }}
+              onKeyDown={e => { if (e.key === 'Escape') { setMode('idle'); setQuery(''); setSearchRes([]); } }}
+              className="w-full pl-10 pr-10 py-2.5 border border-[#e9eae6] rounded-xl text-sm bg-[#f9f9f7] focus:outline-none focus:border-[#3b59f6] text-[#1a1a18]"
+              placeholder="Buscar en tu proyecto..."
+            />
+            <button type="button" onClick={() => { setMode('idle'); setQuery(''); setSearchRes([]); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#1a1a18]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          </form>
+        </div>
+
+        {/* Results */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {searchLoading ? (
+            <div className="space-y-2">
+              {[1,2,3,4].map(i => <div key={i} className="h-10 bg-[#f3f3f1] rounded-lg animate-pulse" />)}
+            </div>
+          ) : searchResults.length > 0 ? (
+            <div className="space-y-1">
+              {searchResults.map((item, i) => (
+                <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#f9f9f7] cursor-pointer group">
+                  <ItemTypeIcon type={item.type} />
+                  <span className="text-sm text-[#1a1a18] flex-1">{item.name}</span>
+                  <span className="text-xs text-[#9ca3af] opacity-0 group-hover:opacity-100 transition-opacity">{item.type}</span>
+                </div>
+              ))}
+            </div>
+          ) : query.trim() ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <svg viewBox="0 0 24 24" className="w-10 h-10 text-[#e9eae6] mb-3"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M16 16l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <p className="text-sm text-[#646462]">No se encontraron resultados para <strong>"{query}"</strong></p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-sm text-[#9ca3af]">Escribe para buscar dashboards, insights, feature flags...</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── RENDER: Idle (main homepage) ───────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-y-auto">
+      <div className="flex flex-col items-center justify-center flex-1 min-h-0 px-6 py-12">
+
+        {/* Project icon */}
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#3b59f6] to-[#6366f1] flex items-center justify-center mb-5 shadow-lg">
+          <svg viewBox="0 0 24 24" className="w-8 h-8 fill-white"><path d="M5 3h14a2 2 0 012 2v9a2 2 0 01-2 2H9l-4 4V5a2 2 0 012-2z"/><path d="M9 9h6M9 12h4" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
+        </div>
+
+        {/* Greeting */}
+        {dataLoading ? (
+          <div className="h-9 w-48 bg-[#e9eae6] rounded-lg animate-pulse mb-7" />
+        ) : (
+          <h1 className="text-3xl font-semibold text-[#1a1a18] mb-7">
+            Hola, {username || 'usuario'} 👋
+          </h1>
+        )}
+
+        {/* Input */}
+        <form onSubmit={handleSubmit} className="w-full max-w-2xl">
+          <div className="relative bg-white border border-[#e9eae6] rounded-xl shadow-sm hover:shadow-md transition-shadow focus-within:border-[#3b59f6] focus-within:ring-1 focus-within:ring-[#3b59f6]">
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={query}
+              onChange={handleQueryChange}
+              onKeyDown={handleKeyDown}
+              className="w-full resize-none bg-transparent px-4 py-3.5 pr-32 text-sm text-[#1a1a18] placeholder-[#9ca3af] focus:outline-none"
+              placeholder="¿En qué puedo ayudarte? / para comandos"
+              style={{ minHeight: 52, maxHeight: 160 }}
+            />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <div
+                onClick={() => { if (query.trim()) { setMode('search'); runSearch(query); } }}
+                className="flex items-center gap-1 text-xs text-[#9ca3af] cursor-pointer hover:text-[#646462] transition-colors select-none"
+              >
+                <kbd className="px-1.5 py-0.5 bg-[#f3f3f1] border border-[#e9eae6] rounded text-[10px] font-mono">Tab</kbd>
+                <span>para buscar →</span>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        {/* Three columns */}
+        {!dataLoading && (
+          <div className="w-full max-w-2xl mt-10 grid grid-cols-3 gap-8">
+            {/* Pinned */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <PinnedIcon />
+                <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Paneles anclados</span>
+              </div>
+              {pinned.length === 0 ? (
+                <p className="text-xs text-[#c4c4be] italic">No hay paneles anclados</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {pinned.map((p, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate">
+                      <PinnedIcon />
+                      <span className="truncate">{p.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Recent */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#9ca3af] flex-shrink-0"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Recientes</span>
+              </div>
+              {recents.length === 0 ? (
+                <p className="text-xs text-[#c4c4be] italic">Sin actividad reciente</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {recents.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate">
+                      <ItemTypeIcon type={r.type} />
+                      <span className="truncate">{r.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Starred */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <StarredIcon />
+                <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Destacados</span>
+              </div>
+              {starred.length === 0 ? (
+                <p className="text-xs text-[#c4c4be] italic">No hay elementos destacados</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {starred.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm text-[#f59e0b] hover:text-[#d97706] cursor-pointer hover:underline truncate">
+                      <StarredIcon />
+                      <span className="text-[#3b59f6] hover:text-[#2a44d6] truncate">{s.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {dataLoading && (
+          <div className="w-full max-w-2xl mt-10 grid grid-cols-3 gap-8">
+            {[0,1,2].map(i => (
+              <div key={i} className="space-y-2">
+                <div className="h-3 w-24 bg-[#e9eae6] rounded animate-pulse" />
+                {[0,1,2].map(j => <div key={j} className="h-4 bg-[#e9eae6] rounded animate-pulse" style={{ width: `${70 + j * 10}%` }} />)}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom bar */}
+      <div className="flex items-center justify-center gap-3 py-3 px-6 bg-white border-t border-[#e9eae6] flex-shrink-0">
+        <button className="flex items-center gap-1.5 text-xs text-[#646462] hover:text-[#1a1a18] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1] transition-colors">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v2.5l1.5 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+          Configurar inicio
+        </button>
+        <button className="flex items-center gap-1.5 text-xs text-[#646462] hover:text-[#1a1a18] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1] transition-colors">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+          Restaurar panel predeterminado
+        </button>
+      </div>
+    </div>
+  );
+}
+

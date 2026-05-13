@@ -1,0 +1,563 @@
+// ── WADataActionsView ──────────────────────────────────────────────────────────
+function WADataActionsView() {
+  type ActionsView = 'list' | 'new';
+  type MatchTab = 'pageview' | 'autocapture' | 'screen' | 'other';
+  type MatchMode = 'exact' | 'regex' | 'contains';
+  const [view, setView] = useState<ActionsView>('list');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [matchTab, setMatchTab] = useState<MatchTab>('pageview');
+  const [urlMode, setUrlMode] = useState<MatchMode>('contains');
+  const [elTextMode, setElTextMode] = useState<MatchMode>('exact');
+  const [elLinkMode, setElLinkMode] = useState<MatchMode>('contains');
+  const [htmlMode, setHtmlMode] = useState<MatchMode>('contains');
+  const [pageUrlMode, setPageUrlMode] = useState<MatchMode>('contains');
+  const [screenMode, setScreenMode] = useState<MatchMode>('contains');
+  const [actionName, setActionName] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [matchGroupsOpen, setMatchGroupsOpen] = useState(true);
+  const [matchingEventsOpen, setMatchingEventsOpen] = useState(true);
+
+  function ModeBtn({ mode, current, set }: { mode: MatchMode; current: MatchMode; set: (m: MatchMode) => void }) {
+    const label = mode === 'exact' ? 'coincide exactamente' : mode === 'regex' ? 'coincide con regex' : 'contiene';
+    const active = mode === current;
+    return (
+      <button
+        onClick={() => set(mode)}
+        className={`h-6 px-2 text-[11px] rounded border transition-colors ${active ? 'border-[#e8572a] text-[#e8572a] font-semibold bg-white' : 'border-[#e9eae6] text-[#646462] bg-white hover:border-[#1a1a1a]'}`}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  function MatchField({ label, desc, mode, setMode, placeholder }: { label: string; desc?: string; mode: MatchMode; setMode: (m: MatchMode) => void; placeholder?: string }) {
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-[#1a1a1a]">{label}</span>
+          <div className="flex items-center gap-0.5">
+            {ModeBtn({ mode: 'exact', current: mode, set: setMode })}
+            {ModeBtn({ mode: 'regex', current: mode, set: setMode })}
+            {ModeBtn({ mode: 'contains', current: mode, set: setMode })}
+          </div>
+        </div>
+        {desc && <p className="text-[12px] text-[#646462]">{desc}</p>}
+        <input type="text" placeholder={placeholder ?? 'Especifica un valor para coincidir'} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]" />
+      </div>
+    );
+  }
+
+  function AndBadge() {
+    return (
+      <div className="flex items-center justify-center py-1">
+        <span className="text-[10px] font-bold text-[#e8572a] border border-[#e8572a] rounded px-1.5 py-0.5">Y</span>
+      </div>
+    );
+  }
+
+  // ── New action view ──────────────────────────────────────────────────────────
+  if (view === 'new') {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-white">
+        {/* Top bar */}
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 h-12 border-b border-[#e9eae6]">
+          <button onClick={() => setView('list')} className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><path d="M3 3h4v4H3zm6 0h4v4H9zm-6 6h4v4H3zm6 0h4v4H9z" opacity=".7"/><path d="M3.5 3.5l9 9" stroke="#1a1a1a" strokeWidth="1" fill="none"/></svg>
+          {editingName
+            ? <input
+                autoFocus
+                value={actionName}
+                onChange={e => setActionName(e.target.value)}
+                onBlur={() => setEditingName(false)}
+                className="flex-1 text-[15px] font-bold text-[#1a1a1a] border-b border-[#3b59f6] outline-none bg-transparent"
+                placeholder="Introducir nombre"
+              />
+            : <button onClick={() => setEditingName(true)} className="flex-1 flex items-center gap-2 group text-left">
+                <span className="text-[15px] font-bold text-[#646462]">{actionName || 'Introducir nombre'}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] opacity-0 group-hover:opacity-100 transition-opacity"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+              </button>
+          }
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+              Quick start
+            </button>
+            <button onClick={() => setView('list')} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#646462] hover:bg-[#f3f3f1]">Cancelar</button>
+            <button className="h-7 px-4 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]">Guardar</button>
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto bg-[#f3f3f1]">
+          {/* Match groups section */}
+          <div className="bg-white border-b border-[#e9eae6]">
+            <button
+              onClick={() => setMatchGroupsOpen(o => !o)}
+              className="flex items-center gap-2 w-full px-5 pt-4 pb-2 text-left"
+            >
+              <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${matchGroupsOpen ? 'rotate-180' : ''}`}><path d="M3 5l5 5 5-5"/></svg>
+              <span className="text-[14px] font-semibold text-[#1a1a1a]">Grupos de coincidencia</span>
+            </button>
+            {matchGroupsOpen && (
+              <div className="px-5 pb-5">
+                <p className="text-[12px] text-[#646462] mb-4">
+                  Tu acción se activará siempre que se reciba <strong>cualquiera de tus grupos de coincidencia</strong>.
+                </p>
+                <div className="flex gap-3">
+                  {/* Match Group #1 card */}
+                  <div className="flex-1 bg-white border border-[#e9eae6] rounded-xl p-4 space-y-4">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Grupo de coincidencia #1</p>
+
+                    {/* Tab bar */}
+                    <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
+                      {(['pageview','autocapture','screen','other'] as MatchTab[]).map((t, i) => {
+                        const labels = ['Vista de página','Autocaptura','Pantalla','Otros eventos'];
+                        return (
+                          <button
+                            key={t}
+                            onClick={() => setMatchTab(t)}
+                            className={`flex-1 h-8 text-[12px] font-medium transition-colors ${i > 0 ? 'border-l border-[#e9eae6]' : ''} ${matchTab === t ? 'border border-[#e8572a] text-[#e8572a] bg-white rounded-lg -m-px' : 'text-[#646462] hover:bg-[#f3f3f1]'}`}
+                          >
+                            {labels[i]}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Tab content */}
+                    {matchTab === 'pageview' && (
+                      <div className="space-y-4">
+                        {MatchField({ label: 'URL', mode: urlMode, setMode: setUrlMode })}
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                            Filtro
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {matchTab === 'autocapture' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 5h6M5 8h4"/></svg>
+                            Seleccionar elemento en el sitio
+                          </button>
+                          <button className="text-[12px] text-[#e8572a] hover:underline">Ver documentación. ↗</button>
+                        </div>
+                        {MatchField({ label: 'Texto del elemento', mode: elTextMode, setMode: setElTextMode })}
+                        {AndBadge()}
+                        {MatchField({ label: 'Destino del enlace del elemento', desc: 'Filtrando por el atributo href. Solo se coincidirán elementos <a/>.',  mode: elLinkMode, setMode: setElLinkMode })}
+                        {AndBadge()}
+                        {MatchField({ label: 'El elemento coincide con el selector HTML', desc: 'El selector puede ser un nombre de etiqueta, clase, atributo HTML o una combinación. Ejemplo: button[data-attr="signup"]. Aprende más en los Docs.', mode: htmlMode, setMode: setHtmlMode })}
+                        {AndBadge()}
+                        {MatchField({ label: 'URL de página', desc: 'La página en la que ocurrió la interacción.', mode: pageUrlMode, setMode: setPageUrlMode })}
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                            Filtro
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {matchTab === 'screen' && (
+                      <div className="space-y-4">
+                        {MatchField({ label: 'Nombre de pantalla', mode: screenMode, setMode: setScreenMode, placeholder: 'ej. HomeScreen, Settings' })}
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                            Filtro
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {matchTab === 'other' && (
+                      <div className="space-y-4">
+                        {MatchField({ label: 'Nombre del evento', mode: urlMode, setMode: setUrlMode, placeholder: 'ej. user_signed_up' })}
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
+                          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                            Filtro
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right panel */}
+                  <div className="w-56 flex-shrink-0 flex items-start justify-center pt-8">
+                    <button className="flex items-center gap-1.5 text-[13px] text-[#1a1a1a] font-semibold hover:text-[#3b59f6]">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                      Agregar grupo de coincidencia
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Matching events section */}
+          <div className="bg-white mt-2">
+            <button
+              onClick={() => setMatchingEventsOpen(o => !o)}
+              className="flex items-center gap-2 w-full px-5 pt-4 pb-2 text-left"
+            >
+              <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${matchingEventsOpen ? 'rotate-180' : ''}`}><path d="M3 5l5 5 5-5"/></svg>
+              <div>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">Eventos coincidentes</p>
+                <p className="text-[12px] text-[#646462]">Eventos recientes que coinciden con esta acción.</p>
+              </div>
+            </button>
+            {matchingEventsOpen && (
+              <div className="px-5 pb-5 space-y-3">
+                {/* Controls */}
+                <div className="flex items-center justify-between">
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="1.5" y="1.5" width="13" height="13" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
+                    Últimas 24 horas
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[12px] text-[#646462]">Filtrar usuarios internos y de prueba</span>
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5A5.5 5.5 0 118 2.5a5.5 5.5 0 010 11zM7 7h2v4H7zm0-2.5h2v1.8H7z"/></svg>
+                    <div className="w-8 h-4 bg-[#e9eae6] rounded-full relative cursor-pointer">
+                      <div className="w-3 h-3 bg-white rounded-full absolute top-0.5 left-0.5 shadow-sm"/>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M3 8l5-5 5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Recargar
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M1 4h14M4 4V2.5M8 4V2.5M12 4V2.5M1 8h14M4 8v5M8 8v5M12 8v5"/></svg>
+                      Configurar columnas
+                    </button>
+                    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M4 9l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Exportar
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                    </button>
+                    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
+                      Abrir como nuevo insight
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                    </button>
+                  </div>
+                </div>
+                {/* Table */}
+                <div className="border border-[#e9eae6] rounded-lg overflow-hidden">
+                  <table className="w-full text-[12px]">
+                    <thead className="bg-[#fafaf9]">
+                      <tr className="border-b border-[#e9eae6]">
+                        {['EVENTO', 'PERSONA', 'URL / PANTALLA', 'LIBRERÍA', 'HORA'].map(col => (
+                          <th key={col} className="px-4 py-2.5 text-left font-semibold text-[#646462] text-[11px] tracking-wide">
+                            {col} <span className="text-[#c0c0bb]">···</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center">
+                          <div className="flex flex-col items-center gap-2">
+                            <svg viewBox="0 0 40 40" className="w-10 h-10 fill-[#c0c0bb]"><rect x="5" y="3" width="30" height="34" rx="3" fill="none" stroke="#c0c0bb" strokeWidth="2"/><path d="M10 12h20M10 17h15M10 22h10" stroke="#c0c0bb" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay eventos coincidentes para esta consulta</p>
+                            <p className="text-[12px] text-[#646462]">Intenta cambiar el rango de fechas o elige otra acción, evento o desglose.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── List view ────────────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white relative">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><path d="M3 3h4v4H3zm6 0h4v4H9zm-6 6h4v4H3zm6 0h4v4H9z" opacity=".6"/><path d="M2 2l12 12" stroke="#1a1a1a" strokeWidth="1.2" fill="none"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Acciones</span>
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] cursor-pointer hover:fill-[#1a1a1a]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+        <div className="flex items-center gap-1.5 ml-2">
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+          <div className="relative">
+            <div className="flex">
+              <button
+                onClick={() => setView('new')}
+                className="flex items-center gap-1.5 h-7 px-3 bg-[#e8572a] text-white text-[12px] font-semibold rounded-l-lg hover:bg-[#c9451e]"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Nueva acción
+              </button>
+              <button
+                onClick={() => setShowDropdown(d => !d)}
+                className="h-7 px-2 bg-[#e8572a] text-white rounded-r-lg hover:bg-[#c9451e] border-l border-[#c9451e]"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+            </div>
+            {showDropdown && (
+              <div className="absolute right-0 top-9 bg-white border border-[#e9eae6] rounded-xl shadow-lg w-72 z-50 overflow-hidden">
+                <button
+                  onClick={() => { setView('new'); setMatchTab('pageview'); setShowDropdown(false); }}
+                  className="w-full flex items-start gap-3 px-4 py-3 hover:bg-[#fafaf9] text-left"
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Desde evento o vista de página</p>
+                    <p className="text-[12px] text-[#646462]">Coincide con eventos por nombre, patrones de URL o propiedades personalizadas. <span className="text-[#e8572a]">Saber más ↗</span></p>
+                  </div>
+                </button>
+                <div className="border-t border-[#f3f3f1]"/>
+                <button
+                  onClick={() => { setView('new'); setMatchTab('autocapture'); setShowDropdown(false); }}
+                  className="w-full flex items-start gap-3 px-4 py-3 hover:bg-[#fafaf9] text-left"
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0 mt-0.5" strokeWidth="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.5 1.5M11 11l1.5 1.5M3.5 12.5L5 11M11 5l1.5-1.5"/></svg>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Inspeccionar elemento en el sitio</p>
+                    <p className="text-[12px] text-[#646462]">Usa la barra de herramientas para seleccionar visualmente elementos en tu sitio. <span className="text-[#e8572a]">Saber más ↗</span></p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Subtitle */}
+      <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6]">
+        <p className="text-[13px] text-[#646462]">Combina varios eventos relacionados en uno, que luego puedes analizar en insights y dashboards como si fuera un único evento.</p>
+      </div>
+
+      {/* Empty state */}
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex items-start gap-8 max-w-xl">
+          {ClainMascot({ size: 120, variant: 'suit' })}
+          <div className="flex flex-col gap-3 pt-4">
+            <h2 className="text-[20px] font-bold text-[#1a1a1a]">Crea tu primera acción</h2>
+            <p className="text-[13px] text-[#646462] leading-[20px]">
+              Usa acciones para combinar eventos que quieres rastrear juntos o para facilitar la reutilización de eventos de Autocaptura detallados.
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex">
+                <button
+                  onClick={() => setView('new')}
+                  className="flex items-center gap-1.5 h-8 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-l-lg hover:bg-[#fff5f2]"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Nueva acción
+                </button>
+                <button
+                  onClick={() => setShowDropdown(d => !d)}
+                  className="h-8 px-2 border border-l-0 border-[#e8572a] text-[#e8572a] rounded-r-lg hover:bg-[#fff5f2]"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+                </button>
+              </div>
+              <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
+                Saber más
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4h2v2M10 6l3-3M7 4H4v8h8v-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Click outside to close dropdown */}
+      {showDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)}/>}
+    </div>
+  );
+}
+
+// ── WADataEventDefsView ────────────────────────────────────────────────────────
+function WADataEventDefsView() {
+  const [showModal, setShowModal] = useState(false);
+  const [eventName, setEventName] = useState('');
+  const [eventDesc, setEventDesc] = useState('');
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white relative">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
+        <svg viewBox="0 0 20 20" className="w-5 h-5 fill-[#1a1a1a] flex-shrink-0"><path d="M3 5h4v4H3zm6 0h4v4H9zm-6 6h4v4H3zm6 0h4v4H9z" opacity=".7"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Definiciones de eventos</span>
+        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+          Quick start
+        </button>
+      </div>
+
+      {/* Info banner */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 border-b border-[#e9eae6] bg-white">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+        <p className="text-[13px] text-[#646462]">
+          ¿Buscas estadísticas de uso de eventos?{' '}
+          <span className="text-[#e8572a] font-semibold cursor-pointer hover:underline">Consultar con SQL</span>
+        </p>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6]">
+        <div className="relative flex-1 max-w-xs">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input type="text" placeholder="Buscar eventos" className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+        </div>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-[12px] text-[#646462]">Etiquetas:</span>
+          <button className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            Cualquier etiqueta
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+          </button>
+          <span className="text-[12px] text-[#646462]">Tipo:</span>
+          <button className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            Todos los eventos
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 h-7 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Crear evento
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-white">
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  Nombre
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  Última vez visto
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Etiquetas</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-[#e9eae6]">
+              <td colSpan={3} className="px-5 py-4 text-[13px] text-[#e8572a] hover:underline cursor-pointer">
+                Sin definiciones de eventos
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Create event modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-2xl shadow-2xl w-[560px] overflow-hidden">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+              <div>
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Crear evento</h2>
+                <p className="text-[12px] text-[#646462] mt-0.5">Crea una definición de evento antes de que se capturen eventos. La primera y última vez visto se establecerán cuando se ingeste el primer evento.</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+
+            <div className="px-6 pt-4 pb-6 space-y-4">
+              {/* Note banner */}
+              <div className="flex items-start gap-2.5 border border-[#e9eae6] rounded-lg px-4 py-3 bg-[#fafaf9]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+                <p className="text-[12px] text-[#1a1a1a]">
+                  <strong>Nota:</strong> Los nombres de eventos no se pueden cambiar después de la creación. Elige tu nombre con cuidado.
+                </p>
+              </div>
+
+              {/* Event name */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">Nombre del evento</label>
+                <input
+                  type="text"
+                  value={eventName}
+                  onChange={e => setEventName(e.target.value)}
+                  placeholder="ej., user_signed_up"
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">
+                  Descripción <span className="font-normal text-[#646462]">(opcional)</span>
+                </label>
+                <textarea
+                  value={eventDesc}
+                  onChange={e => setEventDesc(e.target.value)}
+                  placeholder="¿Qué representa este evento?"
+                  rows={4}
+                  className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] resize-none"
+                />
+              </div>
+
+              {/* Owner + Tags */}
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">
+                    Propietario <span className="font-normal text-[#646462]">(opcional)</span>
+                  </label>
+                  <select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#646462] bg-white outline-none focus:border-[#3b59f6]">
+                    <option>Cualquier usuario</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">
+                    Etiquetas <span className="font-normal text-[#646462]">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Añadir etiquetas..."
+                    className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                  />
+                </div>
+              </div>
+
+              {/* Divider + buttons */}
+              <div className="border-t border-[#e9eae6] pt-4 flex justify-end gap-2">
+                <button onClick={() => setShowModal(false)} className="h-9 px-5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
+                <button className="h-9 px-5 border border-[#e8572a] text-[#e8572a] text-[13px] font-semibold rounded-lg hover:bg-[#fff5f2]">Crear evento</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

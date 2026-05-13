@@ -1,0 +1,289 @@
+  // ── OrgGeneralPage ────────────────────────────────────────────────────────
+  function OrgGeneralPage() {
+    const [orgName, setOrgName] = useState('Hector prueba');
+    const [aiAnalysis, setAiAnalysis] = useState(false);
+    const [discardIPDefault, setDiscardIPDefault] = useState(false);
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Name & logo */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Nombre y logo</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">El nombre y el logo de tu organización se muestran en toda la interfaz de Clain. Haz clic en el avatar para subir un logo personalizado.</p>
+            <div className="flex items-end gap-4">
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-16 h-16 rounded-[12px] bg-[#f59e0b] flex items-center justify-center text-white text-2xl font-bold cursor-pointer hover:opacity-90">
+                  H
+                </div>
+                <button className="flex items-center gap-1 text-[11px] text-[#646462] hover:text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M8 2l3 4H9v5H7V6H5l3-4z"/></svg>
+                  Subir
+                </button>
+              </div>
+              <div className="flex-1 space-y-2">
+                <input
+                  type="text"
+                  value={orgName}
+                  onChange={e => setOrgName(e.target.value)}
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+                />
+                <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Clain AI data analysis */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Análisis de datos con Clain AI</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Las funciones de Clain AI, como el chat de Clain AI, utilizan{' '}
+              <a href="#" className="underline text-[#646462] hover:text-[#1a1a1a]">servicios de IA externos</a>
+              {' '}para el análisis de datos. Esto <em>puede</em> implicar la transferencia de datos de identificación de usuarios, por lo que pedimos tu consentimiento a nivel de organización a continuación.{' '}
+              <strong>Tus datos no se usarán para entrenar modelos.</strong>
+            </p>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Esta función no cumple con HIPAA y no está destinada al procesamiento de Información de Salud Protegida ("PHI"). Cualquier Acuerdo de Socio Comercial ("BAA") que hayas firmado con Clain no aplica a esta funcionalidad. Eres responsable de garantizar que tu uso cumple con las leyes y regulaciones aplicables.
+            </p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar funciones de análisis de datos de Clain AI</span>
+              <Toggle checked={aiAnalysis} onChange={setAiAnalysis}/>
+            </div>
+          </div>
+
+          {/* IP data capture default */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Captura de datos IP por defecto</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Cuando está activado, los nuevos proyectos tendrán automáticamente activado "Descartar datos IP del cliente". Esto se recomienda para el cumplimiento del RGPD. Los proyectos existentes no se ven afectados.
+            </p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente por defecto en nuevos proyectos</span>
+              <Toggle checked={discardIPDefault} onChange={setDiscardIPDefault}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgMembersPage ────────────────────────────────────────────────────────
+  function OrgMembersPage() {
+    const [memberSearch, setMemberSearch] = useState('');
+
+    const PremiumCard = ({ title, desc }: { title: string; desc: string }) => (
+      <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+        <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">{title}</h3>
+        <p className="text-[13px] text-[#646462]">{desc}</p>
+        <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+        <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+      </div>
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl px-8 py-6 space-y-8">
+          {/* Pending invites */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Invitaciones pendientes</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Gestiona las invitaciones pendientes para unirse a tu organización.</p>
+            {/* Warning banner */}
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              <p className="text-[13px] text-[#1a1a1a]">
+                Esta instancia de Clain no está <a href="#" className="text-[#e8572a] hover:underline">configurada para enviar emails ↗</a>.
+                Recuerda <span className="underline cursor-pointer hover:text-[#e8572a]">compartir el enlace de invitación</span> con cada miembro del equipo que invites.
+              </p>
+            </div>
+            {/* Invites table */}
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Invitado</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nivel</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                      <span className="flex items-center gap-1">Creado por <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg></span>
+                    </th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                      <span className="flex items-center gap-1">Creado <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg></span>
+                    </th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Enlace de invitación</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462]">No hay invitaciones pendientes. Puedes invitar a otro miembro del equipo arriba.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+              Invitar miembro del equipo
+            </button>
+          </div>
+
+          {/* Organization members */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Miembros de la organización</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Consulta y gestiona los miembros actuales de tu organización y sus roles.</p>
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1 max-w-xs">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+                <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Buscar miembros..." className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <button className="ml-auto h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Descargar lista de miembros</button>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                    {['Nombre','Email','Nivel','2FA','Incorporación','Último acceso'].map((col, i) => (
+                      <th key={i} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                        <span className="flex items-center gap-1">{col} <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg></span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-[#e9eae6] hover:bg-[#fafaf9]">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-[#a78bfa] flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0">H</div>
+                        <span className="text-[13px] text-[#1a1a1a] font-medium">Hector <span className="text-[#646462] font-normal">(tú)</span></span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[#646462]">hectorvidal0411@gmail.com</td>
+                    <td className="px-4 py-3"><span className="px-2 py-0.5 bg-[#f3f3f1] rounded text-[12px] font-semibold text-[#1a1a1a]">Propietario</span></td>
+                    <td className="px-4 py-3"><span className="px-2 py-0.5 bg-[#fef3c7] border border-[#fde68a] rounded text-[11px] font-semibold text-[#92400e]">2FA no activado</span></td>
+                    <td className="px-4 py-3 text-[#646462]">hace 4 días</td>
+                    <td className="px-4 py-3 text-[#646462]">hace un momento</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Two-factor authentication */}
+          <div className="space-y-3">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autenticación de dos factores</h3>
+            <PremiumCard title="Forzar 2FA" desc="Requiere que todos los usuarios de tu organización activen la autenticación de dos factores."/>
+          </div>
+
+          {/* Invite settings */}
+          <div className="space-y-3">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Ajustes de invitación</h3>
+            <PremiumCard title="Ajustes de invitación de la organización" desc="Personaliza quién puede invitar miembros a tu organización."/>
+          </div>
+
+          {/* Security settings */}
+          <div className="space-y-3">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Ajustes de seguridad</h3>
+            <PremiumCard title="Ajustes de seguridad de la organización" desc="Configura los permisos de seguridad para los miembros de la organización."/>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgRolesPage ──────────────────────────────────────────────────────────
+  function OrgRolesPage() {
+    const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+    const [defaultRole, setDefaultRole] = useState('none');
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          {/* Roles section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Roles</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Usa los roles para agrupar a los miembros de tu organización y asignarles permisos. Los roles se utilizan para el control de acceso en toda tu organización.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Rol</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Miembros</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={2} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button className="flex items-center gap-1.5 h-8 px-3 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Añadir un rol
+            </button>
+          </div>
+
+          {/* Default role */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Rol predeterminado para nuevos miembros</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Asigna automáticamente un rol a los nuevos miembros cuando se unan a la organización. Los nuevos usuarios heredarán todos los permisos de este rol.</p>
+            <div className="relative w-56">
+              <button onClick={() => setShowRoleDropdown(d => !d)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]">
+                <span className="text-[#646462]">{defaultRole === 'none' ? 'Sin rol predeterminado' : defaultRole}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+              {showRoleDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowRoleDropdown(false)}/>
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                    <button onClick={() => { setDefaultRole('none'); setShowRoleDropdown(false); }} className="w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] text-[#646462]">Sin rol predeterminado</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgSSOPage ────────────────────────────────────────────────────────────
+  function OrgSSOPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Dominios de autenticación</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Aprovisionamiento automático</h3>
+              <p className="text-[13px] text-[#646462]">Verifica tus dominios para forzar SSO y añadir automáticamente usuarios con direcciones de email coincidentes a tu organización.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+

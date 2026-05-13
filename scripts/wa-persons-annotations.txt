@@ -1,0 +1,657 @@
+// ── Clain mascot SVG (replaces PostHog hedgehog in onboarding cards) ─────────
+function ClainMascot({ size = 72, variant = 'default' }: { size?: number; variant?: 'default' | 'reading' | 'suit' }) {
+  // Simple friendly robot mascot in Clain blue palette
+  const s = size;
+  if (variant === 'reading') return (
+    <svg viewBox="0 0 80 80" width={s} height={s} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="40" cy="60" rx="24" ry="14" fill="#c7d2fe"/>
+      <rect x="20" y="24" width="40" height="32" rx="12" fill="#eff2ff"/>
+      <rect x="20" y="24" width="40" height="32" rx="12" stroke="#c7d2fe" strokeWidth="1.5"/>
+      <circle cx="32" cy="38" r="3" fill="#3b59f6"/>
+      <circle cx="48" cy="38" r="3" fill="#3b59f6"/>
+      <path d="M33 46 Q40 50 47 46" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+      <rect x="26" y="54" width="28" height="10" rx="3" fill="#e0e7ff"/>
+      <path d="M30 59h20M30 62h14" stroke="#a5b4fc" strokeWidth="1.2" strokeLinecap="round"/>
+      <path d="M40 14 L36 24 L44 24z" fill="#c7d2fe"/>
+    </svg>
+  );
+  if (variant === 'suit') return (
+    <svg viewBox="0 0 80 80" width={s} height={s} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="40" cy="60" rx="22" ry="14" fill="#1e3a8a"/>
+      <rect x="22" y="22" width="36" height="30" rx="10" fill="#eff2ff"/>
+      <rect x="22" y="22" width="36" height="30" rx="10" stroke="#c7d2fe" strokeWidth="1.5"/>
+      <circle cx="33" cy="36" r="2.5" fill="#3b59f6"/>
+      <circle cx="47" cy="36" r="2.5" fill="#3b59f6"/>
+      <path d="M34 44 Q40 48 46 44" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+      <rect x="30" y="52" width="20" height="20" rx="4" fill="#1e3a8a"/>
+      <path d="M37 52 L40 58 L43 52" fill="#eff2ff"/>
+      <rect x="38" y="58" width="4" height="10" rx="1" fill="#c7d2fe"/>
+      <path d="M38 13 Q40 8 42 13" stroke="#c7d2fe" strokeWidth="2" strokeLinecap="round" fill="none"/>
+    </svg>
+  );
+  // default
+  return (
+    <svg viewBox="0 0 80 80" width={s} height={s} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="40" cy="62" rx="24" ry="13" fill="#c7d2fe"/>
+      <rect x="18" y="22" width="44" height="34" rx="14" fill="#eff2ff"/>
+      <rect x="18" y="22" width="44" height="34" rx="14" stroke="#c7d2fe" strokeWidth="1.5"/>
+      <circle cx="31" cy="38" r="3.5" fill="#3b59f6"/>
+      <circle cx="49" cy="38" r="3.5" fill="#3b59f6"/>
+      <circle cx="32" cy="37" r="1" fill="white"/>
+      <circle cx="50" cy="37" r="1" fill="white"/>
+      <path d="M33 46 Q40 51 47 46" stroke="#3b59f6" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+      <path d="M40 12 L36 22 L44 22z" fill="#c7d2fe"/>
+      <ellipse cx="29" cy="63" rx="8" ry="5" fill="#a5b4fc"/>
+      <ellipse cx="51" cy="63" rx="8" ry="5" fill="#a5b4fc"/>
+    </svg>
+  );
+}
+
+// ── WADataPersonsGroupsView — Personas/Cohortes/Grupos tabbed view ────────────
+function WADataPersonsGroupsView({
+  dataSub,
+  onDataSubChange,
+}: {
+  dataSub: WADataSubView;
+  onDataSubChange: (s: WADataSubView) => void;
+}) {
+  const tab = dataSub === 'waDataCohorts' ? 'cohorts' : dataSub === 'waDataGroups' ? 'groups' : 'persons';
+  const setTab = (t: string) =>
+    onDataSubChange(t === 'cohorts' ? 'waDataCohorts' : t === 'groups' ? 'waDataGroups' : 'waDataPersons');
+
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(true);
+  const [personSearch, setPersonSearch] = useState('');
+  const [cohortSearch, setCohortSearch] = useState('');
+  const [cohortType, setCohortType] = useState('Todos');
+  const [cohortCreatedBy, setCohortCreatedBy] = useState('Cualquier usuario');
+  const [showCohortTypeMenu, setShowCohortTypeMenu] = useState(false);
+  const [showCreatedByMenu, setShowCreatedByMenu] = useState(false);
+  const [showPersonConfigCols, setShowPersonConfigCols] = useState(false);
+
+  const TABS = [
+    { key: 'persons', label: 'Personas' },
+    { key: 'cohorts', label: 'Cohortes' },
+    { key: 'groups',  label: 'Grupos'   },
+  ];
+
+  const SAMPLE_COHORTS = [
+    { name: 'Usuarios internos / Test', desc: 'Personas que son miembros internos del equipo o usuarios de prueba. Usado para filtrar el tráfico interno de analytics.', users: 0, createdBy: '', created: 'hace 4 días', lastCalc: 'hace 10 min' },
+  ];
+
+  // ── Personas tab ───────────────────────────────────────────────────────────
+  function PersonsContent() {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* Header row */}
+        <div className="flex items-start justify-between px-6 py-4 flex-shrink-0">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><circle cx="8" cy="5" r="3"/><path d="M2.5 13c.5-2.5 2.8-4 5.5-4s5 1.5 5.5 4v.5h-11V13z"/></svg>
+              <span className="text-[18px] font-bold text-[#1a1a1a]">Personas</span>
+              <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a98]"><path d="M12 4L4 12M4 4l8 8" stroke="#9a9a98" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
+              </button>
+            </div>
+            <p className="text-[13px] text-[#646462]">Un catálogo de todas las personas detrás de tus eventos</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+              Inicio rápido
+              <span className="text-[10px] font-semibold bg-[#eff2ff] text-[#3b59f6] px-1.5 py-0.5 rounded-full">5</span>
+            </button>
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><path d="M2 8h12M8 2l6 6-6 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Feedback
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] text-[#3b59f6]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="px-6 pb-3 flex-shrink-0">
+          <div className="flex items-center gap-2 bg-white border border-[#e9eae6] rounded-[8px] px-3 h-9 w-full">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98] flex-shrink-0" strokeWidth="1.5">
+              <circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/>
+            </svg>
+            <input
+              value={personSearch}
+              onChange={e => setPersonSearch(e.target.value)}
+              placeholder="Buscar por nombre, email, ID de persona o Distinct ID"
+              className="flex-1 text-[13px] bg-transparent outline-none text-[#1a1a1a] placeholder-[#9a9a98]"
+            />
+          </div>
+        </div>
+
+        {/* Action row */}
+        <div className="flex items-center justify-between px-6 pb-3 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5">
+                <path d="M14 8A6 6 0 102 8M2 5v3H5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Recargar
+            </button>
+            <span className="text-[12px] text-[#646462]">Total: <strong>0</strong> personas</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/></svg>
+              Configurar columnas
+            </button>
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v7M5 6l3 3 3-3M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>
+              Exportar
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#646462] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><path d="M9 11.5h5M11.5 9v5" strokeLinecap="round"/></svg>
+              Ver como nuevo insight
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-auto min-h-0 border-t border-[#e9eae6]">
+          <table className="w-full text-[13px] border-collapse">
+            <thead className="sticky top-0 z-10 bg-[#f8f8f7]">
+              <tr className="border-b border-[#e9eae6]">
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">PERSONA <span className="text-[#c0c0be]">···</span></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">ID <span className="text-[#c0c0be]">···</span></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">PRIMERA VEZ VISTO <span className="text-[#c0c0be]">···</span></div>
+                </th>
+                <th className="w-10 px-4 py-2.5">
+                  <span className="text-[#c0c0be]">···</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colSpan={4} className="py-20">
+                  <div className="flex flex-col items-center gap-3">
+                    <svg viewBox="0 0 40 40" className="w-12 h-12 fill-[#d4d4d2]">
+                      <rect x="4" y="8" width="32" height="24" rx="3"/>
+                      <rect x="10" y="4" width="20" height="8" rx="2" fill="#e9eae6"/>
+                    </svg>
+                    <p className="text-[14px] font-medium text-[#1a1a1a]">No existen personas porque no se han ingestado eventos</p>
+                    <p className="text-[13px] text-[#646462]">
+                      Ve al{' '}
+                      <button className="text-[#3b59f6] hover:underline font-medium">flujo de incorporación</button>
+                      {' '}para empezar
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Cohortes tab ───────────────────────────────────────────────────────────
+  function CohortsContent() {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 overflow-auto">
+        {/* Header row */}
+        <div className="flex items-start justify-between px-6 py-4 flex-shrink-0">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><circle cx="5" cy="6" r="2.5"/><circle cx="11" cy="6" r="2.5"/><path d="M0 13c.4-2 2-3 5-3s4.6 1 5 3H0z"/><path d="M6 13c.4-2 2-3 5-3s4.6 1 5 3h-10z"/></svg>
+              <span className="text-[18px] font-bold text-[#1a1a1a]">Cohortes</span>
+              <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+              </button>
+            </div>
+            <p className="text-[13px] text-[#646462]">Un catálogo de personas identificadas y tus cohortes creadas.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+              Inicio rápido
+              <span className="text-[10px] font-semibold bg-[#eff2ff] text-[#3b59f6] px-1.5 py-0.5 rounded-full">5</span>
+            </button>
+            <button className="h-8 px-3 rounded-[8px] bg-[#3b59f6] text-white text-[12px] font-semibold hover:bg-[#2d46e0] flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Nueva cohorte
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] text-[#3b59f6]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Welcome banner */}
+        {showWelcomeBanner && (
+          <div className="mx-6 mb-4 rounded-[12px] border border-[#e9eae6] bg-[#fafaf9] p-5 flex items-center gap-6 relative flex-shrink-0">
+            <button
+              onClick={() => setShowWelcomeBanner(false)}
+              className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded hover:bg-[#e9eae6]"
+            >
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+            </button>
+            <ClainMascot size={88} variant="reading" />
+            <div className="flex flex-col gap-3">
+              <h3 className="text-[17px] font-bold text-[#1a1a1a]">¡Bienvenido a Cohortes!</h3>
+              <p className="text-[13px] text-[#646462] leading-[20px] max-w-[420px]">
+                Usa las cohortes para agrupar personas, como usuarios que usaron tu app la semana pasada,
+                o personas que vieron la página de registro pero no convirtieron.<br/>
+                Tu equipo ya está usando Cohortes. Puedes ver qué están haciendo o empezar tú mismo.
+              </p>
+              <div className="flex items-center gap-3">
+                <button className="h-8 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff] flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Crear cohorte
+                </button>
+                <button className="h-8 px-3 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1.5">
+                  Saber más
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M9 3V1.5M13 9h1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Search + filters */}
+        <div className="px-6 pb-3 flex items-center gap-3 flex-shrink-0">
+          <div className="flex items-center gap-2 bg-white border border-[#e9eae6] rounded-[8px] px-3 h-8 w-64">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98] flex-shrink-0" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/></svg>
+            <input value={cohortSearch} onChange={e => setCohortSearch(e.target.value)} placeholder="Buscar cohortes" className="flex-1 text-[13px] bg-transparent outline-none text-[#1a1a1a] placeholder-[#9a9a98]"/>
+          </div>
+          <div className="flex-1"/>
+          {/* Type filter */}
+          <div className="relative">
+            <button onClick={() => setShowCohortTypeMenu(v => !v)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <span className="text-[#9a9a98]">Tipo</span>{cohortType}
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            {showCohortTypeMenu && (
+              <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-20 py-1">
+                {['Todos', 'Estático', 'Dinámico'].map(opt => (
+                  <button key={opt} onClick={() => { setCohortType(opt); setShowCohortTypeMenu(false); }} className={`w-full h-8 px-3 text-left text-[13px] flex items-center gap-2 hover:bg-[#f3f3f1] ${cohortType === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                    {cohortType === opt && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Created by filter */}
+          <div className="relative">
+            <button onClick={() => setShowCreatedByMenu(v => !v)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+              <span className="text-[#9a9a98]">Creado por</span>{cohortCreatedBy}
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            {showCreatedByMenu && (
+              <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-20 py-1">
+                {['Cualquier usuario', 'Yo', 'Hector García'].map(opt => (
+                  <button key={opt} onClick={() => { setCohortCreatedBy(opt); setShowCreatedByMenu(false); }} className={`w-full h-8 px-3 text-left text-[13px] flex items-center gap-2 hover:bg-[#f3f3f1] ${cohortCreatedBy === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                    {cohortCreatedBy === opt && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Cohorts table */}
+        <div className="border-t border-[#e9eae6] flex-1">
+          <table className="w-full text-[13px] border-collapse">
+            <thead className="bg-[#f8f8f7]">
+              <tr className="border-b border-[#e9eae6]">
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">NOMBRE <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#c0c0be]"><path d="M8 3l3 5H5zM8 13l-3-5h6z"/></svg></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">USUARIOS EN COHORTE <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#c0c0be]"><path d="M8 3l3 5H5zM8 13l-3-5h6z"/></svg></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">CREADO POR <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#c0c0be]"><path d="M8 3l3 5H5zM8 13l-3-5h6z"/></svg></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">CREADO <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#c0c0be]"><path d="M8 3l3 5H5zM8 13l-3-5h6z"/></svg></div>
+                </th>
+                <th className="px-4 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide">
+                  <div className="flex items-center gap-1">ÚLTIMO CÁLCULO <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg></div>
+                </th>
+                <th className="w-10 px-4 py-2.5"/>
+              </tr>
+            </thead>
+            <tbody>
+              {SAMPLE_COHORTS.map((c, i) => (
+                <tr key={i} className="border-b border-[#f0f0ee] hover:bg-[#fafaf9] cursor-pointer group">
+                  <td className="px-4 py-3 align-middle">
+                    <div className="font-semibold text-[#1a1a1a]">{c.name}</div>
+                    <div className="text-[12px] text-[#3b59f6] mt-0.5 max-w-[360px] truncate">{c.desc}</div>
+                  </td>
+                  <td className="px-4 py-3 align-middle text-center font-mono text-[13px]">{c.users}</td>
+                  <td className="px-4 py-3 align-middle text-[#9a9a98]">{c.createdBy || '—'}</td>
+                  <td className="px-4 py-3 align-middle text-[12px] text-[#9a9a98]">{c.created}</td>
+                  <td className="px-4 py-3 align-middle text-[12px] text-[#9a9a98]">{c.lastCalc}</td>
+                  <td className="px-4 py-3 align-middle">
+                    <button className="w-6 h-6 rounded flex items-center justify-center hover:bg-[#e9eae6] opacity-0 group-hover:opacity-100">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="3" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="8" cy="13" r="1.25"/></svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Grupos tab ─────────────────────────────────────────────────────────────
+  function GroupsContent() {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* Header row */}
+        <div className="flex items-start justify-between px-6 py-4 flex-shrink-0">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><circle cx="5" cy="6" r="2.5"/><circle cx="11" cy="6" r="2.5"/><path d="M0 13c.4-2 2-3 5-3s4.6 1 5 3H0z"/><path d="M6 13c.4-2 2-3 5-3s4.6 1 5 3h-10z"/></svg>
+              <span className="text-[18px] font-bold text-[#1a1a1a]">Grupos</span>
+              <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] text-[#3b59f6]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+            </button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <p className="px-6 pb-4 text-[13px] text-[#646462] flex-shrink-0 max-w-[700px]">
+          Asocia eventos con un grupo o entidad —como una empresa, comunidad o proyecto. Analízalos como si los hubiera enviado esa entidad. Ideal para B2B, marketplaces y más.
+        </p>
+
+        {/* Upgrade card */}
+        <div className="mx-6 rounded-[12px] border border-dashed border-[#c7d2fe] bg-[#fafbff] p-10 flex flex-col items-center text-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-[#eff2ff] flex items-center justify-center">
+            <svg viewBox="0 0 24 24" className="w-7 h-7 fill-[#3b59f6]">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-[17px] font-bold text-[#1a1a1a] mb-2">Analítica de grupos</h3>
+            <p className="text-[13px] text-[#646462] leading-[20px] max-w-[440px]">
+              Asocia eventos con un grupo —como una empresa, comunidad o proyecto— y analízalos en ese contexto.
+            </p>
+            <p className="text-[12px] text-[#9a9a98] mt-2">Esta función está disponible en el plan Enterprise de Clain.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="h-9 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff]">
+              Actualizar plan
+            </button>
+            <button className="h-9 px-4 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
+              Saber más
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M9 3V1.5M13 9h1.5" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-white rounded-[12px] border border-[#e9eae6] min-h-0 overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex items-center gap-0 px-4 border-b border-[#e9eae6] flex-shrink-0 bg-[#f8f8f7]">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`h-11 px-4 text-[13px] font-medium border-b-2 transition-colors ${
+              tab === t.key
+                ? 'border-[#3b59f6] text-[#3b59f6] font-semibold'
+                : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'persons'  && <PersonsContent />}
+      {tab === 'cohorts'  && <CohortsContent />}
+      {tab === 'groups'   && <GroupsContent />}
+    </div>
+  );
+}
+
+// ── WADataAnnotationsView ─────────────────────────────────────────────────────
+function WADataAnnotationsView() {
+  const [showModal, setShowModal] = useState(false);
+  const [annotContent, setAnnotContent] = useState('');
+  const [annotTab, setAnnotTab] = useState<'write' | 'preview'>('write');
+  const [scopeFilter, setScopeFilter] = useState('Cualquiera');
+  const [showScopeMenu, setShowScopeMenu] = useState(false);
+  const [annotScope, setAnnotScope] = useState('Proyecto');
+  const [showScopeModalMenu, setShowScopeModalMenu] = useState(false);
+  const [annotDate, setAnnotDate] = useState('12 may 2026 13:52');
+  const MAX_CHARS = 400;
+
+  return (
+    <div className="flex-1 flex flex-col bg-white rounded-[12px] border border-[#e9eae6] min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-start justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M3 2h10a1 1 0 011 1v7a1 1 0 01-1 1H6.5L4 13.5V11H3a1 1 0 01-1-1V3a1 1 0 011-1z" strokeLinejoin="round"/></svg>
+            <span className="text-[18px] font-bold text-[#1a1a1a]">Anotaciones</span>
+            <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+            </button>
+          </div>
+          <p className="text-[13px] text-[#646462] max-w-[560px]">Las anotaciones te permiten marcar cuándo ocurrieron ciertos cambios para que puedas ver fácilmente cómo impactaron en tus métricas.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+            Inicio rápido
+            <span className="text-[10px] font-semibold bg-[#eff2ff] text-[#3b59f6] px-1.5 py-0.5 rounded-full">5</span>
+          </button>
+          <button onClick={() => setShowModal(true)} className="h-8 px-3 rounded-[8px] bg-[#3b59f6] text-white text-[12px] font-semibold hover:bg-[#2d46e0] flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Nueva anotación
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] text-[#3b59f6]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="1" y="3" width="6" height="10" rx="1"/><rect x="9" y="3" width="6" height="10" rx="1"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Scope filter row */}
+      <div className="flex items-center justify-end px-6 py-3 flex-shrink-0">
+        <div className="relative flex items-center gap-2">
+          <span className="text-[12px] text-[#646462]">Ámbito:</span>
+          <button onClick={() => setShowScopeMenu(v => !v)} className="h-7 px-3 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex items-center gap-1.5">
+            {scopeFilter}
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          {showScopeMenu && (
+            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-20 py-1">
+              {['Cualquiera', 'Proyecto', 'Personal'].map(opt => (
+                <button key={opt} onClick={() => { setScopeFilter(opt); setShowScopeMenu(false); }} className={`w-full h-8 px-3 text-left text-[13px] flex items-center gap-2 hover:bg-[#f3f3f1] ${scopeFilter === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                  {scopeFilter === opt && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Empty state card */}
+      <div className="flex-1 px-6 pb-6 flex flex-col min-h-0">
+        <div className="flex-1 rounded-[12px] border border-dashed border-[#c7d2fe] bg-[#fafbff] flex items-center justify-center">
+          <div className="flex items-center gap-10 px-8">
+            <ClainMascot size={100} variant="suit" />
+            <div className="flex flex-col gap-4">
+              <h3 className="text-[18px] font-bold text-[#1a1a1a]">Crea tu primera anotación</h3>
+              <p className="text-[13px] text-[#646462] leading-[20px] max-w-[360px]">
+                Las anotaciones te permiten marcar cuándo ocurrieron ciertos cambios para que puedas
+                ver fácilmente cómo impactaron en tus métricas.
+              </p>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setShowModal(true)} className="h-9 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff] flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Crear anotación
+                </button>
+                <button className="h-9 px-4 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
+                  Saber más
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M9 3V1.5M13 9h1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── New annotation modal ──────────────────────────────────────────── */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowModal(false)}/>
+          {/* Modal */}
+          <div className="relative bg-white rounded-[16px] shadow-[0px_20px_60px_rgba(20,20,20,0.20)] w-[520px] flex flex-col overflow-hidden">
+            {/* Modal header */}
+            <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-[#e9eae6]">
+              <div>
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Nueva anotación</h2>
+                <p className="text-[12px] text-[#9a9a98] mt-0.5">Usa las anotaciones para comentar sobre insights y dashboards</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="w-7 h-7 flex items-center justify-center rounded-[6px] hover:bg-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="px-6 py-5 flex flex-col gap-4">
+              {/* Date + Scope row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-semibold text-[#1a1a1a] flex items-center gap-1">
+                    Fecha y hora (UTC
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#3b59f6]" strokeWidth="1.5"><path d="M10 2H14V6M14 2L8 8M3 6V3h3M3 3l6 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    )
+                  </label>
+                  <button className="h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-left text-[#1a1a1a] hover:border-[#3b59f6] flex items-center justify-between">
+                    <span>{annotDate}</span>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12px] font-semibold text-[#1a1a1a]">Ámbito</label>
+                  <div className="relative">
+                    <button onClick={() => setShowScopeModalMenu(v => !v)} className="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-left text-[#1a1a1a] hover:border-[#3b59f6] flex items-center justify-between">
+                      <span>{annotScope}</span>
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M4 6l4 4 4-4z"/></svg>
+                    </button>
+                    {showScopeModalMenu && (
+                      <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] z-10 py-1">
+                        {['Proyecto', 'Personal'].map(opt => (
+                          <button key={opt} onClick={() => { setAnnotScope(opt); setShowScopeModalMenu(false); }} className={`w-full h-8 px-3 text-left text-[13px] flex items-center gap-2 hover:bg-[#f3f3f1] ${annotScope === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>
+                            {annotScope === opt && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6]"><path d="M3.5 8L6.5 11 12.5 5"/></svg>}
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[12px] font-semibold text-[#1a1a1a]">Contenido</label>
+                {/* Write/Preview tabs */}
+                <div className="flex border-b border-[#e9eae6] mb-2">
+                  {(['write', 'preview'] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setAnnotTab(t)}
+                      className={`h-8 px-3 text-[12px] font-medium border-b-2 transition-colors ${annotTab === t ? 'border-[#3b59f6] text-[#3b59f6]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}
+                    >
+                      {t === 'write' ? 'Escribir' : 'Vista previa'}
+                    </button>
+                  ))}
+                </div>
+
+                {annotTab === 'write' ? (
+                  <div className="border border-[#e9eae6] rounded-[8px] overflow-hidden">
+                    <textarea
+                      value={annotContent}
+                      onChange={e => setAnnotContent(e.target.value.slice(0, MAX_CHARS))}
+                      placeholder="¿De qué trata esta anotación?"
+                      rows={4}
+                      className="w-full px-3 pt-3 text-[13px] text-[#1a1a1a] placeholder-[#9a9a98] bg-transparent outline-none resize-none"
+                    />
+                    <div className="flex items-center justify-between px-3 py-2 border-t border-[#e9eae6]">
+                      <div className="flex items-center gap-2">
+                        <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#f3f3f1]">
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#9a9a98]"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 8h6M7 6v4" stroke="white" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                        </button>
+                        <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#f3f3f1]">
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#9a9a98]"><circle cx="8" cy="8" r="5.5"/><path d="M6 8c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2M8 6V4.5M8 11.5V10" stroke="#9a9a98" fill="none" strokeWidth="1" strokeLinecap="round"/></svg>
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#9a9a98]"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M3 6h10M3 9h7M8 6v-2.5" stroke="white" strokeWidth="1" strokeLinecap="round"/></svg>
+                        <span className="text-[11px] font-mono text-[#9a9a98]">{annotContent.length} / {MAX_CHARS}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="min-h-[120px] border border-[#e9eae6] rounded-[8px] px-3 py-3">
+                    {annotContent
+                      ? <p className="text-[13px] text-[#1a1a1a] whitespace-pre-wrap">{annotContent}</p>
+                      : <p className="text-[13px] text-[#9a9a98] italic">Sin contenido aún</p>
+                    }
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#e9eae6]">
+              <button onClick={() => setShowModal(false)} className="h-9 px-4 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5]">
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setShowModal(false); setAnnotContent(''); setAnnotTab('write'); }}
+                className="h-9 px-4 rounded-[8px] bg-[#3b59f6] text-white text-[13px] font-semibold hover:bg-[#2d46e0]"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

@@ -11,6 +11,7 @@
 import { createCaseRepository } from '../../data/cases.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
+import { fireWorkflowEvent } from '../../lib/workflowEventBus.js';
 import type { JobHandler, SlaCheckPayload } from '../types.js';
 import type { JobType } from '../types.js';
 import { randomUUID } from 'node:crypto';
@@ -74,6 +75,22 @@ export const slaCheckHandler: JobHandler<'sla.check'> = async (payload: SlaCheck
 
         if (updateError) {
           logger.warn('Failed to update case SLA status', { caseId: caseRow.id, error: updateError });
+        } else {
+          // Fire `sla.breached` so workflows whose start node is `sla.breached`
+          // can react to the deadline miss. The event is durably persisted to
+          // `workflow_event_log`; if dispatch fails the recovery sweeper retries.
+          await fireWorkflowEvent(
+            { tenantId, workspaceId },
+            'sla.breached',
+            {
+              caseId:    caseRow.id,
+              caseNumber: caseRow.case_number,
+              customerId: caseRow.customer_id ?? null,
+              deadline:   caseRow.sla_resolution_deadline,
+              breachedAt: now.toISOString(),
+              severity:   'breach',
+            },
+          );
         }
       } else if (isNearBreach) {
         breachedCases.push({

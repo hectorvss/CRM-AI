@@ -1,0 +1,526 @@
+// ── WAAppErrorTrackingView ────────────────────────────────────────────────────
+// PostHog Error Tracking — issues grouped from $exception events.
+// Backend (HogQL-first to work in any PostHog version):
+//   - List issues: HogQL GROUP BY exception_type + exception_message
+//   - Issue detail: HogQL filter by group key + fetch sample events
+//   - Status update: localStorage (PATCH /error_tracking/issue/{id}/ when available)
+//   - Frequencies sparkline: HogQL GROUP BY hour/day
+
+interface ErrorIssue {
+  id:             string;     // synthetic: hash of type+message
+  type:           string;     // e.g. TypeError
+  message:        string;
+  level:          'error' | 'warning' | 'info';
+  count:          number;
+  unique_users:   number;
+  first_seen:     string;
+  last_seen:      string;
+  sample_url:     string;
+  sample_stack:   string;
+  fingerprint:    string;
+  sparkline:      number[];
+  status:         'active' | 'resolved' | 'suppressed';
+  assignee?:      string | null;
+}
+
+interface ErrorEvent {
+  uuid:        string;
+  timestamp:   string;
+  distinct_id: string;
+  message:     string;
+  stack:       string;
+  url:         string;
+  browser:     string;
+  os:          string;
+  properties:  Record<string, any>;
+}
+
+const ET_RANGES: { label: string; clickhouse: string; days: number }[] = [
+  { label: 'Últimas 24 horas', clickhouse: '1 DAY',  days: 1 },
+  { label: 'Últimos 7 días',   clickhouse: '7 DAY',  days: 7 },
+  { label: 'Últimos 14 días',  clickhouse: '14 DAY', days: 14 },
+  { label: 'Últimos 30 días',  clickhouse: '30 DAY', days: 30 },
+  { label: 'Últimos 90 días',  clickhouse: '90 DAY', days: 90 },
+];
+
+// ── Sparkline (mini chart 60x16) ──────────────────────────────────────────────
+function ErrorSparkline({ values, color = '#dc2626' }: { values: number[]; color?: string }) {
+  if (!values.length) return <div className="w-[60px] h-4 bg-[#f3f3f1] rounded" />;
+  const max = Math.max(...values, 1);
+  const W = 60, H = 16;
+  const xAt = (i: number) => values.length > 1 ? (i / (values.length - 1)) * W : W / 2;
+  const yAt = (v: number) => H - (v / max) * H;
+  const d = values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i)} ${yAt(v)}`).join(' ');
+  const fillD = `${d} L ${xAt(values.length - 1)} ${H} L 0 ${H} Z`;
+  return (
+    <svg width={W} height={H} className="overflow-visible">
+      <path d={fillD} fill={color} opacity="0.15" />
+      <path d={d}     fill="none" stroke={color} strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+// ── Stack trace renderer ──────────────────────────────────────────────────────
+function StackTraceViewer({ stack }: { stack: string }) {
+  if (!stack) return <p className="text-xs text-[#9ca3af] italic">Sin stack trace disponible.</p>;
+  // Try to parse JSON-formatted stack first
+  let frames: { function?: string; filename?: string; lineno?: number; colno?: number; in_app?: boolean }[] = [];
+  try {
+    const parsed = typeof stack === 'string' ? JSON.parse(stack) : stack;
+    if (Array.isArray(parsed)) {
+      frames = parsed.map((f: any) => ({ function: f.function ?? f.fn, filename: f.filename ?? f.file, lineno: f.lineno ?? f.line, colno: f.colno ?? f.col, in_app: f.in_app }));
+    }
+  } catch {
+    // Fall back to parsing string format
+    const lines = String(stack).split('\n').filter(l => l.trim());
+    frames = lines.map(line => {
+      const m = line.match(/at\s+(.+?)\s+\((.+?):(\d+):(\d+)\)/) || line.match(/(.+?)@(.+?):(\d+):(\d+)/);
+      if (m) return { function: m[1], filename: m[2], lineno: Number(m[3]), colno: Number(m[4]) };
+      return { function: line, filename: '', lineno: 0, colno: 0 };
+    });
+  }
+
+  return (
+    <div className="bg-[#1a1a18] rounded-lg overflow-hidden font-mono text-[11px]">
+      {frames.slice(0, 20).map((f, i) => {
+        const isApp = f.in_app !== false;
+        return (
+          <div key={i} className={`px-3 py-1.5 border-b border-[#2a2a28] flex items-baseline gap-2 ${isApp ? '' : 'opacity-50'}`}>
+            <span className="text-[#9ca3af] flex-shrink-0 w-6 text-right">{i + 1}.</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-[#fbbf24]">{f.function || '<anonymous>'}</span>
+              {f.filename && <span className="text-[#9ca3af]"> at </span>}
+              {f.filename && <span className="text-[#60a5fa] break-all">{f.filename}</span>}
+              {f.lineno != null && f.lineno > 0 && <span className="text-[#e9eae6]">:{f.lineno}{f.colno ? `:${f.colno}` : ''}</span>}
+              {!isApp && <span className="text-[10px] bg-[#3f3f3a] text-[#9ca3af] px-1 ml-2 rounded">vendor</span>}
+            </div>
+          </div>
+        );
+      })}
+      {frames.length > 20 && <div className="px-3 py-1.5 text-[#9ca3af] text-center text-[10px]">+ {frames.length - 20} frames más</div>}
+    </div>
+  );
+}
+
+// ── Issue detail drawer ──────────────────────────────────────────────────────
+function ErrorIssueDrawer({ issue, onClose, onStatusChange, rangeClause }: {
+  issue: ErrorIssue | null;
+  onClose: () => void;
+  onStatusChange: (id: string, status: ErrorIssue['status']) => void;
+  rangeClause: string;
+}) {
+  const [events,   setEvents]   = React.useState<ErrorEvent[]>([]);
+  const [loading,  setLoading]  = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<'stack' | 'occurrences' | 'breadcrumbs'>('stack');
+  const [selectedEvent, setSelectedEvent] = React.useState<ErrorEvent | null>(null);
+
+  React.useEffect(() => {
+    if (!issue) return;
+    let cancelled = false;
+    setLoading(true);
+    setSelectedEvent(null);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const escType = issue.type.replace(/'/g, "''");
+        const escMsg  = issue.message.replace(/'/g, "''");
+        const hql = `
+          SELECT
+            uuid,
+            timestamp,
+            distinct_id,
+            toString(properties.$exception_message) AS message,
+            toString(coalesce(properties.$exception_stack_trace_raw, properties.$exception_list)) AS stack,
+            toString(properties.$current_url) AS url,
+            toString(properties.$browser) AS browser,
+            toString(properties.$os) AS os,
+            properties
+          FROM events
+          WHERE event = '$exception' AND ${rangeClause}
+            AND toString(properties.$exception_type) = '${escType}'
+            AND toString(properties.$exception_message) = '${escMsg}'
+          ORDER BY timestamp DESC
+          LIMIT 50
+        `;
+        const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+        const cols = res.columns ?? [];
+        const idx = (n: string) => cols.indexOf(n);
+        const rows: ErrorEvent[] = (res.results ?? []).map((r: any[]) => ({
+          uuid:        r[idx('uuid')],
+          timestamp:   r[idx('timestamp')],
+          distinct_id: r[idx('distinct_id')],
+          message:     r[idx('message')],
+          stack:       r[idx('stack')],
+          url:         r[idx('url')],
+          browser:     r[idx('browser')],
+          os:          r[idx('os')],
+          properties:  r[idx('properties')] ?? {},
+        }));
+        if (!cancelled) {
+          setEvents(rows);
+          setSelectedEvent(rows[0] ?? null);
+        }
+      } catch { /* silent */ }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [issue, rangeClause]);
+
+  if (!issue) return null;
+
+  const STATUS_OPTS: { key: ErrorIssue['status']; label: string; color: string }[] = [
+    { key: 'active',     label: 'Activo',     color: '#dc2626' },
+    { key: 'resolved',   label: 'Resuelto',   color: '#16a34a' },
+    { key: 'suppressed', label: 'Silenciado', color: '#9ca3af' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[800px] max-w-[95vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-2 py-0.5 rounded font-bold">{issue.type}</span>
+              <select
+                value={issue.status}
+                onChange={e => onStatusChange(issue.id, e.target.value as any)}
+                className="text-[10px] bg-white border border-[#e9eae6] rounded px-2 py-0.5 focus:outline-none"
+                style={{ color: STATUS_OPTS.find(s => s.key === issue.status)?.color }}
+              >
+                {STATUS_OPTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </div>
+            <h2 className="text-sm font-mono text-[#1a1a18] break-words pr-4">{issue.message}</h2>
+            <div className="flex items-center gap-3 mt-2 text-[10px] text-[#9ca3af]">
+              <span><strong className="text-[#1a1a18]">{issue.count.toLocaleString('es-ES')}</strong> ocurrencias</span>
+              <span>·</span>
+              <span><strong className="text-[#1a1a18]">{issue.unique_users}</strong> usuarios</span>
+              <span>·</span>
+              <span>{formatRelativeTime(issue.first_seen)} (primera)</span>
+              <span>·</span>
+              <span>{formatRelativeTime(issue.last_seen)} (última)</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18] flex-shrink-0">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1 px-5 border-b border-[#e9eae6]">
+          {[
+            { k: 'stack',       l: `Stack trace` },
+            { k: 'occurrences', l: `Ocurrencias (${events.length})` },
+            { k: 'breadcrumbs', l: 'Contexto' },
+          ].map(t => (
+            <button key={t.k} onClick={() => setActiveTab(t.k as any)} className={`pb-2 pt-2.5 px-3 text-xs font-medium border-b-2 ${activeTab === t.k ? 'border-[#dc2626] text-[#dc2626]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>{t.l}</button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {loading && events.length === 0 ? (
+            <div className="space-y-2">{[0,1,2,3,4].map(i => <div key={i} className="h-4 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${85 - i * 8}%` }} />)}</div>
+          ) : activeTab === 'stack' ? (
+            <StackTraceViewer stack={selectedEvent?.stack || issue.sample_stack} />
+          ) : activeTab === 'occurrences' ? (
+            <table className="w-full text-xs">
+              <thead><tr className="text-[10px] text-[#9ca3af] uppercase tracking-widest"><th className="text-left pb-2">Cuando</th><th className="text-left pb-2">Usuario</th><th className="text-left pb-2">URL</th><th className="text-left pb-2">Navegador</th></tr></thead>
+              <tbody>
+                {events.map(e => (
+                  <tr key={e.uuid} onClick={() => { setSelectedEvent(e); setActiveTab('stack'); }} className={`border-t border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer ${selectedEvent?.uuid === e.uuid ? 'bg-[#fef2f2]' : ''}`}>
+                    <td className="py-1.5 text-[#1a1a18]">{formatRelativeTime(e.timestamp)}</td>
+                    <td className="py-1.5 font-mono text-[#646462] truncate max-w-[120px]">{e.distinct_id?.slice(0, 16)}</td>
+                    <td className="py-1.5 text-[#646462] truncate max-w-[200px]" title={e.url}>{e.url || '—'}</td>
+                    <td className="py-1.5 text-[#646462]">{e.browser || '—'} {e.os ? `/ ${e.os}` : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="space-y-3">
+              {selectedEvent ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">URL</p><p className="font-mono text-[#1a1a18] break-all">{selectedEvent.url || '—'}</p></div>
+                    <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Usuario</p><p className="font-mono text-[#1a1a18]">{selectedEvent.distinct_id}</p></div>
+                    <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Navegador</p><p className="text-[#1a1a18]">{selectedEvent.browser || '—'}</p></div>
+                    <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">OS</p><p className="text-[#1a1a18]">{selectedEvent.os || '—'}</p></div>
+                  </div>
+                  <div>
+                    <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Todas las propiedades</h4>
+                    <div className="space-y-1">
+                      {Object.keys(selectedEvent.properties || {}).sort().slice(0, 50).map(k => (
+                        <div key={k} className="flex items-start gap-2 py-1 border-b border-[#f3f3f1] text-xs">
+                          <span className="font-mono text-[#3b59f6] flex-shrink-0 w-1/3 truncate">{k}</span>
+                          <span className="text-[#1a1a18] flex-1 break-all">{typeof selectedEvent.properties[k] === 'object' ? JSON.stringify(selectedEvent.properties[k]).slice(0, 200) : String(selectedEvent.properties[k]).slice(0, 200)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : <p className="text-xs text-[#9ca3af] italic">Selecciona una ocurrencia para ver su contexto.</p>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WAAppErrorTrackingView() {
+  type ETTab = 'active' | 'resolved' | 'suppressed' | 'all';
+  const [tab,    setTab]    = React.useState<ETTab>('active');
+  const [range,  setRange]  = React.useState(ET_RANGES[1]);
+  const [showRange, setShowRange] = React.useState(false);
+  const rangeRef = useClickOutside<HTMLDivElement>(() => setShowRange(false));
+  const [search, setSearch] = React.useState('');
+  const [issues, setIssues] = React.useState<ErrorIssue[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error,  setError]  = React.useState<string | null>(null);
+  const [selected, setSelected] = React.useState<ErrorIssue | null>(null);
+  const [stats,  setStats]  = React.useState({ total: 0, users: 0, new: 0 });
+
+  // localStorage status overrides (since not all PostHog versions have the API)
+  const [statusMap, setStatusMap] = React.useState<Record<string, ErrorIssue['status']>>({});
+  React.useEffect(() => {
+    try { const raw = localStorage.getItem('wa-error-status'); if (raw) setStatusMap(JSON.parse(raw)); } catch {}
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-error-status', JSON.stringify(statusMap)); } catch {}
+  }, [statusMap]);
+
+  const rangeClause = `timestamp >= now() - INTERVAL ${range.clickhouse}`;
+
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      // 1) Group by exception_type + message
+      const hql = `
+        SELECT
+          toString(properties.$exception_type)    AS type,
+          toString(properties.$exception_message) AS message,
+          count()                                 AS c,
+          uniq(distinct_id)                       AS unique_users,
+          min(timestamp)                          AS first_seen,
+          max(timestamp)                          AS last_seen,
+          any(toString(properties.$current_url))                                                           AS sample_url,
+          any(toString(coalesce(properties.$exception_stack_trace_raw, properties.$exception_list)))       AS sample_stack,
+          any(toString(properties.$exception_fingerprint))                                                  AS fingerprint
+        FROM events
+        WHERE event = '$exception' AND ${rangeClause}
+        GROUP BY type, message
+        HAVING type != '' OR message != ''
+        ORDER BY last_seen DESC
+        LIMIT 100
+      `;
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+      const cols = res.columns ?? [];
+      const idx = (n: string) => cols.indexOf(n);
+      const rows: ErrorIssue[] = (res.results ?? []).map((r: any[]) => {
+        const type    = String(r[idx('type')] ?? 'Unknown');
+        const message = String(r[idx('message')] ?? '(sin mensaje)');
+        const id      = btoa(unescape(encodeURIComponent(`${type}|${message}`))).slice(0, 32);
+        return {
+          id, type, message,
+          level:        'error',
+          count:        Number(r[idx('c')] ?? 0),
+          unique_users: Number(r[idx('unique_users')] ?? 0),
+          first_seen:   String(r[idx('first_seen')] ?? ''),
+          last_seen:    String(r[idx('last_seen')] ?? ''),
+          sample_url:   String(r[idx('sample_url')] ?? ''),
+          sample_stack: String(r[idx('sample_stack')] ?? ''),
+          fingerprint:  String(r[idx('fingerprint')] ?? id),
+          sparkline:    [],
+          status:       statusMap[id] ?? 'active',
+        };
+      });
+
+      // 2) Sparkline per issue (buckets of last 24 chunks)
+      const sparkHql = `
+        SELECT
+          toString(properties.$exception_type) AS type,
+          toString(properties.$exception_message) AS message,
+          toStartOfHour(timestamp) AS bucket,
+          count() AS c
+        FROM events
+        WHERE event = '$exception' AND ${rangeClause}
+        GROUP BY type, message, bucket
+        ORDER BY bucket ASC
+      `;
+      try {
+        const sres: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: sparkHql } });
+        const scols = sres.columns ?? [];
+        const sidx = (n: string) => scols.indexOf(n);
+        const bucketsByKey: Record<string, number[]> = {};
+        for (const r of sres.results ?? []) {
+          const type = String(r[sidx('type')]);
+          const msg  = String(r[sidx('message')]);
+          const id   = btoa(unescape(encodeURIComponent(`${type}|${msg}`))).slice(0, 32);
+          bucketsByKey[id] = bucketsByKey[id] ?? [];
+          bucketsByKey[id].push(Number(r[sidx('c')] ?? 0));
+        }
+        for (const issue of rows) {
+          issue.sparkline = bucketsByKey[issue.id] ?? [];
+        }
+      } catch { /* silent */ }
+
+      setIssues(rows);
+      const total = rows.reduce((s, r) => s + r.count, 0);
+      const users = Math.max(...rows.map(r => r.unique_users), 0);
+      const newCount = rows.filter(r => Date.now() - new Date(r.first_seen).getTime() < 86400_000).length;
+      setStats({ total, users, new: newCount });
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar issues');
+    } finally { setLoading(false); }
+  }, [rangeClause, statusMap]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  function changeStatus(id: string, status: ErrorIssue['status']) {
+    setStatusMap(prev => ({ ...prev, [id]: status }));
+    setIssues(prev => prev.map(i => i.id === id ? { ...i, status } : i));
+    if (selected?.id === id) setSelected({ ...selected, status });
+  }
+
+  function bulkResolve() {
+    const ids = filtered.map(i => i.id);
+    const next: Record<string, ErrorIssue['status']> = { ...statusMap };
+    ids.forEach(id => next[id] = 'resolved');
+    setStatusMap(next);
+    setIssues(prev => prev.map(i => ids.includes(i.id) ? { ...i, status: 'resolved' } : i));
+  }
+
+  const TABS: { key: ETTab; label: string; count: number }[] = [
+    { key: 'active',     label: 'Activos',     count: issues.filter(i => i.status === 'active').length },
+    { key: 'resolved',   label: 'Resueltos',   count: issues.filter(i => i.status === 'resolved').length },
+    { key: 'suppressed', label: 'Silenciados', count: issues.filter(i => i.status === 'suppressed').length },
+    { key: 'all',        label: 'Todos',       count: issues.length },
+  ];
+
+  const filtered = issues.filter(i => {
+    if (tab !== 'all' && i.status !== tab) return false;
+    if (search.trim() && !`${i.type} ${i.message}`.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="bg-white px-6 pt-4 pb-2 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#dc2626]"><path d="M8 4v5M8 11v.5M8 1L1 14h14z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round" strokeLinecap="round"/></svg>
+              <h1 className="text-lg font-bold text-[#1a1a18]">Error tracking</h1>
+            </div>
+            <p className="text-xs text-[#646462]">Excepciones agrupadas con stack traces, contexto y triage.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-3 text-xs text-[#646462] mr-3">
+              <span><strong className="text-[#dc2626]">{stats.total.toLocaleString('es-ES')}</strong> errores</span>
+              <span>·</span>
+              <span><strong className="text-[#1a1a18]">{stats.users}</strong> usuarios</span>
+              {stats.new > 0 && <><span>·</span><span><strong className="text-[#f59e0b]">{stats.new}</strong> nuevos hoy</span></>}
+            </div>
+            <div className="relative" ref={rangeRef}>
+              <button onClick={() => setShowRange(s => !s)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12" stroke="currentColor" strokeWidth="1.3"/></svg>
+                {range.label}
+                <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>
+              </button>
+              {showRange && (
+                <div className="absolute right-0 top-full mt-1 w-56 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1">
+                  {ET_RANGES.map(r => (
+                    <button key={r.label} onClick={() => { setRange(r); setShowRange(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f9f9f7] ${range.label === r.label ? 'text-[#dc2626] bg-[#fef2f2]' : 'text-[#1a1a18]'}`}>{r.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={load} disabled={loading} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7] disabled:opacity-50">
+              <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`}><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 -mb-2">
+          <div className="flex gap-1">
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)} className={`flex items-center gap-1.5 pb-2 px-2 text-sm font-medium border-b-2 transition-colors ${tab === t.key ? 'border-[#dc2626] text-[#dc2626]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>
+                {t.label} <span className="text-[10px] text-[#9ca3af]">{t.count}</span>
+              </button>
+            ))}
+          </div>
+          <div className="relative ml-auto max-w-sm flex-1 pb-1">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por tipo o mensaje…" className="w-full pl-10 pr-3 py-1.5 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#dc2626]" />
+          </div>
+          {filtered.length > 0 && tab === 'active' && (
+            <button onClick={bulkResolve} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#16a34a] hover:bg-[#dcfce7] mb-1">
+              ✓ Marcar {filtered.length} como resueltos
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-auto">
+        {error && <div className="m-4 bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b]">{error}</div>}
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-[#fafaf9] sticky top-0 z-10">
+              <th className="text-left px-6 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Issue</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-24">Eventos</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-24">Usuarios</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-32">Frecuencia</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-32">Última</th>
+              <th className="w-12"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} className="border-b border-[#f3f3f1]">{[1,2,3,4,5,6].map(c => <td key={c} className="px-3 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i + c) % 40}%` }} /></td>)}</tr>
+              ))
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={6} className="py-16 text-center">
+                <div className="w-12 h-12 rounded-full bg-[#dcfce7] flex items-center justify-center mx-auto mb-3">
+                  <svg viewBox="0 0 24 24" className="w-6 h-6 text-[#16a34a]"><path d="M5 12l4 4 10-10" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+                <p className="text-sm font-semibold text-[#1a1a18] mb-1">{tab === 'active' ? 'Sin errores activos' : tab === 'resolved' ? 'Sin issues resueltos' : tab === 'suppressed' ? 'Sin issues silenciados' : 'Sin issues'}</p>
+                <p className="text-xs text-[#646462]">{tab === 'active' ? '¡Tu app está limpia en este rango!' : 'Cambia los filtros o el rango para ver más resultados.'}</p>
+              </td></tr>
+            ) : filtered.map(i => (
+              <tr key={i.id} onClick={() => setSelected(i)} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                <td className="px-6 py-3 max-w-[460px]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded font-bold">{i.type}</span>
+                    {i.status === 'resolved'   && <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">Resuelto</span>}
+                    {i.status === 'suppressed' && <span className="text-[10px] bg-[#f3f3f1] text-[#646462] px-1.5 py-0.5 rounded">Silenciado</span>}
+                  </div>
+                  <p className="text-sm font-mono text-[#1a1a18] truncate" title={i.message}>{i.message}</p>
+                  {i.sample_url && <p className="text-[10px] text-[#9ca3af] mt-0.5 truncate">{i.sample_url}</p>}
+                </td>
+                <td className="px-3 py-3 text-sm font-mono text-[#1a1a18]">{i.count.toLocaleString('es-ES')}</td>
+                <td className="px-3 py-3 text-sm font-mono text-[#646462]">{i.unique_users}</td>
+                <td className="px-3 py-3"><ErrorSparkline values={i.sparkline} color={i.status === 'resolved' ? '#16a34a' : '#dc2626'} /></td>
+                <td className="px-3 py-3 text-xs text-[#646462]" title={i.last_seen}>{formatRelativeTime(i.last_seen)}</td>
+                <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                  <select value={i.status} onChange={e => changeStatus(i.id, e.target.value as any)} className="text-[10px] bg-white border border-[#e9eae6] rounded px-1 py-0.5 focus:outline-none">
+                    <option value="active">Activo</option>
+                    <option value="resolved">Resuelto</option>
+                    <option value="suppressed">Silenciado</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <ErrorIssueDrawer issue={selected} onClose={() => setSelected(null)} onStatusChange={changeStatus} rangeClause={rangeClause} />
+    </div>
+  );
+}

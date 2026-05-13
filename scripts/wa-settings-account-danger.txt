@@ -1,0 +1,24 @@
+  // ── AccountDangerZonePage ─────────────────────────────────────────────────
+  function AccountDangerZonePage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Eliminar cuenta</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Elimina permanentemente tu cuenta de Clain. Esta acción no se puede deshacer.</p>
+            <p className="text-[13px] text-[#e8572a]">
+              Esto es <strong>irreversible</strong>. Por favor, asegúrate.
+            </p>
+            <button className="flex items-center gap-2 h-9 px-4 border border-[#e8572a] rounded-lg text-[13px] font-semibold text-[#e8572a] hover:bg-[#fef2f0] bg-white">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#e8572a]"><path d="M6 2a1 1 0 00-1 1v1H3a1 1 0 000 2h.08l.6 7.2A2 2 0 005.67 15h4.66a2 2 0 001.99-1.8L12.92 6H13a1 1 0 000-2h-2V3a1 1 0 00-1-1H6zm1 2h2v1H7V4zm-2.08 2h6.16l-.57 6.87a.5.5 0 01-.5.13H5.99a.5.5 0 01-.5-.13L4.92 6z"/></svg>
+              Eliminar tu cuenta
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
