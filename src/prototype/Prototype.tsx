@@ -47136,7 +47136,14 @@ function WASettingsView() {
 
   // ── HeatmapsPage ─────────────────────────────────────────────────────────
   function HeatmapsPage() {
-    const [heatmapsWeb, setHeatmapsWeb] = useState(false);
+    const [heatmapsWeb, setHeatmapsWeb] = useState<boolean>(!!team?.heatmaps_opt_in);
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setHeatmapsWeb(!!team?.heatmaps_opt_in); }, [team?.id]);
+    async function toggleHeatmaps(v: boolean) {
+      setHeatmapsWeb(v); setSaving(true);
+      await patchTeam({ heatmaps_opt_in: v });
+      setSaving(false);
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-8">
@@ -47164,8 +47171,8 @@ function WASettingsView() {
               <a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a>
             </p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar mapas de calor para web</span>
-              <Toggle checked={heatmapsWeb} onChange={setHeatmapsWeb}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar mapas de calor para web {saving && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={heatmapsWeb} onChange={toggleHeatmaps}/>
             </div>
           </div>
         </div>
@@ -47175,13 +47182,90 @@ function WASettingsView() {
 
   // ── ProductAnalyticsPage ──────────────────────────────────────────────────
   function ProductAnalyticsPage() {
-    const [filterEnabled, setFilterEnabled] = useState(false);
-    const [filterRevenue, setFilterRevenue] = useState(false);
-    const [personMode, setPersonMode] = useState<'event'|'query'|'ids'>('query');
-    const [lastSeen, setLastSeen] = useState(false);
-    const [humanPeriods, setHumanPeriods] = useState(false);
-    const [displayTags, setDisplayTags] = useState(['email', 'name', 'username']);
-    const [excludedEventProps, setExcludedEventProps] = useState('');
+    const xs = team?.extra_settings || {};
+    const initialMode = (() => {
+      const m = team?.modifiers?.personsOnEventsMode || team?.person_on_events_mode || 'person_id_no_override_properties_on_events';
+      if (m === 'person_id_no_override_properties_on_events') return 'event';
+      if (m === 'person_id_override_properties_on_events') return 'query';
+      return 'ids';
+    })();
+    const [filterEnabled, setFilterEnabled] = useState<boolean>(!!team?.test_account_filters_default_checked);
+    const [filterRevenue, setFilterRevenue] = useState<boolean>(!!(team?.revenue_analytics_config?.filter_test_accounts ?? xs.filter_revenue_test_accounts));
+    const [personMode, setPersonMode] = useState<'event'|'query'|'ids'>(initialMode as any);
+    const [lastSeen, setLastSeen] = useState<boolean>(!!xs.last_seen_tracking);
+    const [humanPeriods, setHumanPeriods] = useState<boolean>(!!xs.human_friendly_comparison_periods);
+    const [displayTags, setDisplayTags] = useState<string[]>(team?.person_display_name_properties ?? ['email','name','username']);
+    const [newTag, setNewTag] = useState('');
+    const [excludedEventProps, setExcludedEventProps] = useState<string>((team?.correlation_config?.excluded_event_property_names ?? []).join(','));
+    const [savingKey, setSavingKey] = React.useState('');
+    const [tagsMsg, setTagsMsg] = React.useState('');
+    const [personSaved, setPersonSaved] = React.useState(false);
+    const [excSaved, setExcSaved] = React.useState(false);
+
+    React.useEffect(() => {
+      setFilterEnabled(!!team?.test_account_filters_default_checked);
+      const s = team?.extra_settings || {};
+      setFilterRevenue(!!(team?.revenue_analytics_config?.filter_test_accounts ?? s.filter_revenue_test_accounts));
+      setLastSeen(!!s.last_seen_tracking);
+      setHumanPeriods(!!s.human_friendly_comparison_periods);
+      setDisplayTags(team?.person_display_name_properties ?? ['email','name','username']);
+      setExcludedEventProps((team?.correlation_config?.excluded_event_property_names ?? []).join(','));
+    }, [team?.id]);
+
+    async function toggleFilterDefault(v: boolean) {
+      setFilterEnabled(v); setSavingKey('filter-default');
+      await patchTeam({ test_account_filters_default_checked: v });
+      setSavingKey('');
+    }
+    async function toggleFilterRevenue(v: boolean) {
+      setFilterRevenue(v); setSavingKey('filter-revenue');
+      const cfg = { ...(team?.revenue_analytics_config || {}), filter_test_accounts: v };
+      await patchTeam({ revenue_analytics_config: cfg });
+      setSavingKey('');
+    }
+    async function savePersonMode() {
+      const map: Record<string, string> = {
+        event: 'person_id_no_override_properties_on_events',
+        query: 'person_id_override_properties_on_events',
+        ids: 'disabled',
+      };
+      setSavingKey('person-mode');
+      const mode = map[personMode];
+      // Try modifiers first then fall back to person_on_events_mode
+      try { await patchTeam({ modifiers: { ...(team?.modifiers || {}), personsOnEventsMode: mode } }); }
+      catch { await patchTeam({ person_on_events_mode: mode }); }
+      setPersonSaved(true); setTimeout(() => setPersonSaved(false), 2000);
+      setSavingKey('');
+    }
+    async function toggleLastSeen(v: boolean) {
+      setLastSeen(v); setSavingKey('last-seen');
+      const next = { ...(team?.extra_settings || {}), last_seen_tracking: v };
+      await patchTeam({ extra_settings: next }); setSavingKey('');
+    }
+    async function toggleHumanPeriods(v: boolean) {
+      setHumanPeriods(v); setSavingKey('human-periods');
+      const next = { ...(team?.extra_settings || {}), human_friendly_comparison_periods: v };
+      await patchTeam({ extra_settings: next }); setSavingKey('');
+    }
+    function addTag() {
+      const v = newTag.trim();
+      if (!v || displayTags.includes(v)) return;
+      setDisplayTags([...displayTags, v]); setNewTag('');
+    }
+    async function saveTags() {
+      setSavingKey('tags');
+      const ok = await patchTeam({ person_display_name_properties: displayTags });
+      setSavingKey('');
+      if (ok) { setTagsMsg('Guardado'); setTimeout(() => setTagsMsg(''), 2000); }
+    }
+    async function saveExcluded() {
+      setSavingKey('excluded');
+      const arr = excludedEventProps.split(',').map(s => s.trim()).filter(Boolean);
+      const cfg = { ...(team?.correlation_config || {}), excluded_event_property_names: arr };
+      const ok = await patchTeam({ correlation_config: cfg });
+      setSavingKey('');
+      if (ok) { setExcSaved(true); setTimeout(() => setExcSaved(false), 2000); }
+    }
 
     return (
       <div className="flex-1 overflow-y-auto">
@@ -47219,12 +47303,12 @@ function WASettingsView() {
               </button>
             </div>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar este filtro en todos los nuevos insights</span>
-              <Toggle checked={filterEnabled} onChange={setFilterEnabled}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar este filtro en todos los nuevos insights {savingKey === 'filter-default' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={filterEnabled} onChange={toggleFilterDefault}/>
             </div>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Filtrar usuarios internos y de prueba en revenue analytics</span>
-              <Toggle checked={filterRevenue} onChange={setFilterRevenue}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Filtrar usuarios internos y de prueba en revenue analytics {savingKey === 'filter-revenue' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={filterRevenue} onChange={toggleFilterRevenue}/>
             </div>
           </div>
 
@@ -47259,8 +47343,8 @@ function WASettingsView() {
                 { v: 'query', label: 'Usar propiedades de persona al ejecutar la consulta', badge: '', sub: 'Consultas más lentas. Si la propiedad de persona se actualiza, los resultados de consultas en datos pasados cambiarán.' },
                 { v: 'ids',   label: 'Usar IDs de persona y propiedades de persona del momento del evento', badge: '', sub: 'Consultas más rápidas, pero los embudos y los conteos de usuarios únicos serán imprecisos. Si la propiedad de persona se actualiza, los resultados de consultas en datos pasados no cambiarán.' },
               ].map(opt => (
-                <label key={opt.v} className="flex items-start gap-2.5 cursor-pointer group">
-                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center ${personMode === opt.v ? 'border-[#e8572a] bg-[#e8572a]' : 'border-[#d1d5db] group-hover:border-[#9ca3af]'}`} onClick={() => setPersonMode(opt.v as any)}>
+                <label key={opt.v} onClick={() => setPersonMode(opt.v as any)} className="flex items-start gap-2.5 cursor-pointer group">
+                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center ${personMode === opt.v ? 'border-[#e8572a] bg-[#e8572a]' : 'border-[#d1d5db] group-hover:border-[#9ca3af]'}`}>
                     {personMode === opt.v && <div className="w-1.5 h-1.5 rounded-full bg-white"/>}
                   </div>
                   <div>
@@ -47271,7 +47355,14 @@ function WASettingsView() {
                 </label>
               ))}
             </div>
-            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={savePersonMode}
+                disabled={savingKey === 'person-mode'}
+                className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] disabled:opacity-50"
+              >{savingKey === 'person-mode' ? 'Guardando…' : 'Guardar'}</button>
+              {personSaved && <span className="text-[12px] text-[#16a34a]">✓ Guardado</span>}
+            </div>
           </div>
 
           {/* Correlation analysis exclusions */}
@@ -47293,17 +47384,25 @@ function WASettingsView() {
                     <span className="text-[13px] font-semibold text-[#1a1a1a]">{row.label}</span>
                   </div>
                   {i < 2 ? (
-                    <button className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
+                    <button
+                      onClick={() => alert('Selecciona los elementos a excluir desde la pantalla de Insights — esta lista refleja team.correlation_config.')}
+                      className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]"
+                    >
                       <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
                       Añadir exclusión
                     </button>
                   ) : (
-                    <input
-                      type="text"
-                      value={excludedEventProps}
-                      onChange={e => setExcludedEventProps(e.target.value)}
-                      className="w-full h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={excludedEventProps}
+                        onChange={e => setExcludedEventProps(e.target.value)}
+                        placeholder="prop1, prop2, prop3"
+                        className="flex-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                      />
+                      <button onClick={saveExcluded} disabled={savingKey === 'excluded'} className="h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] disabled:opacity-50">{savingKey === 'excluded' ? '…' : 'Guardar'}</button>
+                      {excSaved && <span className="text-[12px] text-[#16a34a]">✓</span>}
+                    </div>
                   )}
                 </div>
               ))}
@@ -47321,15 +47420,22 @@ function WASettingsView() {
               {displayTags.map(tag => (
                 <div key={tag} className="flex items-center gap-1 h-6 px-2 bg-[#f3f3f1] border border-[#e9eae6] rounded-md text-[12px] text-[#1a1a1a]">
                   {tag}
-                  <button onClick={() => setDisplayTags(t => t.filter(x => x !== tag))} className="text-[#646462] hover:text-[#1a1a1a]">✕</button>
+                  <button onClick={() => setDisplayTags(t => t.filter(x => x !== tag))} className="text-[#646462] hover:text-[#1a1a1a]" title={`Quitar ${tag}`}>✕</button>
                 </div>
               ))}
-              <button className="flex items-center gap-1 h-6 px-2 border border-dashed border-[#e9eae6] rounded-md text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-                Añadir
-              </button>
+              <input
+                type="text"
+                value={newTag}
+                onChange={e => setNewTag(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+                placeholder="Añadir propiedad (Enter)"
+                className="h-6 px-2 border border-dashed border-[#e9eae6] rounded-md text-[12px] outline-none focus:border-[#3b59f6] min-w-[140px]"
+              />
             </div>
-            <button className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Guardar</button>
+            <div className="flex items-center gap-3">
+              <button onClick={saveTags} disabled={savingKey === 'tags'} className="h-7 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] disabled:opacity-50">{savingKey === 'tags' ? 'Guardando…' : 'Guardar'}</button>
+              {tagsMsg && <span className="text-[12px] text-[#16a34a]">✓ {tagsMsg}</span>}
+            </div>
           </div>
 
           {/* Person last seen tracking */}
@@ -47340,8 +47446,8 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462]">Cuando está activado, Clain registra cuándo estuvo activo por última vez cada usuario. El valor se actualiza cada hora y es visible en la lista de Personas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Registrar cuándo se vio por última vez a una persona</span>
-              <Toggle checked={lastSeen} onChange={setLastSeen}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Registrar cuándo se vio por última vez a una persona {savingKey === 'last-seen' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={lastSeen} onChange={toggleLastSeen}/>
             </div>
           </div>
 
@@ -47363,8 +47469,8 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462]">Al comparar con un mes o año anterior, compara con el mismo día de la semana en lugar de la misma fecha del calendario. Una comparación anual pasa a ser 52 semanas y una mensual pasa a ser 4 semanas.</p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Usar períodos de comparación comprensibles</span>
-              <Toggle checked={humanPeriods} onChange={setHumanPeriods}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Usar períodos de comparación comprensibles {savingKey === 'human-periods' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={humanPeriods} onChange={toggleHumanPeriods}/>
             </div>
           </div>
 
@@ -47390,15 +47496,39 @@ function WASettingsView() {
 
   // ── RevenueAnalyticsSettingsPage ──────────────────────────────────────────
   function RevenueAnalyticsSettingsPage() {
-    const [currency, setCurrency] = useState('USD');
-    const [filterInternal, setFilterInternal] = useState(false);
+    const ra = team?.revenue_analytics_config || {};
+    const [currency, setCurrency] = useState<string>(ra.base_currency ?? team?.base_currency ?? 'USD');
+    const [filterInternal, setFilterInternal] = useState<boolean>(!!ra.filter_test_accounts);
     const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
+    const [savingKey, setSavingKey] = React.useState('');
+    React.useEffect(() => {
+      const r = team?.revenue_analytics_config || {};
+      setCurrency(r.base_currency ?? team?.base_currency ?? 'USD');
+      setFilterInternal(!!r.filter_test_accounts);
+    }, [team?.id]);
     const currencies = [
       { code: 'USD', label: 'Dólar americano (USD)', flag: '🇺🇸' },
       { code: 'EUR', label: 'Euro (EUR)', flag: '🇪🇺' },
       { code: 'GBP', label: 'Libra esterlina (GBP)', flag: '🇬🇧' },
       { code: 'JPY', label: 'Yen japonés (JPY)', flag: '🇯🇵' },
+      { code: 'CAD', label: 'Dólar canadiense (CAD)', flag: '🇨🇦' },
+      { code: 'AUD', label: 'Dólar australiano (AUD)', flag: '🇦🇺' },
+      { code: 'CHF', label: 'Franco suizo (CHF)', flag: '🇨🇭' },
+      { code: 'BRL', label: 'Real brasileño (BRL)', flag: '🇧🇷' },
+      { code: 'MXN', label: 'Peso mexicano (MXN)', flag: '🇲🇽' },
     ];
+    async function pickCurrency(code: string) {
+      setCurrency(code); setShowCurrencyDropdown(false); setSavingKey('currency');
+      const cfg = { ...(team?.revenue_analytics_config || {}), base_currency: code };
+      await patchTeam({ revenue_analytics_config: cfg });
+      setSavingKey('');
+    }
+    async function toggleFilterInternal(v: boolean) {
+      setFilterInternal(v); setSavingKey('filter');
+      const cfg = { ...(team?.revenue_analytics_config || {}), filter_test_accounts: v };
+      await patchTeam({ revenue_analytics_config: cfg });
+      setSavingKey('');
+    }
 
     return (
       <div className="flex-1 overflow-y-auto">
@@ -47423,15 +47553,18 @@ function WASettingsView() {
                 onClick={() => setShowCurrencyDropdown(d => !d)}
                 className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]"
               >
-                <span>{currencies.find(c => c.code === currency)?.flag} {currencies.find(c => c.code === currency)?.label}</span>
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M3 5l5 5 5-5"/></svg>
+                <span>{currencies.find(c => c.code === currency)?.flag ?? '💱'} {currencies.find(c => c.code === currency)?.label ?? currency}</span>
+                <span className="flex items-center gap-1">
+                  {savingKey === 'currency' && <span className="text-[11px] text-[#646462]">…</span>}
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M3 5l5 5 5-5"/></svg>
+                </span>
               </button>
               {showCurrencyDropdown && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowCurrencyDropdown(false)}/>
                   <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
                     {currencies.map(c => (
-                      <button key={c.code} onClick={() => { setCurrency(c.code); setShowCurrencyDropdown(false); }}
+                      <button key={c.code} onClick={() => pickCurrency(c.code)}
                         className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] flex items-center gap-2 ${c.code === currency ? 'bg-[#f3f3f1] font-medium' : ''}`}>
                         <span>{c.flag}</span><span>{c.label}</span>
                       </button>
@@ -47453,8 +47586,8 @@ function WASettingsView() {
               <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Filtrar usuarios internos y de prueba en revenue analytics</h3>
               <p className="text-[13px] text-[#646462]">Cuando está activado, los eventos de cuentas de prueba se excluirán de Revenue Analytics. Puedes configurar estas cuentas de prueba <a href="#" className="text-[#e8572a] hover:underline">aquí</a>.</p>
               <div className="flex items-center justify-between pt-2 border-t border-[#e9eae6]">
-                <span className="text-[13px] font-medium text-[#1a1a1a]">Filtrar usuarios internos y de prueba</span>
-                <Toggle checked={filterInternal} onChange={setFilterInternal}/>
+                <span className="text-[13px] font-medium text-[#1a1a1a]">Filtrar usuarios internos y de prueba {savingKey === 'filter' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+                <Toggle checked={filterInternal} onChange={toggleFilterInternal}/>
               </div>
             </div>
           </div>
