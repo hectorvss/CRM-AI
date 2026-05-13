@@ -1,626 +1,397 @@
-function WAAppWebAnalyticsView() {
-  type WATab = 'web' | 'vitals' | 'reports';
-  const [waTab, setWaTab] = useState<WATab>('web');
-  const [visitorsTab, setVisitorsTab] = useState<'visitors'|'views'|'sessions'>('visitors');
-  const [pathsView, setPathsView] = useState<'path'|'entry'|'end'|'outbound'>('path');
-  const [channelsView, setChannelsView] = useState<'channel'|'referring'|'utm'>('channel');
-  const [deviceView, setDeviceView] = useState<'device'|'browser'|'os'|'viewport'>('device');
-  const [activeHoursTab, setActiveHoursTab] = useState<'unique'|'total'>('unique');
-  const [showBetaBanner, setShowBetaBanner] = useState(true);
-  const [vitalsPercentile, setVitalsPercentile] = useState<'P75'|'P90'|'P99'>('P90');
-  const [vitalsMetric, setVitalsMetric] = useState<'INP'|'LCP'|'FCP'|'CLS'>('INP');
+// ── WAAppWebAnalyticsView ─────────────────────────────────────────────────────
+// PostHog Web Analytics dashboard with KPIs, trends, and top-list breakdowns.
+// All data comes from HogQL queries on the events / sessions table.
+// Backend: POST /api/environments/{teamId}/query/  body { query: { kind: 'HogQLQuery', query: '...' } }
 
-  const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+interface WaMetric {
+  label:   string;
+  value:   number | null;
+  prev:    number | null;
+  format:  'count' | 'percent' | 'duration';
+  hint?:   string;
+}
 
-  const EmptyChart = ({ h = 200, text }: { h?: number; text?: string }) => (
-    <div className="flex flex-col items-center justify-center gap-3" style={{ height: h }}>
-      <svg viewBox="0 0 64 64" className="w-12 h-12 opacity-25">
-        <rect x="4" y="10" width="56" height="38" rx="4" fill="none" stroke="#1a1a1a" strokeWidth="2.5"/>
-        <path d="M14 48v6M50 48v6M10 54h44" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-        <path d="M16 36l8-10 8 6 10-14 6 8" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 2"/>
-      </svg>
-      <div className="text-center">
-        <p className="text-[13px] font-semibold text-[#1a1a1a]">{text || 'No hay eventos coincidentes para esta consulta'}</p>
-        <p className="text-[12px] text-[#646462] mt-0.5">Cambia el rango de fechas, o elige otra acción, evento o desglose.</p>
-      </div>
-    </div>
-  );
+interface WaTimeseries {
+  labels: string[];
+  series: { name: string; values: number[]; color: string }[];
+}
 
-  const TableEmptyState = ({ cols }: { cols: number }) => (
-    <tr><td colSpan={cols} className="px-4 py-10">
-      <div className="flex flex-col items-center gap-2">
-        <svg viewBox="0 0 48 48" className="w-10 h-10 opacity-20"><rect x="3" y="7" width="42" height="28" rx="3" fill="none" stroke="#1a1a1a" strokeWidth="2"/><path d="M10 35v5M38 35v5M7 40h34" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round"/></svg>
-        <p className="text-[13px] text-[#1a1a1a] font-semibold">No hay eventos coincidentes para esta consulta</p>
-        <p className="text-[12px] text-[#646462]">Cambia el rango de fechas, o elige otra acción, evento o desglose.</p>
-      </div>
-    </td></tr>
-  );
+interface WaTopRow {
+  key:    string;
+  value:  number;
+}
 
-  const OpenInsightBtn = () => (
-    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M10 2v12M2 6h8"/></svg>
-      Abrir como nuevo insight
-    </button>
-  );
-  const ShowMoreBtn = () => (
-    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round"><path d="M3 8h10M7 4l4 4-4 4"/></svg>
-      Mostrar más
-    </button>
-  );
+const WA_RANGES: { label: string; days: number; clickhouse: string }[] = [
+  { label: 'Hoy',              days: 1,   clickhouse: '1 DAY' },
+  { label: 'Últimas 24 horas', days: 1,   clickhouse: '1 DAY' },
+  { label: 'Últimos 7 días',   days: 7,   clickhouse: '7 DAY' },
+  { label: 'Últimos 14 días',  days: 14,  clickhouse: '14 DAY' },
+  { label: 'Últimos 30 días',  days: 30,  clickhouse: '30 DAY' },
+  { label: 'Últimos 90 días',  days: 90,  clickhouse: '90 DAY' },
+  { label: 'Últimos 180 días', days: 180, clickhouse: '180 DAY' },
+];
 
-  const SharedToolbar = ({ showVitalsPercentiles }: { showVitalsPercentiles?: boolean }) => (
-    <div className="flex items-center gap-2 flex-wrap">
-      <button className="p-1.5 rounded border border-[#e9eae6] hover:bg-[#f3f3f1]">
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M2 8a6 6 0 1012 0M14 4l-2 2-2-2" strokeLinejoin="round"/></svg>
-      </button>
-      <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1.5v3M11 1.5v3M2 7h12" strokeLinecap="round"/></svg>
-        Últimos 7 días <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-      </button>
-      <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/></svg>
-        Todos los dominios <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-      </button>
-      <button className="p-1.5 rounded border border-[#e9eae6] hover:bg-[#f3f3f1]">
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><path d="M3 2h10a1 1 0 011 1v7a1 1 0 01-1 1H6.5L4 13.5V11H3a1 1 0 01-1-1V3a1 1 0 011-1z"/></svg>
-      </button>
-      <button className="p-1.5 rounded border border-[#e9eae6] hover:bg-[#f3f3f1]">
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg>
-      </button>
-      <div className="flex-1"/>
-      {showVitalsPercentiles ? (
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M4 8h8M6 12h4"/></svg>
-            Filtros
-            <span className="ml-1 w-4 h-4 rounded-full bg-[#9966cc] flex items-center justify-center text-white text-[9px]">+</span>
-          </button>
-          <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
-            {(['P75','P90','P99'] as const).map((p,i) => (
-              <button key={p} onClick={() => setVitalsPercentile(p)}
-                className={`h-8 px-3 text-[12px] font-bold transition-colors ${vitalsPercentile === p ? 'border border-[#f59e0b] text-[#1a1a1a] bg-white' : 'text-[#646462] hover:text-[#1a1a1a]'} ${i > 0 ? 'border-l border-[#e9eae6]' : ''}`}>
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <>
-          <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M4 8h8M6 12h4"/></svg>
-            Filtros
-            <span className="ml-1 w-4 h-4 rounded-full bg-[#9966cc] flex items-center justify-center text-white text-[9px]">+</span>
-          </button>
-          <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-            + Añadir objetivo de conversión <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-          </button>
-          <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 2" strokeLinecap="round"/></svg>
-            Comparar con período anterior <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-          </button>
-        </>
-      )}
-    </div>
-  );
+function waFormat(v: number | null, fmt: WaMetric['format']): string {
+  if (v == null || Number.isNaN(v)) return '—';
+  if (fmt === 'percent')  return `${v.toFixed(1)}%`;
+  if (fmt === 'duration') {
+    if (v < 60)   return `${Math.round(v)}s`;
+    if (v < 3600) return `${Math.floor(v / 60)}m ${Math.round(v % 60)}s`;
+    return `${Math.floor(v / 3600)}h ${Math.floor((v % 3600) / 60)}m`;
+  }
+  return v.toLocaleString('es-ES');
+}
+function waDelta(curr: number | null, prev: number | null): { pct: number; up: boolean } | null {
+  if (curr == null || prev == null || prev === 0) return null;
+  const pct = ((curr - prev) / prev) * 100;
+  return { pct, up: pct >= 0 };
+}
 
+function WaMetricCard({ metric, loading, accent }: { metric: WaMetric; loading: boolean; accent: string }) {
+  const delta = waDelta(metric.value, metric.prev);
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white">
-      {/* Header */}
-      <div className="flex-shrink-0 px-6 pt-4 pb-0 border-b border-[#e9eae6]">
-        <div className="flex items-center gap-2 mb-1">
-          <svg viewBox="0 0 20 20" className="w-5 h-5 flex-shrink-0"><circle cx="10" cy="10" r="9" fill="#22c55e" opacity="0.2"/><circle cx="10" cy="10" r="5" fill="#22c55e"/></svg>
-          <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">Web analytics</h1>
-          {waTab === 'web' && <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>}
-          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#e8572a]" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2l1.5 4H14l-3.5 2.5 1.5 4L8 10l-4 2.5 1.5-4L2 6h4.5L8 2z"/></svg>
-            Inicio rápido
-            <span className="text-[10px] bg-[#f59e0b] text-white px-1 rounded">0</span>
-          </button>
-          <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2a5.5 5.5 0 100 11M14 4l-2 2-2-2"/></svg></button>
-          <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2v12M8 2l-3 3M8 2l3 3"/></svg></button>
-          <button className="p-1.5 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg></button>
-        </div>
-        <p className="text-[13px] text-[#646462] mb-3">Analiza los datos de analítica web para entender el rendimiento y el comportamiento de los usuarios.</p>
-        <div className="flex gap-0">
-          {[{k:'web',l:'Web analytics'},{k:'vitals',l:'Web vitals'},{k:'reports',l:'Informes de página'}].map(t => (
-            <button key={t.k} onClick={() => setWaTab(t.k as WATab)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold border-b-2 -mb-px transition-colors ${waTab === t.k ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
-              {t.l}
-              {t.k === 'reports' && <span className="px-1.5 py-0.5 rounded border border-[#f59e0b] text-[10px] font-bold text-[#f59e0b] uppercase">Beta</span>}
-            </button>
-          ))}
-        </div>
+    <div className="bg-white border border-[#e9eae6] rounded-xl p-4 hover:shadow-sm transition-shadow">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accent }} />
+        <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">{metric.label}</p>
       </div>
-
-      {/* ── WEB ANALYTICS TAB ─────────────────────────────────────────────── */}
-      {waTab === 'web' && (
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 py-4 space-y-6">
-            <SharedToolbar />
-            {/* Stats cards */}
-            <div className="grid grid-cols-5 gap-3">
-              {[{l:'VISITANTES',v:'0'},{l:'PÁGINAS VISTAS',v:'0'},{l:'SESIONES',v:'0'},{l:'DURACIÓN DE SESIÓN',v:'-'},{l:'TASA DE REBOTE',v:'-'}].map(s => (
-                <div key={s.l} className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col gap-2">
-                  <span className="text-[11px] font-bold text-[#646462] uppercase tracking-wide">{s.l}</span>
-                  <span className="text-[28px] font-bold text-[#1a1a1a] leading-none">{s.v}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-end"><OpenInsightBtn /></div>
-
-            {/* Unique visitors */}
-            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
-                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Visitantes únicos</h2>
-                <div className="flex items-center gap-2">
-                  <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
-                    {[{k:'visitors',l:'Visitantes'},{k:'views',l:'Vistas'},{k:'sessions',l:'Sesiones'}].map((t,i) => (
-                      <button key={t.k} onClick={() => setVisitorsTab(t.k as any)}
-                        className={`h-7 px-3 text-[12px] font-semibold transition-colors ${visitorsTab === t.k ? 'bg-white text-[#1a1a1a] border border-[#f59e0b]' : 'text-[#646462] hover:text-[#1a1a1a]'} ${i > 0 ? 'border-l border-[#e9eae6]' : ''}`}>
-                        {t.l}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="text-[12px] text-[#646462]">Agrupar por</span>
-                  <button className="flex items-center gap-1 h-7 px-2 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                    Día <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-                  </button>
-                </div>
-              </div>
-              <EmptyChart h={240} />
-            </div>
-            <div className="flex justify-end gap-2"><OpenInsightBtn /><ShowMoreBtn /></div>
-
-            {/* Paths */}
-            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-[15px] font-bold text-[#1a1a1a]">Rutas</h2>
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
-                    <button className="h-7 px-2 border-r border-[#e9eae6] bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg></button>
-                    <button className="h-7 px-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg></button>
-                  </div>
-                  {[{k:'path',l:'Ruta'},{k:'entry',l:'Ruta de entrada'},{k:'end',l:'Ruta de salida'},{k:'outbound',l:'Clics salientes'}].map(t => (
-                    <button key={t.k} onClick={() => setPathsView(t.k as any)}
-                      className={`h-7 px-3 text-[12px] font-semibold rounded transition-colors ${pathsView === t.k ? 'bg-white border border-[#f59e0b] text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>
-                      {t.l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <table className="w-full text-[12px]">
-                <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
-                  {['Ruta','Visitantes','Vistas','Tasa de rebote'].map(h => <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}
-                </tr></thead>
-                <tbody><TableEmptyState cols={4} /></tbody>
-              </table>
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="1.5" y="1.5" width="5" height="5" rx="0.5"/><rect x="9.5" y="1.5" width="5" height="5" rx="0.5"/><rect x="1.5" y="9.5" width="5" height="5" rx="0.5"/><rect x="9.5" y="9.5" width="5" height="5" rx="0.5"/></svg>
-                Copiar <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-              </button>
-              <OpenInsightBtn /><ShowMoreBtn />
-            </div>
-
-            {/* Channels + Device type */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
-                  <div className="flex items-center gap-2"><h2 className="text-[14px] font-bold text-[#1a1a1a]">Canales</h2><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg></div>
-                  <div className="flex items-center gap-1">
-                    <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden mr-1">
-                      <button className="h-6 px-1.5 border-r border-[#e9eae6] bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg></button>
-                      <button className="h-6 px-1.5"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg></button>
-                    </div>
-                    {[{k:'channel',l:'Canal'},{k:'referring',l:'Ref. domain'},{k:'utm',l:'UTM source'}].map(t => (
-                      <button key={t.k} onClick={() => setChannelsView(t.k as any)}
-                        className={`h-6 px-2 text-[11px] font-semibold rounded transition-colors ${channelsView === t.k ? 'bg-white border border-[#f59e0b] text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>{t.l}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex justify-end px-4 py-1 border-b border-[#e9eae6]">
-                  <button className="flex items-center gap-1 text-[11px] text-[#646462] hover:text-[#1a1a1a]">Personalizar tipos de canal <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zM7 5h2v5H7zm0 6h2v2H7z"/></svg></button>
-                </div>
-                <table className="w-full text-[12px]">
-                  <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">{['Tipo de canal','Visitantes','Vistas'].map(h=><th key={h} className="px-4 py-2 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}</tr></thead>
-                  <tbody><TableEmptyState cols={3} /></tbody>
-                </table>
-                <div className="flex items-center justify-center gap-2 px-4 py-2 border-t border-[#e9eae6]"><OpenInsightBtn /><ShowMoreBtn /></div>
-              </div>
-              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
-                  <h2 className="text-[14px] font-bold text-[#1a1a1a]">Tipo de dispositivo</h2>
-                  <div className="flex items-center gap-1">
-                    <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden mr-1">
-                      <button className="h-6 px-1.5 border-r border-[#e9eae6] bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="2" y="9" width="5" height="5" rx="0.5"/><rect x="9" y="9" width="5" height="5" rx="0.5"/></svg></button>
-                      <button className="h-6 px-1.5"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg></button>
-                    </div>
-                    {[{k:'device',l:'Tipo disp.'},{k:'browser',l:'Navegador'},{k:'os',l:'SO'},{k:'viewport',l:'Ventana'}].map(t => (
-                      <button key={t.k} onClick={() => setDeviceView(t.k as any)}
-                        className={`h-6 px-2 text-[11px] font-semibold rounded transition-colors ${deviceView === t.k ? 'bg-white border border-[#f59e0b] text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>{t.l}</button>
-                    ))}
-                  </div>
-                </div>
-                <table className="w-full text-[12px]">
-                  <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">{['Tipo de dispositivo','Visitantes','Vistas'].map(h=><th key={h} className="px-4 py-2 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}</tr></thead>
-                  <tbody><TableEmptyState cols={3} /></tbody>
-                </table>
-                <div className="flex items-center justify-center gap-2 px-4 py-2 border-t border-[#e9eae6]"><OpenInsightBtn /><ShowMoreBtn /></div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Idiomas</button>
-              <button className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Zonas horarias</button>
-            </div>
-            <div className="flex justify-end"><ShowMoreBtn /></div>
-
-            {/* Retention */}
-            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6]">
-                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Retención</h2>
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-              </div>
-              <table className="w-full text-[12px]">
-                <thead><tr className="border-b border-[#e9eae6]">
-                  {['Cohorte','Tamaño','Semana 0','Semana 1'].map(h=><th key={h} className="px-4 py-2.5 text-left text-[12px] font-semibold text-[#1a1a1a]">{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  <tr className="border-b border-[#e9eae6]">
-                    <td className="px-4 py-2.5 font-semibold text-[#1a1a1a] flex items-center gap-1"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg> Media</td>
-                    <td className="px-4 py-2.5 text-[#646462]">0</td>
-                    <td className="px-4 py-2.5"><div className="bg-[#ede9fe] rounded px-3 py-1 text-center text-[#646462]">0,0%</div></td>
-                    <td className="px-4 py-2.5"><div className="bg-[#ede9fe] rounded px-3 py-1 text-center text-[#646462]">0,0%</div></td>
-                  </tr>
-                  {['3 may – 9 may','10 may – 16 may'].map((c,i) => (
-                    <tr key={c} className="border-b border-[#e9eae6] last:border-0">
-                      <td className="px-4 py-2.5 text-[#1a1a1a]">{c}</td>
-                      <td className="px-4 py-2.5 text-[#646462]">0</td>
-                      <td className="px-4 py-2.5"><div className="bg-[#f3f0ff] rounded px-3 py-1 text-center text-[#646462]">0,0%</div></td>
-                      <td className="px-4 py-2.5 text-center text-[#646462]">{i===0?'0,0%':''}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end gap-2"><OpenInsightBtn /><ShowMoreBtn /></div>
-
-            {/* Active Hours heatmap */}
-            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-[15px] font-bold text-[#1a1a1a]">Horas activas</h2>
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-                </div>
-                <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
-                  {[{k:'unique',l:'Usuarios únicos'},{k:'total',l:'Páginas vistas totales'}].map((t,i) => (
-                    <button key={t.k} onClick={() => setActiveHoursTab(t.k as any)}
-                      className={`h-7 px-3 text-[12px] font-semibold transition-colors ${activeHoursTab===t.k?'bg-white text-[#1a1a1a] border border-[#f59e0b]':'text-[#646462] hover:text-[#1a1a1a]'} ${i>0?'border-l border-[#e9eae6]':''}`}>
-                      {t.l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="p-4 space-y-3">
-                {showBetaBanner && (
-                  <div className="flex items-start gap-2 px-3 py-2 bg-[#f0f9ff] border border-[#bae6fd] rounded-lg">
-                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#0ea5e9] flex-shrink-0 mt-0.5"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zM7 5h2v5H7zm0 6h2v2H7z"/></svg>
-                    <p className="text-[12px] text-[#0369a1] flex-1">El mapa de calor de calendario está en versión beta. ¡Haznos saber qué te gustaría ver aquí y/o reporta cualquier problema directamente!</p>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button className="h-6 px-2 border border-[#bae6fd] rounded text-[11px] text-[#0369a1] hover:bg-[#bae6fd]">Enviar feedback</button>
-                      <button onClick={() => setShowBetaBanner(false)} className="text-[#0369a1]">×</button>
-                    </div>
-                  </div>
-                )}
-                <div className="overflow-x-auto">
-                  <table className="text-[11px] border-separate border-spacing-[2px]">
-                    <thead>
-                      <tr>
-                        <td className="w-12"/>
-                        {Array.from({length:24},(_,i)=>i).map(h=><td key={h} className="text-center text-[#646462] font-semibold w-8 pb-1">{h}</td>)}
-                        <td className="text-center text-[#646462] font-semibold w-10 pb-1">All</td>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...days,'All'].map((day,di) => (
-                        <tr key={day}>
-                          <td className="text-[#646462] font-semibold pr-2 text-right whitespace-nowrap">{day}</td>
-                          {Array.from({length:25},(_,h) => (
-                            <td key={h} className={`w-8 h-6 rounded text-center text-[#646462] font-semibold ${di===7||h===24?'bg-[#e9d5ff]':'bg-[#ede9fe]'}`}>0</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="text-[11px] text-[#646462] text-center">Datos mostrados en zona horaria: UTC (UTC+0:00) <button className="text-[#3b59f6] hover:underline">Cambiar</button></p>
-              </div>
-            </div>
-            <div className="flex justify-end"><ShowMoreBtn /></div>
-
-            {/* Goals */}
-            <div className="border border-dashed border-[#e9eae6] rounded-[10px] overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-dashed border-[#e9eae6]">
-                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Objetivos</h2>
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-              </div>
-              <div className="flex items-center justify-center gap-8 px-8 py-10">
-                <div className="w-32 h-32 flex-shrink-0">
-                  <svg viewBox="0 0 120 120" className="w-full h-full">
-                    <ellipse cx="60" cy="108" rx="32" ry="7" fill="#d1d5db"/>
-                    <circle cx="60" cy="58" r="36" fill="#c8a96e"/>
-                    <circle cx="60" cy="58" r="28" fill="#d4b482"/>
-                    <ellipse cx="52" cy="54" rx="4" ry="5" fill="#2d1a0a"/>
-                    <ellipse cx="68" cy="54" rx="4" ry="5" fill="#2d1a0a"/>
-                    <path d="M50 66 Q60 73 70 66" fill="none" stroke="#2d1a0a" strokeWidth="2" strokeLinecap="round"/>
-                    <rect x="50" y="88" width="20" height="22" rx="3" fill="#6b7280"/>
-                    <rect x="45" y="91" width="10" height="16" rx="2" fill="#4b5563"/>
-                    <rect x="65" y="91" width="10" height="16" rx="2" fill="#4b5563"/>
-                    <rect x="52" y="108" width="7" height="8" rx="1.5" fill="#2d1a0a"/>
-                    <rect x="61" y="108" width="7" height="8" rx="1.5" fill="#2d1a0a"/>
-                    <rect x="47" y="72" width="5" height="20" rx="2" fill="#6b7280"/>
-                    <rect x="68" y="72" width="5" height="20" rx="2" fill="#6b7280"/>
-                  </svg>
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-[16px] font-bold text-[#1a1a1a]">Crea tu primera acción</h3>
-                  <p className="text-[13px] text-[#646462] max-w-sm leading-relaxed">Usa acciones para combinar eventos que quieres rastrear juntos o para hacer que los eventos de Autocaptura sean más fáciles de reutilizar.</p>
-                  <div className="flex items-center gap-3 pt-1">
-                    <div className="flex items-center border border-[#f59e0b] rounded-lg overflow-hidden">
-                      <button className="h-8 px-4 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7]">Nueva acción</button>
-                      <div className="w-px h-4 bg-[#f59e0b]"/>
-                      <button className="h-8 px-2 hover:bg-[#fef3c7]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M4 6l4 4 4-4"/></svg></button>
-                    </div>
-                    <button className="flex items-center gap-1 text-[13px] font-semibold text-[#1a1a1a] hover:underline">
-                      Saber más <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M10 2v12M2 6h8"/></svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end"><ShowMoreBtn /></div>
-
-            {/* Session replay + Error tracking */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                <div className="px-4 py-3 border-b border-[#e9eae6]"><h2 className="text-[14px] font-bold text-[#1a1a1a]">Repetición de sesión</h2></div>
-                <div className="flex flex-col items-center justify-center gap-3 py-10 px-4">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">No hay grabaciones que coincidan con este rango de fechas</p>
-                  <p className="text-[12px] text-[#646462] text-center">Asegúrate de tener el fragmento de JavaScript configurado en tu sitio web.</p>
-                  <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Saber más</button>
-                </div>
-                <div className="flex justify-center px-4 py-2 border-t border-[#e9eae6]">
-                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                    Ver todo <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 2"/></svg>
-                  </button>
-                </div>
-              </div>
-              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                <div className="px-4 py-3 border-b border-[#e9eae6]"><h2 className="text-[14px] font-bold text-[#1a1a1a]">Seguimiento de errores</h2></div>
-                <table className="w-full text-[12px]">
-                  <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">{['Error','Usuarios','Ocurrencias','Visto por última vez'].map(h=><th key={h} className="px-4 py-2 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}</tr></thead>
-                  <tbody><TableEmptyState cols={4} /></tbody>
-                </table>
-                <div className="flex justify-end px-4 py-2 border-t border-[#e9eae6]">
-                  <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M10 2v12M2 6h8"/></svg>
-                    Ver todo
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Frustrating Pages — hedgehog empty state */}
-            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6]">
-                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Páginas frustrantes</h2>
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-              </div>
-              <table className="w-full text-[12px]">
-                <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
-                  {['URL','Rage clicks','Dead clicks','Errores'].map(h=><th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  <tr><td colSpan={4} className="px-4 py-8">
-                    <div className="flex flex-col items-center gap-3">
-                      {/* Hedgehog with star */}
-                      <svg viewBox="0 0 100 100" className="w-20 h-20">
-                        <ellipse cx="50" cy="92" rx="28" ry="6" fill="#d1d5db"/>
-                        <circle cx="50" cy="60" r="30" fill="#c8a96e"/>
-                        <circle cx="50" cy="62" r="22" fill="#d4b482"/>
-                        <ellipse cx="42" cy="58" rx="3.5" ry="4" fill="#2d1a0a"/>
-                        <ellipse cx="58" cy="58" rx="3.5" ry="4" fill="#2d1a0a"/>
-                        <path d="M43 68 Q50 74 57 68" fill="none" stroke="#2d1a0a" strokeWidth="1.5" strokeLinecap="round"/>
-                        <rect x="42" y="82" width="16" height="14" rx="2" fill="#9ca3af"/>
-                        <rect x="37" y="84" width="8" height="10" rx="2" fill="#6b7280"/>
-                        <rect x="55" y="84" width="8" height="10" rx="2" fill="#6b7280"/>
-                        <rect x="43" y="94" width="5" height="6" rx="1" fill="#2d1a0a"/>
-                        <rect x="52" y="94" width="5" height="6" rx="1" fill="#2d1a0a"/>
-                        <rect x="36" y="70" width="4" height="15" rx="1.5" fill="#9ca3af"/>
-                        <rect x="60" y="70" width="4" height="15" rx="1.5" fill="#9ca3af"/>
-                        {/* Star held in arm */}
-                        <g transform="translate(60,45) rotate(-15)">
-                          <polygon points="0,-12 3,-4 11,-4 5,2 7,10 0,6 -7,10 -5,2 -11,-4 -3,-4" fill="#f59e0b"/>
-                        </g>
-                      </svg>
-                      <p className="text-[13px] text-[#22c55e] font-semibold">¡No hay páginas frustrantes! ¡Sigue así!</p>
-                    </div>
-                  </td></tr>
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end gap-2"><OpenInsightBtn /><ShowMoreBtn /></div>
-            <div className="h-8"/>
-          </div>
+      {loading ? (
+        <div className="h-8 w-24 bg-[#f3f3f1] rounded animate-pulse" />
+      ) : (
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold text-[#1a1a18]">{waFormat(metric.value, metric.format)}</span>
+          {delta && (
+            <span className={`text-[11px] font-medium ${delta.up ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>
+              {delta.up ? '▲' : '▼'} {Math.abs(delta.pct).toFixed(1)}%
+            </span>
+          )}
         </div>
       )}
-
-      {/* ── WEB VITALS TAB ────────────────────────────────────────────────── */}
-      {waTab === 'vitals' && (
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 py-4 space-y-4">
-            <SharedToolbar showVitalsPercentiles />
-
-            {/* Metric cards */}
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { key:'INP', label:'Interaction to Next Paint (INP)', good: '<200ms' },
-                { key:'LCP', label:'Largest Contentful Paint (LCP)', good: '<2.5s' },
-                { key:'FCP', label:'First Contentful Paint (FCP)', good: '<1.8s' },
-                { key:'CLS', label:'Cumulative Layout Shift (CLS)', good: '<0.1' },
-              ].map(m => (
-                <button key={m.key} onClick={() => setVitalsMetric(m.key as any)}
-                  className={`text-left p-3 border rounded-[10px] transition-colors ${vitalsMetric===m.key ? 'border-[#e8572a] bg-white' : 'border-[#e9eae6] hover:bg-[#fafaf9]'}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[12px] font-bold text-[#1a1a1a]">{m.label}</span>
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-                  </div>
-                  <p className="text-[12px] text-[#646462]">Sin datos para este rango</p>
-                </button>
-              ))}
-            </div>
-            <p className="text-[12px] text-[#646462]">Las métricas anteriores son del último día en el rango de tiempo seleccionado. <a href="#" className="text-[#3b59f6] hover:underline">Saber más en los Docs. ↗</a></p>
-
-            {/* Two-col chart area */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="border border-[#e9eae6] rounded-[10px] flex items-center justify-center" style={{height:280}}>
-                <p className="text-[13px] text-[#646462]">Sin datos para el rango de fechas seleccionado</p>
-              </div>
-              <div className="border border-[#e9eae6] rounded-[10px]">
-                <EmptyChart h={280} />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2"><OpenInsightBtn /><ShowMoreBtn /></div>
-
-            {/* Path Breakdown */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Desglose por ruta</h2>
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#f59e0b]" strokeWidth="1.5"><path d="M8 2L1.5 13h13L8 2z" strokeLinejoin="round"/><path d="M8 7v3M8 11.5v.5" strokeLinecap="round"/></svg>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#e9eae6]">
-                    <div className="flex items-center gap-1.5">
-                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#22c55e]"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zM6 8l2 2 4-4" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="8" cy="8" r="6" fill="none" stroke="#22c55e" strokeWidth="1.5"/></svg>
-                      <span className="text-[13px] font-bold text-[#22c55e]">Bueno</span>
-                    </div>
-                    <span className="text-[12px] text-[#646462]">&lt; 200ms</span>
-                  </div>
-                  <div className="px-4 py-8 flex items-center justify-center gap-2">
-                    <span className="text-[13px]">📋</span>
-                    <span className="text-[12px] text-[#646462]">Sin puntuaciones en esta banda</span>
-                  </div>
-                </div>
-                <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#e9eae6]">
-                    <div className="flex items-center gap-1.5">
-                      <svg viewBox="0 0 16 16" className="w-4 h-4" fill="none" stroke="#f59e0b" strokeWidth="1.5"><path d="M8 2L1.5 13h13L8 2z" strokeLinejoin="round"/><path d="M8 7v3M8 11.5v.5" strokeLinecap="round"/></svg>
-                      <span className="text-[13px] font-bold text-[#f59e0b]">Necesita mejoras</span>
-                    </div>
-                    <span className="text-[12px] text-[#646462]">200ms – 500ms</span>
-                  </div>
-                  <div className="px-4 py-8 flex items-center justify-center gap-2">
-                    <span className="text-[13px]">🚩</span>
-                    <span className="text-[12px] text-[#646462]">Sin puntuaciones en esta banda</span>
-                  </div>
-                </div>
-                <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#e9eae6]">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[#e8572a] font-bold text-[14px]">!</span>
-                      <span className="text-[13px] font-bold text-[#e8572a]">Pobre</span>
-                    </div>
-                    <span className="text-[12px] text-[#646462]">&gt; 500ms</span>
-                  </div>
-                  <div className="px-4 py-8 flex items-center justify-center gap-2">
-                    <span className="text-[13px]">🚩</span>
-                    <span className="text-[12px] text-[#646462]">Sin puntuaciones en esta banda</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end"><ShowMoreBtn /></div>
-            <div className="h-8"/>
-          </div>
-        </div>
-      )}
-
-      {/* ── PAGE REPORTS TAB ──────────────────────────────────────────────── */}
-      {waTab === 'reports' && (
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 py-4 space-y-4">
-            {/* Toolbar */}
-            <div className="flex items-center gap-2">
-              <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1.5v3M11 1.5v3M2 7h12" strokeLinecap="round"/></svg>
-                Últimos 7 días <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-              </button>
-              <button className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 2" strokeLinecap="round"/></svg>
-                Comparar con período anterior <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-              </button>
-              <input placeholder="Haz clic o escribe para ver las páginas principales, o pega una URL" className="flex-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] placeholder:text-[#b0b0ae] outline-none focus:border-[#3b59f6] bg-white"/>
-            </div>
-
-            {/* Empty state with two hedgehogs */}
-            <div className="border border-dashed border-[#e9eae6] rounded-[10px] flex items-center gap-8 px-10 py-12">
-              <div className="w-40 h-32 flex-shrink-0">
-                <svg viewBox="0 0 160 120" className="w-full h-full">
-                  {/* Hedgehog 1 (smaller, left) */}
-                  <circle cx="38" cy="68" r="22" fill="#c8a96e"/>
-                  <circle cx="38" cy="70" r="16" fill="#d4b482"/>
-                  <ellipse cx="33" cy="66" rx="2.5" ry="3" fill="#2d1a0a"/>
-                  <ellipse cx="43" cy="66" rx="2.5" ry="3" fill="#2d1a0a"/>
-                  <path d="M32 73 Q38 77 44 73" fill="none" stroke="#2d1a0a" strokeWidth="1.2" strokeLinecap="round"/>
-                  <rect x="30" y="84" width="16" height="14" rx="2" fill="#9ca3af"/>
-                  <rect x="26" y="87" width="7" height="10" rx="1.5" fill="#6b7280"/>
-                  <rect x="45" y="87" width="7" height="10" rx="1.5" fill="#6b7280"/>
-                  <rect x="31" y="96" width="4.5" height="5" rx="1" fill="#2d1a0a"/>
-                  <rect x="38" y="96" width="4.5" height="5" rx="1" fill="#2d1a0a"/>
-                  {/* Plant pot */}
-                  <rect x="56" y="75" width="18" height="20" rx="2" fill="#92400e"/>
-                  <ellipse cx="65" cy="75" rx="9" ry="4" fill="#a16207"/>
-                  <path d="M65 74 Q58 60 52 50" stroke="#16a34a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-                  <ellipse cx="50" cy="48" rx="6" ry="4" fill="#16a34a" transform="rotate(-30 50 48)"/>
-                  <path d="M65 74 Q72 62 78 52" stroke="#16a34a" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-                  <ellipse cx="80" cy="50" rx="6" ry="4" fill="#16a34a" transform="rotate(20 80 50)"/>
-                  {/* Hedgehog 2 (larger, right, standing) */}
-                  <circle cx="115" cy="52" r="26" fill="#c8a96e"/>
-                  <circle cx="115" cy="55" r="20" fill="#d4b482"/>
-                  <ellipse cx="109" cy="51" rx="3" ry="3.5" fill="#2d1a0a"/>
-                  <ellipse cx="121" cy="51" rx="3" ry="3.5" fill="#2d1a0a"/>
-                  <path d="M108 60 Q115 65 122 60" fill="none" stroke="#2d1a0a" strokeWidth="1.5" strokeLinecap="round"/>
-                  {/* Phone/tablet */}
-                  <rect x="124" y="38" width="20" height="30" rx="2.5" fill="#1e293b"/>
-                  <rect x="126" y="41" width="16" height="22" rx="1" fill="#3b82f6" opacity="0.8"/>
-                  <rect x="128" y="43" width="12" height="2.5" rx="0.5" fill="white" opacity="0.8"/>
-                  <rect x="128" y="47" width="8" height="2" rx="0.5" fill="white" opacity="0.5"/>
-                  <rect x="128" y="51" width="10" height="2" rx="0.5" fill="white" opacity="0.5"/>
-                  <rect x="128" y="55" width="6" height="2" rx="0.5" fill="white" opacity="0.5"/>
-                  <rect x="107" y="73" width="16" height="14" rx="2" fill="#9ca3af"/>
-                  <rect x="103" y="76" width="7" height="10" rx="1.5" fill="#6b7280"/>
-                  <rect x="122" y="76" width="7" height="10" rx="1.5" fill="#6b7280"/>
-                  <rect x="108" y="86" width="5" height="5.5" rx="1" fill="#2d1a0a"/>
-                  <rect x="116" y="86" width="5" height="5.5" rx="1" fill="#2d1a0a"/>
-                </svg>
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-[16px] font-bold text-[#1a1a1a]">Selecciona una página para analizar</h3>
-                <p className="text-[13px] text-[#646462] max-w-md leading-relaxed">
-                  Consulta métricas de rendimiento detalladas de cualquier página de tu sitio. Solo usa la barra de búsqueda de arriba para encontrar y seleccionar una página que quieras analizar.
-                </p>
-              </div>
-            </div>
-            <div className="h-8"/>
-          </div>
-        </div>
-      )}
+      {metric.hint && <p className="text-[10px] text-[#9ca3af] mt-1">{metric.hint}</p>}
     </div>
   );
 }
 
+function WaTopList({ title, icon, rows, loading, valueLabel, keyLabel, maxRows = 8, accent = '#3b59f6' }: {
+  title: string; icon: React.ReactNode; rows: WaTopRow[]; loading: boolean; valueLabel: string; keyLabel: string; maxRows?: number; accent?: string;
+}) {
+  const max = Math.max(...rows.map(r => r.value), 1);
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col">
+      <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center gap-2">
+        <span className="w-3.5 h-3.5 text-[#646462]">{icon}</span>
+        <h3 className="text-sm font-semibold text-[#1a1a18]">{title}</h3>
+      </div>
+      <div className="flex-1">
+        {loading ? (
+          <div className="p-4 space-y-2">{[0,1,2,3,4].map(i => <div key={i} className="h-6 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${80 - i * 8}%` }} />)}</div>
+        ) : rows.length === 0 ? (
+          <div className="px-4 py-8 text-center text-xs text-[#9ca3af]">Sin datos en este período</div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">{keyLabel}</th>
+                <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-24">{valueLabel}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(0, maxRows).map((r, i) => (
+                <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                  <td className="px-4 py-2 relative">
+                    <div className="absolute inset-y-0 left-0 opacity-[.08]" style={{ backgroundColor: accent, width: `${(r.value / max) * 100}%` }} />
+                    <span className="relative text-xs text-[#1a1a18] truncate block max-w-xs" title={r.key}>{r.key || '(sin valor)'}</span>
+                  </td>
+                  <td className="px-4 py-2 text-xs text-[#646462] text-right font-mono">{r.value.toLocaleString('es-ES')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WaTrendChart({ data, loading, height = 240 }: { data: WaTimeseries; loading: boolean; height?: number }) {
+  if (loading) return <div className="h-60 bg-[#f3f3f1] rounded animate-pulse" />;
+  if (!data.series.length || !data.series[0].values.length) return <div className="h-60 flex items-center justify-center text-xs text-[#9ca3af]">Sin datos para este rango</div>;
+  const all = data.series.flatMap(s => s.values);
+  const max = Math.max(...all, 1);
+  const W = 900, H = height;
+  const PAD = { l: 44, r: 16, t: 16, b: 32 };
+  const innerW = W - PAD.l - PAD.r;
+  const innerH = H - PAD.t - PAD.b;
+  const n = data.labels.length;
+  const xAt = (i: number) => PAD.l + (n > 1 ? (i * innerW) / (n - 1) : innerW / 2);
+  const yAt = (v: number) => PAD.t + innerH - (v / max) * innerH;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }}>
+      <defs>
+        {data.series.map((s, i) => (
+          <linearGradient key={i} id={`wa-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={s.color} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={s.color} stopOpacity="0" />
+          </linearGradient>
+        ))}
+      </defs>
+      {[0, 0.25, 0.5, 0.75, 1].map(f => {
+        const y = PAD.t + innerH * (1 - f);
+        const v = Math.round(max * f);
+        return (
+          <g key={f}>
+            <line x1={PAD.l} x2={W - PAD.r} y1={y} y2={y} stroke="#f3f3f1" strokeWidth="1" />
+            <text x={PAD.l - 6} y={y + 3} textAnchor="end" fontSize="10" fill="#9ca3af">{v.toLocaleString('es-ES')}</text>
+          </g>
+        );
+      })}
+      {data.labels.map((l, i) => i % Math.max(1, Math.ceil(n / 8)) === 0 && (
+        <text key={i} x={xAt(i)} y={H - 10} textAnchor="middle" fontSize="10" fill="#9ca3af">{String(l).slice(5, 10)}</text>
+      ))}
+      {data.series.map((s, si) => {
+        const d = s.values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i)} ${yAt(v)}`).join(' ');
+        const fillD = `${d} L ${xAt(s.values.length - 1)} ${PAD.t + innerH} L ${xAt(0)} ${PAD.t + innerH} Z`;
+        return (
+          <g key={si}>
+            <path d={fillD} fill={`url(#wa-grad-${si})`} />
+            <path d={d}     fill="none" stroke={s.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function WAAppWebAnalyticsView() {
+  const [range, setRange] = React.useState(WA_RANGES[2]);
+  const [showRange, setShowRange] = React.useState(false);
+  const rangeRef = useClickOutside<HTMLDivElement>(() => setShowRange(false));
+  const [filterInternal, setFilterInternal] = React.useState(true);
+  const [breakdownTab, setBreakdownTab] = React.useState<'pages' | 'sources' | 'channels' | 'countries' | 'devices' | 'browsers'>('pages');
+
+  const [metrics, setMetrics] = React.useState<{
+    visitors: WaMetric; pageviews: WaMetric; sessions: WaMetric; bounce: WaMetric; duration: WaMetric;
+  }>({
+    visitors:  { label: 'Visitantes únicos', value: null, prev: null, format: 'count',    hint: 'distinct_id únicos' },
+    pageviews: { label: 'Páginas vistas',     value: null, prev: null, format: 'count' },
+    sessions:  { label: 'Sesiones',           value: null, prev: null, format: 'count' },
+    bounce:    { label: 'Tasa de rebote',     value: null, prev: null, format: 'percent', hint: 'Sesiones con ≤1 página' },
+    duration:  { label: 'Duración media',     value: null, prev: null, format: 'duration' },
+  });
+  const [series, setSeries] = React.useState<WaTimeseries>({ labels: [], series: [] });
+  const [topPages, setTopPages] = React.useState<WaTopRow[]>([]);
+  const [topSources, setTopSources] = React.useState<WaTopRow[]>([]);
+  const [topChannels, setTopChannels] = React.useState<WaTopRow[]>([]);
+  const [topCountries, setTopCountries] = React.useState<WaTopRow[]>([]);
+  const [topDevices, setTopDevices] = React.useState<WaTopRow[]>([]);
+  const [topBrowsers, setTopBrowsers] = React.useState<WaTopRow[]>([]);
+
+  const [loadingKpis, setLoadingKpis] = React.useState(true);
+  const [loadingChart, setLoadingChart] = React.useState(true);
+  const [loadingTops, setLoadingTops] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const internalClause = filterInternal ? "AND coalesce(toString(properties.$is_internal), '') != 'true'" : '';
+
+  const loadKpis = React.useCallback(async () => {
+    setLoadingKpis(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const hogql = `
+        SELECT
+          uniqIf(distinct_id, timestamp >= now() - INTERVAL ${range.clickhouse}) AS visitors,
+          countIf(event = '$pageview' AND timestamp >= now() - INTERVAL ${range.clickhouse}) AS pageviews,
+          uniqIf(properties.$session_id, timestamp >= now() - INTERVAL ${range.clickhouse}) AS sessions,
+          uniqIf(distinct_id, timestamp >= now() - INTERVAL ${range.clickhouse} * 2 AND timestamp < now() - INTERVAL ${range.clickhouse}) AS visitors_prev,
+          countIf(event = '$pageview' AND timestamp >= now() - INTERVAL ${range.clickhouse} * 2 AND timestamp < now() - INTERVAL ${range.clickhouse}) AS pageviews_prev,
+          uniqIf(properties.$session_id, timestamp >= now() - INTERVAL ${range.clickhouse} * 2 AND timestamp < now() - INTERVAL ${range.clickhouse}) AS sessions_prev
+        FROM events
+        WHERE timestamp >= now() - INTERVAL ${range.clickhouse} * 2 ${internalClause}
+      `;
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hogql } });
+      const r = res.results?.[0] ?? [];
+      const [visitors, pageviews, sessions, visitors_prev, pageviews_prev, sessions_prev] = r;
+      let avg_dur: number | null = null, bounce_pct: number | null = null, avg_dur_prev: number | null = null, bounce_pct_prev: number | null = null;
+      try {
+        const sessHql = `
+          SELECT
+            avgIf(toFloat($session_duration), $start_timestamp >= now() - INTERVAL ${range.clickhouse}) AS avg_dur,
+            avgIf(toFloat($is_bounce), $start_timestamp >= now() - INTERVAL ${range.clickhouse}) * 100  AS bounce_pct,
+            avgIf(toFloat($session_duration), $start_timestamp >= now() - INTERVAL ${range.clickhouse} * 2 AND $start_timestamp < now() - INTERVAL ${range.clickhouse}) AS avg_dur_prev,
+            avgIf(toFloat($is_bounce), $start_timestamp >= now() - INTERVAL ${range.clickhouse} * 2 AND $start_timestamp < now() - INTERVAL ${range.clickhouse}) * 100 AS bounce_pct_prev
+          FROM sessions
+          WHERE $start_timestamp >= now() - INTERVAL ${range.clickhouse} * 2
+        `;
+        const s: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: sessHql } });
+        [avg_dur, bounce_pct, avg_dur_prev, bounce_pct_prev] = s.results?.[0] ?? [];
+      } catch {}
+      setMetrics({
+        visitors:  { label: 'Visitantes únicos', value: visitors ?? 0,  prev: visitors_prev ?? 0,  format: 'count', hint: 'distinct_id únicos' },
+        pageviews: { label: 'Páginas vistas',     value: pageviews ?? 0, prev: pageviews_prev ?? 0, format: 'count' },
+        sessions:  { label: 'Sesiones',           value: sessions ?? 0,  prev: sessions_prev ?? 0,  format: 'count' },
+        bounce:    { label: 'Tasa de rebote',     value: bounce_pct,     prev: bounce_pct_prev,     format: 'percent', hint: 'Sesiones con ≤1 página' },
+        duration:  { label: 'Duración media',     value: avg_dur,        prev: avg_dur_prev,        format: 'duration' },
+      });
+    } catch (e: any) { setError(e?.message ?? 'Error al cargar métricas'); }
+    finally { setLoadingKpis(false); }
+  }, [range, internalClause]);
+
+  const loadChart = React.useCallback(async () => {
+    setLoadingChart(true);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const unit = range.days <= 1 ? 'hour' : range.days <= 14 ? 'day' : range.days <= 90 ? 'day' : 'week';
+      const trunc = unit === 'hour' ? 'toStartOfHour(timestamp)' : unit === 'day' ? 'toDate(timestamp)' : 'toMonday(toDate(timestamp))';
+      const hogql = `
+        SELECT
+          ${trunc} AS bucket,
+          countIf(event = '$pageview')      AS pageviews,
+          uniq(distinct_id)                 AS visitors,
+          uniq(properties.$session_id)      AS sessions
+        FROM events
+        WHERE timestamp >= now() - INTERVAL ${range.clickhouse} ${internalClause}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `;
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hogql } });
+      const rows: any[][] = res.results ?? [];
+      setSeries({
+        labels: rows.map(r => String(r[0])),
+        series: [
+          { name: 'Páginas vistas', values: rows.map(r => Number(r[1] ?? 0)), color: '#3b59f6' },
+          { name: 'Visitantes',     values: rows.map(r => Number(r[2] ?? 0)), color: '#e8572a' },
+          { name: 'Sesiones',       values: rows.map(r => Number(r[3] ?? 0)), color: '#16a34a' },
+        ],
+      });
+    } catch { setSeries({ labels: [], series: [] }); }
+    finally { setLoadingChart(false); }
+  }, [range, internalClause]);
+
+  const loadTops = React.useCallback(async () => {
+    setLoadingTops(true);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const window = `timestamp >= now() - INTERVAL ${range.clickhouse} ${internalClause}`;
+      const queries = [
+        `SELECT properties.$current_url AS k, count() AS v FROM events WHERE event = '$pageview' AND ${window} GROUP BY k ORDER BY v DESC LIMIT 30`,
+        `SELECT coalesce(toString(properties.$referring_domain), '(directo)') AS k, count() AS v FROM events WHERE event = '$pageview' AND ${window} GROUP BY k ORDER BY v DESC LIMIT 30`,
+        `SELECT coalesce(toString(properties.$initial_utm_source), toString(properties.utm_source), '(orgánico)') AS k, uniq(distinct_id) AS v FROM events WHERE event = '$pageview' AND ${window} GROUP BY k ORDER BY v DESC LIMIT 30`,
+        `SELECT coalesce(toString(properties.$geoip_country_name), '(desconocido)') AS k, uniq(distinct_id) AS v FROM events WHERE ${window} GROUP BY k ORDER BY v DESC LIMIT 30`,
+        `SELECT coalesce(toString(properties.$device_type), '(desconocido)') AS k, uniq(distinct_id) AS v FROM events WHERE ${window} GROUP BY k ORDER BY v DESC LIMIT 30`,
+        `SELECT coalesce(toString(properties.$browser), '(desconocido)') AS k, uniq(distinct_id) AS v FROM events WHERE ${window} GROUP BY k ORDER BY v DESC LIMIT 30`,
+      ];
+      const results = await Promise.all(queries.map(q => ph.posthog.query({ query: { kind: 'HogQLQuery', query: q } }).catch(() => ({ results: [] }))));
+      const conv = (res: any): WaTopRow[] => (res.results ?? []).map((r: any[]) => ({ key: String(r[0] ?? ''), value: Number(r[1] ?? 0) }));
+      setTopPages(conv(results[0]));
+      setTopSources(conv(results[1]));
+      setTopChannels(conv(results[2]));
+      setTopCountries(conv(results[3]));
+      setTopDevices(conv(results[4]));
+      setTopBrowsers(conv(results[5]));
+    } catch {}
+    finally { setLoadingTops(false); }
+  }, [range, internalClause]);
+
+  React.useEffect(() => { loadKpis(); loadChart(); loadTops(); }, [loadKpis, loadChart, loadTops]);
+
+  const BREAKDOWN_TABS = [
+    { key: 'pages',     label: 'Páginas',       rows: topPages,     icon: <svg viewBox="0 0 16 16"><path d="M3 1h8l3 3v11H3z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round"/><path d="M11 1v3h3M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>, valueLabel: 'Vistas',     keyLabel: 'URL',         accent: '#3b59f6' },
+    { key: 'sources',   label: 'Fuentes',       rows: topSources,   icon: <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>, valueLabel: 'Vistas',     keyLabel: 'Dominio',     accent: '#e8572a' },
+    { key: 'channels',  label: 'Canales',       rows: topChannels,  icon: <svg viewBox="0 0 16 16"><path d="M2 8c2-4 5-6 6-6s4 2 6 6" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/><circle cx="8" cy="11" r="2" fill="currentColor"/></svg>, valueLabel: 'Visitantes', keyLabel: 'Canal',       accent: '#a855f7' },
+    { key: 'countries', label: 'Países',        rows: topCountries, icon: <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M2 6h12M2 10h12M8 2c2.5 1 2.5 11 0 12M8 2c-2.5 1-2.5 11 0 12" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>, valueLabel: 'Visitantes', keyLabel: 'País',        accent: '#16a34a' },
+    { key: 'devices',   label: 'Dispositivos',  rows: topDevices,   icon: <svg viewBox="0 0 16 16"><rect x="2" y="3" width="9" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4"/><rect x="11" y="6" width="3" height="9" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.4"/></svg>, valueLabel: 'Visitantes', keyLabel: 'Dispositivo', accent: '#06b6d4' },
+    { key: 'browsers',  label: 'Navegadores',   rows: topBrowsers,  icon: <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>, valueLabel: 'Visitantes', keyLabel: 'Navegador',   accent: '#f59e0b' },
+  ] as const;
+  const activeBreakdown = BREAKDOWN_TABS.find(b => b.key === breakdownTab)!;
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-auto">
+      <div className="bg-white px-6 pt-4 pb-3 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#16a34a]"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>
+              <h1 className="text-lg font-bold text-[#1a1a18]">Web analytics</h1>
+            </div>
+            <p className="text-xs text-[#646462]">Métricas web: visitantes, páginas, fuentes y comportamiento.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <label className="flex items-center gap-2 text-xs text-[#646462] cursor-pointer mr-2">
+              Filtrar internos
+              <button onClick={() => setFilterInternal(v => !v)} className={`relative w-8 h-4 rounded-full transition-colors ${filterInternal ? 'bg-[#3b59f6]' : 'bg-[#e9eae6]'}`}>
+                <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${filterInternal ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </button>
+            </label>
+            <div className="relative" ref={rangeRef}>
+              <button onClick={() => setShowRange(s => !s)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                {range.label}
+                <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>
+              </button>
+              {showRange && (
+                <div className="absolute right-0 top-full mt-1 w-56 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1">
+                  {WA_RANGES.map(r => (
+                    <button key={r.label} onClick={() => { setRange(r); setShowRange(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f9f9f7] ${range.label === r.label ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a18]'}`}>{r.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={() => { loadKpis(); loadChart(); loadTops(); }} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 p-6 space-y-5">
+        {error && <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b]">{error}</div>}
+
+        <div className="grid grid-cols-5 gap-3">
+          <WaMetricCard metric={metrics.visitors}  loading={loadingKpis} accent="#3b59f6" />
+          <WaMetricCard metric={metrics.pageviews} loading={loadingKpis} accent="#e8572a" />
+          <WaMetricCard metric={metrics.sessions}  loading={loadingKpis} accent="#16a34a" />
+          <WaMetricCard metric={metrics.bounce}    loading={loadingKpis} accent="#f59e0b" />
+          <WaMetricCard metric={metrics.duration}  loading={loadingKpis} accent="#a855f7" />
+        </div>
+
+        <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-[#1a1a18]">Tendencias</h3>
+            <div className="flex items-center gap-3">
+              {series.series.map((s, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-[11px] text-[#646462]">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                  {s.name}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="p-4"><WaTrendChart data={series} loading={loadingChart} /></div>
+        </div>
+
+        <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+          <div className="px-4 py-2 border-b border-[#e9eae6] flex items-center gap-1 overflow-x-auto">
+            {BREAKDOWN_TABS.map(b => (
+              <button key={b.key} onClick={() => setBreakdownTab(b.key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs whitespace-nowrap ${breakdownTab === b.key ? 'bg-[#eff2ff] text-[#3b59f6] font-medium' : 'text-[#646462] hover:bg-[#f9f9f7]'}`}>
+                <span className="w-3.5 h-3.5">{b.icon}</span>
+                {b.label}
+              </button>
+            ))}
+          </div>
+          <div className="p-4">
+            <WaTopList title={`Top ${activeBreakdown.label.toLowerCase()}`} icon={activeBreakdown.icon} rows={activeBreakdown.rows} loading={loadingTops} keyLabel={activeBreakdown.keyLabel} valueLabel={activeBreakdown.valueLabel} maxRows={15} accent={activeBreakdown.accent} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <WaTopList title="Top páginas" icon={BREAKDOWN_TABS[0].icon} rows={topPages.slice(0, 5)}     loading={loadingTops} keyLabel="URL"     valueLabel="Vistas"     accent="#3b59f6" />
+          <WaTopList title="Top fuentes" icon={BREAKDOWN_TABS[1].icon} rows={topSources.slice(0, 5)}   loading={loadingTops} keyLabel="Dominio" valueLabel="Vistas"     accent="#e8572a" />
+          <WaTopList title="Top países"  icon={BREAKDOWN_TABS[3].icon} rows={topCountries.slice(0, 5)} loading={loadingTops} keyLabel="País"    valueLabel="Visitantes" accent="#16a34a" />
+        </div>
+      </div>
+    </div>
+  );
+}
