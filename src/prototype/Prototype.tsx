@@ -45877,6 +45877,77 @@ function WASettingsView() {
     } catch {}
   }
 
+  // ── Quick start modal + search filter helpers ────────────────────────────
+  const [showQuickStart, setShowQuickStart] = React.useState(false);
+  const [showTokenDownloadDrop, setShowTokenDownloadDrop] = React.useState(false);
+  const tokenDownloadRef = useClickOutside<HTMLDivElement>(() => setShowTokenDownloadDrop(false));
+
+  function downloadTokenAsEnv() {
+    const content = `# Clain Analytics .env (proyecto: ${team?.name ?? displayName})\nPOSTHOG_API_KEY=${team?.api_token ?? ''}\nPOSTHOG_PROJECT_ID=${team?.id ?? team?.project_id ?? ''}\nPOSTHOG_HOST=${typeof window !== 'undefined' ? window.location.origin : 'https://app.example.com'}\n`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = '.env';
+    a.click(); URL.revokeObjectURL(a.href);
+    setShowTokenDownloadDrop(false);
+  }
+  function downloadTokenAsJson() {
+    const content = JSON.stringify({ apiKey: team?.api_token, projectId: team?.id ?? team?.project_id, host: typeof window !== 'undefined' ? window.location.origin : '' }, null, 2);
+    const blob = new Blob([content], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `clain-project-${team?.id ?? 'config'}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+    setShowTokenDownloadDrop(false);
+  }
+
+  // Map de page → keywords para la búsqueda
+  const PAGE_KEYWORDS: Record<SettingsPage, string> = {
+    'general':              'general token id sdk snippet api key clave proyecto',
+    'customization':        'personalización nombre zona horaria timezone semana moneda currency display',
+    'autocapture':          'autocaptura events web vitals dead clicks cls fcp lcp inp',
+    'ai':                   'ai inteligencia artificial max',
+    'mcp':                  'mcp servidor servers',
+    'error-tracking':       'errores exception stack trace tracking',
+    'experiments':          'experiments tests ab statistical method bayesian',
+    'feature-flags':        'feature flags flag toggle release',
+    'heatmaps':             'heatmaps mapas calor clicks',
+    'product-analytics':    'product analytics insights producto',
+    'revenue-analytics':    'revenue ingresos analytics conversion',
+    'session-replay':       'session replay grabaciones recording',
+    'support':              'support soporte tickets',
+    'surveys':              'surveys encuestas feedback nps csat',
+    'web-analytics':        'web analytics tráfico pageviews paginas',
+    'privacy':              'privacy privacidad gdpr cookies',
+    'access-control':       'access control permisos roles',
+    'activity-logs':        'activity audit logs registros actividad',
+    'approvals':            'approvals aprobaciones',
+    'discussions':          'discussions comentarios',
+    'integrations':         'integrations integraciones webhooks',
+    'danger-zone':          'danger zone peligro eliminar transferir',
+    'org-general':          'org organización general nombre',
+    'org-members':          'org miembros team equipo usuarios',
+    'org-roles':            'org roles permisos',
+    'org-sso':              'org sso saml single sign on',
+    'org-security':         'org security seguridad mfa 2fa password',
+    'org-oauth':            'org oauth applications',
+    'org-cimd':             'org cimd identity management',
+    'org-proxy':            'org proxy hosts',
+    'org-danger-zone':      'org peligro eliminar transferir organización',
+    'account-profile':      'account perfil profile usuario email contraseña',
+    'account-notifications':'account notificaciones email',
+    'account-customization':'account personalización tema theme',
+    'account-previews':     'account previsualizaciones beta previews',
+    'account-integrations': 'account integraciones personales',
+    'account-connected-apps':'account connected apps aplicaciones conectadas oauth',
+    'account-api-keys':     'account api keys claves personales tokens',
+    'account-danger-zone':  'account peligro eliminar cuenta',
+  };
+  function pageMatchesSearch(p: SettingsPage): boolean {
+    if (!settingsSearch.trim()) return true;
+    const q = settingsSearch.toLowerCase();
+    const labelKeywords = (PAGE_KEYWORDS[p] ?? '').toLowerCase();
+    return labelKeywords.includes(q);
+  }
+
   function Toggle({ val, set }: { val: boolean; set: (v: boolean) => void }) {
     return (
       <button
@@ -45925,12 +45996,22 @@ function WASettingsView() {
   // ── Sidebar NavItem ──────────────────────────────────────────────────────────
   function SNavItem({ p, label, indent, red }: { p: SettingsPage; label: string; indent?: boolean; red?: boolean }) {
     const active = page === p;
+    // Respect search filter — hide non-matching pages
+    if (!pageMatchesSearch(p)) return null;
+    // Highlight the search term in label
+    const q = settingsSearch.trim();
+    const renderLabel = () => {
+      if (!q) return label;
+      const idx = label.toLowerCase().indexOf(q.toLowerCase());
+      if (idx < 0) return label;
+      return <>{label.slice(0, idx)}<mark className="bg-[#fef3c7] text-[#1a1a1a] px-0.5 rounded">{label.slice(idx, idx + q.length)}</mark>{label.slice(idx + q.length)}</>;
+    };
     return (
       <button
         onClick={() => setPage(p)}
         className={`w-full text-left px-3 py-1.5 rounded-lg text-[13px] transition-colors ${indent ? 'pl-5' : ''} ${active ? 'bg-white text-[#1a1a1a] font-bold shadow-sm border border-[#e9eae6]' : red ? 'text-[#e8572a] font-medium hover:bg-[#fff5f2]' : 'text-[#1a1a1a] hover:bg-[#f3f3f1]'}`}
       >
-        {label}
+        {renderLabel()}
       </button>
     );
   }
@@ -46006,7 +46087,9 @@ function WASettingsView() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Token e ID de proyecto</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4zM9 2.5L12.5 6H9V2.5z"/></svg>
+              <span title="Estos identificadores autentican tus SDKs contra este entorno. Son únicos por proyecto y entorno." className="cursor-help">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4zM9 2.5L12.5 6H9V2.5z"/></svg>
+              </span>
             </div>
             <p className="text-[13px] text-[#646462] mb-4">Tu token e ID de proyecto para conectar SDKs y APIs a este entorno.</p>
 
@@ -46021,9 +46104,29 @@ function WASettingsView() {
                 <button onClick={() => copyToClipboard(String(token), 'token')} title="Copiar token" className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
                 </button>
-                <button onClick={resetProjectToken} disabled={resettingToken} title="Regenerar token" className="p-1 rounded hover:bg-[#fee2e2] text-[#dc2626] disabled:opacity-50">
-                  <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-none stroke-current ${resettingToken ? 'animate-spin' : ''}`} strokeWidth="1.5"><path d="M13 8A5 5 0 112 8" strokeLinecap="round"/><path d="M13 4v4h-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </button>
+                {/* Download/reset menu (original arrow-down icon preserved) */}
+                <div className="relative" ref={tokenDownloadRef}>
+                  <button onClick={() => setShowTokenDownloadDrop(d => !d)} title="Más acciones" className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M3 8l5 5 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                  {showTokenDownloadDrop && (
+                    <div className="absolute right-0 top-full mt-1 z-40 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1">
+                      <button onClick={downloadTokenAsEnv} className="w-full text-left px-3 py-1.5 text-xs hover:bg-[#f9f9f7] text-[#1a1a1a] flex items-center gap-2">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><path d="M8 2v8M5 7l3 3 3-3M2 13h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Descargar como <code className="text-[#3b59f6]">.env</code>
+                      </button>
+                      <button onClick={downloadTokenAsJson} className="w-full text-left px-3 py-1.5 text-xs hover:bg-[#f9f9f7] text-[#1a1a1a] flex items-center gap-2">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><path d="M8 2v8M5 7l3 3 3-3M2 13h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Descargar como <code className="text-[#3b59f6]">.json</code>
+                      </button>
+                      <div className="border-t border-[#f3f3f1] my-1" />
+                      <button onClick={() => { setShowTokenDownloadDrop(false); resetProjectToken(); }} disabled={resettingToken} className="w-full text-left px-3 py-1.5 text-xs hover:bg-[#fee2e2] text-[#dc2626] flex items-center gap-2 disabled:opacity-50">
+                        <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${resettingToken ? 'animate-spin' : ''}`}><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                        Regenerar token
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <p className="text-[12px] text-[#646462] mb-4">Clave de solo escritura para uso en <a href="https://posthog.com/docs/libraries" target="_blank" rel="noreferrer" className="text-[#e8572a] hover:underline">librerías de cliente</a>. Segura para usar en apps públicas.</p>
@@ -46048,7 +46151,9 @@ function WASettingsView() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Configuración del SDK</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4zM9 2.5L12.5 6H9V2.5z"/></svg>
+              <span title="Cada plataforma tiene su propia librería oficial. El snippet inicializa el SDK con tu token y la URL de tu instancia." className="cursor-help">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4zM9 2.5L12.5 6H9V2.5z"/></svg>
+              </span>
             </div>
             <p className="text-[13px] text-[#646462] mb-3">
               Instala Clain en tu app usando uno de nuestros SDKs. Selecciona tu plataforma para ver las instrucciones de configuración.{' '}
@@ -49203,7 +49308,7 @@ function WASettingsView() {
         <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.5 1.5M11 11l1.5 1.5M3.5 12.5L5 11M11 5l1.5-1.5"/></svg>
           <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">{pageTitles[page]}</span>
-          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+          <button onClick={() => setShowQuickStart(true)} className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
             Quick start
           </button>
@@ -49246,6 +49351,47 @@ function WASettingsView() {
         {page === 'account-danger-zone'     && <AccountDangerZonePage />}
         {!['general','customization','autocapture','ai','mcp','error-tracking','experiments','feature-flags','heatmaps','product-analytics','revenue-analytics','session-replay','support','surveys','web-analytics','privacy','access-control','activity-logs','approvals','discussions','org-general','org-members','org-roles','org-sso','org-security','org-oauth','org-cimd','org-proxy','account-customization','account-previews','account-integrations','account-connected-apps','account-api-keys','account-danger-zone'].includes(page) && <DevPage title={pageTitles[page]}/>}
       </div>
+
+      {/* Quick start modal */}
+      {showQuickStart && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setShowQuickStart(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[640px] max-w-[92vw] max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+                <h2 className="text-base font-bold text-[#1a1a18]">Quick start</h2>
+              </div>
+              <button onClick={() => setShowQuickStart(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              <p className="text-sm text-[#646462] mb-3">Pasos recomendados para terminar de configurar tu proyecto:</p>
+              {[
+                { key: 'token',   done: !!team?.api_token,                  label: 'Genera el token del proyecto',    desc: 'Copia el token desde Ajustes → General para usarlo en tus SDKs.',         action: () => setPage('general'),         actionLabel: 'Ir a General →' },
+                { key: 'sdk',     done: false,                              label: 'Integra el SDK en tu app',         desc: 'Añade el snippet HTML o instala el paquete según tu plataforma.',         action: () => setPage('general'),         actionLabel: 'Ver snippet →' },
+                { key: 'autocap', done: !!team?.autocapture_opt_out === false, label: 'Configura la auto-captura',       desc: 'Decide qué eventos quieres capturar automáticamente (pageviews, clicks, web vitals).', action: () => setPage('autocapture'),     actionLabel: 'Ir a Autocaptura →' },
+                { key: 'flags',   done: false,                              label: 'Crea tu primer feature flag',      desc: 'Activa funcionalidades de forma controlada con feature flags.',           action: () => setPage('feature-flags'),   actionLabel: 'Ir a Feature flags →' },
+                { key: 'replay',  done: !!team?.session_recording_opt_in,   label: 'Activa session replay',            desc: 'Re-vive las sesiones de tus usuarios para entender problemas reales.',     action: () => setPage('session-replay'),  actionLabel: 'Ir a Session replay →' },
+                { key: 'members', done: false,                              label: 'Invita a tu equipo',               desc: 'Comparte el proyecto con tus compañeros.',                                action: () => setPage('org-members'),     actionLabel: 'Ir a Miembros →' },
+              ].map(step => (
+                <div key={step.key} className="flex items-start gap-3 p-3 border border-[#e9eae6] rounded-lg hover:bg-[#fafaf9]">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${step.done ? 'bg-[#16a34a]' : 'bg-[#f3f3f1] border border-[#d1d5db]'}`}>
+                    {step.done && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M13 4L6 11 3 8" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${step.done ? 'text-[#16a34a] line-through' : 'text-[#1a1a18]'}`}>{step.label}</p>
+                    <p className="text-xs text-[#646462] mt-0.5">{step.desc}</p>
+                  </div>
+                  <button onClick={() => { step.action(); setShowQuickStart(false); }} className="text-xs text-[#3b59f6] hover:underline flex-shrink-0">{step.actionLabel}</button>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-3 bg-[#fafaf9] border-t border-[#e9eae6] flex items-center justify-between">
+              <p className="text-[10px] text-[#9ca3af]">Esta lista se actualiza automáticamente al detectar tu configuración.</p>
+              <button onClick={() => setShowQuickStart(false)} className="px-3 py-1.5 bg-[#1a1a18] text-white text-xs rounded-lg">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
