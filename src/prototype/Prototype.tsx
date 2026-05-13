@@ -29230,206 +29230,569 @@ function WAAppClustersView() {
   );
 }
 
-function WAAppPlaygroundView() {
-  const [model, setModel] = useState('gpt-5-mini');
-  const [showModelDrop, setShowModelDrop] = useState(false);
-  const [showSettingsDrop, setShowSettingsDrop] = useState(false);
-  const [systemCollapsed, setSystemCollapsed] = useState(false);
-  const [systemText, setSystemText] = useState('You are a helpful AI assistant.');
-  const [messages, setMessages] = useState<{role:'user'|'assistant';text:string}[]>([]);
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<string|null>(null);
-  const [showTools, setShowTools] = useState(false);
-  const [temperature, setTemperature] = useState('1.0');
-  const [maxTokens, setMaxTokens] = useState('1024');
-  const [showModelSub, setShowModelSub] = useState<string|null>(null);
+// â”€â”€ WAAppPlaygroundView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog LLM Playground â€” test prompts side-by-side with multiple models.
+//
+// Backends supported:
+//   1. PostHog Max AI (default, always available via conversations SSE)
+//   2. OpenAI direct (user provides API key, stored in localStorage)
+//   3. Anthropic direct (user provides API key, stored in localStorage)
+//
+// Every run is logged back to PostHog as `$ai_generation` so the call shows
+// up in LLM Analytics and Clusters.
 
-  const PROVIDERS = [
-    { id:'openai',   label:'OpenAI',        models:['gpt-5-mini','gpt-5','gpt-4o','gpt-4o-mini','gpt-4-turbo','o3','o4-mini'],
-      icon:<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#1a1a1a" strokeWidth="1.2"/><circle cx="8" cy="8" r="2.5" fill="#1a1a1a"/></svg> },
-    { id:'anthropic',label:'Anthropic',     models:['claude-opus-4','claude-sonnet-4-5','claude-haiku-3-5'],
-      icon:<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2L13 13H3L8 2z" stroke="#1a1a1a" strokeWidth="1.3" strokeLinejoin="round"/></svg> },
-    { id:'google',   label:'Google Gemini', models:['gemini-2.5-pro','gemini-2.0-flash','gemini-1.5-pro'],
-      icon:<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.2 3.5H13l-3 2.2 1.2 3.5L8 9.3l-3.2 2 1.2-3.5-3-2.2h3.8L8 2z" stroke="#4285f4" strokeWidth="1" strokeLinejoin="round" fill="none"/></svg> },
-  ];
+interface PlaygroundMessage {
+  role:    'system' | 'user' | 'assistant';
+  content: string;
+}
 
-  const handleRun = () => {
-    setRunning(true); setResult(null);
-    setTimeout(() => { setRunning(false); setResult("Hello! I'm an AI assistant. I'm here to help you with any questions or tasks you might have. What can I do for you today?"); }, 1800);
+interface PlaygroundRun {
+  id:           string;
+  ts:           number;
+  provider:     'max' | 'openai' | 'anthropic';
+  model:        string;
+  system:       string;
+  user_prompt:  string;
+  output:       string;
+  tokens_in?:   number;
+  tokens_out?:  number;
+  cost_usd?:    number;
+  latency_s?:   number;
+  error?:       string;
+  variables?:   Record<string, string>;
+}
+
+interface PromptTemplate {
+  id:          string;
+  name:        string;
+  description: string;
+  system:      string;
+  user:        string;
+  variables:   string[];
+}
+
+const PLAYGROUND_MODELS: { provider: 'max' | 'openai' | 'anthropic'; key: string; label: string; color: string; cost_per_1k_in?: number; cost_per_1k_out?: number }[] = [
+  { provider: 'max',       key: 'max',                  label: 'PostHog Max AI',     color: '#3b59f6' },
+  { provider: 'openai',    key: 'gpt-4o',               label: 'GPT-4o',             color: '#16a34a', cost_per_1k_in: 0.0025, cost_per_1k_out: 0.010 },
+  { provider: 'openai',    key: 'gpt-4o-mini',          label: 'GPT-4o mini',        color: '#16a34a', cost_per_1k_in: 0.00015, cost_per_1k_out: 0.0006 },
+  { provider: 'openai',    key: 'gpt-4-turbo',          label: 'GPT-4 Turbo',        color: '#16a34a', cost_per_1k_in: 0.010, cost_per_1k_out: 0.030 },
+  { provider: 'openai',    key: 'o1-mini',              label: 'o1 mini',            color: '#16a34a', cost_per_1k_in: 0.003, cost_per_1k_out: 0.012 },
+  { provider: 'anthropic', key: 'claude-3-5-sonnet-20241022',  label: 'Claude 3.5 Sonnet',  color: '#e8572a', cost_per_1k_in: 0.003, cost_per_1k_out: 0.015 },
+  { provider: 'anthropic', key: 'claude-3-5-haiku-20241022',   label: 'Claude 3.5 Haiku',   color: '#e8572a', cost_per_1k_in: 0.0008, cost_per_1k_out: 0.004 },
+  { provider: 'anthropic', key: 'claude-3-opus-20240229',      label: 'Claude 3 Opus',      color: '#e8572a', cost_per_1k_in: 0.015, cost_per_1k_out: 0.075 },
+];
+
+const PROMPT_TEMPLATES: PromptTemplate[] = [
+  { id: 'summarize', name: 'Resumir texto',           description: 'Resume un texto largo en 3 puntos clave.',     system: 'Eres un asistente que resume textos de forma concisa.', user: 'Resume este texto en 3 puntos clave:\n\n{{texto}}',                  variables: ['texto'] },
+  { id: 'classify',  name: 'Clasificar feedback',     description: 'Clasifica feedback como positivo/negativo/neutro.', system: 'Eres un experto en anÃ¡lisis de sentimiento.',           user: 'Clasifica este feedback como positivo, negativo o neutro y explica por quÃ©:\n\n{{feedback}}', variables: ['feedback'] },
+  { id: 'translate', name: 'Traducir',                description: 'Traduce texto a otro idioma.',                 system: 'Eres un traductor profesional.',                       user: 'Traduce a {{idioma}}:\n\n{{texto}}',                                 variables: ['idioma', 'texto'] },
+  { id: 'extract',   name: 'Extraer datos JSON',       description: 'Extrae informaciÃ³n estructurada como JSON.',   system: 'Devuelves solo JSON vÃ¡lido sin explicaciones.',         user: 'Extrae nombre, email y telÃ©fono de este texto como JSON:\n\n{{texto}}', variables: ['texto'] },
+  { id: 'code',      name: 'Revisar cÃ³digo',          description: 'Revisa cÃ³digo y sugiere mejoras.',             system: 'Eres un senior software engineer experto en revisiones de cÃ³digo.', user: 'Revisa este cÃ³digo y sugiere mejoras concretas:\n\n```\n{{codigo}}\n```', variables: ['codigo'] },
+  { id: 'email',     name: 'Borrador de email',       description: 'Redacta un email profesional.',                system: 'Escribes emails profesionales en espaÃ±ol, claros y concisos.', user: 'Redacta un email a {{destinatario}} sobre:\n\n{{tema}}',           variables: ['destinatario', 'tema'] },
+];
+
+// Replace {{ variable }} placeholders
+function substituteVars(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, name) => vars[name] ?? `{{${name}}}`);
+}
+
+function extractVars(template: string): string[] {
+  const found = new Set<string>();
+  const re = /\{\{\s*(\w+)\s*\}\}/g;
+  let m;
+  while ((m = re.exec(template)) != null) found.add(m[1]);
+  return Array.from(found);
+}
+
+function estimateTokens(text: string): number {
+  // Rough estimate: ~4 chars per token
+  return Math.ceil(text.length / 4);
+}
+
+function pgFormatCost(usd: number): string {
+  if (usd < 0.0001) return `<$0.0001`;
+  if (usd < 1)      return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
+}
+
+// â”€â”€ Single output panel (one model's result) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function PlaygroundOutputPanel({ pane, onClose, canClose }: {
+  pane: {
+    id:        string;
+    modelKey:  string;
+    state:     'idle' | 'running' | 'done' | 'error';
+    output:    string;
+    tokens_in?:  number;
+    tokens_out?: number;
+    cost?:     number;
+    latency?:  number;
+    error?:    string;
   };
-
+  onClose: () => void;
+  canClose: boolean;
+}) {
+  const model = PLAYGROUND_MODELS.find(m => m.key === pane.modelKey) ?? PLAYGROUND_MODELS[0];
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden" onClick={() => { setShowModelDrop(false); setShowSettingsDrop(false); setShowModelSub(null); }}>
-      {/* Header */}
-      <div className="flex items-start justify-between px-6 pt-5 pb-3 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M3 5h12M3 9h8M3 13h5" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round"/>
-              <path d="M13 11l2 2-2 2" stroke="#8b5cf6" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <h1 className="text-[16px] font-bold text-[#1a1a1a]">Playground</h1>
-          </div>
-          <p className="text-[13px] text-[#646462]">Test and experiment with LLM prompts in a sandbox environment.</p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v3l2 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-            Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">0</span>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7a5 5 0 015-5 5 5 0 014.3 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M12 7a5 5 0 01-5 5 5 5 0 01-4.3-2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M11.5 2.5v2.5H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-            Add prompt
-          </button>
-          <button onClick={handleRun} className={`flex items-center gap-1.5 px-4 py-1.5 border rounded-lg text-[12px] font-semibold transition-colors ${running ? 'border-[#e9eae6] text-[#9ca3af] bg-[#f9f9f7]' : 'border-[#1a1a1a] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]'}`}>
-            {running ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="animate-spin"><circle cx="6" cy="6" r="5" stroke="#9ca3af" strokeWidth="1.5" strokeDasharray="8 8"/></svg> : <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>}
-            {running ? 'Running…' : 'Run'}
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-4 gap-3">
-        {/* Model + Settings row */}
-        <div className="flex items-center gap-3">
-          <div className="relative" onClick={e => e.stopPropagation()}>
-            <button onClick={() => { setShowModelDrop(!showModelDrop); setShowSettingsDrop(false); }} className="flex items-center gap-2 pl-3 pr-2 py-2 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] min-w-[260px] font-medium">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#1a1a1a" strokeWidth="1.2"/><circle cx="8" cy="8" r="2.5" fill="#1a1a1a"/></svg>
-              <span className="flex-1 text-left">{model}</span>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-            {showModelDrop && (
-              <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-xl shadow-xl z-50 w-72 overflow-hidden py-1">
-                <div className="px-3 py-2 border-b border-[#e9eae6]">
-                  <div className="flex items-center gap-2 px-2 py-1.5 bg-[#f9f9f7] rounded-lg">
-                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="text-[#9ca3af]"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M9 9l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                    <input type="text" placeholder="Find a model..." className="flex-1 text-[12px] bg-transparent outline-none text-[#1a1a1a] placeholder-[#9ca3af]" autoFocus />
-                  </div>
-                </div>
-                {PROVIDERS.map(prov => (
-                  <div key={prov.id}>
-                    <button onClick={() => setShowModelSub(showModelSub === prov.id ? null : prov.id)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-[#1a1a1a] hover:bg-[#f9f9f7] font-medium">
-                      <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{prov.icon}</span>
-                      <span className="flex-1 text-left">{prov.label}</span>
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="#9ca3af" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    {showModelSub === prov.id && (
-                      <div className="bg-[#f9f9f7] border-t border-b border-[#e9eae6]">
-                        {prov.models.map(m => (
-                          <button key={m} onClick={() => { setModel(m); setShowModelDrop(false); setShowModelSub(null); }} className={`w-full text-left pl-10 pr-4 py-2 text-[12px] hover:bg-[#f3f4f6] ${model === m ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>{m}</button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div className="px-4 py-2.5 border-t border-[#e9eae6]">
-                  <button className="text-[12px] text-[#e8572a] font-medium hover:underline">Add your own API keys</button>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="relative" onClick={e => e.stopPropagation()}>
-            <button onClick={() => { setShowSettingsDrop(!showSettingsDrop); setShowModelDrop(false); }} className="flex items-center gap-2 px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2" stroke="#646462" strokeWidth="1.2"/><path d="M7 1.5v1M7 11.5v1M1.5 7h1M11.5 7h1M3.2 3.2l.7.7M10.1 10.1l.7.7M10.1 3.2l-.7.7M3.9 10.1l-.7.7" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              Settings
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-            {showSettingsDrop && (
-              <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-xl shadow-xl z-50 w-64 p-4 flex flex-col gap-3">
-                <h3 className="text-[12px] font-semibold text-[#1a1a1a]">Model settings</h3>
-                {[{ label:'Temperature', value:temperature, set:setTemperature, min:'0', max:'2', step:'0.1' }, { label:'Max tokens', value:maxTokens, set:setMaxTokens, min:'1', max:'128000', step:'1' }].map(s => (
-                  <div key={s.label} className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-[#646462]">{s.label}</span>
-                      <span className="text-[11px] font-semibold text-[#1a1a1a]">{s.value}</span>
-                    </div>
-                    <input type="range" min={s.min} max={s.max} step={s.step} value={s.value} onChange={e => s.set(e.target.value)} className="w-full accent-[#3b59f6]" />
-                  </div>
-                ))}
-                <div className="flex flex-col gap-1">
-                  <span className="text-[11px] text-[#646462]">Response format</span>
-                  <select className="px-2 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white"><option>Text</option><option>JSON object</option></select>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Prompt editor card */}
-        <div className="border border-[#e9eae6] rounded-xl overflow-hidden bg-white">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-[#fafafa] border-b border-[#e9eae6]">
-            <button onClick={() => setSystemCollapsed(!systemCollapsed)} className="text-[#646462] hover:text-[#1a1a1a]">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: systemCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}><path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded border border-[#8b5cf6] text-[#8b5cf6]">System</span>
-            <div className="flex-1" />
-            <button className="text-[#9ca3af] hover:text-[#646462]"><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="4" y="1" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1 4v8h8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-            <button className="text-[#9ca3af] hover:text-[#646462] ml-1"><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 10.5l1.5-1.5m0 0L9 3.5a1.5 1.5 0 012 2L5.5 11m-2-2L5.5 11m-4 1h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-          </div>
-          {!systemCollapsed && (
-            <div className="flex">
-              <div className="w-1 bg-[#8b5cf6] flex-shrink-0 self-stretch" />
-              <textarea value={systemText} onChange={e => setSystemText(e.target.value)} className="flex-1 px-4 py-3 text-[13px] text-[#1a1a1a] resize-none min-h-[80px] focus:outline-none bg-white leading-relaxed" placeholder="Enter system prompt..." />
-            </div>
+    <div className="flex-1 border border-[#e9eae6] rounded-xl bg-white flex flex-col min-w-0">
+      <div className="px-4 py-2.5 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: model.color }} />
+        <span className="text-xs font-mono font-medium text-[#1a1a18] truncate">{model.label}</span>
+        <span className="text-[10px] text-[#9ca3af] uppercase tracking-widest ml-1">{model.provider}</span>
+        <div className="ml-auto flex items-center gap-1">
+          {pane.state === 'running' && (
+            <div className="w-3 h-3 border-2 border-[#3b59f6] border-t-transparent rounded-full animate-spin" />
           )}
-          {messages.map((msg, i) => (
-            <div key={i} className="flex border-t border-[#e9eae6]">
-              <div className={`w-1 flex-shrink-0 ${msg.role === 'user' ? 'bg-[#3b59f6]' : 'bg-[#10b981]'}`} />
-              <div className="flex-1 px-4 py-3">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${msg.role === 'user' ? 'border-[#3b59f6] text-[#3b59f6]' : 'border-[#10b981] text-[#10b981]'}`}>{msg.role === 'user' ? 'User' : 'Assistant'}</span>
-                  <div className="flex-1" />
-                  <button onClick={() => setMessages(messages.filter((_,j) => j !== i))} className="text-[#9ca3af] hover:text-red-500"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg></button>
-                </div>
-                <p className="text-[13px] text-[#1a1a1a] leading-relaxed">{msg.text}</p>
-              </div>
-            </div>
-          ))}
-          <div className="flex items-center gap-2 px-4 py-3 border-t border-[#e9eae6] bg-[#fafafa]">
-            <button onClick={() => setMessages([...messages, { role:'user', text:'Hello!' }])} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-white font-medium">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> Message
+          {canClose && (
+            <button onClick={onClose} className="text-[#9ca3af] hover:text-[#dc2626] p-0.5">
+              <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </button>
-            <button onClick={() => setShowTools(!showTools)} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-[12px] font-medium transition-colors ${showTools ? 'border-[#3b59f6] text-[#3b59f6] bg-[#eff2ff]' : 'border-[#e9eae6] text-[#1a1a1a] bg-white hover:bg-white'}`}>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 10.5l3-3m0 0a2.5 2.5 0 103.5-3.5l-1 1-2.5 2.5zm3-3L9 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> Tools
-            </button>
-          </div>
-        </div>
-
-        {/* Result area */}
-        <div className="border border-[#e9eae6] rounded-xl overflow-hidden bg-[#f9f9f7] flex flex-col min-h-[180px]">
-          <div className="px-4 py-2 border-b border-[#e9eae6]">
-            <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Result</span>
-          </div>
-          <div className="flex-1 flex items-center justify-center p-6">
-            {running ? (
-              <div className="flex flex-col items-center gap-2">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="animate-spin text-[#3b59f6]"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="16 16" opacity=".3"/><path d="M12 2a10 10 0 0110 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-                <span className="text-[12px] text-[#9ca3af]">Running prompt…</span>
-              </div>
-            ) : result ? (
-              <div className="w-full"><p className="text-[13px] text-[#1a1a1a] leading-relaxed">{result}</p></div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-center">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none" className="text-[#d1d5db]"><path d="M5 4l13 7-13 7V4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-                <span className="text-[12px] text-[#9ca3af]">Run prompt to see result</span>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
+      <div className="flex-1 overflow-auto p-4 min-h-0">
+        {pane.state === 'idle' ? (
+          <p className="text-xs text-[#9ca3af] italic">Pulsa "Ejecutar" para ver la respuesta.</p>
+        ) : pane.state === 'error' ? (
+          <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b]">
+            <p className="font-semibold mb-1">Error</p>
+            <pre className="font-mono whitespace-pre-wrap break-words">{pane.error}</pre>
+          </div>
+        ) : pane.state === 'running' && !pane.output ? (
+          <div className="space-y-2">
+            <div className="h-3 bg-[#f3f3f1] rounded animate-pulse w-full" />
+            <div className="h-3 bg-[#f3f3f1] rounded animate-pulse w-5/6" />
+            <div className="h-3 bg-[#f3f3f1] rounded animate-pulse w-4/6" />
+          </div>
+        ) : (
+          <div className="prose prose-sm max-w-none">
+            <pre className="text-xs whitespace-pre-wrap break-words font-sans text-[#1a1a18]">{pane.output}{pane.state === 'running' && <span className="inline-block w-0.5 h-3 bg-[#3b59f6] animate-pulse ml-0.5 align-middle" />}</pre>
+          </div>
+        )}
+      </div>
+      {pane.state === 'done' && (
+        <div className="px-4 py-2 border-t border-[#e9eae6] flex items-center gap-3 text-[10px] text-[#9ca3af] flex-shrink-0">
+          <span>{pane.tokens_in ?? '~'} in</span>
+          <span>Â·</span>
+          <span>{pane.tokens_out ?? '~'} out</span>
+          {pane.cost != null && <><span>Â·</span><span className="font-mono text-[#1a1a18]">{pgFormatCost(pane.cost)}</span></>}
+          {pane.latency != null && <><span>Â·</span><span>{pane.latency.toFixed(2)}s</span></>}
+          <button
+            onClick={() => navigator.clipboard.writeText(pane.output)}
+            className="ml-auto text-[#646462] hover:text-[#1a1a18]"
+            title="Copiar"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="4" y="4" width="9" height="9" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M11 4V3a1 1 0 00-1-1H4a1 1 0 00-1 1v6a1 1 0 001 1h1" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── WAAppErrorTrackingView ────────────────────────────────────────────────────
+function WAAppPlaygroundView() {
+  type Pane = {
+    id: string;
+    modelKey: string;
+    state: 'idle' | 'running' | 'done' | 'error';
+    output: string;
+    tokens_in?: number;
+    tokens_out?: number;
+    cost?: number;
+    latency?: number;
+    error?: string;
+  };
+
+  const [system,   setSystem]    = React.useState('Eres un asistente Ãºtil que responde con concisiÃ³n.');
+  const [userMsg,  setUserMsg]   = React.useState('Hola, Â¿quÃ© puedes hacer?');
+  const [variables, setVariables] = React.useState<Record<string, string>>({});
+  const [panes,    setPanes]     = React.useState<Pane[]>([
+    { id: crypto.randomUUID(), modelKey: 'max',          state: 'idle', output: '' },
+    { id: crypto.randomUUID(), modelKey: 'gpt-4o-mini',  state: 'idle', output: '' },
+  ]);
+  const [history,    setHistory]    = React.useState<PlaygroundRun[]>([]);
+  const [showHistory, setShowHistory] = React.useState(false);
+  const [showTemplates, setShowTemplates] = React.useState(false);
+  const [showSettings,  setShowSettings]  = React.useState(false);
+  const [openaiKey,     setOpenaiKey]     = React.useState('');
+  const [anthropicKey,  setAnthropicKey]  = React.useState('');
+  const [logToPosthog,  setLogToPosthog]  = React.useState(true);
+
+  // Persist keys + settings
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('wa-playground-keys');
+      if (raw) { const k = JSON.parse(raw); setOpenaiKey(k.openai ?? ''); setAnthropicKey(k.anthropic ?? ''); }
+      const rawH = localStorage.getItem('wa-playground-history');
+      if (rawH) setHistory(JSON.parse(rawH));
+      const rawS = localStorage.getItem('wa-playground-log');
+      if (rawS) setLogToPosthog(JSON.parse(rawS));
+    } catch {}
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-playground-keys', JSON.stringify({ openai: openaiKey, anthropic: anthropicKey })); } catch {}
+  }, [openaiKey, anthropicKey]);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-playground-history', JSON.stringify(history.slice(0, 100))); } catch {}
+  }, [history]);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-playground-log', JSON.stringify(logToPosthog)); } catch {}
+  }, [logToPosthog]);
+
+  const detectedVars = React.useMemo(() => Array.from(new Set([...extractVars(system), ...extractVars(userMsg)])), [system, userMsg]);
+  const finalSystem  = substituteVars(system, variables);
+  const finalUser    = substituteVars(userMsg, variables);
+
+  function addPane(modelKey = 'gpt-4o') {
+    if (panes.length >= 4) return;
+    setPanes(prev => [...prev, { id: crypto.randomUUID(), modelKey, state: 'idle', output: '' }]);
+  }
+  function removePane(id: string) {
+    if (panes.length === 1) return;
+    setPanes(prev => prev.filter(p => p.id !== id));
+  }
+  function setPaneModel(id: string, modelKey: string) {
+    setPanes(prev => prev.map(p => p.id === id ? { ...p, modelKey, state: 'idle', output: '' } : p));
+  }
+  function updatePane(id: string, patch: Partial<Pane>) {
+    setPanes(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+  }
+
+  // â”€â”€ Run a single pane â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  async function runPane(pane: Pane) {
+    const model = PLAYGROUND_MODELS.find(m => m.key === pane.modelKey);
+    if (!model) return;
+    updatePane(pane.id, { state: 'running', output: '', error: undefined });
+    const t0 = performance.now();
+
+    try {
+      let output = '';
+      let tokens_in: number | undefined, tokens_out: number | undefined, cost: number | undefined;
+
+      if (model.provider === 'max') {
+        // Use PostHog's Max AI via conversations SSE
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        await ph.phStream(
+          `/api/environments/${ph.getTeamId()}/conversations/`,
+          { content: `${finalSystem ? `[Sistema: ${finalSystem}]\n\n` : ''}${finalUser}`, trace_id: crypto.randomUUID() },
+          (event) => {
+            if (event.type === 'message' || event.type === 'ai_message') {
+              const msg = event.data;
+              if (msg?.type === 'ai' && typeof msg.content === 'string') {
+                output = msg.content;
+                updatePane(pane.id, { output, state: 'running' });
+              }
+            }
+            if (event.type === 'ai_message_chunk' && typeof event.data?.content === 'string') {
+              output += event.data.content;
+              updatePane(pane.id, { output, state: 'running' });
+            }
+          }
+        );
+        tokens_in  = estimateTokens(finalSystem + finalUser);
+        tokens_out = estimateTokens(output);
+        cost       = 0; // PostHog Max is part of subscription
+      } else if (model.provider === 'openai') {
+        if (!openaiKey) throw new Error('Falta API key de OpenAI. Ãbrela en Ajustes.');
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+          body: JSON.stringify({
+            model: model.key,
+            messages: [
+              ...(finalSystem ? [{ role: 'system', content: finalSystem }] : []),
+              { role: 'user', content: finalUser },
+            ],
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error?.message ?? `OpenAI ${res.status}`);
+        output     = data.choices?.[0]?.message?.content ?? '';
+        tokens_in  = data.usage?.prompt_tokens;
+        tokens_out = data.usage?.completion_tokens;
+        cost       = (tokens_in ?? 0) / 1000 * (model.cost_per_1k_in ?? 0) + (tokens_out ?? 0) / 1000 * (model.cost_per_1k_out ?? 0);
+      } else if (model.provider === 'anthropic') {
+        if (!anthropicKey) throw new Error('Falta API key de Anthropic. Ãbrela en Ajustes.');
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': anthropicKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: model.key,
+            max_tokens: 1024,
+            system: finalSystem || undefined,
+            messages: [{ role: 'user', content: finalUser }],
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error?.message ?? `Anthropic ${res.status}`);
+        output     = data.content?.[0]?.text ?? '';
+        tokens_in  = data.usage?.input_tokens;
+        tokens_out = data.usage?.output_tokens;
+        cost       = (tokens_in ?? 0) / 1000 * (model.cost_per_1k_in ?? 0) + (tokens_out ?? 0) / 1000 * (model.cost_per_1k_out ?? 0);
+      }
+
+      const latency = (performance.now() - t0) / 1000;
+      updatePane(pane.id, { output, state: 'done', tokens_in, tokens_out, cost, latency, error: undefined });
+
+      // Log run to history + (optionally) to PostHog as $ai_generation
+      const run: PlaygroundRun = {
+        id: crypto.randomUUID(), ts: Date.now(), provider: model.provider, model: model.key,
+        system: finalSystem, user_prompt: finalUser, output, tokens_in, tokens_out, cost_usd: cost, latency_s: latency, variables,
+      };
+      setHistory(prev => [run, ...prev].slice(0, 100));
+
+      if (logToPosthog) {
+        try {
+          const ph = await import('../api/posthog');
+          if (!ph.getTeamId()) await ph.bootstrapPostHog();
+          await ph.phPost(`/api/environments/${ph.getTeamId()}/events/`, {
+            event: '$ai_generation',
+            distinct_id: ph.getCurrentUser()?.uuid ?? 'playground',
+            properties: {
+              $ai_provider:        model.provider,
+              $ai_model:           model.key,
+              $ai_input_tokens:    tokens_in,
+              $ai_output_tokens:   tokens_out,
+              $ai_total_cost_usd:  cost,
+              $ai_latency:         latency,
+              $ai_is_error:        false,
+              $ai_input:           [{ role: 'system', content: finalSystem }, { role: 'user', content: finalUser }],
+              $ai_output:          output,
+              $ai_trace_id:        run.id,
+              $ai_source:          'playground',
+            },
+          }).catch(() => { /* event endpoint may not accept POST writes â€” silent */ });
+        } catch { /* silent */ }
+      }
+    } catch (e: any) {
+      const latency = (performance.now() - t0) / 1000;
+      updatePane(pane.id, { state: 'error', error: e?.message ?? 'Error desconocido', latency });
+      setHistory(prev => [{
+        id: crypto.randomUUID(), ts: Date.now(), provider: model.provider, model: model.key,
+        system: finalSystem, user_prompt: finalUser, output: '', error: e?.message, latency_s: latency, variables,
+      }, ...prev].slice(0, 100));
+    }
+  }
+
+  async function runAll() {
+    await Promise.all(panes.map(p => runPane(p)));
+  }
+
+  function applyTemplate(tpl: PromptTemplate) {
+    setSystem(tpl.system); setUserMsg(tpl.user);
+    setVariables(tpl.variables.reduce((acc, v) => ({ ...acc, [v]: '' }), {} as Record<string, string>));
+    setShowTemplates(false);
+  }
+
+  function applyHistory(run: PlaygroundRun) {
+    setSystem(run.system); setUserMsg(run.user_prompt);
+    if (run.variables) setVariables(run.variables);
+    setShowHistory(false);
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="bg-white px-6 pt-4 pb-3 border-b border-[#e9eae6] flex-shrink-0 flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#a855f7]"><path d="M4 3l9 5-9 5z" fill="currentColor"/></svg>
+            <h1 className="text-lg font-bold text-[#1a1a18]">Playground</h1>
+            <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-2 py-0.5 rounded font-semibold">BETA</span>
+          </div>
+          <p className="text-xs text-[#646462]">Compara prompts en varios modelos. Cada ejecuciÃ³n se registra en LLM Analytics.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setShowTemplates(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M3 1h7l3 3v11H3z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round"/><path d="M10 1v3h3M6 8h4M6 11h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            Plantillas
+          </button>
+          <button onClick={() => setShowHistory(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 4v4l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/></svg>
+            Historial ({history.length})
+          </button>
+          <button onClick={() => setShowSettings(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1v2M8 13v2M14 8h-2M4 8H2M12 4l-1.4 1.4M5.4 10.6L4 12M12 12l-1.4-1.4M5.4 5.4L4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            Ajustes
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Left: prompt editor */}
+        <div className="w-[420px] border-r border-[#e9eae6] bg-white flex flex-col flex-shrink-0">
+          <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between flex-shrink-0">
+            <h3 className="text-xs font-semibold text-[#1a1a18] uppercase tracking-widest">Prompt</h3>
+            <label className="flex items-center gap-1.5 text-[10px] text-[#646462] cursor-pointer">
+              <input type="checkbox" checked={logToPosthog} onChange={e => setLogToPosthog(e.target.checked)} className="accent-[#3b59f6]" />
+              Registrar en PostHog
+            </label>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div>
+              <label className="block text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-1">System prompt</label>
+              <textarea value={system} onChange={e => setSystem(e.target.value)} rows={4} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-xs font-mono focus:outline-none focus:border-[#a855f7] resize-y" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-1">User prompt</label>
+              <textarea value={userMsg} onChange={e => setUserMsg(e.target.value)} rows={8} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-xs font-mono focus:outline-none focus:border-[#a855f7] resize-y" />
+              <p className="text-[10px] text-[#9ca3af] mt-1">Tip: usa <code className="bg-[#f3f3f1] px-1 rounded font-mono text-[#a855f7]">{`{{ variable }}`}</code> para campos sustituibles.</p>
+            </div>
+            {detectedVars.length > 0 && (
+              <div className="space-y-2">
+                <label className="block text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Variables detectadas</label>
+                {detectedVars.map(v => (
+                  <div key={v}>
+                    <label className="block text-[11px] font-mono text-[#a855f7] mb-0.5">{`{{ ${v} }}`}</label>
+                    <input value={variables[v] ?? ''} onChange={e => setVariables(prev => ({ ...prev, [v]: e.target.value }))} placeholder={`valor de ${v}`} className="w-full px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#a855f7]" />
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="text-[10px] text-[#9ca3af]">
+              ~{estimateTokens(finalSystem + finalUser)} tokens estimados
+            </div>
+          </div>
+          <div className="p-4 border-t border-[#e9eae6] flex-shrink-0">
+            <button
+              onClick={runAll}
+              disabled={panes.some(p => p.state === 'running') || !finalUser.trim()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#a855f7] text-white text-sm rounded-lg hover:bg-[#9333ea] disabled:opacity-50"
+            >
+              {panes.some(p => p.state === 'running') ? (
+                <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Ejecutandoâ€¦</>
+              ) : (
+                <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M4 3l9 5-9 5z"/></svg> Ejecutar en {panes.length} modelos</>
+              )}
+            </button>
+            <p className="text-[10px] text-[#9ca3af] mt-1.5 text-center">âŒ˜ Enter para ejecutar</p>
+          </div>
+        </div>
+
+        {/* Right: comparison panes */}
+        <div className="flex-1 overflow-auto p-4 min-w-0">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-[#1a1a18] uppercase tracking-widest">Modelos comparados ({panes.length}/4)</h3>
+            {panes.length < 4 && (
+              <button onClick={() => addPane()} className="flex items-center gap-1 px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs text-[#1a1a18] hover:bg-[#fafaf9]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                AÃ±adir modelo
+              </button>
+            )}
+          </div>
+          <div className={`grid gap-3 h-full min-h-[400px] ${panes.length === 1 ? 'grid-cols-1' : panes.length === 2 ? 'grid-cols-2' : panes.length === 3 ? 'grid-cols-3' : 'grid-cols-2 grid-rows-2'}`}>
+            {panes.map(pane => (
+              <div key={pane.id} className="flex flex-col min-h-[300px]">
+                <div className="mb-2">
+                  <select value={pane.modelKey} onChange={e => setPaneModel(pane.id, e.target.value)} className="w-full px-2 py-1 border border-[#e9eae6] rounded text-xs bg-white focus:outline-none focus:border-[#a855f7]">
+                    {PLAYGROUND_MODELS.map(m => <option key={m.key} value={m.key}>{m.label} ({m.provider})</option>)}
+                  </select>
+                </div>
+                <PlaygroundOutputPanel pane={pane} onClose={() => removePane(pane.id)} canClose={panes.length > 1} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Templates modal */}
+      {showTemplates && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setShowTemplates(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[720px] max-w-[92vw] max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#1a1a18]">Plantillas de prompts</h2>
+              <button onClick={() => setShowTemplates(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-3">
+              {PROMPT_TEMPLATES.map(t => (
+                <button key={t.id} onClick={() => applyTemplate(t)} className="text-left p-4 border border-[#e9eae6] rounded-xl hover:border-[#a855f7] hover:bg-[#fafaf9] transition-all">
+                  <h3 className="text-sm font-semibold text-[#1a1a18] mb-1">{t.name}</h3>
+                  <p className="text-xs text-[#646462] mb-2">{t.description}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {t.variables.map(v => <span key={v} className="text-[10px] font-mono bg-[#f5f3ff] text-[#a855f7] px-1.5 py-0.5 rounded">{`{{${v}}}`}</span>)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History modal */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setShowHistory(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[92vw] max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#1a1a18]">Historial de ejecuciones ({history.length})</h2>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setHistory([])} className="text-xs text-[#9ca3af] hover:text-[#dc2626]">Limpiar todo</button>
+                <button onClick={() => setShowHistory(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {history.length === 0 ? (
+                <p className="p-8 text-sm text-[#9ca3af] text-center">Sin ejecuciones previas</p>
+              ) : history.map(run => (
+                <button key={run.id} onClick={() => applyHistory(run)} className="w-full text-left p-4 border-b border-[#e9eae6] hover:bg-[#fafaf9]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-mono text-[#a855f7]">{run.model}</span>
+                    <span className="text-[10px] text-[#9ca3af]">{new Date(run.ts).toLocaleString('es-ES')}</span>
+                    {run.error ? <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded">Error</span> : (
+                      <>
+                        {run.cost_usd != null && <span className="text-[10px] text-[#1a1a18] font-mono ml-auto">{pgFormatCost(run.cost_usd)}</span>}
+                        {run.latency_s != null && <span className="text-[10px] text-[#9ca3af]">{run.latency_s.toFixed(2)}s</span>}
+                      </>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#646462] line-clamp-1">{run.user_prompt.slice(0, 200)}</p>
+                  {run.output && <p className="text-xs text-[#1a1a18] mt-1 line-clamp-2">â†’ {run.output.slice(0, 200)}</p>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setShowSettings(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[520px] max-w-[92vw] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#1a1a18]">Ajustes del Playground</h2>
+              <button onClick={() => setShowSettings(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+            </div>
+            <div className="p-5 space-y-4 text-sm">
+              <div className="bg-[#fef3c7] border border-[#fcd34d] rounded-lg p-3 text-xs text-[#92400e]">
+                <p className="font-semibold mb-1">âš  Claves API en el navegador</p>
+                <p>Tus claves se guardan en localStorage y se envÃ­an directamente al proveedor desde tu navegador. <strong>No las uses con claves de producciÃ³n.</strong> Usa claves con presupuesto limitado.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#1a1a18] mb-1">OpenAI API key</label>
+                <input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)} placeholder="sk-..." className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-xs font-mono focus:outline-none focus:border-[#a855f7]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#1a1a18] mb-1">Anthropic API key</label>
+                <input type="password" value={anthropicKey} onChange={e => setAnthropicKey(e.target.value)} placeholder="sk-ant-..." className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-xs font-mono focus:outline-none focus:border-[#a855f7]" />
+              </div>
+              <div className="bg-[#f9f9f7] rounded-lg p-3 text-xs">
+                <p className="text-[#646462]"><strong className="text-[#1a1a18]">PostHog Max AI</strong> funciona sin clave: usa tu sesiÃ³n actual de PostHog vÃ­a SSE.</p>
+              </div>
+            </div>
+            <div className="px-5 py-3 bg-[#f9f9f7] border-t border-[#e9eae6] flex justify-end">
+              <button onClick={() => setShowSettings(false)} className="px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WAAppErrorTrackingView() {
   type ETTab = 'issues' | 'config';
   type ConfigSub = 'autocapture'|'alerting'|'suppression'|'spike'|'autoassign'|'grouping'|'symbolsets'|'releases';
@@ -54117,6 +54480,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
