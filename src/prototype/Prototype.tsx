@@ -38137,6 +38137,126 @@ function WAAppWebScriptsView() {
   const [enableDest, setEnableDest] = useState(true);
   const [detailSelector, setDetailSelector] = useState('');
 
+  // ── Estado real ─────────────────────────────────────────────────────────
+  const [scripts, setScripts] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [members, setMembers] = React.useState<any[]>([]);
+  const [filterCreator, setFilterCreator] = React.useState<string | null>(null);
+  const [showCreatorDrop, setShowCreatorDrop] = React.useState(false);
+  const creatorDropRef = useClickOutside<HTMLDivElement>(() => setShowCreatorDrop(false));
+  const [creatingFromTemplate, setCreatingFromTemplate] = React.useState<string | null>(null);
+  const [editingScript, setEditingScript] = React.useState<any | null>(null);
+  const [showFeaturesButton, setShowFeaturesButton] = React.useState(false);
+  const [showSourceModal, setShowSourceModal] = React.useState(false);
+  const [scriptSource, setScriptSource] = React.useState('');
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getProjectId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.hogFunctions.list({ type: 'site_app', limit: 100 });
+        const res2: any = await ph.posthog.hogFunctions.list({ type: 'site_destination', limit: 100 }).catch(() => ({ results: [] }));
+        if (!cancelled) setScripts([...(res.results ?? []), ...(res2.results ?? [])]);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? 'Error al cargar scripts');
+      } finally { if (!cancelled) setLoading(false); }
+    })();
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getCurrentUser()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.organization.members();
+        if (!cancelled) setMembers(res.results ?? res ?? []);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const TEMPLATE_SOURCE: Record<string, { name: string; hog: string }> = {
+    'early-access': { name: 'Early Access Features App', hog: `// Early Access Features popup\nexport function onLoad({ posthog, attachToElement }) {\n  attachToElement('${detailSelector || '[data-attr=posthog-early-access-features-button]'}', () => {\n    posthog.showFeaturePreviewModal()\n  })\n}` },
+    'hogdesk':      { name: 'HogDesk',                    hog: `// HogDesk bug reporter\nexport function onLoad({ posthog }) {\n  // Simple bug reporter dialog\n  const btn = document.createElement('button')\n  btn.textContent = '🐛 Report bug'\n  btn.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:8px 14px;border-radius:8px;background:#1a1a1a;color:#fff;border:0;cursor:pointer;z-index:99999'\n  btn.onclick = () => { const msg = prompt('Describe the bug:'); if (msg) posthog.capture('bug_reported', { description: msg }) }\n  document.body.appendChild(btn)\n}` },
+    'new-web':      { name: 'New web script',             hog: `// Custom JavaScript\nexport function onLoad({ posthog }) {\n  console.log('PostHog Web script loaded')\n  // Your custom code here\n}` },
+    'notif-bar':    { name: 'Notification Bar',           hog: `// Notification Bar\nexport function onLoad({ posthog, attachToElement }) {\n  const bar = document.createElement('div')\n  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#fef3c7;color:#92400e;padding:12px;text-align:center;z-index:99999'\n  bar.textContent = '🎉 Hi! We have a new feature for you.'\n  document.body.appendChild(bar)\n}` },
+    'pineapple':    { name: 'Pineapple Mode',             hog: `// Pineapple Mode - rain pineapples\nexport function onLoad() {\n  setInterval(() => {\n    const p = document.createElement('span')\n    p.textContent = '🍍'\n    p.style.cssText = 'position:fixed;top:-30px;left:' + (Math.random() * window.innerWidth) + 'px;font-size:24px;pointer-events:none;z-index:99999;transition:top 5s linear'\n    document.body.appendChild(p)\n    setTimeout(() => p.style.top = window.innerHeight + 'px', 50)\n    setTimeout(() => p.remove(), 6000)\n  }, 200)\n}` },
+    'js-debugger':  { name: 'PostHog JS debugger',        hog: `// PostHog JS Debugger\nexport function onLoad({ posthog }) {\n  window.__posthog__ = posthog\n  console.log('PostHog JS Debugger enabled. Access via window.__posthog__')\n}` },
+  };
+
+  async function createFromTemplate(templateId: string) {
+    setCreatingFromTemplate(templateId);
+    try {
+      const ph = await import('../api/posthog');
+      const tpl = TEMPLATE_SOURCE[templateId];
+      const created: any = await ph.posthog.hogFunctions.create({
+        name:    tpl?.name ?? 'New web script',
+        type:    'site_app',
+        enabled: false,
+        hog:     tpl?.hog ?? '',
+        inputs:  detailSelector ? { selector: { value: detailSelector } } : {},
+      });
+      setScripts(prev => [created, ...prev]);
+      setSelectedScript(null);
+      setShowNewWS(false);
+      setEditingScript(created);
+    } catch (e: any) {
+      alert('Error: ' + (e?.message ?? ''));
+    } finally { setCreatingFromTemplate(null); }
+  }
+
+  async function toggleScriptEnabled(s: any) {
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.posthog.hogFunctions.update(s.id, { enabled: !s.enabled });
+      setScripts(prev => prev.map(x => x.id === s.id ? updated : x));
+      if (editingScript?.id === s.id) setEditingScript(updated);
+    } catch (e: any) { alert(e?.message); }
+  }
+  async function deleteScript(s: any) {
+    if (!confirm(`¿Eliminar "${s.name}"?`)) return;
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.hogFunctions.delete(s.id);
+      setScripts(prev => prev.filter(x => x.id !== s.id));
+      setEditingScript(null);
+    } catch (e: any) { alert(e?.message); }
+  }
+  async function saveEditingScript() {
+    if (!editingScript) return;
+    try {
+      const ph = await import('../api/posthog');
+      const inputs: any = { ...(editingScript.inputs ?? {}) };
+      if (detailSelector) inputs.selector = { value: detailSelector };
+      inputs.show_features_button = { value: showFeaturesButton };
+      const updated: any = await ph.posthog.hogFunctions.update(editingScript.id, {
+        ...(scriptSource !== editingScript.hog ? { hog: scriptSource } : {}),
+        inputs,
+      });
+      setScripts(prev => prev.map(x => x.id === updated.id ? updated : x));
+      setEditingScript(updated);
+      alert('Cambios guardados');
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
+
+  // Cuando se edita un script, pre-carga sus inputs
+  React.useEffect(() => {
+    if (editingScript) {
+      setDetailSelector(editingScript.inputs?.selector?.value ?? '');
+      setShowFeaturesButton(!!editingScript.inputs?.show_features_button?.value);
+      setEnableDest(!!editingScript.enabled);
+      setScriptSource(editingScript.hog ?? '');
+      setSelectedScript('__edit__');
+    }
+  }, [editingScript]);
+
+  const filtered = scripts.filter(s => {
+    if (search && !`${s.name ?? ''}`.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterCreator && s.created_by?.uuid !== filterCreator && s.created_by?.id !== filterCreator) return false;
+    if (!showPaused && !s.enabled) return false;
+    return true;
+  });
+
   const templates = [
     { id: 'early-access', emoji: '🎁', bg: '#ede9fe', name: 'Early Access Features App', desc: 'This app is used with Early Access Feature Management', descLink: true },
     { id: 'hogdesk',      emoji: '🐷', bg: '#fce7f3', name: 'HogDesk',                    desc: 'HogDesk bug reporter' },
@@ -38185,11 +38305,12 @@ function WAAppWebScriptsView() {
               </p>
             </div>
             <button
-              onClick={() => setSelectedScript(t.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-[#f59e0b] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] flex-shrink-0 transition-colors"
+              onClick={() => createFromTemplate(t.id)}
+              disabled={creatingFromTemplate === t.id}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-[#f59e0b] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] flex-shrink-0 transition-colors disabled:opacity-50"
             >
               <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-              Create
+              {creatingFromTemplate === t.id ? 'Creando…' : 'Create'}
             </button>
           </div>
         ))}
@@ -38199,18 +38320,29 @@ function WAAppWebScriptsView() {
 
   // ── Script detail ───────────────────────────────────────────────────────────
   if (selectedScript !== null) {
-    const script = templates.find(t => t.id === selectedScript)!;
+    // editingScript es el script real cargado del backend
+    // selectedScript === '__edit__' significa que viene de editingScript
+    const isEditing = selectedScript === '__edit__' && editingScript;
+    const tplFromId = templates.find(t => t.id === selectedScript);
+    const script = isEditing
+      ? { id: editingScript.id, emoji: '⚡', bg: '#fef3c7', name: editingScript.name, desc: editingScript.description ?? '', descLink: false }
+      : (tplFromId ?? { id: '', emoji: '📜', bg: '#f3f4f6', name: 'Script', desc: '', descLink: false });
+
     return (
       <div className="flex-1 flex flex-col min-h-0 bg-[#fafaf8] overflow-hidden">
         {/* Top bar */}
         <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] bg-white flex-shrink-0">
-          <button onClick={() => setSelectedScript(null)} className="text-[#646462] hover:text-[#1a1a1a]">
+          <button onClick={() => { setSelectedScript(null); setEditingScript(null); }} className="text-[#646462] hover:text-[#1a1a1a]">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
           <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-[16px]" style={{ background: script.bg }}>
             {script.emoji}
           </div>
-          <span className="text-[16px] font-bold text-[#1a1a1a]">{script.name}</span>
+          {isEditing ? (
+            <input value={editingScript.name} onChange={e => setEditingScript({ ...editingScript, name: e.target.value })} className="text-[16px] font-bold text-[#1a1a1a] bg-transparent border-0 focus:outline-none" />
+          ) : (
+            <span className="text-[16px] font-bold text-[#1a1a1a]">{script.name}</span>
+          )}
           <button className="text-[#9ca3af] hover:text-[#646462]">
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 9l3.5-3.5L7 8l4-5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
@@ -38223,7 +38355,14 @@ function WAAppWebScriptsView() {
             Quick start
             <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">?</span>
           </button>
-          <button className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">Create & enable</button>
+          {isEditing ? (
+            <>
+              <button onClick={() => deleteScript(editingScript)} className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] text-[#dc2626] hover:bg-[#fee2e2] transition-colors">Eliminar</button>
+              <button onClick={saveEditingScript} className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">Guardar</button>
+            </>
+          ) : (
+            <button onClick={() => createFromTemplate(selectedScript!)} disabled={creatingFromTemplate === selectedScript} className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors disabled:opacity-50">{creatingFromTemplate === selectedScript ? 'Creando…' : 'Create & enable'}</button>
+          )}
           <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
           </button>
@@ -38250,12 +38389,21 @@ function WAAppWebScriptsView() {
               <div className="flex items-center justify-between">
                 <span className="text-[13px] text-[#1a1a1a]">Enable destination</span>
                 <button
-                  onClick={() => setEnableDest(!enableDest)}
+                  onClick={() => { setEnableDest(v => !v); if (isEditing) toggleScriptEnabled(editingScript); }}
                   className={`w-9 h-5 rounded-full relative transition-colors ${enableDest ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
                 >
                   <div className="w-3.5 h-3.5 bg-white rounded-full absolute shadow-sm transition-all" style={{ top: '3px', left: enableDest ? '18px' : '3px' }}/>
                 </button>
               </div>
+              {isEditing && (
+                <>
+                  <div className="mt-4 text-[10px] text-[#9ca3af] space-y-0.5">
+                    <p>ID: <span className="font-mono text-[#646462]">{editingScript.id?.slice(0, 12)}…</span></p>
+                    <p>Tipo: <span className="font-mono text-[#646462]">{editingScript.type}</span></p>
+                    {editingScript.created_at && <p>Creado: {formatRelativeTime(editingScript.created_at)}</p>}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Right — config + edit source */}
@@ -38282,10 +38430,10 @@ function WAAppWebScriptsView() {
                   <span className="text-[13px] font-semibold text-[#1a1a1a]">Show features button on the page </span>
                   <span className="text-[13px] text-[#9ca3af]">(optional)</span>
                 </div>
-                <div className="flex items-center justify-between border border-[#e9eae6] rounded-lg px-3 py-2 bg-white mb-2">
-                  <span className="text-[13px] text-[#1a1a1a]">No</span>
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                </div>
+                <select value={showFeaturesButton ? 'yes' : 'no'} onChange={e => setShowFeaturesButton(e.target.value === 'yes')} className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6] mb-2 bg-white">
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
                 <p className="text-[12px] text-[#9ca3af] leading-relaxed">
                   If enabled, a button will be shown on the page that will open the features modal.
                 </p>
@@ -38298,21 +38446,57 @@ function WAAppWebScriptsView() {
                     <h3 className="text-[13px] font-bold text-[#1a1a1a] mb-1">Edit source</h3>
                     <p className="text-[12px] text-[#646462]">Click here to edit the function's source code</p>
                   </div>
-                  <button className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] flex-shrink-0 transition-colors">
+                  <button onClick={() => setShowSourceModal(true)} className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] flex-shrink-0 transition-colors">
                     Edit source code
                   </button>
                 </div>
               </div>
 
-              {/* Create & enable */}
+              {/* Create & enable / Save */}
               <div className="flex justify-end">
-                <button className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">
-                  Create & enable
-                </button>
+                {isEditing ? (
+                  <button onClick={saveEditingScript} className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">Guardar cambios</button>
+                ) : (
+                  <button onClick={() => createFromTemplate(selectedScript!)} disabled={creatingFromTemplate === selectedScript} className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors disabled:opacity-50">{creatingFromTemplate === selectedScript ? 'Creando…' : 'Create & enable'}</button>
+                )}
               </div>
             </div>
           </div>
         </div>
+
+        {/* Source code modal */}
+        {showSourceModal && (
+          <div className="fixed inset-0 bg-[#1a1a18]/50 z-50 flex items-center justify-center" onClick={() => setShowSourceModal(false)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[860px] max-w-[95vw] h-[80vh] overflow-hidden flex flex-col">
+              <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-[#1a1a18]">Editor de código fuente</h2>
+                  <p className="text-xs text-[#646462] mt-0.5">Hog · JavaScript-like syntax para web scripts</p>
+                </div>
+                <button onClick={() => setShowSourceModal(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+              </div>
+              <div className="flex-1 overflow-hidden flex">
+                <div className="flex-1 flex flex-col">
+                  <textarea value={scriptSource} onChange={e => setScriptSource(e.target.value)} spellCheck={false} className="flex-1 bg-[#1a1a18] text-[#e9eae6] font-mono text-[12px] px-4 py-3 focus:outline-none resize-none leading-relaxed" placeholder={`export function onLoad({ posthog }) {\n  // Tu código aquí\n}`} />
+                </div>
+                <div className="w-64 border-l border-[#e9eae6] bg-[#fafaf9] p-4 overflow-y-auto">
+                  <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">API disponible</h4>
+                  <div className="space-y-2 text-[11px] text-[#646462]">
+                    <div><code className="bg-white px-1 rounded font-mono text-[#3b59f6]">posthog.capture</code><br/>Disparar eventos</div>
+                    <div><code className="bg-white px-1 rounded font-mono text-[#3b59f6]">posthog.identify</code><br/>Identificar usuario</div>
+                    <div><code className="bg-white px-1 rounded font-mono text-[#3b59f6]">posthog.isFeatureEnabled</code><br/>Check flag</div>
+                    <div><code className="bg-white px-1 rounded font-mono text-[#3b59f6]">attachToElement</code><br/>Listen click sobre selector CSS</div>
+                    <div><code className="bg-white px-1 rounded font-mono text-[#3b59f6]">posthog.showFeaturePreviewModal</code><br/>Abrir modal de early access</div>
+                  </div>
+                </div>
+              </div>
+              <div className="px-5 py-3 bg-[#fafaf9] border-t border-[#e9eae6] flex justify-end gap-2">
+                <button onClick={() => setShowSourceModal(false)} className="px-3 py-1.5 text-sm text-[#646462]">Cancelar</button>
+                <button onClick={() => { setShowSourceModal(false); if (isEditing) setEditingScript({ ...editingScript, hog: scriptSource }); }} className="px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded">Aplicar</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -38460,9 +38644,22 @@ function WAAppWebScriptsView() {
               <span className="text-[12px] text-[#646462]">Can't find what you're looking for?</span>
               <div className="flex-1"/>
               <span className="text-[12px] text-[#646462]">Created by:</span>
-              <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-                Any user<svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="ml-1"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              </button>
+              <div className="relative" ref={creatorDropRef}>
+                <button onClick={() => setShowCreatorDrop(d => !d)} className={`flex items-center gap-1 px-2 py-1 border rounded-lg text-[12px] hover:bg-[#f9f9f7] ${filterCreator ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'border-[#e9eae6] bg-white text-[#1a1a1a]'}`}>
+                  {filterCreator ? (members.find((m: any) => (m.user?.uuid ?? m.uuid) === filterCreator)?.user?.first_name || 'Usuario') : 'Any user'}
+                  {filterCreator && <span onClick={e => { e.stopPropagation(); setFilterCreator(null); }} className="text-[#9ca3af] hover:text-[#dc2626] cursor-pointer">×</span>}
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="ml-1"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                </button>
+                {showCreatorDrop && (
+                  <div className="absolute top-full right-0 mt-1 w-48 z-40 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto">
+                    {members.map((m: any, i: number) => {
+                      const uuid = m.user?.uuid ?? m.uuid;
+                      return <button key={i} onClick={() => { setFilterCreator(uuid); setShowCreatorDrop(false); }} className={`w-full text-left px-3 py-1.5 text-xs hover:bg-[#f9f9f7] ${filterCreator === uuid ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a18]'}`}>{m.user?.first_name || m.user?.email || 'Usuario'}</button>;
+                    })}
+                    {members.length === 0 && <p className="px-3 py-2 text-xs text-[#9ca3af]">Sin miembros</p>}
+                  </div>
+                )}
+              </div>
               <button onClick={()=>setShowPaused(!showPaused)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
                 <div className={`w-7 h-4 rounded-full relative transition-colors ${showPaused?'bg-[#e8572a]':'bg-[#e9eae6]'}`}>
                   <div className={`w-3 h-3 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${showPaused?'left-3.5':'left-0.5'}`}/>
@@ -38482,7 +38679,25 @@ function WAAppWebScriptsView() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr><td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462]">No Web scripts found</td></tr>
+                  {loading ? (
+                    Array.from({ length: 3 }).map((_, i) => <tr key={i} className="border-b border-[#f3f3f1]">{Array.from({ length: 5 }).map((_, c) => <td key={c} className="px-4 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i + c) % 40}%` }} /></td>)}</tr>)
+                  ) : error ? (
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-[13px] text-[#dc2626]">{error}</td></tr>
+                  ) : filtered.length === 0 ? (
+                    <tr><td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462]">No Web scripts found</td></tr>
+                  ) : filtered.map(s => (
+                    <tr key={s.id} onClick={() => setEditingScript(s)} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                      <td className="px-4 py-3"><div className="flex items-center gap-2"><span className="w-6 h-6 rounded bg-[#fef3c7] flex items-center justify-center text-[12px]">⚡</span><span className="font-medium text-[#1a1a18]">{s.name}</span></div></td>
+                      <td className="px-4 py-3 text-[#646462]">{s.created_by?.first_name || s.created_by?.email || '—'}</td>
+                      <td className="px-4 py-3 text-[#9ca3af]">{s.updated_at ? formatRelativeTime(s.updated_at) : '—'}</td>
+                      <td className="px-4 py-3 text-[#9ca3af]">—</td>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => toggleScriptEnabled(s)} className={`relative w-9 h-5 rounded-full ${s.enabled ? 'bg-[#16a34a]' : 'bg-[#d1d5db]'}`}>
+                          <div className="w-3.5 h-3.5 bg-white rounded-full absolute shadow-sm transition-all top-[3px]" style={{ left: s.enabled ? '18px' : '3px' }} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
