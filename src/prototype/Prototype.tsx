@@ -33576,6 +33576,60 @@ function WAProjectHomeView() {
   const abortRef     = React.useRef<AbortController | null>(null);
   const searchTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Reusable Activity components state ─────────────────────────────────────
+  const [showQuickStart, setShowQuickStart] = React.useState(false);
+  const [showConfig,     setShowConfig]     = React.useState(false);
+  const [selectedEvent,  setSelectedEvent]  = React.useState<any>(null);
+  const [recentEvents,   setRecentEvents]   = React.useState<any[]>([]);
+  const [eventsLoading,  setEventsLoading]  = React.useState(false);
+
+  // Widget visibility (persisted in localStorage)
+  const DEFAULT_WIDGETS = { pinned: true, recents: true, starred: true, activity: true };
+  const [widgets, setWidgets] = React.useState<{ pinned: boolean; recents: boolean; starred: boolean; activity: boolean }>(DEFAULT_WIDGETS);
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('wa-home-widgets');
+      if (raw) setWidgets({ ...DEFAULT_WIDGETS, ...JSON.parse(raw) });
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-home-widgets', JSON.stringify(widgets)); } catch {}
+  }, [widgets]);
+
+  // ── Load recent activity (last 5 events) ────────────────────────────────────
+  React.useEffect(() => {
+    if (!widgets.activity) return;
+    let cancelled = false;
+    setEventsLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.events.query({
+          query: {
+            kind: 'EventsQuery',
+            select: ['*', 'event', 'person', 'properties.$current_url', 'properties.$lib', 'timestamp'],
+            orderBy: ['timestamp DESC'],
+            after: '-1h',
+            limit: 5,
+          },
+        });
+        if (cancelled) return;
+        const rows = (res.results ?? []).map((r: any[]) => {
+          const obj = r[0] || {};
+          return {
+            uuid: obj.uuid, event: obj.event, distinct_id: obj.distinct_id,
+            timestamp: obj.timestamp, properties: obj.properties ?? {}, person: obj.person ?? null,
+          };
+        });
+        setRecentEvents(rows);
+      } catch { /* silent */ }
+      finally { if (!cancelled) setEventsLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [widgets.activity]);
+
   // â”€â”€ Bootstrap: load user + PostHog data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   React.useEffect(() => {
     let cancelled = false;
@@ -34024,13 +34078,24 @@ function WAProjectHomeView() {
           <svg viewBox="0 0 24 24" className="w-8 h-8 fill-white"><path d="M5 3h14a2 2 0 012 2v9a2 2 0 01-2 2H9l-4 4V5a2 2 0 012-2z"/><path d="M9 9h6M9 12h4" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>
         </div>
 
-        {/* Greeting */}
+        {/* Greeting + Inicio rápido button */}
         {dataLoading ? (
           <div className="h-9 w-48 bg-[#e9eae6] rounded-lg animate-pulse mb-7" />
         ) : (
-          <h1 className="text-3xl font-semibold text-[#1a1a18] mb-7">
-            Hola, {username || 'usuario'} ðŸ‘‹
-          </h1>
+          <div className="flex items-center gap-3 mb-7">
+            <h1 className="text-3xl font-semibold text-[#1a1a18]">
+              Hola, {username || 'usuario'} ðŸ‘‹
+            </h1>
+            <button
+              onClick={() => setShowQuickStart(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-[#e9eae6] rounded-md text-xs text-[#1a1a18] hover:bg-[#f9f9f7] shadow-sm transition-colors"
+              title="Plantillas rápidas para empezar"
+            >
+              <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              Inicio rápido
+              <span className="bg-[#f59e0b] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">ON</span>
+            </button>
+          </div>
         )}
 
         {/* Input */}
@@ -34059,67 +34124,108 @@ function WAProjectHomeView() {
         </form>
 
         {/* Three columns */}
-        {!dataLoading && (
-          <div className="w-full max-w-2xl mt-10 grid grid-cols-3 gap-8">
+        {!dataLoading && (widgets.pinned || widgets.recents || widgets.starred) && (
+          <div className={`w-full max-w-2xl mt-10 grid gap-8 ${[widgets.pinned, widgets.recents, widgets.starred].filter(Boolean).length === 3 ? 'grid-cols-3' : [widgets.pinned, widgets.recents, widgets.starred].filter(Boolean).length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {/* Pinned */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-3">
-                <PinnedIcon />
-                <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Paneles anclados</span>
-              </div>
-              {pinned.length === 0 ? (
-                <p className="text-xs text-[#c4c4be] italic">No hay paneles anclados</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {pinned.map((p, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate">
-                      <PinnedIcon />
-                      <span className="truncate">{p.name}</span>
-                    </div>
-                  ))}
+            {widgets.pinned && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <PinnedIcon />
+                  <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Paneles anclados</span>
                 </div>
-              )}
-            </div>
+                {pinned.length === 0 ? (
+                  <p className="text-xs text-[#c4c4be] italic">No hay paneles anclados</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {pinned.map((p, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate">
+                        <PinnedIcon />
+                        <span className="truncate">{p.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Recent */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-3">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#9ca3af] flex-shrink-0"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Recientes</span>
-              </div>
-              {recents.length === 0 ? (
-                <p className="text-xs text-[#c4c4be] italic">Sin actividad reciente</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {recents.map((r, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate">
-                      <ItemTypeIcon type={r.type} />
-                      <span className="truncate">{r.name}</span>
-                    </div>
-                  ))}
+            {widgets.recents && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#9ca3af] flex-shrink-0"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Recientes</span>
                 </div>
-              )}
-            </div>
+                {recents.length === 0 ? (
+                  <p className="text-xs text-[#c4c4be] italic">Sin actividad reciente</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {recents.map((r, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate">
+                        <ItemTypeIcon type={r.type} />
+                        <span className="truncate">{r.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Starred */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-3">
-                <StarredIcon />
-                <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Destacados</span>
-              </div>
-              {starred.length === 0 ? (
-                <p className="text-xs text-[#c4c4be] italic">No hay elementos destacados</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {starred.map((s, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm text-[#f59e0b] hover:text-[#d97706] cursor-pointer hover:underline truncate">
-                      <StarredIcon />
-                      <span className="text-[#3b59f6] hover:text-[#2a44d6] truncate">{s.name}</span>
-                    </div>
-                  ))}
+            {widgets.starred && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <StarredIcon />
+                  <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Destacados</span>
                 </div>
-              )}
+                {starred.length === 0 ? (
+                  <p className="text-xs text-[#c4c4be] italic">No hay elementos destacados</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {starred.map((s, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm text-[#f59e0b] hover:text-[#d97706] cursor-pointer hover:underline truncate">
+                        <StarredIcon />
+                        <span className="text-[#3b59f6] hover:text-[#2a44d6] truncate">{s.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Activity stream widget — uses same backend as Activity view */}
+        {!dataLoading && widgets.activity && (
+          <div className="w-full max-w-2xl mt-10 border-t border-[#e9eae6] pt-6">
+            <div className="flex items-center gap-1.5 mb-3">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#9ca3af]"><path d="M2 10c2-4 5-6 6-6s4 2 6 6" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="8" cy="11.5" r="1.5" fill="currentColor"/></svg>
+              <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Actividad reciente (última hora)</span>
+              <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-[#16a34a]">
+                <span className="w-1.5 h-1.5 bg-[#16a34a] rounded-full animate-pulse" />
+                EN VIVO
+              </span>
             </div>
+            {eventsLoading ? (
+              <div className="space-y-2">
+                {[0,1,2,3,4].map(i => <div key={i} className="h-8 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${70 + (i % 3) * 10}%` }} />)}
+              </div>
+            ) : recentEvents.length === 0 ? (
+              <p className="text-xs text-[#c4c4be] italic py-2">Aún no hay eventos en la última hora</p>
+            ) : (
+              <div className="border border-[#e9eae6] rounded-lg overflow-hidden bg-white">
+                {recentEvents.map((e, i) => (
+                  <div
+                    key={e.uuid ?? i}
+                    onClick={() => setSelectedEvent(e)}
+                    className={`flex items-center gap-3 px-3 py-2 text-xs cursor-pointer hover:bg-[#f9f9f7] ${i < recentEvents.length - 1 ? 'border-b border-[#f3f3f1]' : ''}`}
+                  >
+                    <span className="font-mono text-[#3b59f6] flex-shrink-0 w-32 truncate">{e.event}</span>
+                    <span className="text-[#646462] flex-1 truncate">{e.properties?.$current_url ?? e.distinct_id}</span>
+                    <span className="text-[#9ca3af] flex-shrink-0">{formatRelativeTime(e.timestamp)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -34137,15 +34243,65 @@ function WAProjectHomeView() {
 
       {/* Bottom bar */}
       <div className="flex items-center justify-center gap-3 py-3 px-6 bg-white border-t border-[#e9eae6] flex-shrink-0">
-        <button className="flex items-center gap-1.5 text-xs text-[#646462] hover:text-[#1a1a18] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1] transition-colors">
+        <button onClick={() => setShowConfig(true)} className="flex items-center gap-1.5 text-xs text-[#646462] hover:text-[#1a1a18] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1] transition-colors">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v2.5l1.5 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
           Configurar inicio
         </button>
-        <button className="flex items-center gap-1.5 text-xs text-[#646462] hover:text-[#1a1a18] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1] transition-colors">
+        <button onClick={() => setWidgets(DEFAULT_WIDGETS)} className="flex items-center gap-1.5 text-xs text-[#646462] hover:text-[#1a1a18] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1] transition-colors">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
           Restaurar panel predeterminado
         </button>
       </div>
+
+      {/* Shared modals — reused from Activity view */}
+      <QuickStartPanel
+        open={showQuickStart}
+        onClose={() => setShowQuickStart(false)}
+        onPickRecipe={() => { setShowQuickStart(false); }}
+      />
+      <EventDetailDrawer row={selectedEvent} onClose={() => setSelectedEvent(null)} />
+
+      {/* Configurar inicio — widget visibility */}
+      {showConfig && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setShowConfig(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-[#1a1a18]">Configurar inicio</h2>
+                <p className="text-xs text-[#646462] mt-0.5">Elige qué widgets ver en tu página principal.</p>
+              </div>
+              <button onClick={() => setShowConfig(false)} className="text-[#9ca3af] hover:text-[#1a1a18]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="p-4 space-y-2">
+              {[
+                { key: 'pinned',   label: 'Paneles anclados',  desc: 'Dashboards marcados como anclados.' },
+                { key: 'recents',  label: 'Recientes',         desc: 'Últimos insights vistos.' },
+                { key: 'starred',  label: 'Destacados',        desc: 'Elementos marcados con estrella.' },
+                { key: 'activity', label: 'Actividad reciente', desc: 'Últimos eventos de la última hora.' },
+              ].map(w => (
+                <label key={w.key} className="flex items-start gap-3 p-3 border border-[#e9eae6] rounded-lg cursor-pointer hover:bg-[#f9f9f7]">
+                  <input
+                    type="checkbox"
+                    checked={(widgets as any)[w.key]}
+                    onChange={e => setWidgets(prev => ({ ...prev, [w.key]: e.target.checked }))}
+                    className="mt-0.5 accent-[#3b59f6]"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-[#1a1a18]">{w.label}</p>
+                    <p className="text-xs text-[#646462] mt-0.5">{w.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-[#e9eae6] flex justify-between">
+              <button onClick={() => setWidgets(DEFAULT_WIDGETS)} className="text-xs text-[#646462] hover:text-[#1a1a18]">Restaurar predeterminado</button>
+              <button onClick={() => setShowConfig(false)} className="px-3 py-1.5 bg-[#1a1a18] text-white text-xs rounded-lg hover:bg-[#333]">Hecho</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
