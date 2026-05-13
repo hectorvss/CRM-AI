@@ -47312,7 +47312,7 @@ function WASettingsView() {
       try {
         const ph = await import('../api/posthog');
         await ph.phPost(`/api/projects/${ph.getTeamId()}/error_tracking/assignment_rules/`, {
-          assignee: assigneeId ? { type: 'user_group', id: assigneeId } : null,
+          assignee: assigneeId ? { type: 'user', id: assigneeId } : null,
           filters: { exception_type: exceptionType.trim() || null },
         });
         setExceptionType(''); setAssigneeId(''); setShowAdd(false);
@@ -47417,7 +47417,12 @@ function WASettingsView() {
         const ph = await import('../api/posthog');
         await ph.phPost(`/api/projects/${ph.getTeamId()}/error_tracking/grouping_rules/`, {
           fingerprint: fingerprint.trim(),
-          filters: { exception_type: exceptionType.trim() || null },
+          filters: {
+            events: exceptionType.trim() ? [{
+              id: '$exception',
+              properties: [{ key: '$exception_types', value: [exceptionType.trim()], operator: 'icontains', type: 'event' }],
+            }] : [],
+          },
         });
         setFingerprint(''); setExceptionType(''); setShowAdd(false);
         await refresh();
@@ -47560,10 +47565,15 @@ function WASettingsView() {
       setUploading(true);
       try {
         const ph = await import('../api/posthog');
+        const host = (import.meta as any).env?.VITE_POSTHOG_HOST ?? window.location.origin;
+        const key = (import.meta as any).env?.VITE_POSTHOG_PERSONAL_API_KEY ?? '';
         const fd = new FormData(); fd.append('source_map', file); fd.append('ref', file.name);
-        await fetch(`${window.location.origin}/api/projects/${ph.getTeamId()}/error_tracking/symbol_sets/`, { method: 'POST', body: fd, credentials: 'include' });
+        const headers: any = {};
+        if (key) headers.Authorization = `Bearer ${key}`;
+        const res = await fetch(`${host}/api/projects/${ph.getTeamId()}/error_tracking/symbol_sets/`, { method: 'POST', body: fd, headers, credentials: 'include' });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         await refresh();
-      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      } catch (e: any) { alert('Error al subir source map: ' + (e?.message ?? '')); }
       setUploading(false);
     }
     async function deleteSet(id: string) {
@@ -51360,12 +51370,14 @@ function WASettingsView() {
       setCreating(true);
       try {
         const ph = await import('../api/posthog');
+        const startDate = new Date();
+        startDate.setHours(Number(hourOfDay), 0, 0, 0);
         const payload: any = {
           title: title.trim(),
           target_type: targetType,
           target_value: targetValue.trim(),
           frequency,
-          start_date: new Date().toISOString(),
+          start_date: startDate.toISOString(),
           interval: 1,
           byweekday: frequency === 'weekly_email' ? [byweekday] : undefined,
           bysetpos: frequency === 'monthly_email' ? Number(bysetpos) : undefined,
@@ -51438,7 +51450,8 @@ function WASettingsView() {
               <div>
                 <p className="text-[12px] font-semibold text-[#646462] mb-1">Día del mes</p>
                 <select value={bysetpos} onChange={e => setBysetpos(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
-                  {[1,15,-1].map(d => <option key={d} value={d}>{d === -1 ? 'Último día' : `Día ${d}`}</option>)}
+                  <option value="1">Primer día del mes</option>
+                  <option value="-1">Último día del mes</option>
                 </select>
               </div>
             )}
@@ -51488,9 +51501,14 @@ function WASettingsView() {
     async function uploadLogo(file: File) {
       setUploadingLogo(true);
       try {
-        const ph = await import('../api/posthog');
+        const host = (import.meta as any).env?.VITE_POSTHOG_HOST ?? window.location.origin;
+        const key = (import.meta as any).env?.VITE_POSTHOG_PERSONAL_API_KEY ?? '';
         const fd = new FormData(); fd.append('image', file);
-        const res: any = await fetch(`${window.location.origin}/api/uploaded_media/`, { method: 'POST', body: fd, credentials: 'include' }).then(r => r.json());
+        const headers: any = {};
+        if (key) headers.Authorization = `Bearer ${key}`;
+        const r = await fetch(`${host}/api/uploaded_media/`, { method: 'POST', body: fd, headers, credentials: 'include' });
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        const res: any = await r.json();
         if (res?.id) await patchOrganization({ logo_media_id: res.id });
       } catch (e: any) { alert('Error al subir logo: ' + (e?.message ?? '')); }
       setUploadingLogo(false);
@@ -53178,6 +53196,47 @@ function WASettingsView() {
   }
 
   // ── AccountCustomizationPage ──────────────────────────────────────────────
+  function ThemeSection({ me, patchUser }: { me: any; patchUser: (p: any) => Promise<void> }) {
+    const [open, setOpen] = React.useState(false);
+    const [saving, setSaving] = React.useState(false);
+    const current = me?.theme_mode ?? 'light';
+    const themeRef = useClickOutside<HTMLDivElement>(() => setOpen(false));
+    const options = [
+      { v: 'light', label: 'Modo claro', icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="8" r="2.5" fill="#f59e0b"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M3.2 12.8l1-1M11.8 4.2l1-1" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round"/></svg> },
+      { v: 'dark', label: 'Modo oscuro', icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M12 9.5a5 5 0 01-6.5-6.5A6 6 0 1012 9.5z" fill="#3b59f6"/></svg> },
+      { v: 'system', label: 'Sincronizar con sistema', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="2" y="3" width="12" height="8" rx="1"/><path d="M5 13h6v1H5z"/></svg> },
+    ];
+    const cur = options.find(o => o.v === current) ?? options[0];
+    async function pick(v: string) {
+      setSaving(true); setOpen(false);
+      try { await patchUser({ theme_mode: v }); } catch {}
+      setSaving(false);
+    }
+    return (
+      <div className="space-y-3">
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tema</h2>
+        <div className="relative inline-block" ref={themeRef}>
+          <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 h-9 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+            {cur.icon}
+            {cur.label}
+            {saving && <span className="text-[11px] text-[#646462] font-normal ml-1">…</span>}
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+          </button>
+          {open && (
+            <div className="absolute left-0 top-full mt-1 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-20 py-1">
+              {options.map(o => (
+                <button key={o.v} onClick={() => pick(o.v)} className={`w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-left hover:bg-[#f9f9f7] ${o.v === current ? 'bg-[#fff5f2] text-[#e8572a]' : 'text-[#1a1a1a]'}`}>
+                  {o.icon}
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function AccountCustomizationPage() {
     const [me, setMe] = React.useState<any>(null);
     const [savingKey, setSavingKey] = React.useState('');
@@ -53199,12 +53258,20 @@ function WASettingsView() {
           const u: any = await ph.posthog.me();
           setMe(u);
           setAnonymize(!!u.anonymize_data);
-          setSuggestApps(u.partial_notification_settings?.app_suggestions !== false);
+          setSuggestApps((u.notification_settings ?? u.partial_notification_settings)?.app_suggestions !== false);
           const hh = u.hedgehog_config || {};
-          setHedgehogEnabled(!!hh.use_as_profile_photo || !!hh.enabled);
+          setHedgehogEnabled(!!hh.enabled);
           setHedgehogProfile(!!hh.use_as_profile_photo);
           setFreeRoam(hh.free_movement !== false);
           setKeyboardControls(hh.controls_enabled !== false);
+          if (typeof hh.color === 'number') setSelectedColor(hh.color);
+          if (typeof hh.skin === 'number') setSelectedSkin(hh.skin);
+          if (Array.isArray(hh.accessories)) {
+            const acc = hh.accessories;
+            if (typeof acc[0] === 'number') setSelectedHeadwear(acc[0]);
+            if (typeof acc[1] === 'number') setSelectedEyewear(acc[1]);
+            if (typeof acc[2] === 'number') setSelectedOther(acc[2]);
+          }
         } catch {}
       })();
     }, []);
@@ -53246,14 +53313,7 @@ function WASettingsView() {
         <div className="max-w-3xl px-8 py-6 space-y-8">
 
           {/* Theme */}
-          <div className="space-y-3">
-            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tema</h2>
-            <button className="flex items-center gap-2 h-9 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-              <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="8" r="2.5" fill="#f59e0b"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M3.2 12.8l1-1M11.8 4.2l1-1" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              Modo claro
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-            </button>
-          </div>
+          <ThemeSection me={me} patchUser={patchUser}/>
 
           {/* Anonymize data */}
           <div className="space-y-2">
@@ -53275,8 +53335,8 @@ function WASettingsView() {
             <Toggle label="Sugerir nuevas aplicaciones automáticamente" checked={suggestApps} onChange={async (v: boolean) => {
               setSuggestApps(v); setSavingKey('app_suggestions');
               try {
-                const next = { ...(me?.partial_notification_settings || {}), app_suggestions: v };
-                await patchUser({ partial_notification_settings: next });
+                const next = { ...(me?.notification_settings || me?.partial_notification_settings || {}), app_suggestions: v };
+                await patchUser({ notification_settings: next });
               } catch {}
               setSavingKey('');
             }} />
@@ -53334,7 +53394,7 @@ function WASettingsView() {
                 <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">colores</p>
                 <div className="flex flex-wrap gap-2">
                   {colorPalette.map((c, i) => (
-                    <Dot key={i} color={c} selected={selectedColor === i} onClick={() => setSelectedColor(i)} />
+                    <Dot key={i} color={c} selected={selectedColor === i} onClick={() => { setSelectedColor(i); patchHedgehog({ color: i }); }} />
                   ))}
                 </div>
               </div>
@@ -53344,7 +53404,7 @@ function WASettingsView() {
                 <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">tocados</p>
                 <div className="flex flex-wrap gap-2">
                   {headwearPalette.map((c, i) => (
-                    <Dot key={i} color={c} selected={selectedHeadwear === i} onClick={() => setSelectedHeadwear(selectedHeadwear === i ? null : i)} />
+                    <Dot key={i} color={c} selected={selectedHeadwear === i} onClick={() => { const v = selectedHeadwear === i ? null : i; setSelectedHeadwear(v); const acc = [v, selectedEyewear, selectedOther]; patchHedgehog({ accessories: acc }); }} />
                   ))}
                 </div>
               </div>
@@ -53354,7 +53414,7 @@ function WASettingsView() {
                 <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">gafas</p>
                 <div className="flex flex-wrap gap-2">
                   {eyewearPalette.map((c, i) => (
-                    <Dot key={i} color={c} selected={selectedEyewear === i} onClick={() => setSelectedEyewear(selectedEyewear === i ? null : i)} />
+                    <Dot key={i} color={c} selected={selectedEyewear === i} onClick={() => { const v = selectedEyewear === i ? null : i; setSelectedEyewear(v); const acc = [selectedHeadwear, v, selectedOther]; patchHedgehog({ accessories: acc }); }} />
                   ))}
                 </div>
               </div>
@@ -53364,7 +53424,7 @@ function WASettingsView() {
                 <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">otros</p>
                 <div className="flex flex-wrap gap-2">
                   {otherPalette.map((c, i) => (
-                    <Dot key={i} color={c} selected={selectedOther === i} onClick={() => setSelectedOther(selectedOther === i ? null : i)} />
+                    <Dot key={i} color={c} selected={selectedOther === i} onClick={() => { const v = selectedOther === i ? null : i; setSelectedOther(v); const acc = [selectedHeadwear, selectedEyewear, v]; patchHedgehog({ accessories: acc }); }} />
                   ))}
                 </div>
               </div>
@@ -53374,7 +53434,7 @@ function WASettingsView() {
                 <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">pieles</p>
                 <div className="flex flex-wrap gap-2">
                   {skinPalette.map((c, i) => (
-                    <Dot key={i} color={c} selected={selectedSkin === i} onClick={() => setSelectedSkin(i)} square />
+                    <Dot key={i} color={c} selected={selectedSkin === i} onClick={() => { setSelectedSkin(i); patchHedgehog({ skin: i }); }} square />
                   ))}
                 </div>
               </div>
@@ -53404,15 +53464,22 @@ function WASettingsView() {
       try { return JSON.parse(localStorage.getItem('wa-preview-flags') ?? '{}'); } catch { return {}; }
     });
     const toggle = async (k: string) => {
+      // Read previous value BEFORE setState so the API call uses correct state
+      const wasOn = !!flags[k];
+      const nextOn = !wasOn;
       setFlags(f => {
-        const next = { ...f, [k]: !f[k] };
+        const next = { ...f, [k]: nextOn };
         try { localStorage.setItem('wa-preview-flags', JSON.stringify(next)); } catch {}
         return next;
       });
-      // Best-effort: persist to backend as user-level early access flags
+      // Best-effort: persist to backend as user-level early access enrollment
       try {
         const ph = await import('../api/posthog');
-        await ph.phPost(`/api/users/@me/early_access_features/`, { feature_key: k, enabled: !flags[k] }).catch(() => {});
+        if (nextOn) {
+          await ph.phPost(`/api/users/@me/early_access_features/`, { feature_key: k, stage: 'beta' }).catch(() => {});
+        } else {
+          await ph.phDelete(`/api/users/@me/early_access_features/${k}/`).catch(() => {});
+        }
       } catch {}
     };
 
@@ -54094,7 +54161,8 @@ function WASettingsView() {
     const [deleting, setDeleting] = React.useState(false);
     React.useEffect(() => { (async () => { try { const ph = await import('../api/posthog'); setMe(await ph.posthog.me()); } catch {} })(); }, []);
     async function deleteAccount() {
-      if (!me?.email || confirmEmail !== me.email) { alert('El email no coincide'); return; }
+      if (!me?.email) { alert('Cuenta todavía no cargada.'); return; }
+      if (confirmEmail.trim().toLowerCase() !== me.email.trim().toLowerCase()) { alert('El email no coincide'); return; }
       if (!confirm('¿Eliminar tu cuenta de Clain DEFINITIVAMENTE?')) return;
       setDeleting(true);
       try {
@@ -54127,7 +54195,7 @@ function WASettingsView() {
               />
               <button
                 onClick={deleteAccount}
-                disabled={deleting || !me?.email || confirmEmail !== me.email}
+                disabled={deleting || !me?.email || confirmEmail.trim().toLowerCase() !== me.email.trim().toLowerCase()}
                 className="flex items-center gap-2 h-9 px-4 bg-[#dc2626] text-white text-[13px] font-semibold rounded-lg hover:bg-[#b91c1c] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white"><path d="M6 2a1 1 0 00-1 1v1H3a1 1 0 000 2h.08l.6 7.2A2 2 0 005.67 15h4.66a2 2 0 001.99-1.8L12.92 6H13a1 1 0 000-2h-2V3a1 1 0 00-1-1H6zm1 2h2v1H7V4zm-2.08 2h6.16l-.57 6.87a.5.5 0 01-.5.13H5.99a.5.5 0 01-.5-.13L4.92 6z"/></svg>
