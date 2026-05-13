@@ -48440,14 +48440,7 @@ function WASettingsView() {
           </div>
 
           {/* Path cleaning rules */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Reglas de limpieza de rutas</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-            </div>
-            <p className="text-[13px] text-[#646462]">Define reglas de expresión regular para normalizar URLs en análisis de rutas. Útil para eliminar IDs o parámetros de consulta de las rutas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
-            <p className="text-[13px] text-[#646462]">La limpieza avanzada de rutas es una función premium. Consulta <a href="#" className="text-[#e8572a] hover:underline">la documentación de reglas de limpieza de rutas</a> para saber más.</p>
-          </div>
+          <PathCleaningRulesSection/>
 
           {/* Human friendly comparison periods */}
           <div className="space-y-3">
@@ -48463,20 +48456,201 @@ function WASettingsView() {
           </div>
 
           {/* Group analytics */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Analíticas de grupo</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          <GroupAnalyticsSection/>
+        </div>
+      </div>
+    );
+  }
+
+  // ── PathCleaningRulesSection ──────────────────────────────────────────────
+  function PathCleaningRulesSection() {
+    const initialRules: any[] = team?.path_cleaning_filters ?? [];
+    const [rules, setRules] = React.useState<any[]>(initialRules);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [alias, setAlias] = React.useState('');
+    const [regex, setRegex] = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setRules(team?.path_cleaning_filters ?? []); }, [team?.id]);
+    async function persist(next: any[]) {
+      setSaving(true);
+      const ok = await patchTeam({ path_cleaning_filters: next });
+      setSaving(false);
+      if (ok) setRules(next);
+    }
+    function add() {
+      if (!alias.trim() || !regex.trim()) return;
+      persist([...rules, { alias: alias.trim(), regex: regex.trim() }]);
+      setAlias(''); setRegex(''); setShowAdd(false);
+    }
+    function remove(i: number) {
+      const next = rules.filter((_, idx) => idx !== i);
+      persist(next);
+    }
+    function moveUp(i: number) {
+      if (i === 0) return;
+      const next = [...rules]; [next[i - 1], next[i]] = [next[i], next[i - 1]];
+      persist(next);
+    }
+    function moveDown(i: number) {
+      if (i === rules.length - 1) return;
+      const next = [...rules]; [next[i + 1], next[i]] = [next[i], next[i + 1]];
+      persist(next);
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Reglas de limpieza de rutas</h2>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Normaliza URLs con regex para análisis de rutas"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          {saving && <span className="text-[11px] text-[#646462]">guardando…</span>}
+        </div>
+        <p className="text-[13px] text-[#646462]">Define reglas regex para normalizar URLs. Se aplican en orden — la primera coincidencia gana.{' '}<a href="https://posthog.com/docs/product-analytics/paths/path-cleaning" target="_blank" rel="noopener noreferrer" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+
+        {rules.length > 0 && (
+          <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-3 py-2.5 w-10"></th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Alias</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Regex</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {rules.map((r: any, i: number) => (
+                  <tr key={i} className="hover:bg-[#fafaf9]">
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-col gap-0">
+                        <button onClick={() => moveUp(i)} disabled={i === 0} className="text-[#646462] hover:text-[#1a1a1a] disabled:opacity-30">▲</button>
+                        <button onClick={() => moveDown(i)} disabled={i === rules.length - 1} className="text-[#646462] hover:text-[#1a1a1a] disabled:opacity-30">▼</button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5"><code className="font-mono text-[12px] text-[#1a1a1a]">{r.alias}</code></td>
+                    <td className="px-4 py-2.5"><code className="font-mono text-[11px] text-[#646462]">{r.regex}</code></td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => remove(i)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 space-y-2 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Alias (cómo se mostrará la ruta)</p>
+              <input value={alias} onChange={e => setAlias(e.target.value)} placeholder="/users/:id" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
             </div>
-            <p className="text-[13px] text-[#646462]">Configura tipos de grupo para analizar el comportamiento de usuarios a nivel de empresa o equipo.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
-            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
-              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
-              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Analíticas de grupo</h3>
-              <p className="text-[13px] text-[#646462]">Asocia eventos con un grupo —como una empresa, comunidad o proyecto— y analízalos en ese contexto.</p>
-              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
-              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Regex</p>
+              <input value={regex} onChange={e => setRegex(e.target.value)} placeholder="^/users/\d+$" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => { setShowAdd(false); setAlias(''); setRegex(''); }} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={add} disabled={!alias.trim() || !regex.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">Añadir</button>
             </div>
           </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir regla</button>
+        )}
+      </div>
+    );
+  }
+
+  // ── GroupAnalyticsSection ─────────────────────────────────────────────────
+  function GroupAnalyticsSection() {
+    const [groupTypes, setGroupTypes] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
+    const [editName, setEditName] = React.useState('');
+    const [editPlural, setEditPlural] = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/groups_types/`);
+        setGroupTypes(res ?? []);
+      } catch { setGroupTypes([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    function startEdit(i: number) {
+      setEditingIndex(i);
+      setEditName(groupTypes[i]?.name_singular ?? '');
+      setEditPlural(groupTypes[i]?.name_plural ?? '');
+    }
+    async function saveEdit() {
+      if (editingIndex === null) return;
+      const gt = groupTypes[editingIndex];
+      setSaving(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPatch(`/api/projects/${ph.getTeamId()}/groups_types/${gt.group_type_index}/`, {
+          name_singular: editName.trim(),
+          name_plural: editPlural.trim(),
+        });
+        await refresh();
+        setEditingIndex(null);
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      setSaving(false);
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Analíticas de grupo</h2>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Tipos de grupo (empresa, equipo, etc.)"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+        </div>
+        <p className="text-[13px] text-[#646462]">Configura cómo se muestran los tipos de grupo (empresas, equipos, etc.) en la UI. Los tipos se crean desde el SDK con <code className="text-[11px] bg-[#f3f3f1] px-1 rounded font-mono">posthog.group()</code>.{' '}<a href="https://posthog.com/docs/product-analytics/group-analytics" target="_blank" rel="noopener noreferrer" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando tipos de grupo…</div>
+          ) : groupTypes.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">No hay tipos de grupo configurados todavía. Llama <code className="text-[11px] bg-[#f3f3f1] px-1 rounded font-mono">posthog.group('company', 'acme-corp')</code> desde tu SDK para crear el primero.</div>
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-16">Index</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tipo</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre singular</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre plural</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {groupTypes.map((gt: any, i: number) => (
+                  <tr key={gt.group_type_index} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px] text-[#646462]">{gt.group_type_index}</td>
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono">{gt.group_type}</code></td>
+                    {editingIndex === i ? (
+                      <>
+                        <td className="px-4 py-2.5">
+                          <input value={editName} onChange={e => setEditName(e.target.value)} placeholder={gt.group_type} className="w-full h-7 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6]"/>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <input value={editPlural} onChange={e => setEditPlural(e.target.value)} placeholder={`${gt.group_type}s`} className="w-full h-7 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6]"/>
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button onClick={saveEdit} disabled={saving} className="text-[#e8572a] text-[12px] hover:underline mr-2">{saving ? '…' : 'Guardar'}</button>
+                          <button onClick={() => setEditingIndex(null)} className="text-[#646462] text-[12px] hover:underline">Cancelar</button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a]">{gt.name_singular ?? gt.group_type}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a]">{gt.name_plural ?? `${gt.group_type}s`}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button onClick={() => startEdit(i)} className="text-[#e8572a] text-[12px] hover:underline">Editar</button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     );
