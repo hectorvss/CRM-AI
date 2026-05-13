@@ -37315,112 +37315,85 @@ function WAAppNotebooksView() {
   const [search, setSearch] = useState('');
   const [selectedNotebook, setSelectedNotebook] = useState<string|null>(null);
 
+  // ── Estado real ─────────────────────────────────────────────────────────
+  const [notebooks, setNotebooks] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [members, setMembers] = React.useState<any[]>([]);
+  const [filterCreator, setFilterCreator] = React.useState<string | null>(null);
+  const [filterContent, setFilterContent] = React.useState<string | null>(null);
+  const [showCreatorDrop, setShowCreatorDrop] = React.useState(false);
+  const [showContentDrop, setShowContentDrop] = React.useState(false);
+  const creatorRef = useClickOutside<HTMLDivElement>(() => setShowCreatorDrop(false));
+  const contentRef = useClickOutside<HTMLDivElement>(() => setShowContentDrop(false));
+  const [page, setPage] = React.useState(0);
+  const PAGE_SIZE = 25;
+
+  // Carga al montar
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError(null);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getProjectId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.notebooks.list({ limit: 200 });
+        if (!cancelled) setNotebooks(res.results ?? []);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? 'Error al cargar notebooks');
+      } finally { if (!cancelled) setLoading(false); }
+    })();
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getCurrentUser()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.organization.members();
+        if (!cancelled) setMembers(res.results ?? res ?? []);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function createNotebook(asCanvas = false) {
+    try {
+      const ph = await import('../api/posthog');
+      const created: any = await ph.posthog.notebooks.create({
+        title: asCanvas ? 'Untitled canvas' : 'Untitled notebook',
+        content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: asCanvas ? 'Untitled canvas' : 'Untitled notebook' }] }] },
+      });
+      setNotebooks(prev => [created, ...prev]);
+      setSelectedNotebook(created.short_id);
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
+  async function deleteNotebook(shortId: string) {
+    if (!confirm('¿Eliminar notebook?')) return;
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.notebooks.delete(shortId);
+      setNotebooks(prev => prev.filter(n => n.short_id !== shortId));
+      setSelectedNotebook(null);
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
+
+  // Filtros aplicados
+  const filtered = notebooks.filter(n => {
+    if (search && !`${n.title ?? ''}`.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterCreator && n.created_by?.uuid !== filterCreator && n.created_by?.id !== filterCreator) return false;
+    // filterContent: a heuristic on text-only search inside content
+    if (filterContent) {
+      const text = JSON.stringify(n.content ?? {}).toLowerCase();
+      if (filterContent === 'insights' && !text.includes('insight')) return false;
+      if (filterContent === 'replays' && !text.includes('recording') && !text.includes('replay')) return false;
+      if (filterContent === 'feature_flags' && !text.includes('feature_flag') && !text.includes('flag')) return false;
+      if (filterContent === 'persons' && !text.includes('person')) return false;
+    }
+    return true;
+  });
+  const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
   // ── Notebook detail view ───────────────────────────────────────────────────
   if (selectedNotebook !== null) {
-    return (
-      <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
-        {/* Top bar */}
-        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0">
-          <button onClick={() => setSelectedNotebook(null)} className="text-[#646462] hover:text-[#1a1a1a]">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          {/* TEMPLATE badge */}
-          <span className="text-[10px] font-bold px-2 py-0.5 border border-[#e8572a] rounded text-[#e8572a]">TEMPLATE</span>
-          <span className="text-[12px] text-[#9ca3af]">Last modified 3 years ago by</span>
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-[#7c3aed] flex items-center justify-center text-white text-[10px] font-bold">P</div>
-            <span className="text-[12px] font-medium text-[#1a1a1a]">PostHog</span>
-          </div>
-
-          <div className="flex-1"/>
-
-          {/* Right actions */}
-          <div className="flex items-center gap-2">
-            <button className="text-[#9ca3af] hover:text-[#646462]">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="7" r="1.2" fill="currentColor"/><circle cx="11" cy="7" r="1.2" fill="currentColor"/></svg>
-            </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f9f9f7] font-medium">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              Guide
-            </button>
-            <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2" width="11" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1 5h11" stroke="currentColor" strokeWidth="1.1"/></svg>
-            </button>
-            <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="1" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.1"/><rect x="1" y="7" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="7" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.1"/></svg>
-            </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f9f9f7] font-medium">
-              Open in context panel
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M4.5 7.5L8 4M8 4H5.5M8 4v2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Template banner */}
-        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-[#e9eae6] bg-[#fafaf8] flex-shrink-0">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
-          <p className="text-[13px] text-[#646462] flex-1">
-            <span className="font-semibold text-[#1a1a1a]">This is a template.</span> You can create a copy of it to edit and use as your own.
-          </p>
-          <button className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] flex-shrink-0">
-            Create copy
-          </button>
-        </div>
-
-        {/* Document content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-[680px] mx-auto px-8 py-10">
-            <h1 className="text-[28px] font-bold text-[#1a1a1a] mb-4">Introducing Notebooks! 🎨</h1>
-            <p className="text-[14px] text-[#646462] leading-relaxed mb-5">
-              Notebooks are a powerful way to collate, analyze, and share PostHog data with others:
-            </p>
-
-            <ul className="flex flex-col gap-4 mb-6 pl-4">
-              {[
-                { bold: 'Investigating a bug report?', rest: ' Drag and drop session replays into a scratchpad and watch them as normal, or add timestamped comments to break things down.' },
-                { bold: 'Researching a new idea?', rest: ' Collect insights and add them to your proposal seamlessly, alongside survey results or cohorts.' },
-                { bold: 'Planning a launch?', rest: ' Embed the feature flags, events, persons, or cohorts you\'ll need to deploy changes and track success.' },
-              ].map((item, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#1a1a1a] flex-shrink-0 mt-2"/>
-                  <p className="text-[14px] text-[#646462] leading-relaxed">
-                    <span className="font-bold text-[#1a1a1a]">{item.bold}</span>{item.rest}
-                  </p>
-                </li>
-              ))}
-            </ul>
-
-            <p className="text-[14px] text-[#646462] leading-relaxed mb-8">
-              There's no limit to how many notebooks you can create, or how you can share them within your organization, though we block multiplayer editing to stop things getting messy.
-            </p>
-
-            <h2 className="text-[20px] font-bold text-[#1a1a1a] mb-3">Editing in notebooks</h2>
-            <p className="text-[14px] text-[#646462] leading-relaxed mb-4">
-              Notebooks support all sorts of typical text editing features such as headings, bold, italic, numbered and un-numbered lists etc:
-            </p>
-
-            <ul className="flex flex-col gap-2 pl-4">
-              {[
-                { text: '# Heading 1', plain: true },
-                { text: '## Heading 2', plain: true },
-                { text: '### Heading 3 ', italic: '(you get the idea...)', plain: true },
-                { text: '- List', plain: true },
-                { text: '1. Numbered list', plain: true },
-                { text: '**Bold**', plain: true },
-              ].map((item, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#1a1a1a] flex-shrink-0 mt-2"/>
-                  <p className="text-[14px] text-[#646462] font-mono">
-                    {item.text}
-                    {item.italic && <em className="font-sans not-italic text-[#9ca3af]">{item.italic}</em>}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    );
+    return <NotebookDetailView shortId={selectedNotebook} onBack={() => setSelectedNotebook(null)} onDelete={() => deleteNotebook(selectedNotebook)} onUpdate={(updated) => setNotebooks(prev => prev.map(n => n.short_id === selectedNotebook ? updated : n))} />;
   }
 
   // ── Notebooks list ─────────────────────────────────────────────────────────
@@ -37443,13 +37416,10 @@ function WAAppNotebooksView() {
           <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="7" r="1.2" fill="currentColor"/><circle cx="11" cy="7" r="1.2" fill="currentColor"/></svg>
           </button>
-          <button className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+          <button onClick={() => createNotebook(true)} className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
             New canvas
           </button>
-          <button
-            onClick={() => setSelectedNotebook('new')}
-            className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors"
-          >
+          <button onClick={() => createNotebook(false)} className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">
             New notebook
           </button>
           <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
@@ -37485,16 +37455,38 @@ function WAAppNotebooksView() {
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search for notebooks" className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none placeholder-[#9ca3af]"/>
           </div>
           <div className="flex-1"/>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative" ref={contentRef}>
             <span className="text-[12px] text-[#646462]">Containing:</span>
-            <button className="text-[12px] text-[#646462] hover:text-[#1a1a1a] font-medium">Any content</button>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-[#646462]">Created by:</span>
-            <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-              Any user
+            <button onClick={() => setShowContentDrop(d => !d)} className={`flex items-center gap-1 px-2 py-1 border rounded-lg text-[12px] hover:bg-[#f9f9f7] ${filterContent ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'border-[#e9eae6] bg-white text-[#1a1a1a]'}`}>
+              {filterContent ? ({ insights: 'Insights', replays: 'Replays', feature_flags: 'Feature flags', persons: 'Persons' } as any)[filterContent] ?? filterContent : 'Any content'}
+              {filterContent && <span onClick={e => { e.stopPropagation(); setFilterContent(null); }} className="text-[#9ca3af] hover:text-[#dc2626] cursor-pointer">×</span>}
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
             </button>
+            {showContentDrop && (
+              <div className="absolute top-full right-0 mt-1 w-40 z-40 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1">
+                {[{k:'insights',l:'Insights'},{k:'replays',l:'Replays'},{k:'feature_flags',l:'Feature flags'},{k:'persons',l:'Persons'}].map(o => (
+                  <button key={o.k} onClick={() => { setFilterContent(o.k); setShowContentDrop(false); }} className={`w-full text-left px-3 py-1.5 text-xs hover:bg-[#f9f9f7] ${filterContent === o.k ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a1a]'}`}>{o.l}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2 relative" ref={creatorRef}>
+            <span className="text-[12px] text-[#646462]">Created by:</span>
+            <button onClick={() => setShowCreatorDrop(d => !d)} className={`flex items-center gap-1 px-2 py-1 border rounded-lg text-[12px] hover:bg-[#f9f9f7] ${filterCreator ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'border-[#e9eae6] bg-white text-[#1a1a1a]'}`}>
+              {filterCreator ? (members.find((m: any) => (m.user?.uuid ?? m.uuid) === filterCreator)?.user?.first_name || members.find((m: any) => (m.user?.uuid ?? m.uuid) === filterCreator)?.user?.email || 'Usuario') : 'Any user'}
+              {filterCreator && <span onClick={e => { e.stopPropagation(); setFilterCreator(null); }} className="text-[#9ca3af] hover:text-[#dc2626] cursor-pointer">×</span>}
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            </button>
+            {showCreatorDrop && (
+              <div className="absolute top-full right-0 mt-1 w-48 z-40 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto">
+                {members.length === 0 ? <p className="px-3 py-2 text-xs text-[#9ca3af]">Sin miembros</p>
+                : members.map((m: any, i) => {
+                  const uuid = m.user?.uuid ?? m.uuid;
+                  const lbl  = m.user?.first_name || m.user?.email || 'Usuario';
+                  return <button key={i} onClick={() => { setFilterCreator(uuid); setShowCreatorDrop(false); }} className={`w-full text-left px-3 py-1.5 text-xs hover:bg-[#f9f9f7] ${filterCreator === uuid ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a1a]'}`}>{lbl}</button>;
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -37519,36 +37511,47 @@ function WAAppNotebooksView() {
               </tr>
             </thead>
             <tbody>
-              {/* Template row */}
-              <tr
-                className="border-b border-[#e9eae6] hover:bg-[#fafaf8] cursor-pointer transition-colors"
-                onClick={() => setSelectedNotebook('introducing')}
-              >
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-semibold text-[#1a1a1a]">Introducing Notebooks! 🎨</span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 border border-[#e8572a] rounded text-[#e8572a]">TEMPLATE</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-[#7c3aed] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">P</div>
-                    <span className="text-[13px] text-[#1a1a1a]">PostHog</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-[13px] text-[#646462]">3 years ago</td>
-                <td className="px-4 py-3 text-[13px] text-[#646462]">3 years ago</td>
-              </tr>
+              {loading ? (
+                Array.from({ length: 4 }).map((_, i) => <tr key={i} className="border-b border-[#f3f3f1]">{Array.from({ length: 4 }).map((_, c) => <td key={c} className="px-4 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i + c) % 40}%` }} /></td>)}</tr>)
+              ) : error ? (
+                <tr><td colSpan={4} className="px-4 py-8 text-center"><p className="text-sm text-[#dc2626]">{error}</p></td></tr>
+              ) : paged.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-8 text-center text-[13px] text-[#9ca3af]">
+                  {notebooks.length === 0 ? <>Sin notebooks todavía. <button onClick={() => createNotebook(false)} className="text-[#e8572a] hover:underline">Crea el primero</button></> : 'Sin coincidencias'}
+                </td></tr>
+              ) : paged.map(n => {
+                const creator = n.created_by?.first_name || n.created_by?.email || 'Usuario';
+                const initial = creator[0]?.toUpperCase() ?? '?';
+                return (
+                  <tr key={n.short_id} onClick={() => setSelectedNotebook(n.short_id)} className="border-b border-[#e9eae6] hover:bg-[#fafaf8] cursor-pointer transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><rect x="2" y="1" width="10" height="12" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 4h5M5 7h5M5 10h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                        <span className="text-[13px] font-semibold text-[#1a1a1a] truncate">{n.title || 'Untitled notebook'}</span>
+                        {n.is_template && <span className="text-[10px] font-bold px-1.5 py-0.5 border border-[#e8572a] rounded text-[#e8572a] flex-shrink-0">TEMPLATE</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-[#7c3aed] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">{initial}</div>
+                        <span className="text-[13px] text-[#1a1a1a]">{creator}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[13px] text-[#646462]" title={n.created_at}>{n.created_at ? formatRelativeTime(n.created_at) : '—'}</td>
+                    <td className="px-4 py-3 text-[13px] text-[#646462]" title={n.last_modified_at}>{n.last_modified_at ? formatRelativeTime(n.last_modified_at) : '—'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
           {/* Pagination */}
           <div className="flex items-center justify-end gap-2 px-4 py-2.5 border-t border-[#e9eae6]">
-            <span className="text-[12px] text-[#646462]">1 notebook on this page</span>
-            <button className="w-6 h-6 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7] disabled:opacity-40" disabled>
+            <span className="text-[12px] text-[#646462]">{paged.length} notebook{paged.length === 1 ? '' : 's'} on this page · {filtered.length} total</span>
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="w-6 h-6 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7] disabled:opacity-40">
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M6.5 2.5L4 5l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
-            <button className="w-6 h-6 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7] disabled:opacity-40" disabled>
+            <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * PAGE_SIZE >= filtered.length} className="w-6 h-6 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7] disabled:opacity-40">
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2.5L6 5l-2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
           </div>
@@ -37558,7 +37561,293 @@ function WAAppNotebooksView() {
   );
 }
 
+// ── Notebook detail view ──────────────────────────────────────────────────────
+function NotebookDetailView({ shortId, onBack, onDelete, onUpdate }: { shortId: string; onBack: () => void; onDelete: () => void; onUpdate: (n: any) => void }) {
+  const [data, setData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [title, setTitle] = React.useState('');
+  const [bodyText, setBodyText] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [showGuide, setShowGuide] = React.useState(false);
+  const [showInsertMenu, setShowInsertMenu] = React.useState(false);
+  const insertMenuRef = useClickOutside<HTMLDivElement>(() => setShowInsertMenu(false));
+  const saveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
+  // Decode ProseMirror content → plain markdown-like text
+  function contentToText(content: any): string {
+    if (!content) return '';
+    const lines: string[] = [];
+    function walk(node: any, level = 0) {
+      if (!node) return;
+      if (node.type === 'doc' && node.content) { node.content.forEach((c: any) => walk(c, level)); return; }
+      if (node.type === 'heading') {
+        const text = (node.content ?? []).map((c: any) => c.text ?? '').join('');
+        lines.push('#'.repeat(node.attrs?.level ?? 1) + ' ' + text);
+        return;
+      }
+      if (node.type === 'paragraph') {
+        const text = (node.content ?? []).map((c: any) => c.text ?? '').join('');
+        lines.push(text || '');
+        return;
+      }
+      if (node.type === 'bulletList' && node.content) {
+        node.content.forEach((li: any) => {
+          const text = ((li.content?.[0]?.content ?? []) as any[]).map((c: any) => c.text ?? '').join('');
+          lines.push('- ' + text);
+        });
+        return;
+      }
+      if (node.type === 'orderedList' && node.content) {
+        node.content.forEach((li: any, i: number) => {
+          const text = ((li.content?.[0]?.content ?? []) as any[]).map((c: any) => c.text ?? '').join('');
+          lines.push(`${i + 1}. ` + text);
+        });
+        return;
+      }
+      if (node.type === 'codeBlock') {
+        const text = (node.content ?? []).map((c: any) => c.text ?? '').join('');
+        lines.push('```'); lines.push(text); lines.push('```');
+        return;
+      }
+      if (node.type === 'horizontalRule') { lines.push('---'); return; }
+      if (node.type?.startsWith('ph-')) {
+        // PostHog custom nodes (insight, recording, person, flag, etc.)
+        lines.push(`@${node.type}{${JSON.stringify(node.attrs ?? {}).slice(0, 60)}}`);
+        return;
+      }
+      if (node.text) { lines.push(node.text); }
+    }
+    walk(content);
+    return lines.join('\n');
+  }
+
+  function textToContent(text: string): any {
+    const lines = text.split('\n');
+    const content: any[] = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      const hMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (hMatch) {
+        content.push({ type: 'heading', attrs: { level: hMatch[1].length }, content: [{ type: 'text', text: hMatch[2] }] });
+        i++; continue;
+      }
+      const bMatch = line.match(/^[-*]\s+(.+)$/);
+      if (bMatch) {
+        const items: any[] = [];
+        while (i < lines.length) {
+          const m = lines[i].match(/^[-*]\s+(.+)$/);
+          if (!m) break;
+          items.push({ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: m[1] }] }] });
+          i++;
+        }
+        content.push({ type: 'bulletList', content: items });
+        continue;
+      }
+      const oMatch = line.match(/^\d+\.\s+(.+)$/);
+      if (oMatch) {
+        const items: any[] = [];
+        while (i < lines.length) {
+          const m = lines[i].match(/^\d+\.\s+(.+)$/);
+          if (!m) break;
+          items.push({ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: m[1] }] }] });
+          i++;
+        }
+        content.push({ type: 'orderedList', content: items });
+        continue;
+      }
+      if (line === '---') { content.push({ type: 'horizontalRule' }); i++; continue; }
+      if (line.startsWith('```')) {
+        i++;
+        const codeLines: string[] = [];
+        while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
+        i++;
+        content.push({ type: 'codeBlock', content: [{ type: 'text', text: codeLines.join('\n') }] });
+        continue;
+      }
+      if (line.trim() === '') { content.push({ type: 'paragraph' }); i++; continue; }
+      content.push({ type: 'paragraph', content: [{ type: 'text', text: line }] });
+      i++;
+    }
+    return { type: 'doc', content };
+  }
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError(null);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getProjectId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.notebooks.get(shortId);
+        if (cancelled) return;
+        setData(res);
+        setTitle(res.title || 'Untitled notebook');
+        setBodyText(contentToText(res.content));
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? 'Error al cargar notebook');
+      } finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [shortId]);
+
+  async function saveChanges() {
+    if (!data) return;
+    setSaving(true);
+    try {
+      const ph = await import('../api/posthog');
+      const newContent = textToContent(bodyText);
+      const updated: any = await ph.posthog.notebooks.update(shortId, { title: title.trim() || 'Untitled', content: newContent });
+      setData(updated);
+      onUpdate(updated);
+    } catch (e: any) {
+      alert('Error al guardar: ' + (e?.message ?? ''));
+    } finally { setSaving(false); }
+  }
+
+  // Auto-save 2s tras dejar de escribir
+  React.useEffect(() => {
+    if (!data) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => { saveChanges(); }, 2000);
+    return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, bodyText]);
+
+  function insertSnippet(snippet: string) {
+    const ta = textareaRef.current;
+    if (!ta) { setBodyText(prev => prev + '\n' + snippet); return; }
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const nuevoBody = bodyText.slice(0, s) + snippet + bodyText.slice(e);
+    setBodyText(nuevoBody);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(s + snippet.length, s + snippet.length); }, 0);
+  }
+
+  const INSERT_OPTIONS: { kind: string; label: string; description: string; icon: React.ReactNode; snippet: string }[] = [
+    { kind: 'heading',   label: 'Heading',     description: 'Título grande', icon: <span className="font-bold">H</span>, snippet: '\n# Título\n' },
+    { kind: 'list',      label: 'Lista',       description: 'Bullet list', icon: <span>•</span>, snippet: '\n- Item 1\n- Item 2\n' },
+    { kind: 'numbered',  label: 'Numerada',    description: 'Ordered list', icon: <span>1.</span>, snippet: '\n1. Paso uno\n2. Paso dos\n' },
+    { kind: 'code',      label: 'Código',      description: 'Bloque preformateado', icon: <span className="font-mono">{`<>`}</span>, snippet: '\n```\nconsola.log("hola")\n```\n' },
+    { kind: 'insight',   label: 'Insight',     description: 'Embed un insight', icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M1 13l3-4 3 2 3-5 3 3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>, snippet: '\n@ph-insight{"id":"<id_del_insight>"}\n' },
+    { kind: 'recording', label: 'Grabación',   description: 'Embed un session replay', icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M6 5l5 3-5 3z" fill="currentColor"/></svg>, snippet: '\n@ph-recording{"id":"<recording_id>"}\n' },
+    { kind: 'person',    label: 'Persona',     description: 'Embed una persona', icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="5" r="3" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 14c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>, snippet: '\n@ph-person{"id":"<distinct_id>"}\n' },
+    { kind: 'flag',      label: 'Feature flag', description: 'Embed un flag', icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M3 2v12M3 2l9 4-9 4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>, snippet: '\n@ph-flag{"key":"<flag_key>"}\n' },
+    { kind: 'divider',   label: 'Divisor',     description: 'Línea horizontal', icon: <span>—</span>, snippet: '\n---\n' },
+  ];
+
+  if (loading) return (
+    <div className="flex-1 flex flex-col bg-white items-center justify-center">
+      <div className="w-6 h-6 border-2 border-[#3b59f6] border-t-transparent rounded-full animate-spin mb-2" />
+      <p className="text-sm text-[#646462]">Cargando notebook…</p>
+    </div>
+  );
+  if (error) return (
+    <div className="flex-1 flex flex-col bg-white items-center justify-center">
+      <p className="text-sm text-[#dc2626] mb-2">{error}</p>
+      <button onClick={onBack} className="text-xs text-[#3b59f6] hover:underline">← Volver al listado</button>
+    </div>
+  );
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0">
+        <button onClick={onBack} className="text-[#646462] hover:text-[#1a1a1a]"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+        {data?.is_template && <span className="text-[10px] font-bold px-2 py-0.5 border border-[#e8572a] rounded text-[#e8572a]">TEMPLATE</span>}
+        <span className="text-[12px] text-[#9ca3af]">Modificado {data?.last_modified_at ? formatRelativeTime(data.last_modified_at) : 'recientemente'} por</span>
+        <div className="flex items-center gap-1.5">
+          <div className="w-5 h-5 rounded-full bg-[#7c3aed] flex items-center justify-center text-white text-[10px] font-bold">{(data?.created_by?.first_name || data?.created_by?.email || '?')[0]?.toUpperCase()}</div>
+          <span className="text-[12px] font-medium text-[#1a1a1a]">{data?.created_by?.first_name || data?.created_by?.email || 'Usuario'}</span>
+        </div>
+        <div className="flex-1"/>
+        <div className="flex items-center gap-2">
+          {saving ? <span className="text-[10px] text-[#9ca3af] flex items-center gap-1"><div className="w-2 h-2 bg-[#f59e0b] rounded-full animate-pulse" />Guardando…</span> : <span className="text-[10px] text-[#16a34a]">✓ Guardado</span>}
+          <button onClick={() => setShowGuide(g => !g)} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-[12px] hover:bg-[#f9f9f7] font-medium ${showGuide ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'border-[#e9eae6] text-[#1a1a1a]'}`}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            Guide
+          </button>
+          <button onClick={onDelete} className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#dc2626] hover:bg-[#fee2e2] font-medium">
+            Eliminar
+          </button>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex items-center gap-1 px-6 py-2 border-b border-[#e9eae6] bg-[#fafaf9] flex-shrink-0 relative" ref={insertMenuRef}>
+        <button onClick={() => insertSnippet('\n# ')} className="px-2 py-1 hover:bg-white rounded text-xs font-bold text-[#646462]" title="Heading">H1</button>
+        <button onClick={() => insertSnippet('\n## ')} className="px-2 py-1 hover:bg-white rounded text-xs font-bold text-[#646462]" title="Heading 2">H2</button>
+        <button onClick={() => insertSnippet('**texto**')} className="px-2 py-1 hover:bg-white rounded text-xs font-bold text-[#646462]" title="Bold">B</button>
+        <button onClick={() => insertSnippet('*texto*')} className="px-2 py-1 hover:bg-white rounded text-xs italic text-[#646462]" title="Italic">I</button>
+        <button onClick={() => insertSnippet('\n- ')} className="px-2 py-1 hover:bg-white rounded text-xs text-[#646462]" title="Bullet list">•</button>
+        <button onClick={() => insertSnippet('\n1. ')} className="px-2 py-1 hover:bg-white rounded text-xs text-[#646462]" title="Numbered">1.</button>
+        <button onClick={() => insertSnippet('\n```\n\n```')} className="px-2 py-1 hover:bg-white rounded text-xs font-mono text-[#646462]" title="Code">{`<>`}</button>
+        <button onClick={() => insertSnippet('\n---\n')} className="px-2 py-1 hover:bg-white rounded text-xs text-[#646462]" title="Divider">—</button>
+        <div className="w-px h-4 bg-[#e9eae6] mx-1" />
+        <button onClick={() => setShowInsertMenu(v => !v)} className="flex items-center gap-1 px-2 py-1 bg-[#1a1a1a] text-white rounded text-xs hover:bg-[#333]">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          Insertar
+        </button>
+        {showInsertMenu && (
+          <div className="absolute top-full left-0 mt-1 z-40 w-64 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 max-h-80 overflow-y-auto">
+            {INSERT_OPTIONS.map(o => (
+              <button key={o.kind} onClick={() => { insertSnippet(o.snippet); setShowInsertMenu(false); }} className="w-full flex items-start gap-2 px-3 py-2 hover:bg-[#f9f9f7] text-left">
+                <span className="w-5 h-5 flex items-center justify-center text-[#646462] flex-shrink-0">{o.icon}</span>
+                <div>
+                  <p className="text-xs font-medium text-[#1a1a18]">{o.label}</p>
+                  <p className="text-[10px] text-[#9ca3af]">{o.description}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 flex min-h-0">
+        {/* Editor */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[680px] mx-auto px-8 py-10">
+            <input value={title} onChange={e => setTitle(e.target.value)} className="w-full text-[28px] font-bold text-[#1a1a18] bg-transparent border-0 focus:outline-none mb-6 placeholder-[#c4c4be]" placeholder="Sin título" />
+            <textarea
+              ref={textareaRef}
+              value={bodyText}
+              onChange={e => setBodyText(e.target.value)}
+              placeholder="Empieza a escribir o pulsa 'Insertar' para añadir bloques…"
+              className="w-full min-h-[600px] text-[14px] text-[#1a1a18] bg-transparent border-0 focus:outline-none resize-none font-mono leading-relaxed placeholder-[#c4c4be]"
+              spellCheck={false}
+            />
+          </div>
+        </div>
+
+        {/* Guide panel */}
+        {showGuide && (
+          <div className="w-72 border-l border-[#e9eae6] bg-[#fafaf9] p-5 flex flex-col gap-3 flex-shrink-0 overflow-y-auto">
+            <div className="flex items-center justify-between"><h3 className="text-[12px] font-bold text-[#1a1a18]">Guía de markdown</h3><button onClick={() => setShowGuide(false)} className="text-[#9ca3af]">×</button></div>
+            <div className="space-y-2 text-[11px] text-[#646462]">
+              <div><code className="bg-white px-1 rounded font-mono">{'# Heading'}</code> → Título</div>
+              <div><code className="bg-white px-1 rounded font-mono">{'## Subheading'}</code> → Subtítulo</div>
+              <div><code className="bg-white px-1 rounded font-mono">{'**bold**'}</code> → <strong>bold</strong></div>
+              <div><code className="bg-white px-1 rounded font-mono">{'*italic*'}</code> → <em>italic</em></div>
+              <div><code className="bg-white px-1 rounded font-mono">{'- item'}</code> → bullet list</div>
+              <div><code className="bg-white px-1 rounded font-mono">{'1. item'}</code> → numbered</div>
+              <div><code className="bg-white px-1 rounded font-mono">{'```'}</code> → bloque código</div>
+              <div><code className="bg-white px-1 rounded font-mono">{'---'}</code> → divisor</div>
+            </div>
+            <div className="border-t border-[#e9eae6] pt-3 space-y-2 text-[11px] text-[#646462]">
+              <p className="font-semibold text-[#1a1a18]">Embeds PostHog:</p>
+              <p>Pulsa <strong>Insertar</strong> para añadir insights, replays, personas, feature flags como bloques especiales.</p>
+            </div>
+            <div className="border-t border-[#e9eae6] pt-3 space-y-2 text-[11px] text-[#646462]">
+              <p className="font-semibold text-[#1a1a18]">Auto-save</p>
+              <p>Los cambios se guardan automáticamente 2 segundos después de dejar de escribir.</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── WAAppToolbarView ──────────────────────────────────────────────────────────
 function WAAppToolbarView() {
