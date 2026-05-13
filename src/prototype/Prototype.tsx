@@ -33026,6 +33026,443 @@ function WAAppWebScriptsView() {
 
 
 
+
+// ── WAAppWorkflowsView ────────────────────────────────────────────────────────
+function WAAppWorkflowsView() {
+  const [tab, setTab] = React.useState<'workflows'|'library'|'channels'|'optouts'>('workflows');
+  const [showCreateModal, setShowCreateModal] = React.useState(false);
+  const [showChannelDropdown, setShowChannelDropdown] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const [libSearch, setLibSearch] = React.useState('');
+
+  const tabs = [
+    { key: 'workflows', label: 'Workflows' },
+    { key: 'library',   label: 'Library' },
+    { key: 'channels',  label: 'Channels' },
+    { key: 'optouts',   label: 'Opt-outs' },
+  ] as const;
+
+  const workflowTemplates = [
+    { icon: '⬜', title: 'Empty Workflow', tags: [], bg: '#f0ede8' },
+    { icon: '📣', title: 'Announce a New Feature', tags: ['official'], bg: '#fef3c7' },
+    { icon: '🚀', title: 'Onboarding Started But Not Completed', tags: ['official'], bg: '#dbeafe' },
+    { icon: '⬆️', title: 'Trial Started – Upgrade Nudge', tags: ['official'], bg: '#fce7f3' },
+    { icon: '✉️', title: 'Welcome Email Sequence', tags: ['official'], bg: '#d1fae5' },
+    { icon: '🎉', title: 'Send Congrats for a Milestone Reached', tags: ['official','milestone','email','messaging'], bg: '#ede9fe' },
+    { icon: '💡', title: 'Feature Adoption Tips', tags: ['official','feature adoption','email','messaging'], bg: '#fef9c3' },
+    { icon: '📈', title: 'Heavy Usage Levels Detected', tags: ['official','product usage'], bg: '#fee2e2' },
+    { icon: '💼', title: 'Notify Sales for High Intent Users', tags: ['official','sales','slack'], bg: '#e0f2fe' },
+    { icon: '😟', title: 'Negative Survey Response → Alert Team', tags: ['official','surveys','slack'], bg: '#fce7f3' },
+    { icon: '🔄', title: 'Re-Engagement Workflow for Inactive Users', tags: ['official','messaging','email'], bg: '#d1fae5' },
+    { icon: '🚨', title: 'Alert Team in Case of a Repeated Failure', tags: ['official','slack','failure alert','incident management'], bg: '#fee2e2' },
+  ];
+
+  // Create Workflow Modal
+  if (showCreateModal) {
+    return (
+      <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0">
+        {/* Fixed overlay modal */}
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[88vh] flex flex-col">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+              <div>
+                <h2 className="text-lg font-semibold text-[#1a1a18]">Create a workflow</h2>
+                <p className="text-sm text-[#646462] mt-0.5">Choose a template or start with a blank slate</p>
+              </div>
+              <button onClick={() => setShowCreateModal(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f3f3f1] text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            {/* Search */}
+            <div className="px-6 py-3 border-b border-[#e9eae6] flex gap-2">
+              <div className="relative flex-1">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                <input className="w-full pl-9 pr-3 py-2 border border-[#e9eae6] rounded-lg text-sm bg-[#f9f9f7] focus:outline-none focus:border-[#3b59f6]" placeholder="Search templates..." value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+              <select className="border border-[#e9eae6] rounded-lg px-3 py-2 text-sm bg-[#f9f9f7] text-[#1a1a18] focus:outline-none">
+                <option>All categories</option>
+                <option>Email</option>
+                <option>Messaging</option>
+                <option>Slack</option>
+                <option>Onboarding</option>
+              </select>
+            </div>
+            {/* Grid */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-4 gap-4">
+                {workflowTemplates.filter(t =>
+                  !search || t.title.toLowerCase().includes(search.toLowerCase())
+                ).map((tpl, i) => (
+                  <div key={i} className="border border-[#e9eae6] rounded-xl overflow-hidden hover:shadow-md cursor-pointer group transition-shadow">
+                    {/* Illustration area */}
+                    <div className="h-28 flex items-center justify-center text-4xl" style={{ backgroundColor: tpl.bg }}>
+                      {tpl.title === 'Empty Workflow' ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-10 h-10 rounded-lg border-2 border-dashed border-[#e8572a] flex items-center justify-center">
+                            <svg viewBox="0 0 16 16" className="w-5 h-5 text-[#e8572a]"><path d="M8 4v8M4 8h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                          </div>
+                          <span className="text-xs text-[#e8572a] font-medium">Blank</span>
+                        </div>
+                      ) : (
+                        <span>{tpl.icon}</span>
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div className="p-3">
+                      <p className="text-sm font-medium text-[#1a1a18] leading-tight mb-2">{tpl.title}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {tpl.tags.map((tag, j) => (
+                          <span key={j} className="px-1.5 py-0.5 bg-[#f3f3f1] text-[#646462] text-[10px] rounded-full">{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0 bg-white">
+        <div className="flex items-center gap-3">
+          {/* Workflow icon */}
+          <div className="w-8 h-8 rounded-lg bg-[#fef3c7] flex items-center justify-center">
+            <svg viewBox="0 0 20 20" className="w-5 h-5 text-[#d97706]" fill="currentColor"><path d="M2 4a2 2 0 012-2h3a2 2 0 012 2v1h2V4a2 2 0 012-2h3a2 2 0 012 2v3a2 2 0 01-2 2h-3a2 2 0 01-2-2V6H9v1a2 2 0 01-2 2H4a2 2 0 01-2-2V4zm2 0v3h3V4H4zm9 0v3h3V4h-3zM2 13a2 2 0 012-2h3a2 2 0 012 2v3a2 2 0 01-2 2H4a2 2 0 01-2-2v-3zm2 0v3h3v-3H4z"/></svg>
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-[#1a1a18]">Workflows</h1>
+            <p className="text-xs text-[#646462]">Automated messaging pipelines for your users</p>
+          </div>
+        </div>
+        {/* Tab-specific action buttons */}
+        {tab === 'workflows' && (
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 bg-[#fef3c7] text-[#d97706] text-xs font-semibold rounded-full border border-[#fde68a]">Quick start</span>
+            <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f59e0b] hover:bg-[#d97706] text-white text-sm font-medium rounded-lg transition-colors">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              New workflow
+            </button>
+          </div>
+        )}
+        {tab === 'library' && (
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f59e0b] hover:bg-[#d97706] text-white text-sm font-medium rounded-lg transition-colors">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+            New template
+          </button>
+        )}
+        {tab === 'channels' && (
+          <div className="flex items-stretch">
+            <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f59e0b] hover:bg-[#d97706] text-white text-sm font-medium rounded-l-lg transition-colors border-r border-[#d97706]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              New channel
+            </button>
+            <button onClick={() => setShowChannelDropdown(v => !v)} className="px-2 py-1.5 bg-[#f59e0b] hover:bg-[#d97706] text-white rounded-r-lg transition-colors relative">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              {showChannelDropdown && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 w-48 z-10 text-left">
+                  <button className="w-full px-3 py-2 text-sm text-[#1a1a18] hover:bg-[#f9f9f7] text-left">Email channel</button>
+                  <button className="w-full px-3 py-2 text-sm text-[#1a1a18] hover:bg-[#f9f9f7] text-left">Slack integration</button>
+                  <button className="w-full px-3 py-2 text-sm text-[#1a1a18] hover:bg-[#f9f9f7] text-left">In-app messaging</button>
+                </div>
+              )}
+            </button>
+          </div>
+        )}
+        {tab === 'optouts' && (
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f59e0b] hover:bg-[#d97706] text-white text-sm font-medium rounded-lg transition-colors">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+            New category
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-[#e9eae6] px-6 bg-white flex-shrink-0">
+        {tabs.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === t.key ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+
+        {/* ── WORKFLOWS TAB ── */}
+        {tab === 'workflows' && (
+          <div className="flex flex-col items-center justify-center py-20 px-6">
+            {/* Hedgehog postman mascot with mailbox */}
+            <div className="mb-6 relative">
+              <svg viewBox="0 0 160 140" className="w-48 h-40">
+                {/* Mailbox post */}
+                <rect x="78" y="90" width="6" height="40" rx="2" fill="#8B7355"/>
+                {/* Mailbox body */}
+                <rect x="55" y="65" width="52" height="32" rx="8" fill="#e8572a"/>
+                <rect x="55" y="65" width="52" height="16" rx="8" fill="#c94a20"/>
+                {/* Mailbox door */}
+                <rect x="63" y="75" width="36" height="18" rx="4" fill="#c94a20"/>
+                <rect x="63" y="75" width="36" height="9" rx="3" fill="#a83a18"/>
+                {/* Mailbox flag */}
+                <rect x="104" y="68" width="3" height="18" rx="1" fill="#8B7355"/>
+                <rect x="107" y="68" width="12" height="8" rx="1" fill="#e8572a"/>
+                {/* Hedgehog body */}
+                <ellipse cx="55" cy="95" rx="22" ry="18" fill="#8B7355"/>
+                {/* Hedgehog spines */}
+                <path d="M40 82 Q35 72 38 65" stroke="#5C4033" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                <path d="M50 78 Q48 67 52 60" stroke="#5C4033" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                <path d="M60 79 Q62 68 65 62" stroke="#5C4033" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                <path d="M68 84 Q73 74 75 68" stroke="#5C4033" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                {/* Hedgehog face */}
+                <ellipse cx="42" cy="97" rx="14" ry="12" fill="#D4A574"/>
+                {/* Eyes */}
+                <circle cx="38" cy="94" r="2" fill="#1a1a18"/>
+                <circle cx="39" cy="93.5" r="0.7" fill="white"/>
+                {/* Nose */}
+                <ellipse cx="36" cy="97" rx="2" ry="1.5" fill="#c94a20"/>
+                {/* Smile */}
+                <path d="M33 99 Q36 102 39 99" stroke="#8B7355" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+                {/* Postman hat */}
+                <rect x="34" y="82" width="20" height="8" rx="2" fill="#1a3a5c"/>
+                <rect x="31" y="88" width="26" height="3" rx="1.5" fill="#1a3a5c"/>
+                <rect x="38" y="79" width="12" height="4" rx="2" fill="#1a3a5c"/>
+                {/* Hat badge */}
+                <circle cx="44" cy="86" r="2.5" fill="#f59e0b"/>
+                {/* Arm holding letter */}
+                <path d="M55 100 Q60 105 65 100" stroke="#8B7355" strokeWidth="3" strokeLinecap="round" fill="none"/>
+                {/* Letter/envelope */}
+                <rect x="62" y="96" width="18" height="13" rx="2" fill="white" stroke="#e9eae6" strokeWidth="1"/>
+                <path d="M62 98 L71 104 L80 98" stroke="#e9eae6" strokeWidth="1" fill="none"/>
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-[#1a1a18] mb-2">Create your first workflow</h2>
+            <p className="text-sm text-[#646462] text-center max-w-sm mb-6">
+              Workflows let you send automated messages to users based on their behavior and properties.
+            </p>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-1.5 px-4 py-2 bg-[#f59e0b] hover:bg-[#d97706] text-white text-sm font-medium rounded-lg transition-colors">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                + Create workflow
+              </button>
+              <button className="flex items-center gap-1.5 px-4 py-2 border border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] text-sm rounded-lg transition-colors">
+                Learn more
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 8h8M9 5l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── LIBRARY TAB ── */}
+        {tab === 'library' && (
+          <div className="p-6">
+            {/* Search row */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="relative flex-1 max-w-xs">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                <input className="w-full pl-9 pr-3 py-1.5 border border-[#e9eae6] rounded-lg text-sm bg-white focus:outline-none focus:border-[#3b59f6]" placeholder="Search templates..." value={libSearch} onChange={e => setLibSearch(e.target.value)} />
+              </div>
+              <select className="border border-[#e9eae6] rounded-lg px-3 py-1.5 text-sm bg-white text-[#1a1a18] focus:outline-none">
+                <option>Created by: Any user</option>
+              </select>
+            </div>
+            {/* Empty state */}
+            <div className="flex flex-col items-center justify-center py-16">
+              <div className="mb-5">
+                <svg viewBox="0 0 120 100" className="w-36 h-28">
+                  {/* Open book */}
+                  <rect x="15" y="30" width="40" height="50" rx="4" fill="#dbeafe" stroke="#93c5fd" strokeWidth="1.5"/>
+                  <rect x="55" y="30" width="40" height="50" rx="4" fill="white" stroke="#93c5fd" strokeWidth="1.5"/>
+                  <line x1="55" y1="30" x2="55" y2="80" stroke="#93c5fd" strokeWidth="1.5"/>
+                  {/* Lines on pages */}
+                  <line x1="22" y1="42" x2="48" y2="42" stroke="#93c5fd" strokeWidth="1.2"/>
+                  <line x1="22" y1="50" x2="48" y2="50" stroke="#93c5fd" strokeWidth="1.2"/>
+                  <line x1="22" y1="58" x2="48" y2="58" stroke="#93c5fd" strokeWidth="1.2"/>
+                  <line x1="62" y1="42" x2="88" y2="42" stroke="#e9eae6" strokeWidth="1.2"/>
+                  <line x1="62" y1="50" x2="88" y2="50" stroke="#e9eae6" strokeWidth="1.2"/>
+                  <line x1="62" y1="58" x2="88" y2="58" stroke="#e9eae6" strokeWidth="1.2"/>
+                  {/* Hedgehog reading */}
+                  <ellipse cx="60" cy="22" rx="14" ry="11" fill="#8B7355"/>
+                  <path d="M50 16 Q48 8 51 4" stroke="#5C4033" strokeWidth="2" strokeLinecap="round" fill="none"/>
+                  <path d="M57 13 Q57 5 60 2" stroke="#5C4033" strokeWidth="2" strokeLinecap="round" fill="none"/>
+                  <path d="M64 14 Q66 6 68 3" stroke="#5C4033" strokeWidth="2" strokeLinecap="round" fill="none"/>
+                  <ellipse cx="52" cy="25" rx="10" ry="8" fill="#D4A574"/>
+                  <circle cx="49" cy="23" r="1.5" fill="#1a1a18"/>
+                  <ellipse cx="48" cy="26" rx="1.5" ry="1" fill="#c94a20"/>
+                  {/* Glasses */}
+                  <circle cx="49" cy="23" r="3" fill="none" stroke="#1a1a18" strokeWidth="0.8"/>
+                  <circle cx="55" cy="23" r="3" fill="none" stroke="#1a1a18" strokeWidth="0.8"/>
+                  <line x1="52" y1="23" x2="52" y2="23" stroke="#1a1a18" strokeWidth="0.8"/>
+                </svg>
+              </div>
+              <h2 className="text-lg font-semibold text-[#1a1a18] mb-1.5">Create your first message template</h2>
+              <p className="text-sm text-[#646462] text-center max-w-sm mb-5">
+                Message templates are reusable content blocks you can use across your workflows.
+              </p>
+              <div className="flex items-center gap-3">
+                <button className="flex items-center gap-1.5 px-4 py-2 bg-[#f59e0b] hover:bg-[#d97706] text-white text-sm font-medium rounded-lg transition-colors">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                  + Create message template
+                </button>
+                <button className="flex items-center gap-1.5 px-4 py-2 border border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] text-sm rounded-lg transition-colors">
+                  Learn more
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 8h8M9 5l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── CHANNELS TAB ── */}
+        {tab === 'channels' && (
+          <div className="flex flex-col items-center justify-center py-20 px-6">
+            {/* Hedgehog in suit with phone */}
+            <div className="mb-6">
+              <svg viewBox="0 0 120 120" className="w-40 h-36">
+                {/* Body / suit */}
+                <ellipse cx="60" cy="90" rx="24" ry="20" fill="#1a3a5c"/>
+                {/* White shirt / tie */}
+                <rect x="56" y="76" width="8" height="20" rx="2" fill="white"/>
+                <path d="M58 78 L60 82 L62 78" fill="#e8572a"/>
+                <rect x="59" y="82" width="2" height="10" rx="1" fill="#e8572a"/>
+                {/* Spines on back */}
+                <path d="M42 80 Q37 70 40 62" stroke="#5C4033" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                <path d="M52 75 Q50 64 53 57" stroke="#5C4033" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                <path d="M62 74 Q64 63 67 57" stroke="#5C4033" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                <path d="M70 78 Q75 68 77 62" stroke="#5C4033" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                {/* Head */}
+                <ellipse cx="60" cy="62" rx="18" ry="15" fill="#8B7355"/>
+                <ellipse cx="52" cy="68" rx="12" ry="10" fill="#D4A574"/>
+                {/* Eyes */}
+                <circle cx="48" cy="65" r="2" fill="#1a1a18"/>
+                <circle cx="48.7" cy="64.4" r="0.7" fill="white"/>
+                {/* Nose */}
+                <ellipse cx="46" cy="68" rx="2" ry="1.5" fill="#c94a20"/>
+                {/* Smile */}
+                <path d="M43 71 Q46 74 49 71" stroke="#8B7355" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+                {/* Phone in hand */}
+                <rect x="72" y="75" width="12" height="20" rx="3" fill="#1a1a18"/>
+                <rect x="74" y="78" width="8" height="13" rx="1" fill="#3b59f6"/>
+                <circle cx="78" cy="93" r="1.2" fill="#646462"/>
+                {/* Arm */}
+                <path d="M68 88 Q70 82 72 80" stroke="#8B7355" strokeWidth="3" strokeLinecap="round" fill="none"/>
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-[#1a1a18] mb-2">Create your first channel integration</h2>
+            <p className="text-sm text-[#646462] text-center max-w-sm mb-6">
+              Connect messaging channels like email, Slack, or in-app notifications to send workflow messages.
+            </p>
+            <div className="flex items-center gap-3">
+              <button className="flex items-center gap-1.5 px-4 py-2 bg-[#f59e0b] hover:bg-[#d97706] text-white text-sm font-medium rounded-lg transition-colors">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                + Create channel integration
+              </button>
+              <button className="flex items-center gap-1.5 px-4 py-2 border border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] text-sm rounded-lg transition-colors">
+                Learn more
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 8h8M9 5l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── OPT-OUTS TAB ── */}
+        {tab === 'optouts' && (
+          <div className="p-6 space-y-6">
+            {/* Message categories section */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-semibold text-[#1a1a18]">Message categories</h3>
+              </div>
+              {/* Empty state */}
+              <div className="border border-[#e9eae6] rounded-xl bg-white flex flex-col items-center py-14 px-6">
+                <div className="mb-5">
+                  <svg viewBox="0 0 120 100" className="w-36 h-28">
+                    {/* Clipboard */}
+                    <rect x="30" y="20" width="60" height="70" rx="5" fill="white" stroke="#e9eae6" strokeWidth="1.5"/>
+                    <rect x="42" y="14" width="36" height="14" rx="4" fill="#e9eae6"/>
+                    <rect x="46" y="10" width="28" height="10" rx="3" fill="#d1d5db"/>
+                    <line x1="40" y1="40" x2="80" y2="40" stroke="#e9eae6" strokeWidth="1.2"/>
+                    <line x1="40" y1="50" x2="80" y2="50" stroke="#e9eae6" strokeWidth="1.2"/>
+                    <line x1="40" y1="60" x2="65" y2="60" stroke="#e9eae6" strokeWidth="1.2"/>
+                    {/* Checkmarks */}
+                    <path d="M35 40 L38 43 L44 37" stroke="#e8572a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                    <path d="M35 50 L38 53 L44 47" stroke="#e8572a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                    {/* Hedgehog with helmet */}
+                    <ellipse cx="85" cy="55" rx="16" ry="13" fill="#8B7355"/>
+                    <path d="M75 48 Q72 40 74 35" stroke="#5C4033" strokeWidth="2" strokeLinecap="round" fill="none"/>
+                    <path d="M82 44 Q81 36 84 32" stroke="#5C4033" strokeWidth="2" strokeLinecap="round" fill="none"/>
+                    <path d="M90 45 Q93 37 95 34" stroke="#5C4033" strokeWidth="2" strokeLinecap="round" fill="none"/>
+                    <ellipse cx="78" cy="60" rx="10" ry="8" fill="#D4A574"/>
+                    <circle cx="75" cy="58" r="1.5" fill="#1a1a18"/>
+                    <ellipse cx="74" cy="61" rx="1.5" ry="1" fill="#c94a20"/>
+                    {/* Helmet */}
+                    <path d="M72 50 Q72 42 85 42 Q98 42 98 50" fill="#f59e0b" stroke="#d97706" strokeWidth="1"/>
+                    <rect x="72" y="49" width="26" height="4" rx="2" fill="#d97706"/>
+                    {/* Strap */}
+                    <path d="M73 53 Q74 58 75 60" stroke="#d97706" strokeWidth="1.2" fill="none"/>
+                    <path d="M97 53 Q96 58 95 60" stroke="#d97706" strokeWidth="1.2" fill="none"/>
+                  </svg>
+                </div>
+                <h3 className="text-base font-semibold text-[#1a1a18] mb-1.5">Create your first category</h3>
+                <p className="text-sm text-[#646462] text-center max-w-sm mb-5">
+                  Message categories allow users to manage their notification preferences.
+                </p>
+                <div className="flex items-center gap-2 flex-wrap justify-center">
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] text-sm rounded-lg transition-colors">
+                    Import from Customer.io
+                  </button>
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f59e0b] hover:bg-[#d97706] text-white text-sm font-medium rounded-lg transition-colors">
+                    Create category
+                  </button>
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] text-sm rounded-lg transition-colors">
+                    Learn more
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 8h8M9 5l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Marketing opt-out list section */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-semibold text-[#1a1a18]">Marketing opt-out list</h3>
+                <div className="flex items-center gap-2">
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] text-sm rounded-lg transition-colors">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                    + Add opt-out
+                  </button>
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] text-sm rounded-lg transition-colors">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Reload
+                  </button>
+                </div>
+              </div>
+              <div className="border border-[#e9eae6] rounded-xl bg-white overflow-hidden">
+                {/* Table header */}
+                <div className="grid grid-cols-2 px-4 py-2.5 border-b border-[#e9eae6] bg-[#f9f9f7]">
+                  <span className="text-xs font-semibold text-[#646462] uppercase tracking-wide">Recipient</span>
+                  <span className="text-xs font-semibold text-[#646462] uppercase tracking-wide">Opt-out date</span>
+                </div>
+                {/* Empty row */}
+                <div className="flex items-center justify-center py-10 text-sm text-[#646462]">
+                  No opt-outs found
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // ── WADataSidebar — identical pattern to ReportsSidebar / KnowledgeSidebar ──
 function WADataSidebar({ sub, onSelect }: { sub: WADataSubView; onSelect: (s: WADataSubView) => void }) {
   const [open, setOpen] = useState<Record<string, boolean>>({
@@ -40924,7 +41361,8 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
            appsSub === 'appFeatureFlags'    ? <WAAppFeatureFlagsView /> :
            appsSub === 'appNotebooks'       ? <WAAppNotebooksView /> :
            appsSub === 'appToolbar'         ? <WAAppToolbarView /> :
-           appsSub === 'appWebScripts'      ? <WAAppWebScriptsView /> : (
+           appsSub === 'appWebScripts'      ? <WAAppWebScriptsView /> :
+           appsSub === 'appWorkflows'       ? <WAAppWorkflowsView /> : (
             <>
               <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
                 <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{appsSub.replace(/^app/, '').replace(/([A-Z])/g, ' $1').trim()}</h1>
