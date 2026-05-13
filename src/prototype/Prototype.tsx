@@ -26346,10 +26346,17 @@ function WAAppDashboardsView() {
   type DashTab = 'all' | 'mine' | 'pinned' | 'templates';
   const [tab,     setTab]     = React.useState<DashTab>('all');
   const [detail,  setDetail]  = React.useState<number | null>(null);
+
+  // Consume nav intent from another screen (e.g. "open dashboard X")
+  React.useEffect(() => {
+    const intent = consumeNavIntent<number>('dashboard');
+    if (intent?.id != null) setDetail(Number(intent.id));
+  }, []);
   const [search,  setSearch]  = React.useState('');
   const [showNew, setShowNew] = React.useState(false);
   const [toDelete, setToDelete] = React.useState<DashboardRow | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [toShare, setToShare] = React.useState<DashboardRow | null>(null);
 
   const [filterPinned,  setFilterPinned]  = React.useState<string | null>(null);    // 'pinned' | null
   const [filterTags,    setFilterTags]    = React.useState<string[]>([]);
@@ -26442,8 +26449,7 @@ function WAAppDashboardsView() {
           break;
         }
         case 'share': {
-          // TODO: open share modal (out of scope this iteration)
-          alert('Compartir: prÃ³ximamente.');
+          setToShare(row);
           break;
         }
       }
@@ -26618,6 +26624,115 @@ function WAAppDashboardsView() {
 
       <NewDashboardModal open={showNew} onClose={() => setShowNew(false)} onCreated={(d) => { setDetail(d.id); load(); }} />
       <ConfirmDeleteModal open={!!toDelete} name={toDelete?.name ?? ''} busy={deleting} onConfirm={confirmDelete} onCancel={() => setToDelete(null)} />
+      {toShare && <DashboardShareModal dashboard={toShare} onClose={() => setToShare(null)} onUpdate={(patch) => { setRows(prev => prev.map(r => r.id === toShare.id ? { ...r, ...patch } : r)); setToShare(s => s ? { ...s, ...patch } : s); }} />}
+    </div>
+  );
+}
+
+// ── Dashboard share modal (Members access + public link + email digest) ──────
+function DashboardShareModal({ dashboard, onClose, onUpdate }: { dashboard: DashboardRow; onClose: () => void; onUpdate: (patch: Partial<DashboardRow>) => void }) {
+  const [tab,        setTab]        = React.useState<'access' | 'public' | 'subscribe'>('access');
+  const [members,    setMembers]    = React.useState<any[]>([]);
+  const [publicEnabled, setPublicEnabled] = React.useState<boolean>(!!dashboard.is_shared);
+  const [publicToken, setPublicToken] = React.useState<string>(`d_${dashboard.id}_${Math.random().toString(36).slice(2, 10)}`);
+  const [subEmail,   setSubEmail]   = React.useState('');
+  const [subFreq,    setSubFreq]    = React.useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  const [busy,       setBusy]       = React.useState(false);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getCurrentUser()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.organization.members();
+        setMembers(res.results ?? res ?? []);
+      } catch {}
+    })();
+  }, []);
+
+  async function togglePublic() {
+    setBusy(true);
+    try {
+      const ph = await import('../api/posthog');
+      const next = !publicEnabled;
+      try { await ph.posthog.dashboards.update(dashboard.id, { is_shared: next } as any); } catch {}
+      setPublicEnabled(next);
+      onUpdate({ is_shared: next });
+    } finally { setBusy(false); }
+  }
+
+  const publicUrl = `${window.location.origin}/shared/dashboard/${publicToken}`;
+
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-[92vw] overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-[#1a1a18]">Compartir dashboard</h2>
+            <p className="text-xs text-[#646462] mt-0.5 truncate max-w-[400px]">{dashboard.name}</p>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+        </div>
+        <div className="flex items-center gap-1 px-5 border-b border-[#e9eae6]">
+          {[{k:'access',l:'Equipo'},{k:'public',l:'Link público'},{k:'subscribe',l:'Suscripción email'}].map(t => (
+            <button key={t.k} onClick={() => setTab(t.k as any)} className={`pb-2 pt-2.5 px-3 text-xs font-medium border-b-2 ${tab === t.k ? 'border-[#3b59f6] text-[#3b59f6]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>{t.l}</button>
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {tab === 'access' && (
+            <>
+              <p className="text-xs text-[#646462]">Miembros del equipo con acceso a este dashboard:</p>
+              {members.length === 0 ? <p className="text-xs text-[#9ca3af] italic">Cargando miembros…</p>
+              : members.map((m: any, i) => {
+                const lbl = m.user?.first_name || m.user?.email || 'Usuario';
+                return (
+                  <div key={i} className="flex items-center gap-2 p-2 bg-[#fafaf9] rounded">
+                    <div className="w-7 h-7 rounded-full bg-[#3b59f6] text-white flex items-center justify-center text-xs font-bold">{lbl[0]?.toUpperCase()}</div>
+                    <div className="flex-1 min-w-0"><p className="text-sm text-[#1a1a18] truncate">{lbl}</p><p className="text-[10px] text-[#9ca3af] truncate">{m.user?.email}</p></div>
+                    <select defaultValue="view" className="text-[10px] border border-[#e9eae6] rounded px-1 py-0.5">
+                      <option value="view">Ver</option><option value="edit">Editar</option><option value="admin">Admin</option>
+                    </select>
+                  </div>
+                );
+              })}
+            </>
+          )}
+          {tab === 'public' && (
+            <>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={publicEnabled} onChange={togglePublic} disabled={busy} className="accent-[#3b59f6]" />
+                <span className="text-sm text-[#1a1a18]">Habilitar enlace público (sin autenticación)</span>
+              </label>
+              {publicEnabled && (
+                <div className="bg-[#f9f9f7] rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input readOnly value={publicUrl} className="flex-1 px-2 py-1.5 bg-white border border-[#e9eae6] rounded text-xs font-mono" />
+                    <button onClick={() => navigator.clipboard.writeText(publicUrl)} className="px-3 py-1.5 bg-[#1a1a18] text-white text-xs rounded">Copiar</button>
+                  </div>
+                  <p className="text-[10px] text-[#9ca3af]">⚠ Cualquiera con este link puede ver el dashboard. Regenera el token para invalidar enlaces antiguos.</p>
+                  <button onClick={() => setPublicToken(`d_${dashboard.id}_${Math.random().toString(36).slice(2, 10)}`)} className="text-xs text-[#3b59f6] hover:underline">Regenerar token</button>
+                </div>
+              )}
+            </>
+          )}
+          {tab === 'subscribe' && (
+            <>
+              <p className="text-xs text-[#646462]">Recibe un PDF del dashboard por email automáticamente:</p>
+              <div>
+                <label className="block text-xs font-medium text-[#1a1a18] mb-1">Email destinatario</label>
+                <input value={subEmail} onChange={e => setSubEmail(e.target.value)} type="email" placeholder="tu@empresa.com" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#1a1a18] mb-1">Frecuencia</label>
+                <select value={subFreq} onChange={e => setSubFreq(e.target.value as any)} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm">
+                  <option value="daily">Diario (9:00)</option><option value="weekly">Semanal (lunes 9:00)</option><option value="monthly">Mensual (día 1, 9:00)</option>
+                </select>
+              </div>
+              <button disabled={!subEmail.trim()} onClick={() => alert(`Suscripción creada para ${subEmail} (${subFreq}).`)} className="px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded disabled:opacity-50">Crear suscripción</button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -27225,6 +27340,13 @@ function WAAppProductAnalyticsView() {
   const [typeFilter, setTypeFilter] = React.useState<InsightType | null>(null);
   const [favOnly, setFavOnly] = React.useState(false);
   const [detail, setDetail] = React.useState<number | null>(null);
+
+  // Consume nav intent (e.g. "open insight X" from Home or "create from EventsQuery")
+  React.useEffect(() => {
+    const intent = consumeNavIntent<number>('insight');
+    if (intent?.id != null) setDetail(Number(intent.id));
+  }, []);
+  const [toAddToDash, setToAddToDash] = React.useState<InsightRow | null>(null);
   const [showNew, setShowNew] = React.useState(false);
 
   const [rows,    setRows]    = React.useState<InsightRow[]>([]);
@@ -27292,7 +27414,7 @@ function WAAppProductAnalyticsView() {
           break;
         }
         case 'add_to_dashboard': {
-          alert('AÃ±adir a dashboard: prÃ³ximamente.');
+          setToAddToDash(row);
           break;
         }
       }
@@ -27421,6 +27543,85 @@ function WAAppProductAnalyticsView() {
       </div>
 
       <NewInsightModal open={showNew} onClose={() => setShowNew(false)} onCreated={(id) => setDetail(id)} />
+      {toAddToDash && <AddInsightToDashboardModal insight={toAddToDash} onClose={() => setToAddToDash(null)} />}
+    </div>
+  );
+}
+
+// ── Add insight to dashboard modal ──────────────────────────────────────────
+function AddInsightToDashboardModal({ insight, onClose }: { insight: InsightRow; onClose: () => void }) {
+  const [dashboards, setDashboards] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [search, setSearch] = React.useState('');
+  const [selected, setSelected] = React.useState<Set<number>>(new Set(insight.dashboards ?? []));
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getProjectId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.dashboards.list({ limit: 100 });
+        setDashboards(res.results ?? []);
+      } catch {}
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const filtered = dashboards.filter(d => !search || d.name.toLowerCase().includes(search.toLowerCase()));
+
+  async function save() {
+    setSaving(true);
+    try {
+      const ph = await import('../api/posthog');
+      // PostHog uses dashboards array on the insight to track membership
+      await ph.phPatch(`/api/environments/${ph.getTeamId()}/insights/${insight.id}/`, { dashboards: Array.from(selected) });
+      onClose();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? 'desconocido')); }
+    finally { setSaving(false); }
+  }
+
+  function toggle(id: number) {
+    setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-[60] flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-[92vw] max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-[#1a1a18]">Añadir a dashboard</h2>
+            <p className="text-xs text-[#646462] mt-0.5 truncate max-w-[400px]">{insightDisplayName(insight)}</p>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+        </div>
+        <div className="p-3 border-b border-[#e9eae6]">
+          <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar dashboards…" className="w-full px-3 py-1.5 bg-[#fafaf9] border border-[#e9eae6] rounded text-sm focus:outline-none focus:border-[#3b59f6]" />
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="p-4 space-y-2">{[0,1,2,3].map(i => <div key={i} className="h-9 bg-[#f3f3f1] rounded animate-pulse" />)}</div>
+          ) : filtered.length === 0 ? (
+            <p className="p-8 text-sm text-[#9ca3af] text-center">Sin dashboards encontrados</p>
+          ) : filtered.map(d => (
+            <label key={d.id} className="flex items-center gap-3 px-4 py-2 hover:bg-[#fafaf9] cursor-pointer border-b border-[#f3f3f1]">
+              <input type="checkbox" checked={selected.has(d.id)} onChange={() => toggle(d.id)} className="accent-[#3b59f6]" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[#1a1a18] truncate">{d.name}</p>
+                {d.description && <p className="text-[10px] text-[#9ca3af] truncate">{d.description}</p>}
+              </div>
+              {d.pinned && <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#f59e0b] flex-shrink-0" fill="currentColor"><path d="M8 1l1.5 4H14l-3.5 2.6 1.3 4L8 9.8l-3.8 2.3 1.3-4L2 5h4.5z"/></svg>}
+            </label>
+          ))}
+        </div>
+        <div className="px-5 py-3 bg-[#fafaf9] border-t border-[#e9eae6] flex items-center justify-between">
+          <span className="text-xs text-[#646462]">{selected.size} dashboard{selected.size === 1 ? '' : 's'} seleccionado{selected.size === 1 ? '' : 's'}</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 text-sm text-[#646462]">Cancelar</button>
+            <button onClick={save} disabled={saving} className="px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -29898,11 +30099,13 @@ function StackTraceViewer({ stack }: { stack: string }) {
 }
 
 // â”€â”€ Issue detail drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function ErrorIssueDrawer({ issue, onClose, onStatusChange, rangeClause }: {
+function ErrorIssueDrawer({ issue, onClose, onStatusChange, rangeClause, members, onAssignChange }: {
   issue: ErrorIssue | null;
   onClose: () => void;
   onStatusChange: (id: string, status: ErrorIssue['status']) => void;
   rangeClause: string;
+  members: any[];
+  onAssignChange: (id: string, assignee: string | null) => void;
 }) {
   const [events,   setEvents]   = React.useState<ErrorEvent[]>([]);
   const [loading,  setLoading]  = React.useState(false);
@@ -29985,6 +30188,19 @@ function ErrorIssueDrawer({ issue, onClose, onStatusChange, rangeClause }: {
                 style={{ color: STATUS_OPTS.find(s => s.key === issue.status)?.color }}
               >
                 {STATUS_OPTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+              <select
+                value={issue.assignee ?? ''}
+                onChange={e => onAssignChange(issue.id, e.target.value || null)}
+                className="text-[10px] bg-white border border-[#e9eae6] rounded px-2 py-0.5 focus:outline-none text-[#1a1a18]"
+                title="Asignar a miembro"
+              >
+                <option value="">Sin asignar</option>
+                {members.map((m: any) => {
+                  const uuid = m.user?.uuid ?? m.uuid;
+                  const lbl  = m.user?.first_name || m.user?.email || 'Usuario';
+                  return <option key={uuid} value={uuid}>{lbl}</option>;
+                })}
               </select>
             </div>
             <h2 className="text-sm font-mono text-[#1a1a18] break-words pr-4">{issue.message}</h2>
@@ -30078,9 +30294,23 @@ function WAAppErrorTrackingView() {
 
   // localStorage status overrides (since not all PostHog versions have the API)
   const [statusMap, setStatusMap] = React.useState<Record<string, ErrorIssue['status']>>({});
+  const [assigneeMap, setAssigneeMap] = React.useState<Record<string, string | null>>({});
+  const [members, setMembers] = React.useState<any[]>([]);
   React.useEffect(() => {
     try { const raw = localStorage.getItem('wa-error-status'); if (raw) setStatusMap(JSON.parse(raw)); } catch {}
+    try { const raw = localStorage.getItem('wa-error-assignee'); if (raw) setAssigneeMap(JSON.parse(raw)); } catch {}
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getCurrentUser()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.organization.members();
+        setMembers(res.results ?? res ?? []);
+      } catch {}
+    })();
   }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-error-assignee', JSON.stringify(assigneeMap)); } catch {}
+  }, [assigneeMap]);
   React.useEffect(() => {
     try { localStorage.setItem('wa-error-status', JSON.stringify(statusMap)); } catch {}
   }, [statusMap]);
@@ -30130,6 +30360,7 @@ function WAAppErrorTrackingView() {
           fingerprint:  String(r[idx('fingerprint')] ?? id),
           sparkline:    [],
           status:       statusMap[id] ?? 'active',
+          assignee:     assigneeMap[id] ?? null,
         };
       });
 
@@ -30170,7 +30401,7 @@ function WAAppErrorTrackingView() {
     } catch (e: any) {
       setError(e?.message ?? 'Error al cargar issues');
     } finally { setLoading(false); }
-  }, [rangeClause, statusMap]);
+  }, [rangeClause, statusMap, assigneeMap]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -30178,6 +30409,11 @@ function WAAppErrorTrackingView() {
     setStatusMap(prev => ({ ...prev, [id]: status }));
     setIssues(prev => prev.map(i => i.id === id ? { ...i, status } : i));
     if (selected?.id === id) setSelected({ ...selected, status });
+  }
+  function changeAssignee(id: string, assignee: string | null) {
+    setAssigneeMap(prev => ({ ...prev, [id]: assignee }));
+    setIssues(prev => prev.map(i => i.id === id ? { ...i, assignee } : i));
+    if (selected?.id === id) setSelected({ ...selected, assignee });
   }
 
   function bulkResolve() {
@@ -30315,7 +30551,7 @@ function WAAppErrorTrackingView() {
         </table>
       </div>
 
-      <ErrorIssueDrawer issue={selected} onClose={() => setSelected(null)} onStatusChange={changeStatus} rangeClause={rangeClause} />
+      <ErrorIssueDrawer issue={selected} onClose={() => setSelected(null)} onStatusChange={changeStatus} rangeClause={rangeClause} members={members} onAssignChange={changeAssignee} />
     </div>
   );
 }
@@ -36922,6 +37158,34 @@ interface RecentItem {
 
 type HomeMode = 'idle' | 'ai' | 'search';
 
+// ── Cross-screen navigation helper ────────────────────────────────────────────
+// Lets any view request opening another view with optional intent (e.g. open
+// a specific dashboard / insight / recording). The destination view reads the
+// intent from localStorage on mount and clears it.
+type WANavTarget =
+  | 'appDashboards' | 'appProductAnalytics' | 'appSqlEditor' | 'appWebAnalytics'
+  | 'appLlmAnalytics' | 'appClusters' | 'appPlayground'
+  | 'appErrorTracking' | 'appHeatmaps' | 'appLogs' | 'appSessionReplay' | 'appSupport' | 'appSurveys'
+  | 'appEarlyAccess' | 'appExperiments' | 'appFeatureFlags'
+  | 'appNotebooks' | 'appToolbar' | 'appWebScripts' | 'appWorkflows';
+function navigateWA(appsSub: WANavTarget, intent?: { kind: string; id: any; data?: any }) {
+  if (intent) {
+    try { localStorage.setItem(`wa-nav-${intent.kind}`, JSON.stringify({ id: intent.id, data: intent.data, ts: Date.now() })); } catch {}
+  }
+  window.dispatchEvent(new CustomEvent('wa-navigate', { detail: { appsSub } }));
+}
+function consumeNavIntent<T = any>(kind: string): { id: T; data?: any } | null {
+  try {
+    const raw = localStorage.getItem(`wa-nav-${kind}`);
+    if (!raw) return null;
+    localStorage.removeItem(`wa-nav-${kind}`);
+    const parsed = JSON.parse(raw);
+    // Ignore stale intents older than 5 seconds (likely from a previous mount)
+    if (Date.now() - (parsed.ts ?? 0) > 5000) return null;
+    return { id: parsed.id, data: parsed.data };
+  } catch { return null; }
+}
+
 // â”€â”€ Icon helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ItemTypeIcon({ type }: { type: RecentItem['type'] }) {
   const cls = 'w-4 h-4 flex-shrink-0';
@@ -37528,10 +37792,10 @@ function WAProjectHomeView() {
                 ) : (
                   <div className="space-y-1.5">
                     {pinned.map((p, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate">
+                      <button key={i} onClick={() => navigateWA('appDashboards', { kind: 'dashboard', id: p.id })} className="w-full flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate text-left">
                         <PinnedIcon />
                         <span className="truncate">{p.name}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -37550,10 +37814,10 @@ function WAProjectHomeView() {
                 ) : (
                   <div className="space-y-1.5">
                     {recents.map((r, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate">
+                      <button key={i} onClick={() => navigateWA('appProductAnalytics', { kind: 'insight', id: r.id })} className="w-full flex items-center gap-2 text-sm text-[#3b59f6] hover:text-[#2a44d6] cursor-pointer hover:underline truncate text-left">
                         <ItemTypeIcon type={r.type} />
                         <span className="truncate">{r.name}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -37572,10 +37836,10 @@ function WAProjectHomeView() {
                 ) : (
                   <div className="space-y-1.5">
                     {starred.map((s, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm text-[#f59e0b] hover:text-[#d97706] cursor-pointer hover:underline truncate">
+                      <button key={i} onClick={() => navigateWA('appDashboards', { kind: 'dashboard', id: s.id })} className="w-full flex items-center gap-2 text-sm text-[#f59e0b] hover:text-[#d97706] cursor-pointer hover:underline truncate text-left">
                         <StarredIcon />
                         <span className="text-[#3b59f6] hover:text-[#2a44d6] truncate">{s.name}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -39144,7 +39408,21 @@ function WAActivityView() {
               <div className="ml-auto flex items-center gap-2">
                 {tab === 'events' && <ColumnConfigurator cols={columns} onChange={setColumns} />}
                 <ExportMenu onExport={handleExport} />
-                <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                <button
+                  onClick={async () => {
+                    try {
+                      const ph = await import('../api/posthog');
+                      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+                      const created: any = await ph.phPost(`/api/environments/${ph.getTeamId()}/insights/`, {
+                        name: `Insight desde Actividad (${new Date().toLocaleString('es-ES')})`,
+                        saved: true,
+                        query: { kind: 'DataTableNode', source: buildEventsQuery(100).query },
+                      });
+                      navigateWA('appProductAnalytics', { kind: 'insight', id: created.id });
+                    } catch (e: any) { alert('Error creando insight: ' + (e?.message ?? '')); }
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]"
+                >
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12M6 2v12" stroke="currentColor" strokeWidth="1.3"/></svg>
                   Abrir como nuevo insight
                 </button>
@@ -46165,6 +46443,17 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
   const [dataSub, setDataSub] = useState<WADataSubView>('waDataModels');
   const [appsSub, setAppsSub] = useState<WAAppsSubView>('appDashboards');
   const [showSqlEditor, setShowSqlEditor] = useState(false);
+
+  // ── Global navigation listener (cross-screen nav intents) ──────────────────
+  React.useEffect(() => {
+    function handler(e: any) {
+      const d = e.detail || {};
+      if (d.view)    setSub(d.view as WAView);
+      if (d.appsSub) { setSub('waApps'); setAppsSub(d.appsSub as WAAppsSubView); }
+    }
+    window.addEventListener('wa-navigate', handler);
+    return () => window.removeEventListener('wa-navigate', handler);
+  }, []);
 
   const DATA_TITLES: Record<WADataSubView, string> = {
     waDataModels:            'Modelos',
