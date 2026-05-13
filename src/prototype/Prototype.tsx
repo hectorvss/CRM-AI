@@ -28099,536 +28099,636 @@ function WAAppSqlEditorView() {
   );
 }
 
-function WAAppLlmAnalyticsView() {
-  type LLMTab = 'overview' | 'traces' | 'generations' | 'users';
-  const [llmTab, setLlmTab] = useState<LLMTab>('overview');
-  const [dateRange, setDateRange] = useState('Últimos 7 días');
-  const [showDateDrop, setShowDateDrop] = useState(false);
-  const [selectedTrace, setSelectedTrace] = useState<string | null>(null);
-  const [showBetaBanner, setShowBetaBanner] = useState(true);
+// â”€â”€ WAAppLlmAnalyticsView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog LLM observability dashboard.
+// PostHog tracks LLM calls as `$ai_generation` events with properties:
+//   $ai_model, $ai_provider, $ai_input_tokens, $ai_output_tokens,
+//   $ai_total_cost_usd, $ai_latency, $ai_is_error, $ai_trace_id, $ai_span_id
+// Backend: POST /api/environments/{teamId}/query/ (HogQLQuery on events)
 
-  const DATE_OPTIONS = ['Hoy','Ayer','Últimas 24 horas','Últimos 7 días','Últimas 2 semanas','Últimos 30 días','Últimos 90 días','Último año'];
+interface LlmMetric {
+  label:  string;
+  value:  number | null;
+  prev:   number | null;
+  format: 'count' | 'currency' | 'duration' | 'percent' | 'tokens';
+  hint?:  string;
+}
 
-  const traces = [
-    { id: 'trc_001', name: 'Chat completion', model: 'gpt-4o', provider: 'OpenAI', duration: '1.24s', cost: '$0.0034', tokens: '1,204', inputTokens: '892', outputTokens: '312', status: 'success', user: 'u_alice', ts: 'Hace 2 min', input: 'Summarize the following support ticket and suggest a resolution...', output: 'The ticket describes a billing issue where the customer was charged twice. I recommend issuing a refund and...' },
-    { id: 'trc_002', name: 'Embeddings batch', model: 'text-embedding-3-small', provider: 'OpenAI', duration: '0.43s', cost: '$0.0002', tokens: '4,120', inputTokens: '4,120', outputTokens: '0', status: 'success', user: 'u_bob', ts: 'Hace 5 min', input: 'Batch of 41 documents for embedding...', output: '(vector output)' },
-    { id: 'trc_003', name: 'Customer intent classification', model: 'claude-3-5-sonnet', provider: 'Anthropic', duration: '0.88s', cost: '$0.0021', tokens: '620', inputTokens: '540', outputTokens: '80', status: 'success', user: 'u_alice', ts: 'Hace 8 min', input: 'Classify the intent of: "I need to upgrade my plan but the button is broken"', output: '{"intent": "billing_upgrade", "sentiment": "frustrated", "priority": "high"}' },
-    { id: 'trc_004', name: 'RAG pipeline', model: 'gpt-4o-mini', provider: 'OpenAI', duration: '2.11s', cost: '$0.0008', tokens: '3,880', inputTokens: '3,420', outputTokens: '460', status: 'success', user: 'u_carol', ts: 'Hace 12 min', input: 'Using retrieved context from knowledge base, answer: What are the refund policies?', output: 'Based on the retrieved documents, refunds are processed within 5-7 business days...' },
-    { id: 'trc_005', name: 'Code generation', model: 'claude-3-5-sonnet', provider: 'Anthropic', duration: '3.42s', cost: '$0.0089', tokens: '2,140', inputTokens: '980', outputTokens: '1,160', status: 'success', user: 'u_dave', ts: 'Hace 15 min', input: 'Write a TypeScript function to validate email addresses with regex', output: 'function validateEmail(email: string): boolean {\n  const regex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  return regex.test(email);\n}' },
-    { id: 'trc_006', name: 'Sentiment analysis', model: 'gpt-4o-mini', provider: 'OpenAI', duration: '0.61s', cost: '$0.0003', tokens: '340', inputTokens: '290', outputTokens: '50', status: 'error', user: 'u_eve', ts: 'Hace 19 min', input: 'Analyze sentiment of customer review: "This product is absolutely terrible..."', output: 'Error: rate limit exceeded' },
-    { id: 'trc_007', name: 'Chat completion', model: 'gemini-2.0-flash', provider: 'Google', duration: '0.79s', cost: '$0.0001', tokens: '880', inputTokens: '720', outputTokens: '160', status: 'success', user: 'u_frank', ts: 'Hace 22 min', input: 'Help me draft a professional apology email to a client whose project was delayed.', output: 'Subject: Sincere Apologies for the Project Delay\n\nDear [Client Name],\n\nI am writing to personally apologize...' },
-    { id: 'trc_008', name: 'Document summarization', model: 'gpt-4o', provider: 'OpenAI', duration: '4.88s', cost: '$0.0156', tokens: '8,320', inputTokens: '7,890', outputTokens: '430', status: 'success', user: 'u_alice', ts: 'Hace 31 min', input: 'Summarize this 40-page legal document into key bullet points...', output: '• Parties involved: Clain Inc. and Vendora Corp.\n• Contract term: 24 months\n• Payment schedule: quarterly...' },
-  ];
+interface LlmGeneration {
+  uuid:          string;
+  timestamp:     string;
+  model:         string;
+  provider:      string;
+  input_tokens:  number;
+  output_tokens: number;
+  cost_usd:      number;
+  latency:       number;
+  is_error:      boolean;
+  trace_id:      string;
+  distinct_id:   string;
+}
 
-  const users = [
-    { id: 'u_alice', email: 'alice@acmecorp.com', generations: 142, cost: '$1.24', avgDuration: '1.8s', errorRate: '0%' },
-    { id: 'u_bob',   email: 'bob@startupxyz.io',  generations:  87, cost: '$0.43', avgDuration: '0.9s', errorRate: '2%' },
-    { id: 'u_carol', email: 'carol@techfirm.dev', generations:  63, cost: '$0.89', avgDuration: '2.1s', errorRate: '0%' },
-    { id: 'u_dave',  email: 'dave@bigco.com',     generations:  58, cost: '$2.31', avgDuration: '3.4s', errorRate: '1%' },
-    { id: 'u_eve',   email: 'eve@freelance.me',   generations:  34, cost: '$0.12', avgDuration: '0.7s', errorRate: '8%' },
-    { id: 'u_frank', email: 'frank@agency.io',    generations:  21, cost: '$0.08', avgDuration: '0.8s', errorRate: '0%' },
-  ];
+interface LlmTopRow { key: string; value: number; secondary?: number; }
 
-  const modelBreakdown = [
-    { model: 'gpt-4o', provider: 'OpenAI', calls: 312, cost: '$3.42', pct: 58, color: '#10b981' },
-    { model: 'claude-3-5-sonnet', provider: 'Anthropic', calls: 142, cost: '$1.89', pct: 24, color: '#3b59f6' },
-    { model: 'gpt-4o-mini', provider: 'OpenAI', calls: 89, cost: '$0.34', pct: 15, color: '#f59e0b' },
-    { model: 'gemini-2.0-flash', provider: 'Google', calls: 21, cost: '$0.04', pct: 3, color: '#8b5cf6' },
-  ];
+const LLM_RANGES: { label: string; clickhouse: string; days: number }[] = [
+  { label: 'Ãšltimas 24 horas', clickhouse: '1 DAY',  days: 1 },
+  { label: 'Ãšltimos 7 dÃ­as',   clickhouse: '7 DAY',  days: 7 },
+  { label: 'Ãšltimos 14 dÃ­as',  clickhouse: '14 DAY', days: 14 },
+  { label: 'Ãšltimos 30 dÃ­as',  clickhouse: '30 DAY', days: 30 },
+  { label: 'Ãšltimos 90 dÃ­as',  clickhouse: '90 DAY', days: 90 },
+];
 
-  // Tiny sparkline-style bar chart
-  const SparkBars = ({ data, color }: { data: number[]; color: string }) => {
-    const max = Math.max(...data);
-    return (
-      <div className="flex items-end gap-[2px] h-10">
-        {data.map((v, i) => (
-          <div key={i} style={{ height: `${(v / max) * 100}%`, backgroundColor: color, opacity: i === data.length - 1 ? 1 : 0.45 }} className="w-1.5 rounded-sm flex-shrink-0" />
-        ))}
-      </div>
-    );
-  };
-
-  // Full area chart (SVG)
-  const AreaChart = ({ data, color, label }: { data: number[]; color: string; label: string }) => {
-    const max = Math.max(...data, 1);
-    const w = 600; const h = 120; const pad = 8;
-    const pts = data.map((v, i) => ({ x: pad + (i / (data.length - 1)) * (w - 2 * pad), y: h - pad - (v / max) * (h - 2 * pad) }));
-    const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-    const areaPath = `${linePath} L${pts[pts.length - 1].x},${h - pad} L${pts[0].x},${h - pad} Z`;
-    const days = ['L','M','M','J','V','S','D','L','M','M','J','V','S','D'];
-    return (
-      <div className="w-full">
-        <div className="text-[11px] text-[#646462] mb-1">{label}</div>
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height: 120 }} preserveAspectRatio="none">
-          <defs>
-            <linearGradient id={`grad-${color.replace('#','')}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path d={areaPath} fill={`url(#grad-${color.replace('#','')})`} />
-          <path d={linePath} fill="none" stroke={color} strokeWidth="1.5" />
-          {pts.map((p, i) => i % 2 === 0 && <line key={i} x1={p.x} y1={h - pad} x2={p.x} y2={h - pad + 4} stroke="#e9eae6" strokeWidth="1" />)}
-        </svg>
-        <div className="flex justify-between mt-1">
-          {days.slice(0, Math.min(days.length, data.length)).filter((_, i) => i % 2 === 0).map((d, i) => (
-            <span key={i} className="text-[10px] text-[#9ca3af]">{d}</span>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const kpiCards = [
-    { label: 'Generaciones', value: '564', sub: '+12% vs anterior', trend: 'up', sparkData: [22,18,28,31,24,36,40,28,32,45,38,52,48,64], color: '#3b59f6' },
-    { label: 'Coste total', value: '$5.72', sub: '+8% vs anterior', trend: 'up', sparkData: [0.3,0.25,0.4,0.45,0.35,0.5,0.6,0.42,0.48,0.65,0.55,0.75,0.7,0.92], color: '#e8572a' },
-    { label: 'Duración media', value: '1.84s', sub: '-5% vs anterior', trend: 'down', sparkData: [2.1,2.3,1.9,2.0,1.8,1.7,1.9,1.8,1.7,1.6,1.9,1.8,1.7,1.6], color: '#10b981' },
-    { label: 'Tasa de error', value: '1.2%', sub: '-0.3pp vs anterior', trend: 'down', sparkData: [1.8,2.1,1.6,1.4,1.9,1.2,1.5,1.3,1.1,1.4,1.0,1.3,1.1,1.2], color: '#f59e0b' },
-    { label: 'Tokens de entrada', value: '1.24M', sub: '+15% vs anterior', trend: 'up', sparkData: [40,38,52,58,45,68,72,55,62,80,71,95,88,112], color: '#8b5cf6' },
-    { label: 'Tokens de salida', value: '312K', sub: '+9% vs anterior', trend: 'up', sparkData: [12,10,15,17,14,20,22,16,18,24,21,28,26,31], color: '#06b6d4' },
-  ];
-
-  // Selected trace detail
-  const activeTrace = traces.find(t => t.id === selectedTrace);
-
-  if (activeTrace) {
-    return (
-      <div className="flex-1 flex flex-col min-h-0 bg-white overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
-          <button onClick={() => setSelectedTrace(null)} className="flex items-center gap-1.5 text-[#646462] hover:text-[#1a1a1a] text-[13px]">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            LLM Analytics
-          </button>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#d1d5db]"><path d="M6 12L10 8 6 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          <span className="text-[13px] font-semibold text-[#1a1a1a]">{activeTrace.name}</span>
-          <span className={`ml-2 text-[11px] font-semibold px-2 py-0.5 rounded-full ${activeTrace.status === 'error' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>{activeTrace.status === 'error' ? 'Error' : 'Éxito'}</span>
-        </div>
-        <div className="p-6 flex flex-col gap-5">
-          {/* Meta row */}
-          <div className="flex flex-wrap gap-4">
-            {[
-              { label: 'Modelo', value: activeTrace.model },
-              { label: 'Proveedor', value: activeTrace.provider },
-              { label: 'Usuario', value: activeTrace.user },
-              { label: 'Duración', value: activeTrace.duration },
-              { label: 'Coste', value: activeTrace.cost },
-              { label: 'Tokens totales', value: activeTrace.tokens },
-              { label: 'Tokens entrada', value: activeTrace.inputTokens },
-              { label: 'Tokens salida', value: activeTrace.outputTokens },
-              { label: 'Hora', value: activeTrace.ts },
-            ].map(m => (
-              <div key={m.label} className="flex flex-col gap-0.5 min-w-[80px]">
-                <span className="text-[11px] text-[#646462]">{m.label}</span>
-                <span className="text-[13px] font-semibold text-[#1a1a1a]">{m.value}</span>
-              </div>
-            ))}
-          </div>
-          {/* Input/Output */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-lg border border-[#e9eae6] overflow-hidden">
-              <div className="px-4 py-2 bg-[#f9f9f7] border-b border-[#e9eae6] flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Entrada</span>
-                <span className="ml-auto text-[11px] text-[#9ca3af]">{activeTrace.inputTokens} tokens</span>
-              </div>
-              <div className="p-4 text-[13px] text-[#1a1a1a] leading-relaxed font-mono whitespace-pre-wrap bg-white min-h-[120px]">{activeTrace.input}</div>
-            </div>
-            <div className="rounded-lg border border-[#e9eae6] overflow-hidden">
-              <div className="px-4 py-2 bg-[#f9f9f7] border-b border-[#e9eae6] flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Salida</span>
-                <span className="ml-auto text-[11px] text-[#9ca3af]">{activeTrace.outputTokens} tokens</span>
-              </div>
-              <div className="p-4 text-[13px] text-[#1a1a1a] leading-relaxed font-mono whitespace-pre-wrap bg-white min-h-[120px]">{activeTrace.output}</div>
-            </div>
-          </div>
-          {/* Timeline */}
-          <div className="rounded-lg border border-[#e9eae6] overflow-hidden">
-            <div className="px-4 py-2 bg-[#f9f9f7] border-b border-[#e9eae6]">
-              <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Línea de tiempo</span>
-            </div>
-            <div className="p-4 flex flex-col gap-3">
-              {[
-                { label: 'Solicitud enviada', time: '0ms', color: '#3b59f6' },
-                { label: 'Primera respuesta (TTFT)', time: `${Math.round(parseFloat(activeTrace.duration) * 280)}ms`, color: '#10b981' },
-                { label: 'Respuesta completa', time: activeTrace.duration, color: '#e8572a' },
-              ].map((step, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: step.color }} />
-                  <span className="text-[13px] text-[#1a1a1a] flex-1">{step.label}</span>
-                  <span className="text-[12px] font-semibold text-[#646462] font-mono">{step.time}</span>
-                </div>
-              ))}
-              {/* bar */}
-              <div className="mt-2 h-2 rounded-full bg-[#f3f4f6] overflow-hidden relative">
-                <div className="absolute left-0 top-0 h-full rounded-full bg-[#3b59f6]" style={{ width: '5%' }} />
-                <div className="absolute top-0 h-full rounded-full bg-[#10b981]" style={{ left: '5%', width: '30%' }} />
-                <div className="absolute top-0 h-full rounded-full bg-[#e8572a]" style={{ left: '35%', width: '65%' }} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+function llmFormat(v: number | null, fmt: LlmMetric['format']): string {
+  if (v == null || Number.isNaN(v)) return 'â€”';
+  if (fmt === 'currency') return `$${v.toFixed(v < 1 ? 4 : 2)}`;
+  if (fmt === 'percent')  return `${v.toFixed(1)}%`;
+  if (fmt === 'tokens') {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+    if (v >= 1_000)     return `${(v / 1_000).toFixed(1)}K`;
+    return v.toLocaleString('es-ES');
   }
+  if (fmt === 'duration') {
+    if (v < 1)    return `${Math.round(v * 1000)}ms`;
+    return `${v.toFixed(2)}s`;
+  }
+  return v.toLocaleString('es-ES');
+}
+function llmDelta(curr: number | null, prev: number | null) {
+  if (curr == null || prev == null || prev === 0) return null;
+  return { pct: ((curr - prev) / prev) * 100, up: curr >= prev };
+}
 
+// â”€â”€ KPI card (specific for LLM) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function LlmMetricCard({ metric, loading, accent, betterDirection = 'up' }: { metric: LlmMetric; loading: boolean; accent: string; betterDirection?: 'up' | 'down' }) {
+  const delta = llmDelta(metric.value, metric.prev);
+  const isGood = delta ? (betterDirection === 'up' ? delta.up : !delta.up) : null;
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
-      {/* Beta banner */}
-      {showBetaBanner && (
-        <div className="flex items-center gap-3 px-5 py-2.5 bg-[#eff2ff] border-b border-[#c7d0fd] flex-shrink-0">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#3b59f6] flex-shrink-0"><path d="M8 1.5a6.5 6.5 0 100 13A6.5 6.5 0 008 1.5zM7.25 5a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0V5zm.75 6.75a.75.75 0 100-1.5.75.75 0 000 1.5z" fill="currentColor"/></svg>
-          <span className="text-[13px] text-[#3b59f6] flex-1">LLM Analytics está en <strong>beta pública</strong>. Necesitas instrumentar tu código con el SDK de Clain para ver datos. <span className="underline cursor-pointer">Ver guía de integración →</span></span>
-          <button onClick={() => setShowBetaBanner(false)} className="text-[#3b59f6] hover:opacity-70 ml-2">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          </button>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex items-center gap-4 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#fef3c7] flex items-center justify-center flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2C5 2 3 5 3 8s2 6 5 6 5-3 5-6-2-6-5-6z" stroke="#f59e0b" strokeWidth="1.2"/><path d="M6 7.5c0-.83.67-1.5 1.5-1.5h1c.83 0 1.5.67 1.5 1.5v.5H6v-.5z" fill="#f59e0b"/><path d="M6 8h4v1.5A2 2 0 016 9.5V8z" fill="#f59e0b" opacity=".5"/><circle cx="8" cy="5" r="1" fill="#f59e0b"/></svg>
-          </div>
-          <h1 className="text-[16px] font-bold text-[#1a1a1a]">LLM Analytics</h1>
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#fef3c7] text-[#92400e]">BETA</span>
-        </div>
-
-        <div className="flex gap-0 ml-1 bg-[#f3f4f6] rounded-lg p-0.5">
-          {(['overview','traces','generations','users'] as LLMTab[]).map(t => {
-            const labels: Record<LLMTab, string> = { overview: 'Resumen', traces: 'Trazas', generations: 'Generaciones', users: 'Usuarios' };
-            return (
-              <button key={t} onClick={() => setLlmTab(t)} className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${llmTab === t ? 'bg-white text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>
-                {labels[t]}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex-1" />
-
-        {/* Date range */}
-        <div className="relative">
-          <button onClick={() => setShowDateDrop(!showDateDrop)} className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2" width="11" height="10" rx="1.5" stroke="#646462" strokeWidth="1.2"/><path d="M4 1v2M9 1v2M1 5h11" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-            {dateRange}
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 4l3 3 3-3" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-          </button>
-          {showDateDrop && (
-            <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-48 py-1">
-              {DATE_OPTIONS.map(opt => (
-                <button key={opt} onClick={() => { setDateRange(opt); setShowDateDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${dateRange === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>{opt}</button>
-              ))}
-            </div>
+    <div className="bg-white border border-[#e9eae6] rounded-xl p-4 hover:shadow-sm transition-shadow">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accent }} />
+        <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">{metric.label}</p>
+      </div>
+      {loading ? <div className="h-8 w-24 bg-[#f3f3f1] rounded animate-pulse" /> : (
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold text-[#1a1a18]">{llmFormat(metric.value, metric.format)}</span>
+          {delta && (
+            <span className={`text-[11px] font-medium ${isGood ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>
+              {delta.up ? 'â–²' : 'â–¼'} {Math.abs(delta.pct).toFixed(1)}%
+            </span>
           )}
         </div>
+      )}
+      {metric.hint && <p className="text-[10px] text-[#9ca3af] mt-1">{metric.hint}</p>}
+    </div>
+  );
+}
 
-        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] bg-white hover:bg-[#f9f9f7]">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="5.5" cy="5.5" r="3.5" stroke="#646462" strokeWidth="1.2"/><path d="M8.5 8.5L11 11" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-          Filtrar
-        </button>
+// â”€â”€ Top list with secondary metric â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function LlmTopList({ title, rows, loading, valueLabel, secondaryLabel, secondaryFormat, keyLabel, color }: {
+  title: string; rows: LlmTopRow[]; loading: boolean; valueLabel: string; secondaryLabel?: string; secondaryFormat?: 'currency' | 'tokens' | 'duration'; keyLabel: string; color: string;
+}) {
+  const max = Math.max(...rows.map(r => r.value), 1);
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-[#e9eae6]"><h3 className="text-sm font-semibold text-[#1a1a18]">{title}</h3></div>
+      {loading ? (
+        <div className="p-4 space-y-2">{[0,1,2,3,4].map(i => <div key={i} className="h-6 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${80 - i * 8}%` }} />)}</div>
+      ) : rows.length === 0 ? (
+        <div className="px-4 py-8 text-center text-xs text-[#9ca3af]">Sin datos</div>
+      ) : (
+        <table className="w-full">
+          <thead>
+            <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+              <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">{keyLabel}</th>
+              <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">{valueLabel}</th>
+              {secondaryLabel && <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">{secondaryLabel}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 10).map((r, i) => (
+              <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                <td className="px-4 py-2 relative">
+                  <div className="absolute inset-y-0 left-0 opacity-[.08]" style={{ backgroundColor: color, width: `${(r.value / max) * 100}%` }} />
+                  <span className="relative text-xs text-[#1a1a18] font-mono">{r.key || '(desconocido)'}</span>
+                </td>
+                <td className="px-4 py-2 text-xs text-[#646462] text-right font-mono">{r.value.toLocaleString('es-ES')}</td>
+                {secondaryLabel && <td className="px-4 py-2 text-xs text-[#646462] text-right font-mono">{secondaryFormat ? llmFormat(r.secondary ?? 0, secondaryFormat) : (r.secondary ?? 0)}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// â”€â”€ Time series chart (line+area) for cost / generations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function LlmTrendChart({ labels, series, loading, height = 220 }: { labels: string[]; series: { name: string; values: number[]; color: string; fmt?: 'currency' | 'count' }[]; loading: boolean; height?: number }) {
+  if (loading) return <div className="h-56 bg-[#f3f3f1] rounded animate-pulse" />;
+  if (!series.length || !series[0].values.length) return <div className="h-56 flex items-center justify-center text-xs text-[#9ca3af]">Sin datos</div>;
+  // Two y-axes: left for series[0], right for series[1] if exists
+  const max0 = Math.max(...series[0].values, 1);
+  const max1 = series[1] ? Math.max(...series[1].values, 1) : 1;
+  const W = 900, H = height;
+  const PAD = { l: 50, r: 50, t: 16, b: 32 };
+  const innerW = W - PAD.l - PAD.r;
+  const innerH = H - PAD.t - PAD.b;
+  const n = labels.length;
+  const xAt = (i: number) => PAD.l + (n > 1 ? (i * innerW) / (n - 1) : innerW / 2);
+  const yAt = (v: number, maxV: number) => PAD.t + innerH - (v / maxV) * innerH;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }}>
+      <defs>
+        {series.map((s, i) => (
+          <linearGradient key={i} id={`llm-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={s.color} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={s.color} stopOpacity="0" />
+          </linearGradient>
+        ))}
+      </defs>
+      {[0, 0.25, 0.5, 0.75, 1].map(f => {
+        const y = PAD.t + innerH * (1 - f);
+        return (
+          <g key={f}>
+            <line x1={PAD.l} x2={W - PAD.r} y1={y} y2={y} stroke="#f3f3f1" strokeWidth="1" />
+            <text x={PAD.l - 6} y={y + 3} textAnchor="end" fontSize="10" fill={series[0].color}>{series[0].fmt === 'currency' ? `$${(max0 * f).toFixed(2)}` : Math.round(max0 * f).toLocaleString('es-ES')}</text>
+            {series[1] && <text x={W - PAD.r + 6} y={y + 3} textAnchor="start" fontSize="10" fill={series[1].color}>{series[1].fmt === 'currency' ? `$${(max1 * f).toFixed(2)}` : Math.round(max1 * f).toLocaleString('es-ES')}</text>}
+          </g>
+        );
+      })}
+      {labels.map((l, i) => i % Math.max(1, Math.ceil(n / 8)) === 0 && (
+        <text key={i} x={xAt(i)} y={H - 10} textAnchor="middle" fontSize="10" fill="#9ca3af">{String(l).slice(5, 10)}</text>
+      ))}
+      {series.map((s, si) => {
+        const maxV = si === 0 ? max0 : max1;
+        const d = s.values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i)} ${yAt(v, maxV)}`).join(' ');
+        const fillD = `${d} L ${xAt(s.values.length - 1)} ${PAD.t + innerH} L ${xAt(0)} ${PAD.t + innerH} Z`;
+        return (
+          <g key={si}>
+            <path d={fillD} fill={`url(#llm-grad-${si})`} />
+            <path d={d}     fill="none" stroke={s.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// â”€â”€ Generation detail drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function LlmGenerationDrawer({ gen, onClose }: { gen: any | null; onClose: () => void }) {
+  if (!gen) return null;
+  const p = gen.properties || {};
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[640px] max-w-[92vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] bg-[#a855f7]/10 text-[#a855f7] px-2 py-0.5 rounded font-medium">{p.$ai_provider || 'unknown'}</span>
+              <span className="text-sm font-mono text-[#1a1a18]">{p.$ai_model}</span>
+              {p.$ai_is_error && <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-2 py-0.5 rounded font-medium">ERROR</span>}
+            </div>
+            <p className="text-[10px] text-[#9ca3af] mt-0.5 font-mono">{p.$ai_trace_id ?? gen.uuid}</p>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <section className="grid grid-cols-4 gap-2">
+            <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Coste</p><p className="text-sm font-bold text-[#1a1a18]">{llmFormat(Number(p.$ai_total_cost_usd ?? 0), 'currency')}</p></div>
+            <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Latencia</p><p className="text-sm font-bold text-[#1a1a18]">{llmFormat(Number(p.$ai_latency ?? 0), 'duration')}</p></div>
+            <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">In tokens</p><p className="text-sm font-bold text-[#1a1a18]">{llmFormat(Number(p.$ai_input_tokens ?? 0), 'tokens')}</p></div>
+            <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Out tokens</p><p className="text-sm font-bold text-[#1a1a18]">{llmFormat(Number(p.$ai_output_tokens ?? 0), 'tokens')}</p></div>
+          </section>
+          {p.$ai_input && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Input</h3>
+              <pre className="bg-[#f9f9f7] rounded p-3 text-xs whitespace-pre-wrap break-words font-mono max-h-64 overflow-auto">{typeof p.$ai_input === 'string' ? p.$ai_input : JSON.stringify(p.$ai_input, null, 2)}</pre>
+            </section>
+          )}
+          {p.$ai_output && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Output</h3>
+              <pre className="bg-[#f9f9f7] rounded p-3 text-xs whitespace-pre-wrap break-words font-mono max-h-64 overflow-auto">{typeof p.$ai_output === 'string' ? p.$ai_output : JSON.stringify(p.$ai_output, null, 2)}</pre>
+            </section>
+          )}
+          {p.$ai_error && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-[#dc2626] uppercase tracking-widest mb-2">Error</h3>
+              <pre className="bg-[#fef2f2] border border-[#fecaca] rounded p-3 text-xs text-[#991b1b] whitespace-pre-wrap break-words font-mono">{typeof p.$ai_error === 'string' ? p.$ai_error : JSON.stringify(p.$ai_error, null, 2)}</pre>
+            </section>
+          )}
+          <section>
+            <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Todas las propiedades</h3>
+            <div className="space-y-1">
+              {Object.keys(p).sort().filter(k => k.startsWith('$ai_')).map(k => (
+                <div key={k} className="flex items-start gap-2 py-1 border-b border-[#f3f3f1] text-xs">
+                  <span className="font-mono text-[#a855f7] flex-shrink-0 w-1/3 truncate">{k}</span>
+                  <span className="text-[#1a1a18] flex-1 break-all">{typeof p[k] === 'object' ? JSON.stringify(p[k]).slice(0, 200) : String(p[k]).slice(0, 200)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WAAppLlmAnalyticsView() {
+  type LlmTab = 'overview' | 'generations' | 'traces' | 'models' | 'users';
+  const [tab, setTab] = React.useState<LlmTab>('overview');
+  const [range, setRange] = React.useState(LLM_RANGES[1]);
+  const [showRange, setShowRange] = React.useState(false);
+  const rangeRef = useClickOutside<HTMLDivElement>(() => setShowRange(false));
+  const [modelFilter,    setModelFilter]    = React.useState<string | null>(null);
+  const [providerFilter, setProviderFilter] = React.useState<string | null>(null);
+  const [errorsOnly,     setErrorsOnly]     = React.useState(false);
+  const [selected,       setSelected]       = React.useState<any | null>(null);
+  const [showSetup,      setShowSetup]      = React.useState(false);
+
+  const [metrics, setMetrics] = React.useState({
+    generations: { label: 'Generaciones',   value: null, prev: null, format: 'count'    } as LlmMetric,
+    cost:        { label: 'Coste total',     value: null, prev: null, format: 'currency' } as LlmMetric,
+    tokens:      { label: 'Tokens totales',  value: null, prev: null, format: 'tokens'   } as LlmMetric,
+    latency:     { label: 'Latencia media',  value: null, prev: null, format: 'duration' } as LlmMetric,
+    errorRate:   { label: 'Tasa de error',   value: null, prev: null, format: 'percent'  } as LlmMetric,
+  });
+  const [series,   setSeries]   = React.useState<{ labels: string[]; gens: number[]; cost: number[] }>({ labels: [], gens: [], cost: [] });
+  const [topModels,    setTopModels]    = React.useState<LlmTopRow[]>([]);
+  const [topProviders, setTopProviders] = React.useState<LlmTopRow[]>([]);
+  const [topUsers,     setTopUsers]     = React.useState<LlmTopRow[]>([]);
+  const [generations,  setGenerations]  = React.useState<any[]>([]);
+  const [traces,       setTraces]       = React.useState<any[]>([]);
+
+  const [loading,  setLoading]  = React.useState(true);
+  const [genLoading, setGenLoading] = React.useState(false);
+  const [traceLoading, setTraceLoading] = React.useState(false);
+  const [error,    setError]    = React.useState<string | null>(null);
+
+  const filterClause = `event = '$ai_generation' AND timestamp >= now() - INTERVAL ${range.clickhouse}` +
+    (modelFilter    ? ` AND properties.$ai_model = '${modelFilter.replace(/'/g, "''")}'`       : '') +
+    (providerFilter ? ` AND properties.$ai_provider = '${providerFilter.replace(/'/g, "''")}'` : '') +
+    (errorsOnly     ? ` AND toString(properties.$ai_is_error) = 'true'`                       : '');
+
+  // â”€â”€ Load overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const loadOverview = React.useCallback(async () => {
+    if (tab !== 'overview') return;
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const currentClause = filterClause;
+      const prevClause = filterClause.replace(
+        `timestamp >= now() - INTERVAL ${range.clickhouse}`,
+        `timestamp >= now() - INTERVAL ${range.clickhouse} * 2 AND timestamp < now() - INTERVAL ${range.clickhouse}`
+      );
+
+      const kpiHql = `
+        SELECT
+          countIf(${currentClause}) AS gens,
+          sumIf(toFloat(properties.$ai_total_cost_usd), ${currentClause}) AS cost,
+          sumIf(toFloat(properties.$ai_input_tokens) + toFloat(properties.$ai_output_tokens), ${currentClause}) AS tokens,
+          avgIf(toFloat(properties.$ai_latency), ${currentClause}) AS lat,
+          avgIf(toFloat(toString(properties.$ai_is_error) = 'true'), ${currentClause}) * 100 AS err_rate,
+          countIf(${prevClause}) AS gens_prev,
+          sumIf(toFloat(properties.$ai_total_cost_usd), ${prevClause}) AS cost_prev,
+          sumIf(toFloat(properties.$ai_input_tokens) + toFloat(properties.$ai_output_tokens), ${prevClause}) AS tokens_prev,
+          avgIf(toFloat(properties.$ai_latency), ${prevClause}) AS lat_prev,
+          avgIf(toFloat(toString(properties.$ai_is_error) = 'true'), ${prevClause}) * 100 AS err_rate_prev
+        FROM events
+        WHERE event = '$ai_generation' AND timestamp >= now() - INTERVAL ${range.clickhouse} * 2
+      `;
+      const k: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: kpiHql } });
+      const [gens, cost, tokens, lat, errRate, gens_prev, cost_prev, tokens_prev, lat_prev, errRate_prev] = k.results?.[0] ?? [];
+      setMetrics({
+        generations: { label: 'Generaciones',  value: gens ?? 0,   prev: gens_prev ?? 0,   format: 'count' },
+        cost:        { label: 'Coste total',   value: cost ?? 0,   prev: cost_prev ?? 0,   format: 'currency', hint: 'USD' },
+        tokens:      { label: 'Tokens totales',value: tokens ?? 0, prev: tokens_prev ?? 0, format: 'tokens',   hint: 'Input + Output' },
+        latency:     { label: 'Latencia media',value: lat,         prev: lat_prev,         format: 'duration' },
+        errorRate:   { label: 'Tasa de error', value: errRate,     prev: errRate_prev,     format: 'percent' },
+      });
+
+      const unit = range.days <= 1 ? 'toStartOfHour(timestamp)' : range.days <= 30 ? 'toDate(timestamp)' : 'toMonday(toDate(timestamp))';
+      const trendHql = `
+        SELECT ${unit} AS bucket,
+          countIf(${currentClause})                                           AS gens,
+          sumIf(toFloat(properties.$ai_total_cost_usd), ${currentClause})     AS cost
+        FROM events
+        WHERE ${currentClause}
+        GROUP BY bucket ORDER BY bucket ASC
+      `;
+      const t: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: trendHql } });
+      const rows: any[][] = t.results ?? [];
+      setSeries({ labels: rows.map(r => String(r[0])), gens: rows.map(r => Number(r[1] ?? 0)), cost: rows.map(r => Number(r[2] ?? 0)) });
+
+      const tops = await Promise.all([
+        ph.posthog.query({ query: { kind: 'HogQLQuery', query: `SELECT toString(properties.$ai_model) AS k, count() AS c, sum(toFloat(properties.$ai_total_cost_usd)) AS cost FROM events WHERE ${currentClause} GROUP BY k ORDER BY c DESC LIMIT 10` } }),
+        ph.posthog.query({ query: { kind: 'HogQLQuery', query: `SELECT toString(properties.$ai_provider) AS k, count() AS c, sum(toFloat(properties.$ai_total_cost_usd)) AS cost FROM events WHERE ${currentClause} GROUP BY k ORDER BY c DESC LIMIT 10` } }),
+        ph.posthog.query({ query: { kind: 'HogQLQuery', query: `SELECT distinct_id AS k, count() AS c, sum(toFloat(properties.$ai_total_cost_usd)) AS cost FROM events WHERE ${currentClause} GROUP BY k ORDER BY c DESC LIMIT 10` } }),
+      ]);
+      const conv = (r: any): LlmTopRow[] => (r.results ?? []).map((row: any[]) => ({ key: String(row[0] ?? ''), value: Number(row[1] ?? 0), secondary: Number(row[2] ?? 0) }));
+      setTopModels(conv(tops[0])); setTopProviders(conv(tops[1])); setTopUsers(conv(tops[2]));
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar mÃ©tricas LLM');
+    } finally { setLoading(false); }
+  }, [tab, range, filterClause]);
+
+  // â”€â”€ Load generations list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const loadGenerations = React.useCallback(async () => {
+    if (tab !== 'generations') return;
+    setGenLoading(true);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const res: any = await ph.posthog.events.query({
+        query: { kind: 'EventsQuery', select: ['*', 'event', 'person', 'timestamp', 'properties'], event: '$ai_generation', after: `-${range.clickhouse.replace(' DAY', 'd').replace(' HOUR', 'h')}`, orderBy: ['timestamp DESC'], limit: 100 },
+      });
+      const rows = (res.results ?? []).map((r: any[]) => r[0] || {});
+      let filtered = rows;
+      if (modelFilter)    filtered = filtered.filter((g: any) => g.properties?.$ai_model === modelFilter);
+      if (providerFilter) filtered = filtered.filter((g: any) => g.properties?.$ai_provider === providerFilter);
+      if (errorsOnly)     filtered = filtered.filter((g: any) => String(g.properties?.$ai_is_error) === 'true');
+      setGenerations(filtered);
+    } catch (e: any) {
+      setError(e?.message ?? 'Error');
+    } finally { setGenLoading(false); }
+  }, [tab, range, modelFilter, providerFilter, errorsOnly]);
+
+  // â”€â”€ Load traces (grouped by trace_id) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const loadTraces = React.useCallback(async () => {
+    if (tab !== 'traces') return;
+    setTraceLoading(true);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const hql = `
+        SELECT
+          toString(properties.$ai_trace_id) AS trace,
+          count()                            AS spans,
+          sum(toFloat(properties.$ai_total_cost_usd)) AS cost,
+          sum(toFloat(properties.$ai_input_tokens) + toFloat(properties.$ai_output_tokens)) AS tokens,
+          max(toFloat(properties.$ai_latency)) AS max_lat,
+          min(timestamp) AS start_ts,
+          max(timestamp) AS end_ts,
+          anyIf(distinct_id, true) AS distinct_id,
+          countIf(toString(properties.$ai_is_error) = 'true') AS errors
+        FROM events
+        WHERE ${filterClause} AND trace != ''
+        GROUP BY trace
+        ORDER BY end_ts DESC
+        LIMIT 100
+      `;
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+      const cols = res.columns ?? [];
+      const idx = (n: string) => cols.indexOf(n);
+      setTraces((res.results ?? []).map((r: any[]) => ({
+        trace:    r[idx('trace')],
+        spans:    r[idx('spans')],
+        cost:     r[idx('cost')],
+        tokens:   r[idx('tokens')],
+        max_lat:  r[idx('max_lat')],
+        start_ts: r[idx('start_ts')],
+        end_ts:   r[idx('end_ts')],
+        distinct_id: r[idx('distinct_id')],
+        errors:   r[idx('errors')],
+      })));
+    } catch {}
+    finally { setTraceLoading(false); }
+  }, [tab, filterClause]);
+
+  React.useEffect(() => { loadOverview(); loadGenerations(); loadTraces(); }, [loadOverview, loadGenerations, loadTraces]);
+
+  const TABS: { key: LlmTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'overview',    label: 'Resumen',      icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><rect x="2" y="2" width="5" height="5" rx="0.5" fill="currentColor" opacity=".6"/><rect x="9" y="2" width="5" height="5" rx="0.5" fill="currentColor" opacity=".4"/><rect x="2" y="9" width="5" height="5" rx="0.5" fill="currentColor" opacity=".5"/><rect x="9" y="9" width="5" height="5" rx="0.5" fill="currentColor" opacity=".3"/></svg> },
+    { key: 'generations', label: 'Generaciones', icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M3 3h10v3H3zM3 8h10v2H3zM3 12h10v1H3z" fill="currentColor"/></svg> },
+    { key: 'traces',      label: 'Trazas',       icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="3" cy="3" r="1.5" fill="currentColor"/><circle cx="13" cy="3" r="1.5" fill="currentColor"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="3" cy="13" r="1.5" fill="currentColor"/><circle cx="13" cy="13" r="1.5" fill="currentColor"/><path d="M3 3l5 5M13 3l-5 5M3 13l5-5M13 13l-5-5" stroke="currentColor" strokeWidth="1"/></svg> },
+    { key: 'models',      label: 'Modelos',      icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 1l6 4-6 4-6-4z M2 11l6 4 6-4 M2 8l6 4 6-4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round"/></svg> },
+    { key: 'users',       label: 'Usuarios',     icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="5" r="3" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 14c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg> },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-auto">
+      {/* Header */}
+      <div className="bg-white px-6 pt-4 pb-2 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#a855f7]"><path d="M3 3h10v3H3zM3 8h10v2H3zM3 12h10v1H3z" fill="currentColor"/></svg>
+              <h1 className="text-lg font-bold text-[#1a1a18]">LLM analytics</h1>
+              <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-2 py-0.5 rounded font-semibold">BETA</span>
+            </div>
+            <p className="text-xs text-[#646462]">Observabilidad de tus llamadas a LLM: coste, latencia, tokens y errores.</p>
+            <div className="flex gap-1 mt-3 -mb-2">
+              {TABS.map(t => (
+                <button key={t.key} onClick={() => setTab(t.key)} className={`flex items-center gap-1.5 pb-2 px-2 text-sm font-medium border-b-2 transition-colors ${tab === t.key ? 'border-[#a855f7] text-[#a855f7]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>
+                  {t.icon}{t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => setShowSetup(true)} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 inline mr-1"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v4M8 11v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              CÃ³mo enviar datos
+            </button>
+            <div className="relative" ref={rangeRef}>
+              <button onClick={() => setShowRange(s => !s)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12" stroke="currentColor" strokeWidth="1.3"/></svg>
+                {range.label}
+                <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>
+              </button>
+              {showRange && (
+                <div className="absolute right-0 top-full mt-1 w-56 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1">
+                  {LLM_RANGES.map(r => (
+                    <button key={r.label} onClick={() => { setRange(r); setShowRange(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f9f9f7] ${range.label === r.label ? 'text-[#a855f7] bg-[#f5f3ff]' : 'text-[#1a1a18]'}`}>{r.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* ── OVERVIEW TAB ── */}
-      {llmTab === 'overview' && (
-        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
-          {/* KPI cards */}
-          <div className="grid grid-cols-3 gap-3">
-            {kpiCards.map(card => (
-              <div key={card.label} className="rounded-xl border border-[#e9eae6] p-4 bg-white flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-[#646462] font-medium">{card.label}</span>
-                  <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${card.trend === 'up' ? 'text-[#10b981]' : 'text-[#e8572a]'}`}>
-                    {card.trend === 'up' ? '↑' : '↓'} {card.sub.split(' ')[0]}
-                  </span>
+      {/* Filters bar */}
+      {tab !== 'overview' && (
+        <div className="bg-white px-6 py-2 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
+          {[
+            { label: 'Modelo',    value: modelFilter,    set: setModelFilter,    options: topModels.map(m => m.key) },
+            { label: 'Proveedor', value: providerFilter, set: setProviderFilter, options: topProviders.map(m => m.key) },
+          ].map(f => (
+            <select key={f.label} value={f.value ?? ''} onChange={e => f.set(e.target.value || null)} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#a855f7]">
+              <option value="">Todos los {f.label.toLowerCase()}s</option>
+              {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ))}
+          <button onClick={() => setErrorsOnly(v => !v)} className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs ${errorsOnly ? 'bg-[#fee2e2] text-[#dc2626] border border-[#fecaca]' : 'bg-white border border-[#e9eae6] text-[#646462]'}`}>
+            <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M8 4v5M8 11v.5M8 1L1 14h14z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round" strokeLinecap="round"/></svg>
+            Solo errores
+          </button>
+        </div>
+      )}
+
+      {/* Body */}
+      <div className="flex-1 p-6 space-y-5">
+        {error && <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b]">{error}</div>}
+
+        {tab === 'overview' && (
+          <>
+            <div className="grid grid-cols-5 gap-3">
+              <LlmMetricCard metric={metrics.generations} loading={loading} accent="#a855f7" />
+              <LlmMetricCard metric={metrics.cost}        loading={loading} accent="#e8572a" betterDirection="down" />
+              <LlmMetricCard metric={metrics.tokens}      loading={loading} accent="#3b59f6" />
+              <LlmMetricCard metric={metrics.latency}     loading={loading} accent="#f59e0b" betterDirection="down" />
+              <LlmMetricCard metric={metrics.errorRate}   loading={loading} accent="#dc2626" betterDirection="down" />
+            </div>
+
+            <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center gap-3">
+                <h3 className="text-sm font-semibold text-[#1a1a18]">Generaciones y coste en el tiempo</h3>
+                <div className="ml-auto flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 text-[11px] text-[#646462]"><span className="w-2 h-2 rounded-full bg-[#a855f7]" />Generaciones</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[#646462]"><span className="w-2 h-2 rounded-full bg-[#e8572a]" />Coste ($)</div>
                 </div>
-                <div className="flex items-end justify-between gap-2">
-                  <span className="text-[24px] font-bold text-[#1a1a1a] leading-none">{card.value}</span>
-                  <SparkBars data={card.sparkData} color={card.color} />
-                </div>
-                <span className="text-[11px] text-[#9ca3af]">{card.sub}</span>
               </div>
-            ))}
-          </div>
-
-          {/* Charts row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-xl border border-[#e9eae6] p-4 bg-white">
-              <AreaChart data={[22,18,28,31,24,36,40,28,32,45,38,52,48,64]} color="#3b59f6" label="Generaciones por día" />
-            </div>
-            <div className="rounded-xl border border-[#e9eae6] p-4 bg-white">
-              <AreaChart data={[0.30,0.25,0.40,0.45,0.35,0.50,0.60,0.42,0.48,0.65,0.55,0.75,0.70,0.92]} color="#e8572a" label="Coste por día ($)" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Model breakdown */}
-            <div className="rounded-xl border border-[#e9eae6] p-4 bg-white">
-              <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Desglose por modelo</h3>
-              <div className="flex flex-col gap-2.5">
-                {modelBreakdown.map(m => (
-                  <div key={m.model} className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between text-[12px]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
-                        <span className="font-medium text-[#1a1a1a]">{m.model}</span>
-                        <span className="text-[#9ca3af]">{m.provider}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-[#646462]">
-                        <span>{m.calls.toLocaleString()} llamadas</span>
-                        <span className="font-semibold text-[#1a1a1a]">{m.cost}</span>
-                      </div>
-                    </div>
-                    <div className="h-1.5 bg-[#f3f4f6] rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${m.pct}%`, backgroundColor: m.color }} />
-                    </div>
-                  </div>
-                ))}
+              <div className="p-4">
+                <LlmTrendChart
+                  labels={series.labels}
+                  series={[
+                    { name: 'Generaciones', values: series.gens, color: '#a855f7', fmt: 'count' },
+                    { name: 'Coste',        values: series.cost, color: '#e8572a', fmt: 'currency' },
+                  ]}
+                  loading={loading}
+                />
               </div>
             </div>
 
-            {/* Latency & errors */}
-            <div className="rounded-xl border border-[#e9eae6] p-4 bg-white flex flex-col gap-4">
-              <div>
-                <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Duración media (ms)</h3>
-                <AreaChart data={[2100,2300,1900,2000,1800,1700,1900,1800,1700,1600,1900,1800,1700,1840]} color="#10b981" label="" />
-              </div>
-              <div className="pt-2 border-t border-[#e9eae6]">
-                <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Tasa de error (%)</h3>
-                <AreaChart data={[1.8,2.1,1.6,1.4,1.9,1.2,1.5,1.3,1.1,1.4,1.0,1.3,1.1,1.2]} color="#f59e0b" label="" />
-              </div>
+            <div className="grid grid-cols-3 gap-4">
+              <LlmTopList title="Modelos mÃ¡s usados"  rows={topModels}    loading={loading} keyLabel="Modelo"    valueLabel="Llamadas" secondaryLabel="Coste" secondaryFormat="currency" color="#a855f7" />
+              <LlmTopList title="Top proveedores"      rows={topProviders} loading={loading} keyLabel="Proveedor" valueLabel="Llamadas" secondaryLabel="Coste" secondaryFormat="currency" color="#3b59f6" />
+              <LlmTopList title="Top usuarios"         rows={topUsers}     loading={loading} keyLabel="Usuario"   valueLabel="Llamadas" secondaryLabel="Coste" secondaryFormat="currency" color="#16a34a" />
             </div>
-          </div>
+          </>
+        )}
 
-          {/* Recent traces preview */}
-          <div className="rounded-xl border border-[#e9eae6] overflow-hidden bg-white">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
-              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Trazas recientes</h3>
-              <button onClick={() => setLlmTab('traces')} className="text-[12px] text-[#3b59f6] font-medium hover:underline">Ver todas →</button>
-            </div>
+        {tab === 'generations' && (
+          <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f9f9f7]">
-                  {['Nombre','Modelo','Usuario','Duración','Coste','Estado','Hora'].map(h => (
-                    <th key={h} className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>
-                  ))}
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Modelo</th>
+                  <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Proveedor</th>
+                  <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Usuario</th>
+                  <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Tokens</th>
+                  <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Coste</th>
+                  <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Latencia</th>
+                  <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Estado</th>
+                  <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Tiempo</th>
                 </tr>
               </thead>
               <tbody>
-                {traces.slice(0, 5).map((trace, i) => (
-                  <tr key={trace.id} onClick={() => setSelectedTrace(trace.id)} className={`cursor-pointer hover:bg-[#f9f9f7] border-t border-[#e9eae6] ${i % 2 === 0 ? '' : ''}`}>
-                    <td className="px-4 py-2.5 text-[12px] font-medium text-[#1a1a1a]">{trace.name}</td>
-                    <td className="px-4 py-2.5">
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#f3f4f6] text-[#646462]">{trace.model}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-[12px] text-[#646462]">{trace.user}</td>
-                    <td className="px-4 py-2.5 text-[12px] text-[#646462] font-mono">{trace.duration}</td>
-                    <td className="px-4 py-2.5 text-[12px] text-[#646462] font-mono">{trace.cost}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${trace.status === 'error' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                        {trace.status === 'error' ? 'Error' : 'OK'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-[12px] text-[#9ca3af]">{trace.ts}</td>
-                  </tr>
-                ))}
+                {genLoading ? (
+                  Array.from({ length: 6 }).map((_, i) => <tr key={i} className="border-b border-[#f3f3f1]">{[1,2,3,4,5,6,7,8].map(c => <td key={c} className="px-4 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" /></td>)}</tr>)
+                ) : generations.length === 0 ? (
+                  <tr><td colSpan={8} className="py-12 text-center text-xs text-[#9ca3af]">Sin generaciones en este rango</td></tr>
+                ) : generations.map(g => {
+                  const p = g.properties || {};
+                  const tokens = Number(p.$ai_input_tokens ?? 0) + Number(p.$ai_output_tokens ?? 0);
+                  return (
+                    <tr key={g.uuid} onClick={() => setSelected(g)} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                      <td className="px-4 py-2 text-xs font-mono text-[#a855f7]">{p.$ai_model ?? 'â€”'}</td>
+                      <td className="px-4 py-2 text-xs text-[#646462]">{p.$ai_provider ?? 'â€”'}</td>
+                      <td className="px-4 py-2 text-xs font-mono text-[#646462] truncate max-w-[140px]">{g.distinct_id}</td>
+                      <td className="px-4 py-2 text-xs text-right font-mono">{llmFormat(tokens, 'tokens')}</td>
+                      <td className="px-4 py-2 text-xs text-right font-mono">{llmFormat(Number(p.$ai_total_cost_usd ?? 0), 'currency')}</td>
+                      <td className="px-4 py-2 text-xs text-right font-mono">{llmFormat(Number(p.$ai_latency ?? 0), 'duration')}</td>
+                      <td className="px-4 py-2 text-xs">{String(p.$ai_is_error) === 'true' ? <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded">Error</span> : <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">OK</span>}</td>
+                      <td className="px-4 py-2 text-xs text-[#646462]">{formatRelativeTime(g.timestamp)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── TRACES TAB ── */}
-      {llmTab === 'traces' && (
-        <div className="flex-1 overflow-y-auto flex flex-col">
-          {/* Search + filters */}
-          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0 bg-[#f9f9f7]">
-            <div className="flex-1 relative">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              <input type="text" placeholder="Buscar trazas por nombre, usuario o modelo..." className="w-full pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
-            </div>
-            <select className="px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white">
-              <option>Todos los modelos</option>
-              <option>gpt-4o</option>
-              <option>claude-3-5-sonnet</option>
-              <option>gpt-4o-mini</option>
-              <option>gemini-2.0-flash</option>
-            </select>
-            <select className="px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white">
-              <option>Todos los estados</option>
-              <option>Éxito</option>
-              <option>Error</option>
-            </select>
-          </div>
-
-          {/* Table */}
-          <div className="flex-1 overflow-y-auto">
+        {tab === 'traces' && (
+          <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
             <table className="w-full">
-              <thead className="sticky top-0 bg-[#f9f9f7] z-10">
-                <tr>
-                  {['Nombre','Modelo','Usuario','Tokens (E/S)','Duración','Coste','Estado','Hora'].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">{h}</th>
-                  ))}
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Trace ID</th>
+                  <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Usuario</th>
+                  <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Spans</th>
+                  <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Tokens</th>
+                  <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Coste</th>
+                  <th className="text-right px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Latencia mÃ¡x.</th>
+                  <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Estado</th>
+                  <th className="text-left px-4 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Iniciado</th>
                 </tr>
               </thead>
               <tbody>
-                {traces.map((trace, i) => (
-                  <tr key={trace.id} onClick={() => setSelectedTrace(trace.id)} className="cursor-pointer hover:bg-[#f9f9f7] border-b border-[#e9eae6] group">
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[12px] font-semibold text-[#1a1a1a] group-hover:text-[#3b59f6]">{trace.name}</span>
-                        <span className="text-[11px] text-[#9ca3af] font-mono">{trace.id}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[12px] font-medium text-[#1a1a1a]">{trace.model}</span>
-                        <span className="text-[11px] text-[#9ca3af]">{trace.provider}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-[12px] text-[#646462]">{trace.user}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[12px] text-[#1a1a1a] font-mono">{trace.tokens}</span>
-                        <span className="text-[11px] text-[#9ca3af] font-mono">{trace.inputTokens} → {trace.outputTokens}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-[12px] text-[#646462] font-mono">{trace.duration}</td>
-                    <td className="px-4 py-3 text-[12px] font-mono font-semibold text-[#1a1a1a]">{trace.cost}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${trace.status === 'error' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                        {trace.status === 'error' ? 'Error' : 'OK'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[12px] text-[#9ca3af]">{trace.ts}</td>
+                {traceLoading ? (
+                  Array.from({ length: 6 }).map((_, i) => <tr key={i} className="border-b border-[#f3f3f1]">{[1,2,3,4,5,6,7,8].map(c => <td key={c} className="px-4 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" /></td>)}</tr>)
+                ) : traces.length === 0 ? (
+                  <tr><td colSpan={8} className="py-12 text-center text-xs text-[#9ca3af]">Sin trazas en este rango</td></tr>
+                ) : traces.map((t, i) => (
+                  <tr key={t.trace ?? i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                    <td className="px-4 py-2 text-xs font-mono text-[#a855f7] truncate max-w-[180px]" title={t.trace}>{t.trace?.slice(0, 16)}â€¦</td>
+                    <td className="px-4 py-2 text-xs font-mono text-[#646462] truncate max-w-[140px]">{t.distinct_id}</td>
+                    <td className="px-4 py-2 text-xs text-right font-mono">{t.spans}</td>
+                    <td className="px-4 py-2 text-xs text-right font-mono">{llmFormat(Number(t.tokens), 'tokens')}</td>
+                    <td className="px-4 py-2 text-xs text-right font-mono">{llmFormat(Number(t.cost), 'currency')}</td>
+                    <td className="px-4 py-2 text-xs text-right font-mono">{llmFormat(Number(t.max_lat), 'duration')}</td>
+                    <td className="px-4 py-2 text-xs">{Number(t.errors) > 0 ? <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded">{t.errors} errores</span> : <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">OK</span>}</td>
+                    <td className="px-4 py-2 text-xs text-[#646462]">{formatRelativeTime(t.start_ts)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        )}
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between px-5 py-3 border-t border-[#e9eae6] flex-shrink-0 bg-white">
-            <span className="text-[12px] text-[#646462]">Mostrando 1–{traces.length} de 564 trazas</span>
-            <div className="flex items-center gap-1">
-              {[1,2,3,'...',24].map((p, i) => (
-                <button key={i} className={`w-7 h-7 flex items-center justify-center rounded text-[12px] ${p === 1 ? 'bg-[#3b59f6] text-white' : 'text-[#646462] hover:bg-[#f3f4f6]'}`}>{p}</button>
-              ))}
+        {tab === 'models'   && <LlmTopList title="Modelos mÃ¡s usados" rows={topModels} loading={loading} keyLabel="Modelo" valueLabel="Llamadas" secondaryLabel="Coste" secondaryFormat="currency" color="#a855f7" />}
+        {tab === 'users'    && <LlmTopList title="Top usuarios" rows={topUsers} loading={loading} keyLabel="Usuario" valueLabel="Llamadas" secondaryLabel="Coste" secondaryFormat="currency" color="#16a34a" />}
+      </div>
+
+      <LlmGenerationDrawer gen={selected} onClose={() => setSelected(null)} />
+
+      {showSetup && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setShowSetup(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[640px] max-w-[92vw] max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#1a1a18]">CÃ³mo enviar datos LLM a PostHog</h2>
+              <button onClick={() => setShowSetup(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+            </div>
+            <div className="p-5 overflow-y-auto text-sm space-y-3">
+              <p className="text-[#646462]">EnvÃ­a un evento <code className="bg-[#f3f3f1] text-[#a855f7] px-1.5 py-0.5 rounded font-mono text-xs">$ai_generation</code> por cada llamada al LLM con las siguientes propiedades:</p>
+              <pre className="bg-[#1a1a18] text-[#e9eae6] rounded-lg p-3 text-[11px] font-mono overflow-auto">
+{`posthog.capture('$ai_generation', {
+  $ai_model:          'gpt-4o-mini',
+  $ai_provider:       'openai',
+  $ai_input_tokens:   1250,
+  $ai_output_tokens:  340,
+  $ai_total_cost_usd: 0.00213,
+  $ai_latency:        1.42,           // seconds
+  $ai_is_error:       false,
+  $ai_trace_id:       'trace_abc123',
+  $ai_input:          [{ role: 'user', content: '...' }],
+  $ai_output:         '...respuesta...',
+})`}
+              </pre>
+              <p className="text-xs text-[#646462]">Las SDKs <code className="bg-[#f3f3f1] text-[#a855f7] px-1 rounded font-mono">posthog-python</code> y <code className="bg-[#f3f3f1] text-[#a855f7] px-1 rounded font-mono">posthog-node</code> incluyen wrappers automÃ¡ticos para OpenAI, Anthropic, LangChain, etc.</p>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ── GENERATIONS TAB ── */}
-      {llmTab === 'generations' && (
-        <div className="flex-1 overflow-y-auto flex flex-col">
-          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0 bg-[#f9f9f7]">
-            <div className="flex-1 relative">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              <input type="text" placeholder="Buscar generaciones..." className="w-full pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
-            </div>
-            <span className="text-[12px] text-[#646462]">564 generaciones</span>
-          </div>
-          <table className="w-full">
-            <thead className="sticky top-0 bg-[#f9f9f7] z-10">
-              <tr>
-                {['Traza','Modelo','Entrada (preview)','Salida (preview)','Tokens','Coste','Estado'].map(h => (
-                  <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {traces.map(trace => (
-                <tr key={trace.id} onClick={() => setSelectedTrace(trace.id)} className="cursor-pointer hover:bg-[#f9f9f7] border-b border-[#e9eae6] group">
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[12px] font-semibold text-[#1a1a1a] group-hover:text-[#3b59f6]">{trace.name}</span>
-                      <span className="text-[11px] text-[#9ca3af] font-mono">{trace.id}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#f3f4f6] text-[#646462]">{trace.model}</span>
-                  </td>
-                  <td className="px-4 py-3 max-w-[200px]">
-                    <p className="text-[12px] text-[#646462] truncate">{trace.input}</p>
-                  </td>
-                  <td className="px-4 py-3 max-w-[200px]">
-                    <p className="text-[12px] text-[#646462] truncate">{trace.output}</p>
-                  </td>
-                  <td className="px-4 py-3 text-[12px] font-mono text-[#646462]">{trace.tokens}</td>
-                  <td className="px-4 py-3 text-[12px] font-mono font-semibold text-[#1a1a1a]">{trace.cost}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${trace.status === 'error' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                      {trace.status === 'error' ? 'Error' : 'OK'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── USERS TAB ── */}
-      {llmTab === 'users' && (
-        <div className="flex-1 overflow-y-auto flex flex-col">
-          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0 bg-[#f9f9f7]">
-            <div className="flex-1 relative">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              <input type="text" placeholder="Buscar usuarios..." className="w-full pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
-            </div>
-            <span className="text-[12px] text-[#646462]">{users.length} usuarios</span>
-          </div>
-          <table className="w-full">
-            <thead className="sticky top-0 bg-[#f9f9f7] z-10">
-              <tr>
-                {['Usuario','Generaciones','Coste total','Duración media','Tasa de error','Acciones'].map(h => (
-                  <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user, i) => (
-                <tr key={user.id} className="hover:bg-[#f9f9f7] border-b border-[#e9eae6]">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold text-white" style={{ backgroundColor: ['#3b59f6','#e8572a','#10b981','#f59e0b','#8b5cf6','#06b6d4'][i % 6] }}>
-                        {user.email[0].toUpperCase()}
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[12px] font-semibold text-[#1a1a1a]">{user.email}</span>
-                        <span className="text-[11px] text-[#9ca3af] font-mono">{user.id}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-bold text-[#1a1a1a]">{user.generations}</span>
-                      <div className="flex-1 max-w-[80px] h-1.5 bg-[#f3f4f6] rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-[#3b59f6]" style={{ width: `${(user.generations / users[0].generations) * 100}%` }} />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-[13px] font-semibold font-mono text-[#1a1a1a]">{user.cost}</td>
-                  <td className="px-4 py-3 text-[12px] font-mono text-[#646462]">{user.avgDuration}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-[12px] font-semibold font-mono ${parseFloat(user.errorRate) > 3 ? 'text-red-500' : 'text-[#646462]'}`}>{user.errorRate}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => { setLlmTab('traces'); }} className="text-[11px] text-[#3b59f6] font-medium hover:underline">Ver trazas →</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
     </div>
   );
 }
 
-
-// ── WAAppClustersView ─────────────────────────────────────────────────────────
 function WAAppClustersView() {
   type ClustersTab = 'traces' | 'generations';
   const [tab, setTab] = useState<ClustersTab>('traces');
@@ -53686,6 +53786,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
