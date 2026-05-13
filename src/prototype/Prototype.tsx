@@ -29082,6 +29082,660 @@ function WAAppErrorTrackingView() {
 }
 
 
+// ── WAAppHeatmapsView ─────────────────────────────────────────────────────────
+function WAAppHeatmapsView() {
+  const [showWarningBanner, setShowWarningBanner] = useState(true);
+  const [showBetaBanner, setShowBetaBanner]       = useState(true);
+  const [createdBy, setCreatedBy]                 = useState('Any user');
+  const [showCreatedDrop, setShowCreatedDrop]     = useState(false);
+  const [showNewForm, setShowNewForm]             = useState(false);
+  // New heatmap form state
+  const [pageUrl, setPageUrl]         = useState('');
+  const [dataUrl, setDataUrl]         = useState('');
+  const [captureMethod, setCaptureMethod] = useState<'screenshot'|'iframe'>('screenshot');
+
+  if (showNewForm) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[#f9f9f7] overflow-y-auto">
+        {/* Top bar */}
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] bg-white flex-shrink-0">
+          <button onClick={() => setShowNewForm(false)} className="text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="#f59e0b" strokeWidth="1.3"/><path d="M5 9l2.5-3L10 9" stroke="#f59e0b" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/><circle cx="5.5" cy="6" r="1" fill="#f59e0b"/></svg>
+          </div>
+          <h1 className="text-[15px] font-bold text-[#1a1a1a] flex-1">New heatmap</h1>
+          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">0</span>
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 px-8 py-8 flex flex-col gap-8 max-w-3xl">
+          {/* Page URL */}
+          <div className="flex flex-col gap-2">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Page URL</h2>
+            <p className="text-[12.5px] text-[#646462]">URL to your website</p>
+            <input type="text" value={pageUrl} onChange={e => setPageUrl(e.target.value)} placeholder="https://www.example.com" className="w-full px-3 py-2.5 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6] placeholder-[#9ca3af]" />
+            <div className="flex items-center gap-2 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              <p className="text-[12.5px] text-[#646462]">No pageview events have been received yet. Once you have some data, you'll see the most viewed pages here.</p>
+            </div>
+          </div>
+
+          {/* Heatmap data URL */}
+          <div className="flex flex-col gap-2">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Heatmap data URL</h2>
+            <p className="text-[12.5px] text-[#646462] leading-relaxed">An exact match or a pattern for heatmap data. For example, use a pattern if you have pages with dynamic IDs. E.g. https://www.example.com/users/* will aggregate data from all pages under /users/.</p>
+            <input type="text" value={dataUrl} onChange={e => setDataUrl(e.target.value)} placeholder="https://www.example.com/*" className="w-full px-3 py-2.5 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6] placeholder-[#9ca3af]" />
+            <p className="text-[12px] text-[#9ca3af]">Add * for wildcards to aggregate data from multiple pages</p>
+          </div>
+
+          {/* Capture method */}
+          <div className="flex flex-col gap-3">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Capture method</h2>
+            <p className="text-[12.5px] text-[#646462]">Choose how to display your page in the heatmap</p>
+            <div className="flex flex-col gap-3">
+              {[
+                { id:'screenshot' as const, label:'Screenshot', desc:'We will generate a full-page screenshot of your website' },
+                { id:'iframe'     as const, label:'Iframe',      desc:'We will load your website in an iframe. Make sure you allow your website to be loaded in an iframe.' },
+              ].map(opt => (
+                <label key={opt.id} className="flex items-start gap-3 cursor-pointer">
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center mt-0.5 flex-shrink-0 ${captureMethod===opt.id?'border-[#e8572a]':'border-[#d1d5db]'}`} onClick={() => setCaptureMethod(opt.id)}>
+                    {captureMethod===opt.id && <div className="w-2 h-2 rounded-full bg-[#e8572a]" />}
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">{opt.label}</p>
+                    <p className="text-[12px] text-[#646462]">{opt.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              <p className="text-[12.5px] text-[#646462]">You can also generate a screenshot of your site directly from <span className="text-[#e8572a] cursor-pointer hover:underline inline-flex items-center gap-0.5">session replay <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg></span> by clicking the 'view heatmap' button above a recording.</p>
+            </div>
+          </div>
+
+          {/* Save */}
+          <div>
+            <button onClick={() => setShowNewForm(false)} className="px-4 py-2 border border-[#e8572a] rounded-lg text-[13px] text-[#e8572a] font-semibold bg-white hover:bg-[#fff5f3]">Save</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden" onClick={() => setShowCreatedDrop(false)}>
+      {/* Warning banner */}
+      {showWarningBanner && (
+        <div className="flex items-center gap-3 px-5 py-3 bg-[#fffbeb] border-b border-[#fcd34d] flex-shrink-0">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#d97706] flex-shrink-0"><path d="M8 2L14.5 13H1.5L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 6.5v3M8 11.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+          <span className="text-[13px] text-[#1a1a1a] flex-1">You aren't collecting heatmaps data. Enable heatmaps in your project.</span>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#d97706] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#fffbeb] font-medium">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="#646462" strokeWidth="1.1"/><path d="M4 6l1.5 1.5L8.5 4" stroke="#646462" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Configure
+          </button>
+          <button onClick={() => setShowWarningBanner(false)} className="text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      )}
+
+      {/* Header row */}
+      <div className="flex items-center gap-3 px-5 py-4 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-1">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="14" height="14" rx="2.5" stroke="#f59e0b" strokeWidth="1.4"/><path d="M5 11l3.5-4.5L11 9.5l2-2.5" stroke="#f59e0b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="5.5" cy="7" r="1.2" fill="#f59e0b"/></svg>
+          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Heatmaps</h1>
+        </div>
+        <button onClick={() => setShowNewForm(true)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          New heatmap
+        </button>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
+        </button>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+        </button>
+      </div>
+
+      {/* Subtitle */}
+      <p className="text-[13px] text-[#646462] px-5 pb-3 flex-shrink-0">Heatmaps are a way to visualize user behavior on your website.</p>
+
+      {/* Beta banner */}
+      {showBetaBanner && (
+        <div className="mx-5 mb-4 flex items-center gap-3 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white flex-shrink-0">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          <span className="text-[12.5px] text-[#646462] flex-1">Heatmaps is in beta. Please let us know what you'd like to see here and/or report any issues directly to us!</span>
+          <button className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium flex-shrink-0">Send feedback</button>
+          <button onClick={() => setShowBetaBanner(false)} className="text-[#9ca3af] hover:text-[#646462]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      )}
+
+      {/* Search + filter row */}
+      <div className="flex items-center gap-3 px-5 pb-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
+        <div className="relative">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          <input type="text" placeholder="Search for heatmaps" className="pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6] w-56" />
+        </div>
+        <div className="flex-1" />
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] text-[#646462]">Created by:</span>
+          <div className="relative">
+            <button onClick={() => setShowCreatedDrop(!showCreatedDrop)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+              {createdBy} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            </button>
+            {showCreatedDrop && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
+                {['Any user','Me'].map(u => (
+                  <button key={u} onClick={() => { setCreatedBy(u); setShowCreatedDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${createdBy===u?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{u}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto px-5 pb-5">
+        <table className="w-full border border-[#e9eae6] rounded-xl overflow-hidden">
+          <thead>
+            <tr className="bg-[#f9f9f7]">
+              {['NAME','PAGE','HEATMAP DATA URL','TYPE','CREATED','CREATED BY'].map(h => (
+                <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">
+                  {h === 'CREATED BY' ? <span className="flex items-center gap-1">{h} <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1v7M2 3l2.5-2.5L7 3M2 6l2.5 2.5L7 6" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg></span> : h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colSpan={6} className="px-4 py-4 text-[12.5px] text-[#9ca3af]">No heatmaps</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── WAAppLogsView ─────────────────────────────────────────────────────────────
+function WAAppLogsView() {
+  const [showSetupBanner, setShowSetupBanner] = useState(true);
+  const [volumeCollapsed, setVolumeCollapsed] = useState(false);
+  const [logLevel, setLogLevel]     = useState('All levels');
+  const [service, setService]       = useState('All services');
+  const [timeRange, setTimeRange]   = useState('Last 1 hour');
+  const [timezone, setTimezone]     = useState('UTC');
+  const [wrapMessage, setWrapMessage] = useState(true);
+  const [sortOrder, setSortOrder]   = useState<'earliest'|'latest'>('latest');
+  const [liveTail, setLiveTail]     = useState(false);
+  const [showLevelDrop, setShowLevelDrop]   = useState(false);
+  const [showServiceDrop, setShowServiceDrop] = useState(false);
+  const [showTimeDrop, setShowTimeDrop]     = useState(false);
+  const [showTzDrop, setShowTzDrop]         = useState(false);
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden" onClick={() => { setShowLevelDrop(false); setShowServiceDrop(false); setShowTimeDrop(false); setShowTzDrop(false); }}>
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2 flex-1">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <circle cx="9" cy="9" r="7" stroke="#e8572a" strokeWidth="1.4" strokeDasharray="3 2"/>
+            <circle cx="9" cy="9" r="3.5" stroke="#e8572a" strokeWidth="1.4"/>
+            <circle cx="9" cy="9" r="1" fill="#e8572a"/>
+          </svg>
+          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Logs</h1>
+        </div>
+        <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">2</span>
+        </button>
+        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 1.5v1M6.5 10.5v1M1.5 6.5h1M10.5 6.5h1M3.2 3.2l.7.7M9.8 9.8l.7.7M9.8 3.2l-.7.7M3.9 9.8l-.7.7" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          Settings
+        </button>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
+        </button>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+        </button>
+      </div>
+
+      {/* Subtitle */}
+      <p className="text-[13px] text-[#646462] px-5 py-3 flex-shrink-0">Monitor and analyze your logs to understand and fix issues.</p>
+
+      {/* Setup banner */}
+      {showSetupBanner && (
+        <div className="mx-5 mb-3 flex items-center gap-3 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white flex-shrink-0">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          <span className="text-[12.5px] text-[#646462] flex-1">Unable to verify logs setup. If you haven't configured logging yet, check out our setup guide.</span>
+          <button className="flex items-center gap-1 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium flex-shrink-0">
+            Setup guide <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <button onClick={() => setShowSetupBanner(false)} className="text-[#9ca3af] hover:text-[#646462]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      )}
+
+      {/* Volume over time */}
+      <div className="mx-5 mb-3 border border-[#e9eae6] rounded-xl overflow-hidden flex-shrink-0">
+        <button onClick={() => setVolumeCollapsed(!volumeCollapsed)} className="w-full flex items-center gap-2 px-4 py-2.5 text-[12.5px] font-medium text-[#646462] hover:bg-[#f9f9f7] text-left">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: volumeCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Volume over time
+        </button>
+        {!volumeCollapsed && (
+          <div className="flex items-center justify-center py-10 border-t border-[#e9eae6] bg-white">
+            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" className="animate-spin">
+              <circle cx="18" cy="18" r="15" stroke="#f3e8e8" strokeWidth="3"/>
+              <path d="M18 3a15 15 0 0115 15" stroke="#e8572a" strokeWidth="3" strokeLinecap="round"/>
+            </svg>
+          </div>
+        )}
+      </div>
+
+      {/* Filter toolbar */}
+      <div className="flex items-center gap-2 px-5 pb-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+        {/* Level */}
+        <div className="relative">
+          <button onClick={() => { setShowLevelDrop(!showLevelDrop); setShowServiceDrop(false); }} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+            {logLevel} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          </button>
+          {showLevelDrop && (
+            <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
+              {['All levels','Debug','Info','Warning','Error'].map(l => (
+                <button key={l} onClick={() => { setLogLevel(l); setShowLevelDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${logLevel===l?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{l}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Service */}
+        <div className="relative">
+          <button onClick={() => { setShowServiceDrop(!showServiceDrop); setShowLevelDrop(false); }} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+            {service} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          </button>
+          {showServiceDrop && (
+            <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-40 py-1">
+              {['All services','Frontend','Backend','API','Worker'].map(s => (
+                <button key={s} onClick={() => { setService(s); setShowServiceDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${service===s?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{s}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Search */}
+        <div className="flex-1 relative">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.1"/><path d="M9 9l2 2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          <input type="text" placeholder="Search recent, pinned, logs, resources or attri..." className="w-full pl-8 pr-4 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
+        </div>
+        {/* Right actions */}
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+        </button>
+        <div className="relative">
+          <button onClick={() => setShowTimeDrop(!showTimeDrop)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="#646462" strokeWidth="1.1"/><path d="M4 1v2M8 1v2M1 5h10" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            {timeRange} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          </button>
+          {showTimeDrop && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-40 py-1">
+              {['Last 1 hour','Last 6 hours','Last 24 hours','Last 7 days'].map(t => (
+                <button key={t} onClick={() => { setTimeRange(t); setShowTimeDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${timeRange===t?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{t}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+        </button>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7a5 5 0 015-5 5 5 0 014.3 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M12 7a5 5 0 01-5 5 5 5 0 01-4.3-2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M11.5 2.5v2.5H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <button onClick={() => setLiveTail(!liveTail)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${liveTail?'bg-[#e8572a] text-white':'border border-[#e9eae6] text-[#646462] bg-white hover:bg-[#f9f9f7]'}`}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><circle cx="6" cy="6" r="2" fill="currentColor"/></svg>
+          Live tail
+        </button>
+      </div>
+
+      {/* Second toolbar */}
+      <div className="flex items-center gap-2 px-5 pb-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-0 border border-[#e9eae6] rounded-lg overflow-hidden">
+          {(['earliest','latest'] as const).map(o => (
+            <button key={o} onClick={() => setSortOrder(o)} className={`px-3 py-1.5 text-[12px] font-medium capitalize transition-colors ${sortOrder===o?'border border-[#e8572a] text-[#1a1a1a] rounded-lg':'text-[#646462] hover:text-[#1a1a1a]'}`}>{o.charAt(0).toUpperCase()+o.slice(1)}</button>
+          ))}
+        </div>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${wrapMessage?'bg-[#e8572a] border-[#e8572a]':'border-[#d1d5db]'}`} onClick={() => setWrapMessage(!wrapMessage)}>
+            {wrapMessage && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          </div>
+          <span className="text-[12px] text-[#1a1a1a]">Wrap message</span>
+        </label>
+        <div className="relative">
+          <button onClick={() => setShowTzDrop(!showTzDrop)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="#646462" strokeWidth="1.1"/><path d="M6 1.5v1M6 9.5v1M1.5 6h1M9.5 6h1" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            {timezone} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          </button>
+          {showTzDrop && (
+            <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-40 py-1">
+              {['UTC','Local time','Europe/Madrid','America/New_York'].map(tz => (
+                <button key={tz} onClick={() => { setTimezone(tz); setShowTzDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${timezone===tz?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{tz}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1.5v8M3.5 7.5L6.5 10l3-2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M1.5 11h10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+        </button>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 1h4v4H1V1zM8 1h4v4H8V1zM1 8h4v4H1V8zM8 8h4v4H8V8z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
+        </button>
+        <div className="flex-1" />
+        <div className="flex items-center gap-1 text-[11px] text-[#9ca3af]">
+          {[['↑↓','or'],['J',''],['K','navigate'],['·',''],['↵','expand'],['·',''],['P','prettify'],['·',''],['R','refresh']].map(([k,label],i) => (
+            <span key={i} className="flex items-center gap-0.5">
+              {k.length === 1 && k !== '·' ? <kbd className="px-1 py-0.5 border border-[#e9eae6] rounded text-[10px] bg-[#f9f9f7] text-[#646462]">{k}</kbd> : <span>{k}</span>}
+              {label && <span className="text-[#9ca3af]"> {label}</span>}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Log table */}
+      <div className="flex-1 overflow-y-auto px-5 pb-5">
+        <table className="w-full border border-[#e9eae6] rounded-xl overflow-hidden">
+          <thead>
+            <tr className="bg-white border-b border-[#e9eae6]">
+              <th className="w-8 px-3 py-3"><input type="checkbox" className="rounded border-[#e9eae6]" /></th>
+              <th className="text-left px-4 py-3 text-[12px] font-semibold text-[#1a1a1a]">
+                <span className="flex items-center gap-1">Timestamp <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M6 10l-3-3M6 10l3-3" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+              </th>
+              <th className="text-left px-4 py-3 text-[12px] font-semibold text-[#1a1a1a]">Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colSpan={3} className="px-4 py-16 text-center text-[12px] text-[#9ca3af]">No logs found in the selected time range.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── WAAppSessionReplayView ────────────────────────────────────────────────────
+function WAAppSessionReplayView() {
+  type SRTab = 'recordings' | 'collections' | 'whattowatch';
+  const [srTab, setSrTab] = useState<SRTab>('recordings');
+  const [showFilters, setShowFilters] = useState(false);
+  const [recordingFilter, setRecordingFilter] = useState('Viewed and unviewed recordings');
+  const [relativeFilter, setRelativeFilter] = useState('Relative');
+  const [showRecordingDrop, setShowRecordingDrop] = useState(false);
+  const [showRelativeDrop, setShowRelativeDrop]   = useState(false);
+  // Collections
+  const [collectionType, setCollectionType] = useState('All');
+  const [createdBy, setCreatedBy] = useState('Any user');
+  const [showCollTypeDrop, setShowCollTypeDrop] = useState(false);
+  const [showCreatedDrop, setShowCreatedDrop]   = useState(false);
+
+  const COLLECTIONS = [
+    { name:'Watch history',           desc:'Recordings you have watched' },
+    { name:'Recordings with comments',desc:'Recordings that have team comments' },
+    { name:'Shared recordings',       desc:'Recordings that have been shared externally' },
+    { name:'Exported recordings',     desc:'Recordings that have been exported as clips or screenshots' },
+    { name:'Expiring soon',           desc:'Recordings that will expire in the next 10 days' },
+    { name:'Frustration signals',     desc:'Sessions with rage clicks or errors in the last 7 days' },
+    { name:'Summarised sessions',     desc:'Sessions with AI-generated summaries. Ask Clain AI to summarize sessions for you.' },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden" onClick={() => { setShowRecordingDrop(false); setShowRelativeDrop(false); setShowCollTypeDrop(false); setShowCreatedDrop(false); }}>
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2 flex-1">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <circle cx="9" cy="9" r="7" stroke="#e8572a" strokeWidth="1.4"/>
+            <path d="M7 6l5 3-5 3V6z" fill="#e8572a"/>
+          </svg>
+          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Session replay</h1>
+        </div>
+        <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">0</span>
+        </button>
+        {srTab === 'collections' && (
+          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+            New collection
+          </button>
+        )}
+        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 1.5v1M6.5 10.5v1M1.5 6.5h1M10.5 6.5h1" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          Settings
+        </button>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
+        </button>
+        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center border-b border-[#e9eae6] px-5 flex-shrink-0">
+        {([['recordings','Recordings'],['collections','Collections'],['whattowatch','What to watch']] as [SRTab,string][]).map(([id,label]) => (
+          <button key={id} onClick={() => setSrTab(id)} className={`px-1 py-2.5 mr-6 text-[13px] font-medium border-b-2 flex items-center gap-1.5 transition-colors ${srTab===id?'border-[#e8572a] text-[#1a1a1a]':'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+            {label}
+            {id === 'collections' && <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="text-[#9ca3af]"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 4.5v3M6.5 9.5v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>}
+          </button>
+        ))}
+      </div>
+
+      {/* ── RECORDINGS TAB ── */}
+      {srTab === 'recordings' && (
+        <div className="flex-1 flex min-h-0">
+          {/* Left panel */}
+          <div className="w-[440px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col min-h-0" onClick={e => e.stopPropagation()}>
+            {/* Filters row */}
+            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e9eae6] flex-shrink-0">
+              <button onClick={() => setShowFilters(!showFilters)} className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 3.5h10M3.5 6.5h6M5.5 9.5h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                Show filters
+              </button>
+              <button className="w-7 h-7 flex items-center justify-center rounded-full border-2 border-dashed border-[#8b5cf6] text-[#8b5cf6] hover:bg-[#f3f0ff]">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              </button>
+              <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5a5 5 0 015-5 5 5 0 014.3 2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/><path d="M11.5 6.5a5 5 0 01-5 5A5 5 0 012.2 9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/><path d="M11 2v3H8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+            {/* Sub-filters */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6] flex-shrink-0">
+              <div className="relative">
+                <button onClick={() => { setShowRecordingDrop(!showRecordingDrop); setShowRelativeDrop(false); }} className="flex items-center gap-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a]">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 4v3l2 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                  {recordingFilter} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                </button>
+                {showRecordingDrop && (
+                  <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-56 py-1">
+                    {['Viewed and unviewed recordings','Viewed recordings','Unviewed recordings'].map(r => (
+                      <button key={r} onClick={() => { setRecordingFilter(r); setShowRecordingDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${recordingFilter===r?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{r}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <button onClick={() => { setShowRelativeDrop(!showRelativeDrop); setShowRecordingDrop(false); }} className="flex items-center gap-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a]">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                  {relativeFilter} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                </button>
+                {showRelativeDrop && (
+                  <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
+                    {['Relative','Last 7 days','Last 30 days','Last 90 days'].map(r => (
+                      <button key={r} onClick={() => { setRelativeFilter(r); setShowRelativeDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${relativeFilter===r?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{r}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* Sort row */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6] flex-shrink-0">
+              <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7]">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="1" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="1" y="7" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="7" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/></svg>
+              </button>
+              <span className="text-[12px] text-[#646462]">Sort by:</span>
+              <button className="flex items-center gap-1 text-[12px] text-[#1a1a1a] font-medium hover:text-[#3b59f6]">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4l3-3 3 3M6 1v7M3 8l3 3 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Latest <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+              </button>
+              <div className="flex-1" />
+              <button className="text-[#9ca3af] hover:text-[#646462]">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="12" r="1.2" fill="currentColor"/></svg>
+              </button>
+            </div>
+            {/* Empty state */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">No matching recordings</p>
+              <div className="mb-4 px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#9ca3af] bg-[#f9f9f7]">Search over the last 30 days</div>
+              <div className="border-t border-[#e9eae6] pt-3 flex flex-col gap-2">
+                <a className="text-[12.5px] text-[#e8572a] hover:underline cursor-pointer flex items-center gap-1">
+                  Recordings might be outside the retention period <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </a>
+                <a className="text-[12.5px] text-[#e8572a] hover:underline cursor-pointer flex items-center gap-1">
+                  An ad blocker might be preventing recordings <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Right pane — no recording selected */}
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+            <p className="text-[15px] font-semibold text-[#1a1a1a]">No recording selected</p>
+            <p className="text-[13px] text-[#9ca3af]">Please select a recording from the list on the left</p>
+            <button className="mt-1 px-4 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">Learn more about recordings</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── COLLECTIONS TAB ── */}
+      {srTab === 'collections' && (
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          {/* Search + filters row */}
+          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0" onClick={e => e.stopPropagation()}>
+            <div className="relative">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.1"/><path d="M9 9l2 2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+              <input type="text" placeholder="Search for collections" className="pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6] w-56" />
+            </div>
+            <div className="flex-1" />
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a]">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l2.5 2.5L10 3" stroke="#646462" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Pinned
+              </button>
+              <div className="flex items-center gap-1.5 text-[12px] text-[#646462]">
+                <span>Collection type:</span>
+                <div className="relative">
+                  <button onClick={() => setShowCollTypeDrop(!showCollTypeDrop)} className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                    {collectionType} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                  </button>
+                  {showCollTypeDrop && (
+                    <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
+                      {['All','Smart','Custom'].map(t => (
+                        <button key={t} onClick={() => { setCollectionType(t); setShowCollTypeDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${collectionType===t?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{t}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-[12px] text-[#646462]">
+                <span>Last modified:</span>
+                <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="1" y="1.5" width="9" height="8" rx="1.5" stroke="#646462" strokeWidth="1"/><path d="M3.5 1v1.5M7.5 1v1.5M1 4.5h9" stroke="#646462" strokeWidth="1" strokeLinecap="round"/></svg>
+                  No date range override <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5 text-[12px] text-[#646462]">
+                <span>Created by:</span>
+                <div className="relative">
+                  <button onClick={() => setShowCreatedDrop(!showCreatedDrop)} className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                    {createdBy} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                  </button>
+                  {showCreatedDrop && (
+                    <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-32 py-1">
+                      {['Any user','Me'].map(u => (
+                        <button key={u} onClick={() => { setCreatedBy(u); setShowCreatedDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${createdBy===u?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{u}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Collections table */}
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[#e9eae6]">
+                <th className="text-left px-5 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-20">
+                  <span className="flex items-center gap-1">COUNT <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 4v2.5M6 8v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg></span>
+                </th>
+                <th className="text-left px-5 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">NAME</th>
+                <th className="text-left px-5 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                  <span className="flex items-center gap-1">CREATED BY <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1v7M2 3l2.5-2.5L7 3M2 6l2.5 2.5L7 6" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg></span>
+                </th>
+                <th className="text-left px-5 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                  <span className="flex items-center gap-1">LAST MODIFIED <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 8V1M7 6.5L4.5 9 2 6.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg></span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {COLLECTIONS.map((coll, i) => (
+                <tr key={i} className="border-b border-[#e9eae6] hover:bg-[#f9f9f7] cursor-pointer group">
+                  <td className="px-5 py-4">
+                    <div className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 7a2 2 0 114 0 2 2 0 01-4 0z" fill="white"/><path d="M5 7a2 2 0 114 0 2 2 0 01-4 0z" stroke="white"/></svg>
+                    </div>
+                  </td>
+                  <td className="px-5 py-4">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a] group-hover:text-[#3b59f6]">{coll.name}</p>
+                    <p className="text-[12px] text-[#9ca3af] mt-0.5">{coll.desc}</p>
+                  </td>
+                  <td className="px-5 py-4 text-[12px] text-[#9ca3af]">—</td>
+                  <td className="px-5 py-4 text-[12px] text-[#9ca3af]">—</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── WHAT TO WATCH TAB ── */}
+      {srTab === 'whattowatch' && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+          <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-1">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="11" stroke="#9ca3af" strokeWidth="1.5"/><path d="M10 8l10 6-10 6V8z" fill="#9ca3af"/></svg>
+          </div>
+          <h2 className="text-[15px] font-semibold text-[#1a1a1a]">No recommendations yet</h2>
+          <p className="text-[13px] text-[#9ca3af] max-w-[360px] leading-relaxed">Clain AI will suggest recordings worth watching once you have more session data.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ── WADataSidebar — identical pattern to ReportsSidebar / KnowledgeSidebar ──
 function WADataSidebar({ sub, onSelect }: { sub: WADataSubView; onSelect: (s: WADataSubView) => void }) {
   const [open, setOpen] = useState<Record<string, boolean>>({
@@ -36970,7 +37624,10 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
            appsSub === 'appLlmAnalytics'    ? <WAAppLlmAnalyticsView /> :
            appsSub === 'appClusters'        ? <WAAppClustersView /> :
            appsSub === 'appPlayground'      ? <WAAppPlaygroundView /> :
-           appsSub === 'appErrorTracking'   ? <WAAppErrorTrackingView /> : (
+           appsSub === 'appErrorTracking'   ? <WAAppErrorTrackingView /> :
+           appsSub === 'appHeatmaps'        ? <WAAppHeatmapsView /> :
+           appsSub === 'appLogs'            ? <WAAppLogsView /> :
+           appsSub === 'appSessionReplay'   ? <WAAppSessionReplayView /> : (
             <>
               <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
                 <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{appsSub.replace(/^app/, '').replace(/([A-Z])/g, ' $1').trim()}</h1>
