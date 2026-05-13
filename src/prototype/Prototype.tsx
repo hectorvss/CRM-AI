@@ -34902,6 +34902,10 @@ function WAAppExperimentsView() {
   // Step 2 state
   const [rolloutPct, setRolloutPct] = useState(100);
   const [persistFlag, setPersistFlag] = useState(false);
+  const [variants, setVariants] = React.useState<{ key: string; rolloutPct: number; color: string }[]>([
+    { key: 'control', rolloutPct: 50, color: '#3b59f6' },
+    { key: 'test',    rolloutPct: 50, color: '#7c3aed' },
+  ]);
 
   // Step 3 state
   const [filterInternal, setFilterInternal] = useState(true);
@@ -34915,9 +34919,234 @@ function WAAppExperimentsView() {
   const [smDesc, setSmDesc] = useState('');
   const [smConvWindow, setSmConvWindow] = useState<'experiment'|'time'>('experiment');
   const [showAddHoldout, setShowAddHoldout] = useState(false);
+  const [holdoutName, setHoldoutName] = React.useState('');
+  const [holdoutDesc, setHoldoutDesc] = React.useState('');
   const [holdoutRollout, setHoldoutRollout] = useState(10);
   const [statMethod, setStatMethod] = useState<'bayesian'|'frequentist'>('bayesian');
   const [requireConvWindow, setRequireConvWindow] = useState(false);
+  const [confidenceLevel, setConfidenceLevel] = React.useState<'90' | '95' | '99'>('95');
+  const [recalcTime, setRecalcTime] = React.useState('02:00');
+
+  // ── State real (datos PostHog) ────────────────────────────────────────────
+  const [experiments, setExperiments] = React.useState<any[]>([]);
+  const [sharedMetrics, setSharedMetrics] = React.useState<any[]>([]);
+  const [holdouts, setHoldouts] = React.useState<any[]>([]);
+  const [members, setMembers] = React.useState<any[]>([]);
+  const [loadingExps, setLoadingExps] = React.useState(false);
+  const [loadingSm, setLoadingSm] = React.useState(false);
+  const [loadingHo, setLoadingHo] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [selectedExp, setSelectedExp] = React.useState<any | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [filterStatus, setFilterStatus] = React.useState<string | null>(null);
+  const [filterCreator, setFilterCreator] = React.useState<string | null>(null);
+  const [filterArchived, setFilterArchived] = React.useState<'active' | 'archived' | 'all'>('active');
+  const [showStatusFilter, setShowStatusFilter] = React.useState(false);
+  const [showCreatorFilter, setShowCreatorFilter] = React.useState(false);
+  const [showArchivedFilter, setShowArchivedFilter] = React.useState(false);
+  const [showQuickStart, setShowQuickStart] = React.useState(false);
+  const statusFilterRef   = useClickOutside<HTMLDivElement>(() => setShowStatusFilter(false));
+  const creatorFilterRef  = useClickOutside<HTMLDivElement>(() => setShowCreatorFilter(false));
+  const archivedFilterRef = useClickOutside<HTMLDivElement>(() => setShowArchivedFilter(false));
+  const quickStartRef     = useClickOutside<HTMLDivElement>(() => setShowQuickStart(false));
+
+  // Persistencia settings
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('wa-experiments-settings');
+      if (raw) {
+        const cfg = JSON.parse(raw);
+        setStatMethod(cfg.statMethod ?? 'bayesian');
+        setConfidenceLevel(cfg.confidenceLevel ?? '95');
+        setRecalcTime(cfg.recalcTime ?? '02:00');
+        setRequireConvWindow(cfg.requireConvWindow ?? false);
+      }
+    } catch {}
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-experiments-settings', JSON.stringify({ statMethod, confidenceLevel, recalcTime, requireConvWindow })); } catch {}
+  }, [statMethod, confidenceLevel, recalcTime, requireConvWindow]);
+
+  // Consume nav intent
+  React.useEffect(() => {
+    const intent = consumeNavIntent<number>('experiment');
+    if (intent?.id != null && experiments.length > 0) {
+      const e = experiments.find(x => x.id === intent.id);
+      if (e) setSelectedExp(e);
+    }
+  }, [experiments]);
+
+  // Carga datos
+  const loadExperiments = React.useCallback(async () => {
+    setLoadingExps(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getProjectId()) await ph.bootstrapPostHog();
+      const res: any = await ph.posthog.experiments.list({ limit: 100 });
+      setExperiments(res.results ?? []);
+    } catch (e: any) { setError(e?.message ?? 'Error al cargar experiments'); }
+    finally { setLoadingExps(false); }
+  }, []);
+  const loadSharedMetrics = React.useCallback(async () => {
+    setLoadingSm(true);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getProjectId()) await ph.bootstrapPostHog();
+      const res: any = await ph.posthog.experiments.savedMetrics.list();
+      setSharedMetrics(res.results ?? []);
+    } catch {}
+    finally { setLoadingSm(false); }
+  }, []);
+  const loadHoldouts = React.useCallback(async () => {
+    setLoadingHo(true);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getProjectId()) await ph.bootstrapPostHog();
+      const res: any = await ph.posthog.experiments.holdouts.list();
+      setHoldouts(res.results ?? []);
+    } catch {}
+    finally { setLoadingHo(false); }
+  }, []);
+  React.useEffect(() => {
+    loadExperiments();
+    loadSharedMetrics();
+    loadHoldouts();
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getCurrentUser()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.organization.members();
+        setMembers(res.results ?? res ?? []);
+      } catch {}
+    })();
+  }, [loadExperiments, loadSharedMetrics, loadHoldouts]);
+
+  // Mutaciones
+  async function saveExperimentDraft() {
+    if (!expName.trim()) { alert('Nombre obligatorio'); return; }
+    if (!flagKey.trim()) { alert('Feature flag key obligatorio'); return; }
+    setSaving(true);
+    try {
+      const ph = await import('../api/posthog');
+      const payload = {
+        name: expName.trim(),
+        description: hypothesis.trim(),
+        feature_flag_key: flagKey.trim(),
+        parameters: {
+          feature_flag_variants: variants.map((v) => ({ key: v.key, name: v.key, rollout_percentage: v.rolloutPct })),
+          recommended_running_time: 14,
+          recommended_sample_size: 100,
+        },
+        filters: {
+          filter_test_accounts: filterInternal,
+        },
+      };
+      const created: any = await ph.posthog.experiments.create(payload);
+      setExperiments(prev => [created, ...prev]);
+      setShowNewExp(false); setNewExpStep(1);
+      setExpName(''); setHypothesis(''); setFlagKey('');
+      setSelectedExp(created);
+    } catch (e: any) {
+      alert('Error al crear experimento: ' + (e?.message ?? ''));
+    } finally { setSaving(false); }
+  }
+  async function saveSharedMetric() {
+    if (!smName.trim()) { alert('Nombre obligatorio'); return; }
+    setSaving(true);
+    try {
+      const ph = await import('../api/posthog');
+      const payload = {
+        name: smName.trim(),
+        description: smDesc.trim(),
+        kind: sharedMetricType === 'funnel' ? 'ExperimentFunnelsQuery' : sharedMetricType === 'mean' ? 'ExperimentTrendsQuery' : sharedMetricType === 'ratio' ? 'ExperimentRatioQuery' : 'ExperimentRetentionQuery',
+        query: { kind: 'TrendsQuery', series: [{ kind: 'EventsNode', event: '$pageview' }] },
+      };
+      const created: any = await ph.posthog.experiments.savedMetrics.create(payload);
+      setSharedMetrics(prev => [created, ...prev]);
+      setShowNewSharedMetric(false);
+      setSmName(''); setSmDesc('');
+    } catch (e: any) {
+      alert('Error: ' + (e?.message ?? ''));
+    } finally { setSaving(false); }
+  }
+  async function saveHoldout() {
+    if (!holdoutName.trim()) { alert('Nombre obligatorio'); return; }
+    setSaving(true);
+    try {
+      const ph = await import('../api/posthog');
+      const payload = {
+        name: holdoutName.trim(),
+        description: holdoutDesc.trim(),
+        filters: [{ properties: [], rollout_percentage: holdoutRollout, variant: null }],
+      };
+      const created: any = await ph.posthog.experiments.holdouts.create(payload);
+      setHoldouts(prev => [created, ...prev]);
+      setShowAddHoldout(false);
+      setHoldoutName(''); setHoldoutDesc(''); setHoldoutRollout(10);
+    } catch (e: any) {
+      alert('Error: ' + (e?.message ?? ''));
+    } finally { setSaving(false); }
+  }
+  async function launchExperiment(exp: any) {
+    if (!confirm(`¿Lanzar "${exp.name}"? Empezará a recoger datos inmediatamente.`)) return;
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.posthog.experiments.update(exp.id, { start_date: new Date().toISOString() });
+      setExperiments(prev => prev.map(x => x.id === exp.id ? updated : x));
+      setSelectedExp(updated);
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
+  async function endExperiment(exp: any) {
+    if (!confirm(`¿Finalizar "${exp.name}"?`)) return;
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.posthog.experiments.update(exp.id, { end_date: new Date().toISOString() });
+      setExperiments(prev => prev.map(x => x.id === exp.id ? updated : x));
+      setSelectedExp(updated);
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
+  async function archiveExperiment(exp: any) {
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.posthog.experiments.update(exp.id, { archived: !exp.archived });
+      setExperiments(prev => prev.map(x => x.id === exp.id ? updated : x));
+      setSelectedExp(updated);
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
+
+  // ── Helpers para badges ──────────────────────────────────────────────────
+  function expStatus(e: any): { label: string; color: string; bg: string } {
+    if (e.archived) return { label: 'Archived', color: '#646462', bg: '#f3f3f1' };
+    if (e.end_date)    return { label: 'Completed', color: '#3b59f6', bg: '#eff2ff' };
+    if (e.start_date)  return { label: 'Running',  color: '#16a34a', bg: '#dcfce7' };
+    return { label: 'Draft', color: '#9ca3af', bg: '#f3f3f1' };
+  }
+  function expDuration(e: any): string {
+    if (!e.start_date) return '—';
+    const start = new Date(e.start_date).getTime();
+    const end = e.end_date ? new Date(e.end_date).getTime() : Date.now();
+    const days = Math.floor((end - start) / (86400 * 1000));
+    return `${days} día${days === 1 ? '' : 's'}`;
+  }
+  function memberLabel(uuid: string | null | undefined): string {
+    if (!uuid) return '—';
+    const m = members.find((mb: any) => (mb.user?.uuid ?? mb.uuid) === uuid);
+    return m?.user?.first_name || m?.user?.email || uuid;
+  }
+
+  // Filtered experiments
+  const filteredExperiments = experiments.filter(e => {
+    if (search && !`${e.name} ${e.description ?? ''}`.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterArchived === 'active'   && e.archived) return false;
+    if (filterArchived === 'archived' && !e.archived) return false;
+    if (filterStatus) {
+      const st = expStatus(e).label.toLowerCase();
+      if (st !== filterStatus.toLowerCase()) return false;
+    }
+    if (filterCreator && e.created_by?.uuid !== filterCreator && e.created_by?.id !== filterCreator) return false;
+    return true;
+  });
+  const filteredSm = sharedMetrics.filter(m => !smSearch || `${m.name} ${m.description ?? ''}`.toLowerCase().includes(smSearch.toLowerCase()));
 
   // ── Step indicator ─────────────────────────────────────────────────────────
   const StepIndicator = () => {
@@ -35253,8 +35482,8 @@ function WAAppExperimentsView() {
                     Continue
                   </button>
                 ) : (
-                  <button className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] transition-colors">
-                    Save as draft
+                  <button onClick={saveExperimentDraft} disabled={saving} className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] transition-colors disabled:opacity-50">
+                    {saving ? 'Guardando…' : 'Save as draft'}
                   </button>
                 )}
               </div>
@@ -35317,7 +35546,7 @@ function WAAppExperimentsView() {
               Quick start
               <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">0</span>
             </button>
-            <button className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">Save</button>
+            <button onClick={saveSharedMetric} disabled={saving || !smName.trim()} className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors disabled:opacity-50">{saving ? 'Guardando…' : 'Save'}</button>
             <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
             </button>
@@ -35447,8 +35676,8 @@ function WAAppExperimentsView() {
               <p className="text-[13px] text-[#9ca3af] mt-1">No recent activity</p>
             </div>
             <div className="mt-6">
-              <button className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">
-                Save
+              <button onClick={saveSharedMetric} disabled={saving || !smName.trim()} className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors disabled:opacity-50">
+                {saving ? 'Guardando…' : 'Save'}
               </button>
             </div>
           </div>
@@ -35633,14 +35862,29 @@ function WAAppExperimentsView() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td colSpan={8} className="px-4 py-4 text-[13px] text-[#646462]">
-                    No results for this filter,{' '}
-                    <span className="text-[#e8572a] cursor-pointer hover:underline">change filter</span>
-                    {' '}or{' '}
-                    <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => { setShowNewExp(true); setNewExpStep(1); }}>create a new experiment</span>.
-                  </td>
-                </tr>
+                {loadingExps ? (
+                  Array.from({ length: 4 }).map((_, i) => <tr key={i} className="border-b border-[#f3f3f1]">{Array.from({ length: 8 }).map((_, c) => <td key={c} className="px-4 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i + c) % 40}%` }} /></td>)}</tr>)
+                ) : filteredExperiments.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-4 text-[13px] text-[#646462]">
+                      {experiments.length === 0 ? <>No tienes experimentos aún. <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => { setShowNewExp(true); setNewExpStep(1); }}>Crea el primero</span>.</> : <>No results for this filter, <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => { setSearch(''); setFilterStatus(null); setFilterCreator(null); setFilterArchived('active'); }}>change filter</span> or <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => { setShowNewExp(true); setNewExpStep(1); }}>create a new experiment</span>.</>}
+                    </td>
+                  </tr>
+                ) : filteredExperiments.map(e => {
+                  const st = expStatus(e);
+                  return (
+                    <tr key={e.id} onClick={() => setSelectedExp(e)} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                      <td className="px-4 py-2.5"><p className="font-medium text-[#1a1a1a]">{e.name}</p>{e.description && <p className="text-[10px] text-[#9ca3af] truncate max-w-[240px]">{e.description}</p>}</td>
+                      <td className="px-4 py-2.5 text-[#646462]">{e.created_by?.first_name || e.created_by?.email || '—'}</td>
+                      <td className="px-4 py-2.5 text-[#646462]">{e.created_at ? new Date(e.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : '—'}</td>
+                      <td className="px-4 py-2.5 text-[#646462]">{e.start_date ? new Date(e.start_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : '—'}</td>
+                      <td className="px-4 py-2.5 text-[#646462]">{expDuration(e)}</td>
+                      <td className="px-4 py-2.5 text-[#9ca3af]">—</td>
+                      <td className="px-4 py-2.5"><span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span></td>
+                      <td className="px-4 py-2.5 text-[#9ca3af]">—</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -35696,13 +35940,24 @@ function WAAppExperimentsView() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
+                {loadingSm ? (
+                  Array.from({ length: 3 }).map((_, i) => <tr key={i} className="border-b border-[#f3f3f1]">{Array.from({ length: 6 }).map((_, c) => <td key={c} className="px-4 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i + c) % 40}%` }} /></td>)}</tr>)
+                ) : filteredSm.length > 0 ? filteredSm.map(m => (
+                  <tr key={m.id} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 font-medium text-[#1a1a1a]">{m.name}</td>
+                    <td className="px-4 py-2.5 text-[#646462] truncate max-w-[260px]">{m.description ?? '—'}</td>
+                    <td className="px-4 py-2.5"><div className="flex gap-1 flex-wrap">{(m.tags ?? []).map((t: string) => <span key={t} className="text-[9px] bg-[#f3f3f1] text-[#646462] px-1 py-0.5 rounded">{t}</span>)}</div></td>
+                    <td className="px-4 py-2.5"><span className="text-[10px] bg-[#ede9fe] text-[#7c3aed] px-1.5 py-0.5 rounded font-mono">{m.kind ?? 'funnel'}</span></td>
+                    <td className="px-4 py-2.5 text-[#646462]">{m.created_by?.first_name || m.created_by?.email || '—'}</td>
+                    <td className="px-4 py-2.5 text-[#9ca3af]">{m.created_at ? formatRelativeTime(m.created_at) : '—'}</td>
+                  </tr>
+                )) : <tr>
                   <td colSpan={6} className="px-4 py-4 text-[13px] text-[#646462]">
                     You haven't created any{' '}
-                    <span className="text-[#e8572a] cursor-pointer hover:underline">shared metrics</span>
+                    <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => setShowNewSharedMetric(true)}>shared metrics</span>
                     {' '}yet.
                   </td>
-                </tr>
+                </tr>}
               </tbody>
             </table>
           </div>
@@ -35738,9 +35993,18 @@ function WAAppExperimentsView() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
+                {loadingHo ? (
+                  Array.from({ length: 3 }).map((_, i) => <tr key={i} className="border-b border-[#f3f3f1]">{Array.from({ length: 4 }).map((_, c) => <td key={c} className="px-4 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" /></td>)}</tr>)
+                ) : holdouts.length > 0 ? holdouts.map(h => (
+                  <tr key={h.id} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 font-medium text-[#1a1a1a]">{h.name}</td>
+                    <td className="px-4 py-2.5 text-[#646462] truncate max-w-[260px]">{h.description ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-[#1a1a1a] font-mono">{h.filters?.[0]?.rollout_percentage ?? 0}%</td>
+                    <td className="px-4 py-2.5"><button onClick={async () => { if (!confirm('Eliminar holdout?')) return; try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/projects/${ph.getProjectId()}/experiment_holdouts/${h.id}/`); setHoldouts(prev => prev.filter(x => x.id !== h.id)); } catch (e: any) { alert(e?.message); } }} className="text-[11px] text-[#dc2626] hover:underline">Eliminar</button></td>
+                  </tr>
+                )) : <tr>
                   <td colSpan={4} className="px-4 py-8 text-center text-[13px] text-[#9ca3af]">You have not created any holdouts yet.</td>
-                </tr>
+                </tr>}
               </tbody>
             </table>
           </div>
@@ -35757,11 +36021,11 @@ function WAAppExperimentsView() {
                 </div>
                 <div>
                   <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">Name</label>
-                  <input placeholder="e.g. 'Frontend holdout group 1'" className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af]"/>
+                  <input value={holdoutName} onChange={e => setHoldoutName(e.target.value)} placeholder="e.g. 'Frontend holdout group 1'" className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af]"/>
                 </div>
                 <div>
                   <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">Description</label>
-                  <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6]"/>
+                  <input value={holdoutDesc} onChange={e => setHoldoutDesc(e.target.value)} className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6]"/>
                 </div>
                 <p className="text-[12px] text-[#646462] leading-relaxed border border-[#e9eae6] rounded-lg p-3 bg-[#fafaf8]">
                   Specify the percentage population that should be included in this holdout group. This is stable across experiments.
@@ -35781,7 +36045,7 @@ function WAAppExperimentsView() {
                 </div>
                 <div className="flex items-center justify-end gap-3 pt-1 border-t border-[#e9eae6]">
                   <button onClick={() => setShowAddHoldout(false)} className="px-4 py-2 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] transition-colors">Cancel</button>
-                  <button className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">Save</button>
+                  <button onClick={saveHoldout} disabled={saving || !holdoutName.trim()} className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors disabled:opacity-50">{saving ? 'Guardando…' : 'Save'}</button>
                 </div>
               </div>
             </div>
@@ -35871,6 +36135,153 @@ function WAAppExperimentsView() {
           </div>
         </div>
       )}
+      {selectedExp && (
+        <ExperimentDetailDrawer
+          exp={selectedExp}
+          onClose={() => setSelectedExp(null)}
+          onLaunch={() => launchExperiment(selectedExp)}
+          onEnd={() => endExperiment(selectedExp)}
+          onArchive={() => archiveExperiment(selectedExp)}
+          statusFn={expStatus}
+          durationFn={expDuration}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Experiment detail drawer ─────────────────────────────────────────────────
+function ExperimentDetailDrawer({ exp, onClose, onLaunch, onEnd, onArchive, statusFn, durationFn }: { exp: any; onClose: () => void; onLaunch: () => void; onEnd: () => void; onArchive: () => void; statusFn: (e: any) => any; durationFn: (e: any) => string }) {
+  const st = statusFn(exp);
+  const variants = exp.parameters?.feature_flag_variants ?? exp.parameters?.variants ?? [];
+  const isRunning = !!exp.start_date && !exp.end_date;
+  const isCompleted = !!exp.end_date;
+  const [results, setResults] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  React.useEffect(() => {
+    if (!exp.feature_flag_key && !exp.feature_flag?.key) return;
+    const flagKey = exp.feature_flag_key ?? exp.feature_flag?.key;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const escKey = flagKey.replace(/'/g, "''");
+        const startClause = exp.start_date ? `AND timestamp >= '${exp.start_date}'` : '';
+        const endClause   = exp.end_date   ? `AND timestamp <= '${exp.end_date}'`   : '';
+        const hql = `
+          SELECT
+            toString(properties.\`$feature/${escKey}\`) AS variant,
+            uniq(distinct_id) AS users,
+            count() AS events
+          FROM events
+          WHERE event = '$feature_flag_called' AND toString(properties.$feature_flag) = '${escKey}'
+            ${startClause} ${endClause}
+          GROUP BY variant
+          ORDER BY users DESC
+        `;
+        const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+        if (!cancelled) setResults((res.results ?? []).map((r: any[]) => ({ variant: r[0], users: Number(r[1]), events: Number(r[2]) })));
+      } catch {}
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [exp.id, exp.feature_flag_key, exp.feature_flag?.key, exp.start_date, exp.end_date]);
+
+  const totalUsers = results.reduce((s, r) => s + r.users, 0);
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[860px] max-w-[95vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
+              {exp.feature_flag?.key && <span className="text-[10px] bg-[#ede9fe] text-[#7c3aed] px-1.5 py-0.5 rounded font-mono">flag: {exp.feature_flag.key}</span>}
+              {exp.archived && <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-1.5 py-0.5 rounded">Archivado</span>}
+            </div>
+            <h2 className="text-base font-bold text-[#1a1a18]">{exp.name}</h2>
+            {exp.description && <p className="text-xs text-[#646462] mt-1">{exp.description}</p>}
+            <div className="flex items-center gap-3 mt-2 text-[10px] text-[#9ca3af]">
+              {exp.start_date && <span>Iniciado: <strong className="text-[#1a1a18]">{new Date(exp.start_date).toLocaleString('es-ES')}</strong></span>}
+              {exp.end_date && <span>Finalizado: <strong className="text-[#1a1a18]">{new Date(exp.end_date).toLocaleString('es-ES')}</strong></span>}
+              <span>Duración: <strong className="text-[#1a1a18]">{durationFn(exp)}</strong></span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {!exp.start_date && !exp.archived && <button onClick={onLaunch} className="px-3 py-1.5 bg-[#16a34a] text-white text-xs rounded hover:bg-[#15803d]">▶ Lanzar</button>}
+            {isRunning && <button onClick={onEnd} className="px-3 py-1.5 bg-[#dc2626] text-white text-xs rounded hover:bg-[#b91c1c]">⏹ Finalizar</button>}
+            <button onClick={onArchive} className="px-2 py-1.5 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7]">{exp.archived ? 'Reactivar' : 'Archivar'}</button>
+            <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18] ml-1"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Variants */}
+          <section>
+            <h3 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Variantes</h3>
+            {variants.length === 0 ? <p className="text-xs text-[#9ca3af] italic">Sin variantes configuradas</p>
+            : <div className="space-y-2">
+                {variants.map((v: any, i: number) => {
+                  const palette = ['#3b59f6', '#7c3aed', '#e8572a', '#16a34a', '#f59e0b', '#06b6d4'];
+                  const color = palette[i % palette.length];
+                  const result = results.find(r => r.variant === v.key);
+                  const pct = totalUsers > 0 && result ? (result.users / totalUsers) * 100 : (v.rollout_percentage ?? 50);
+                  return (
+                    <div key={v.key} className="border border-[#e9eae6] rounded-lg p-3">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-6 h-6 rounded flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ backgroundColor: color }}>{String.fromCharCode(65 + i)}</div>
+                        <span className="font-mono text-sm text-[#1a1a18]">{v.key}</span>
+                        <span className="text-[10px] text-[#9ca3af]">Rollout: {v.rollout_percentage ?? 50}%</span>
+                        <span className="ml-auto text-xs font-mono text-[#1a1a18]">{result?.users ?? 0} usuarios · {result?.events ?? 0} eventos</span>
+                      </div>
+                      <div className="h-2 bg-[#f3f3f1] rounded overflow-hidden">
+                        <div className="h-full rounded transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>}
+          </section>
+
+          {/* Results summary */}
+          {(isRunning || isCompleted) && (
+            <section className="grid grid-cols-3 gap-3">
+              <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Usuarios expuestos</p>{loading ? <div className="h-7 w-16 bg-[#e9eae6] animate-pulse rounded mt-1" /> : <p className="text-2xl font-bold text-[#1a1a18]">{totalUsers.toLocaleString('es-ES')}</p>}</div>
+              <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Variantes</p><p className="text-2xl font-bold text-[#1a1a18]">{variants.length}</p></div>
+              <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Estado</p><p className="text-lg font-bold" style={{ color: st.color }}>{st.label}</p></div>
+            </section>
+          )}
+
+          {/* Filters / metrics */}
+          {exp.parameters?.feature_flag_variants && (
+            <section className="bg-[#fafaf9] rounded-lg p-3">
+              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Métricas configuradas</h4>
+              {(exp.metrics ?? []).length === 0 && (exp.metrics_secondary ?? []).length === 0 ? (
+                <p className="text-xs text-[#9ca3af] italic">Sin métricas configuradas. Añade primaria y secundaria desde el wizard.</p>
+              ) : (
+                <div className="space-y-1">
+                  {(exp.metrics ?? []).map((m: any, i: number) => <div key={`p-${i}`} className="flex items-center gap-2 text-xs"><span className="text-[9px] bg-[#dcfce7] text-[#16a34a] px-1 py-0.5 rounded font-bold">PRIM</span><span className="text-[#1a1a18]">{m.name ?? m.kind ?? 'Métrica'}</span></div>)}
+                  {(exp.metrics_secondary ?? []).map((m: any, i: number) => <div key={`s-${i}`} className="flex items-center gap-2 text-xs"><span className="text-[9px] bg-[#eff2ff] text-[#3b59f6] px-1 py-0.5 rounded font-bold">SEC</span><span className="text-[#1a1a18]">{m.name ?? m.kind ?? 'Métrica'}</span></div>)}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Hypothesis */}
+          {(exp.parameters?.hypothesis || exp.description) && (
+            <section>
+              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Hipótesis</h4>
+              <p className="text-sm text-[#1a1a18] bg-[#fffbeb] border border-[#fde68a] rounded-lg p-3">{exp.parameters?.hypothesis ?? exp.description}</p>
+            </section>
+          )}
+
+          {/* Link to flag */}
+          {exp.feature_flag?.id && (
+            <button onClick={() => navigateWA('appFeatureFlags', { kind: 'flag', id: exp.feature_flag.id })} className="text-xs text-[#3b59f6] hover:underline">Ir al feature flag asociado →</button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
