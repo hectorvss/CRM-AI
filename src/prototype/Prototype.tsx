@@ -48772,39 +48772,81 @@ function WASettingsView() {
 
   // ── ActivityLogsPage ──────────────────────────────────────────────────────
   function ActivityLogsPage() {
-    const PremiumCard = ({ title, desc }: { title: string; desc: string }) => (
-      <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
-        <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
-        <h3 className="text-[15px] font-bold text-[#1a1a1a]">{title}</h3>
-        <p className="text-[13px] text-[#646462]">{desc}</p>
-        <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
-        <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
-      </div>
-    );
+    const [logs, setLogs] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState('');
+    const [scopeFilter, setScopeFilter] = React.useState('all');
+    React.useEffect(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/activity_log/?limit=50`);
+          if (!cancelled) setLogs(res?.results ?? []);
+        } catch (e: any) {
+          if (!cancelled) setError(e?.message ?? 'Error al cargar registros');
+        } finally { if (!cancelled) setLoading(false); }
+      })();
+      return () => { cancelled = true; };
+    }, []);
+    const scopes = React.useMemo(() => {
+      const set = new Set<string>(logs.map(l => l.scope).filter(Boolean));
+      return ['all', ...Array.from(set)];
+    }, [logs]);
+    const visibleLogs = scopeFilter === 'all' ? logs : logs.filter(l => l.scope === scopeFilter);
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl px-8 py-6 space-y-8">
+        <div className="max-w-4xl px-8 py-6 space-y-6">
           <div className="flex items-start gap-2.5 px-4 py-3 bg-white border border-[#e9eae6] rounded-[10px]">
             <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
             <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
           </div>
 
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Registros de actividad</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <h2 className="text-[15px] font-bold text-[#1a1a1a]">Registros de actividad</h2>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Auditoría de cambios realizados por miembros del equipo"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-[#646462]">Filtrar:</span>
+                <select value={scopeFilter} onChange={e => setScopeFilter(e.target.value)} className="h-7 px-2 pr-6 border border-[#e9eae6] rounded text-[12px] bg-white cursor-pointer">
+                  {scopes.map(s => <option key={s} value={s}>{s === 'all' ? 'Todos' : s}</option>)}
+                </select>
+              </div>
             </div>
             <p className="text-[13px] text-[#646462]">Consulta un registro de los cambios realizados en este entorno por los miembros del equipo.</p>
-            <PremiumCard title="Registros de actividad" desc="Consulta quién en tu organización ha accedido o modificado entidades dentro de Clain."/>
-          </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Ajustes</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              {loading ? (
+                <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando registros…</div>
+              ) : error ? (
+                <div className="px-4 py-8 text-center text-[12px] text-[#dc2626]">{error}</div>
+              ) : visibleLogs.length === 0 ? (
+                <div className="px-4 py-8 text-center text-[12px] text-[#646462]">No hay registros para mostrar.</div>
+              ) : (
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Quién</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acción</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Recurso</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Cuándo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e9eae6]">
+                    {visibleLogs.map((l: any, i: number) => (
+                      <tr key={l.id ?? i} className="hover:bg-[#fafaf9]">
+                        <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a]">{l.user?.first_name || l.user?.email || '—'}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{l.activity ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]"><span className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[11px]">{l.scope ?? '—'}</span> {l.item_id ?? ''}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{l.created_at ? new Date(l.created_at).toLocaleString() : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
-            <p className="text-[13px] text-[#646462]">Configura los ajustes de registros de actividad a nivel de organización.</p>
-            <PremiumCard title="Registros de actividad" desc="Consulta quién en tu organización ha accedido o modificado entidades dentro de Clain."/>
           </div>
         </div>
       </div>
@@ -48813,15 +48855,38 @@ function WASettingsView() {
 
   // ── ApprovalsPage ─────────────────────────────────────────────────────────
   function ApprovalsPage() {
-    const PremiumCard = ({ title, desc }: { title: string; desc: string }) => (
-      <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
-        <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
-        <h3 className="text-[15px] font-bold text-[#1a1a1a]">{title}</h3>
-        <p className="text-[13px] text-[#646462]">{desc}</p>
-        <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
-        <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
-      </div>
-    );
+    const xs = team?.extra_settings || {};
+    const [requireFFApproval, setRequireFFApproval] = React.useState<boolean>(!!xs.approval_required_feature_flags);
+    const [requireExpApproval, setRequireExpApproval] = React.useState<boolean>(!!xs.approval_required_experiments);
+    const [requireInsightApproval, setRequireInsightApproval] = React.useState<boolean>(!!xs.approval_required_insights);
+    const [savingKey, setSavingKey] = React.useState('');
+    const [pendingChanges, setPendingChanges] = React.useState<any[]>([]);
+    const [loadingPending, setLoadingPending] = React.useState(true);
+    React.useEffect(() => {
+      const s = team?.extra_settings || {};
+      setRequireFFApproval(!!s.approval_required_feature_flags);
+      setRequireExpApproval(!!s.approval_required_experiments);
+      setRequireInsightApproval(!!s.approval_required_insights);
+    }, [team?.id]);
+    React.useEffect(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          // Try the approval-requests endpoint; ignore if not present
+          const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/approval_requests/?status=pending&limit=20`);
+          if (!cancelled) setPendingChanges(res?.results ?? []);
+        } catch { if (!cancelled) setPendingChanges([]); }
+        finally { if (!cancelled) setLoadingPending(false); }
+      })();
+      return () => { cancelled = true; };
+    }, []);
+    async function toggleApproval(field: string, v: boolean, key: string, setter: (b: boolean) => void) {
+      setter(v); setSavingKey(key);
+      const next = { ...(team?.extra_settings || {}), [field]: v };
+      await patchTeam({ extra_settings: next });
+      setSavingKey('');
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-8">
@@ -48833,19 +48898,49 @@ function WASettingsView() {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <h2 className="text-[15px] font-bold text-[#1a1a1a]">Políticas</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Selecciona qué cambios requieren aprobación antes de aplicarse"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
             </div>
-            <p className="text-[13px] text-[#646462]">Configura qué acciones requieren aprobación antes de aplicarse.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
-            <PremiumCard title="Aprobaciones" desc="Requiere flujos de aprobación para los cambios en feature flags y otros recursos."/>
+            <p className="text-[13px] text-[#646462]">Configura qué acciones requieren aprobación antes de aplicarse.{' '}<a href="https://posthog.com/docs/settings/approvals" target="_blank" rel="noopener noreferrer" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
+            <div className="border border-[#e9eae6] rounded-[10px] divide-y divide-[#e9eae6]">
+              {[
+                { label: 'Feature flags', field: 'approval_required_feature_flags', val: requireFFApproval, setter: setRequireFFApproval, key: 'ff' },
+                { label: 'Experimentos', field: 'approval_required_experiments', val: requireExpApproval, setter: setRequireExpApproval, key: 'exp' },
+                { label: 'Insights', field: 'approval_required_insights', val: requireInsightApproval, setter: setRequireInsightApproval, key: 'ins' },
+              ].map(row => (
+                <div key={row.field} className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Requerir aprobación para {row.label} {savingKey === row.key && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                    <p className="text-[12px] text-[#646462]">Los cambios deberán ser aprobados por otro miembro antes de aplicarse.</p>
+                  </div>
+                  <Toggle checked={row.val} onChange={(v: boolean) => toggleApproval(row.field, v, row.key, row.setter)}/>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <h2 className="text-[15px] font-bold text-[#1a1a1a]">Solicitudes de cambio</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Cambios pendientes de revisión y aprobación"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
             </div>
-            <p className="text-[13px] text-[#646462]">Revisa y aprueba solicitudes de cambio pendientes.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
-            <PremiumCard title="Aprobaciones" desc="Requiere flujos de aprobación para los cambios en feature flags y otros recursos."/>
+            <p className="text-[13px] text-[#646462]">Revisa y aprueba solicitudes de cambio pendientes.</p>
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              {loadingPending ? (
+                <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando solicitudes…</div>
+              ) : pendingChanges.length === 0 ? (
+                <div className="px-4 py-8 text-center text-[12px] text-[#646462]">No hay solicitudes pendientes.</div>
+              ) : (
+                <div className="divide-y divide-[#e9eae6]">
+                  {pendingChanges.map((c: any) => (
+                    <div key={c.id} className="px-4 py-2.5 text-[13px] flex items-center gap-3">
+                      <span className="flex-1 truncate">{c.title ?? c.resource_type ?? 'Cambio'}</span>
+                      <span className="text-[11px] text-[#646462]">{c.requester?.email ?? '—'}</span>
+                      <span className="px-2 py-0.5 bg-[#fef3c7] text-[#92400e] rounded text-[11px] font-semibold">Pendiente</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -48858,6 +48953,27 @@ function WASettingsView() {
     const [createdBy, setCreatedBy] = useState('any');
     const [showPaused, setShowPaused] = useState(false);
     const [showCreatedByDropdown, setShowCreatedByDropdown] = useState(false);
+    const [subscriptions, setSubscriptions] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [showNewModal, setShowNewModal] = React.useState(false);
+    React.useEffect(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/subscriptions/`);
+          if (!cancelled) setSubscriptions(res?.results ?? []);
+        } catch { if (!cancelled) setSubscriptions([]); }
+        finally { if (!cancelled) setLoading(false); }
+      })();
+      return () => { cancelled = true; };
+    }, []);
+    const filteredSubs = subscriptions.filter(s => {
+      if (search && !((s.title ?? '').toLowerCase().includes(search.toLowerCase()))) return false;
+      if (!showPaused && s.deleted) return false;
+      if (createdBy === 'me' && s.created_by?.email !== team?.created_by?.email && s.created_by?.uuid !== team?.created_by?.uuid) return false;
+      return true;
+    });
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl px-8 py-6 space-y-6">
@@ -48910,7 +49026,7 @@ function WASettingsView() {
                   Mostrar pausados
                 </label>
                 {/* New notification */}
-                <button className="h-7 px-3 border border-[#f59e0b] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+                <button onClick={() => setShowNewModal(true)} className="h-7 px-3 border border-[#f59e0b] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
                   Nueva notificación
                 </button>
               </div>
@@ -48939,15 +49055,43 @@ function WASettingsView() {
                     ))}
                   </tr>
                 </thead>
-                <tbody>
-                  <tr>
-                    <td colSpan={5} className="px-4 py-5 text-[13px] text-[#646462]">No hay notificaciones configuradas.</td>
-                  </tr>
+                <tbody className="divide-y divide-[#e9eae6]">
+                  {loading ? (
+                    <tr><td colSpan={5} className="px-4 py-5 text-[13px] text-[#646462] text-center">Cargando…</td></tr>
+                  ) : filteredSubs.length === 0 ? (
+                    <tr><td colSpan={5} className="px-4 py-5 text-[13px] text-[#646462]">No hay notificaciones configuradas.</td></tr>
+                  ) : (
+                    filteredSubs.map((s: any) => (
+                      <tr key={s.id} className="hover:bg-[#fafaf9]">
+                        <td className="px-4 py-2.5 text-[13px] text-[#1a1a1a]">{s.title ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{s.created_by?.email ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{s.updated_at ? new Date(s.updated_at).toLocaleDateString() : '—'}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">—</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${s.deleted ? 'bg-[#f3f3f1] text-[#646462]' : 'bg-[#f0fdf4] text-[#16a34a]'}`}>{s.deleted ? 'Pausada' : 'Activa'}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
+
+        {/* New notification modal */}
+        {showNewModal && (
+          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center px-4" onClick={() => setShowNewModal(false)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white border border-[#e9eae6] rounded-[12px] shadow-2xl w-full max-w-md p-5">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">Nueva notificación</h3>
+              <p className="text-[13px] text-[#646462] mb-4">Las notificaciones se crean desde el recurso (insight, dashboard, etc.) que quieres seguir, no desde esta pantalla.</p>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowNewModal(false)} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cerrar</button>
+                <button onClick={() => window.open('https://posthog.com/docs/notifications/subscriptions', '_blank', 'noopener,noreferrer')} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Ver docs ↗</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
