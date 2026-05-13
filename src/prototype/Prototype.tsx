@@ -43480,8 +43480,75 @@ function WADataAnnotationsView() {
   const [showScopeMenu, setShowScopeMenu] = useState(false);
   const [annotScope, setAnnotScope] = useState('Proyecto');
   const [showScopeModalMenu, setShowScopeModalMenu] = useState(false);
-  const [annotDate, setAnnotDate] = useState('12 may 2026 13:52');
+  const [annotDate, setAnnotDate] = useState(() => {
+    const d = new Date();
+    return `${d.getDate().toString().padStart(2, '0')} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]} ${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  });
   const MAX_CHARS = 400;
+  const [annotations, setAnnotations] = useState<any[]>([]);
+  const [annotLoading, setAnnotLoading] = useState(true);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function refresh() {
+    setAnnotLoading(true);
+    try {
+      const ph = await import('../api/posthog');
+      const params: any = { limit: 100 };
+      if (scopeFilter === 'Proyecto') params.scope = 'project';
+      else if (scopeFilter === 'Personal') params.scope = 'organization';
+      const res: any = await ph.posthog.annotations.list(params);
+      setAnnotations(res?.results ?? []);
+    } catch { setAnnotations([]); }
+    finally { setAnnotLoading(false); }
+  }
+  React.useEffect(() => { refresh(); }, [scopeFilter]);
+
+  function openCreate() {
+    setEditingId(null); setAnnotContent(''); setAnnotTab('write'); setAnnotScope('Proyecto');
+    const d = new Date();
+    setAnnotDate(`${d.getDate().toString().padStart(2, '0')} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]} ${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`);
+    setShowModal(true);
+  }
+  function openEdit(a: any) {
+    setEditingId(a.id);
+    setAnnotContent(a.content ?? '');
+    setAnnotScope(a.scope === 'project' ? 'Proyecto' : 'Personal');
+    if (a.date_marker) {
+      const d = new Date(a.date_marker);
+      setAnnotDate(`${d.getDate().toString().padStart(2, '0')} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]} ${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`);
+    }
+    setShowModal(true);
+  }
+  async function saveAnnotation() {
+    if (!annotContent.trim()) return;
+    setSaving(true);
+    try {
+      const ph = await import('../api/posthog');
+      // Parse date string back to ISO best-effort, otherwise use now
+      const months: Record<string, number> = { ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,oct:9,nov:10,dic:11 };
+      const m = annotDate.match(/(\d+) (\w+) (\d+) (\d+):(\d+)/);
+      const dateIso = m ? new Date(Number(m[3]), months[m[2].toLowerCase()] ?? 0, Number(m[1]), Number(m[4]), Number(m[5])).toISOString() : new Date().toISOString();
+      const payload: any = {
+        content: annotContent,
+        date_marker: dateIso,
+        scope: annotScope === 'Proyecto' ? 'project' : 'organization',
+      };
+      if (editingId) await ph.posthog.annotations.update(editingId, payload);
+      else await ph.posthog.annotations.create(payload);
+      await refresh();
+      setShowModal(false); setAnnotContent(''); setEditingId(null);
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    setSaving(false);
+  }
+  async function deleteAnnot(id: number) {
+    if (!confirm('¿Eliminar anotación?')) return;
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.annotations.delete(id);
+      await refresh();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-white rounded-[12px] border border-[#e9eae6] min-h-0 overflow-hidden">
@@ -43503,7 +43570,7 @@ function WADataAnnotationsView() {
             Inicio rápido
             <span className="text-[10px] font-semibold bg-[#eff2ff] text-[#3b59f6] px-1.5 py-0.5 rounded-full">5</span>
           </button>
-          <button onClick={() => setShowModal(true)} className="h-8 px-3 rounded-[8px] bg-[#3b59f6] text-white text-[12px] font-semibold hover:bg-[#2d46e0] flex items-center gap-1.5">
+          <button onClick={openCreate} className="h-8 px-3 rounded-[8px] bg-[#3b59f6] text-white text-[12px] font-semibold hover:bg-[#2d46e0] flex items-center gap-1.5">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
             Nueva anotación
           </button>
@@ -43537,30 +43604,61 @@ function WADataAnnotationsView() {
         </div>
       </div>
 
-      {/* Empty state card */}
+      {/* List or empty state */}
       <div className="flex-1 px-6 pb-6 flex flex-col min-h-0">
-        <div className="flex-1 rounded-[12px] border border-dashed border-[#c7d2fe] bg-[#fafbff] flex items-center justify-center">
-          <div className="flex items-center gap-10 px-8">
-            <ClainMascot size={100} variant="suit" />
-            <div className="flex flex-col gap-4">
-              <h3 className="text-[18px] font-bold text-[#1a1a1a]">Crea tu primera anotación</h3>
-              <p className="text-[13px] text-[#646462] leading-[20px] max-w-[360px]">
-                Las anotaciones te permiten marcar cuándo ocurrieron ciertos cambios para que puedas
-                ver fácilmente cómo impactaron en tus métricas.
-              </p>
-              <div className="flex items-center gap-3">
-                <button onClick={() => setShowModal(true)} className="h-9 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff] flex items-center gap-1.5">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-                  Crear anotación
-                </button>
-                <button className="h-9 px-4 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
-                  Saber más
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M9 3V1.5M13 9h1.5" strokeLinecap="round"/></svg>
-                </button>
+        {annotLoading ? (
+          <div className="flex-1 flex items-center justify-center text-[12px] text-[#646462]">Cargando anotaciones…</div>
+        ) : annotations.length === 0 ? (
+          <div className="flex-1 rounded-[12px] border border-dashed border-[#c7d2fe] bg-[#fafbff] flex items-center justify-center">
+            <div className="flex items-center gap-10 px-8">
+              <ClainMascot size={100} variant="suit" />
+              <div className="flex flex-col gap-4">
+                <h3 className="text-[18px] font-bold text-[#1a1a1a]">Crea tu primera anotación</h3>
+                <p className="text-[13px] text-[#646462] leading-[20px] max-w-[360px]">
+                  Las anotaciones te permiten marcar cuándo ocurrieron ciertos cambios para que puedas
+                  ver fácilmente cómo impactaron en tus métricas.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button onClick={openCreate} className="h-9 px-4 rounded-[8px] border-2 border-[#3b59f6] text-[13px] font-semibold text-[#3b59f6] hover:bg-[#eff2ff] flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                    Crear anotación
+                  </button>
+                  <a href="https://posthog.com/docs/data/annotations" target="_blank" rel="noopener noreferrer" className="h-9 px-4 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
+                    Saber más
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M9 3V1.5M13 9h1.5" strokeLinecap="round"/></svg>
+                  </a>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-[12px] border border-[#e9eae6] overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fecha del marcador</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Contenido</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Ámbito</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado por</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {annotations.map((a: any) => (
+                  <tr key={a.id} onClick={() => openEdit(a)} className="hover:bg-[#fafaf9] cursor-pointer">
+                    <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a]">{a.date_marker ? new Date(a.date_marker).toLocaleString() : '—'}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#646462] max-w-md truncate">{a.content}</td>
+                    <td className="px-4 py-2.5"><span className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[11px] font-semibold">{a.scope === 'project' ? 'Proyecto' : a.scope === 'organization' ? 'Personal' : a.scope}</span></td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#646462]">{a.created_by?.first_name ?? a.created_by?.email ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={e => { e.stopPropagation(); deleteAnnot(a.id); }} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* ── New annotation modal ──────────────────────────────────────────── */}
@@ -43573,7 +43671,7 @@ function WADataAnnotationsView() {
             {/* Modal header */}
             <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-[#e9eae6]">
               <div>
-                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Nueva anotación</h2>
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">{editingId ? 'Editar anotación' : 'Nueva anotación'}</h2>
                 <p className="text-[12px] text-[#9a9a98] mt-0.5">Usa las anotaciones para comentar sobre insights y dashboards</p>
               </div>
               <button onClick={() => setShowModal(false)} className="w-7 h-7 flex items-center justify-center rounded-[6px] hover:bg-[#e9eae6]">
@@ -43674,10 +43772,11 @@ function WADataAnnotationsView() {
                 Cancelar
               </button>
               <button
-                onClick={() => { setShowModal(false); setAnnotContent(''); setAnnotTab('write'); }}
-                className="h-9 px-4 rounded-[8px] bg-[#3b59f6] text-white text-[13px] font-semibold hover:bg-[#2d46e0]"
+                onClick={saveAnnotation}
+                disabled={saving || !annotContent.trim()}
+                className="h-9 px-4 rounded-[8px] bg-[#3b59f6] text-white text-[13px] font-semibold hover:bg-[#2d46e0] disabled:opacity-50"
               >
-                Guardar
+                {saving ? 'Guardando…' : (editingId ? 'Guardar cambios' : 'Guardar')}
               </button>
             </div>
           </div>
@@ -45329,6 +45428,91 @@ function WADataActionsView() {
   const [matchGroupsOpen, setMatchGroupsOpen] = useState(true);
   const [matchingEventsOpen, setMatchingEventsOpen] = useState(true);
 
+  // Match field values
+  const [urlValue, setUrlValue] = useState('');
+  const [elTextValue, setElTextValue] = useState('');
+  const [elLinkValue, setElLinkValue] = useState('');
+  const [htmlValue, setHtmlValue] = useState('');
+  const [pageUrlValue, setPageUrlValue] = useState('');
+  const [screenValue, setScreenValue] = useState('');
+  const [otherEventName, setOtherEventName] = useState('');
+
+  // Persistence state
+  const [editingActionId, setEditingActionId] = useState<number | null>(null);
+  const [actions, setActions] = useState<any[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  async function refreshActions() {
+    setActionsLoading(true);
+    try {
+      const ph = await import('../api/posthog');
+      const res: any = await ph.posthog.actions.list({ limit: 100 });
+      setActions(res?.results ?? []);
+    } catch { setActions([]); }
+    finally { setActionsLoading(false); }
+  }
+  React.useEffect(() => { refreshActions(); }, []);
+
+  function resetForm() {
+    setActionName(''); setEditingActionId(null);
+    setUrlValue(''); setElTextValue(''); setElLinkValue(''); setHtmlValue(''); setPageUrlValue(''); setScreenValue(''); setOtherEventName('');
+    setMatchTab('pageview');
+  }
+  function openNew() { resetForm(); setView('new'); }
+  function openEdit(a: any) {
+    resetForm();
+    setEditingActionId(a.id);
+    setActionName(a.name ?? '');
+    const step = (a.steps ?? [])[0] ?? {};
+    if (step.event === '$pageview') {
+      setMatchTab('pageview'); setUrlValue(step.url ?? ''); setUrlMode(step.url_matching ?? 'contains');
+    } else if (step.event === '$autocapture') {
+      setMatchTab('autocapture');
+      setElTextValue(step.text ?? ''); setElTextMode(step.text_matching ?? 'exact');
+      setElLinkValue(step.href ?? ''); setElLinkMode(step.href_matching ?? 'contains');
+      setHtmlValue(step.selector ?? '');
+      setPageUrlValue(step.url ?? ''); setPageUrlMode(step.url_matching ?? 'contains');
+    } else if (step.event === '$screen') {
+      setMatchTab('screen'); setScreenValue(step.properties?.[0]?.value ?? ''); setScreenMode(step.properties?.[0]?.operator ?? 'contains');
+    } else {
+      setMatchTab('other'); setOtherEventName(step.event ?? '');
+    }
+    setView('new');
+  }
+  async function saveAction() {
+    if (!actionName.trim()) { alert('Pon un nombre a la acción.'); return; }
+    setSaving(true);
+    let step: any = {};
+    if (matchTab === 'pageview') step = { event: '$pageview', url: urlValue, url_matching: urlMode };
+    else if (matchTab === 'autocapture') {
+      step = { event: '$autocapture' };
+      if (elTextValue) { step.text = elTextValue; step.text_matching = elTextMode; }
+      if (elLinkValue) { step.href = elLinkValue; step.href_matching = elLinkMode; }
+      if (htmlValue) step.selector = htmlValue;
+      if (pageUrlValue) { step.url = pageUrlValue; step.url_matching = pageUrlMode; }
+    } else if (matchTab === 'screen') step = { event: '$screen', properties: [{ key: '$screen_name', value: screenValue, operator: screenMode, type: 'event' }] };
+    else step = { event: otherEventName };
+
+    try {
+      const ph = await import('../api/posthog');
+      if (editingActionId) await ph.posthog.actions.update(editingActionId, { name: actionName.trim(), steps: [step] });
+      else await ph.posthog.actions.create({ name: actionName.trim(), steps: [step] });
+      await refreshActions();
+      setView('list');
+      resetForm();
+    } catch (e: any) { alert('Error al guardar: ' + (e?.message ?? '')); }
+    setSaving(false);
+  }
+  async function deleteAction(id: number, name: string) {
+    if (!confirm(`¿Eliminar acción "${name}"?`)) return;
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.actions.delete(id);
+      await refreshActions();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
+
   function ModeBtn({ mode, current, set }: { mode: MatchMode; current: MatchMode; set: (m: MatchMode) => void }) {
     const label = mode === 'exact' ? 'coincide exactamente' : mode === 'regex' ? 'coincide con regex' : 'contiene';
     const active = mode === current;
@@ -45342,7 +45526,7 @@ function WADataActionsView() {
     );
   }
 
-  function MatchField({ label, desc, mode, setMode, placeholder }: { label: string; desc?: string; mode: MatchMode; setMode: (m: MatchMode) => void; placeholder?: string }) {
+  function MatchField({ label, desc, mode, setMode, value, setValue, placeholder }: { label: string; desc?: string; mode: MatchMode; setMode: (m: MatchMode) => void; value?: string; setValue?: (v: string) => void; placeholder?: string }) {
     return (
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
@@ -45354,7 +45538,7 @@ function WADataActionsView() {
           </div>
         </div>
         {desc && <p className="text-[12px] text-[#646462]">{desc}</p>}
-        <input type="text" placeholder={placeholder ?? 'Especifica un valor para coincidir'} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]" />
+        <input type="text" value={value ?? ''} onChange={e => setValue?.(e.target.value)} placeholder={placeholder ?? 'Especifica un valor para coincidir'} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]" />
       </div>
     );
   }
@@ -45396,8 +45580,8 @@ function WADataActionsView() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
               Quick start
             </button>
-            <button onClick={() => setView('list')} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#646462] hover:bg-[#f3f3f1]">Cancelar</button>
-            <button className="h-7 px-4 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]">Guardar</button>
+            <button onClick={() => { setView('list'); resetForm(); }} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#646462] hover:bg-[#f3f3f1]">Cancelar</button>
+            <button onClick={saveAction} disabled={saving || !actionName.trim()} className="h-7 px-4 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e] disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
           </div>
         </div>
 
@@ -45441,7 +45625,7 @@ function WADataActionsView() {
                     {/* Tab content */}
                     {matchTab === 'pageview' && (
                       <div className="space-y-4">
-                        {MatchField({ label: 'URL', mode: urlMode, setMode: setUrlMode })}
+                        {MatchField({ label: 'URL', mode: urlMode, setMode: setUrlMode, value: urlValue, setValue: setUrlValue })}
                         <div>
                           <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
                           <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
@@ -45461,13 +45645,13 @@ function WADataActionsView() {
                           </button>
                           <button className="text-[12px] text-[#e8572a] hover:underline">Ver documentación. ↗</button>
                         </div>
-                        {MatchField({ label: 'Texto del elemento', mode: elTextMode, setMode: setElTextMode })}
+                        {MatchField({ label: 'Texto del elemento', mode: elTextMode, setMode: setElTextMode, value: elTextValue, setValue: setElTextValue })}
                         {AndBadge()}
-                        {MatchField({ label: 'Destino del enlace del elemento', desc: 'Filtrando por el atributo href. Solo se coincidirán elementos <a/>.',  mode: elLinkMode, setMode: setElLinkMode })}
+                        {MatchField({ label: 'Destino del enlace del elemento', desc: 'Filtrando por el atributo href. Solo se coincidirán elementos <a/>.',  mode: elLinkMode, setMode: setElLinkMode, value: elLinkValue, setValue: setElLinkValue })}
                         {AndBadge()}
-                        {MatchField({ label: 'El elemento coincide con el selector HTML', desc: 'El selector puede ser un nombre de etiqueta, clase, atributo HTML o una combinación. Ejemplo: button[data-attr="signup"]. Aprende más en los Docs.', mode: htmlMode, setMode: setHtmlMode })}
+                        {MatchField({ label: 'El elemento coincide con el selector HTML', desc: 'El selector puede ser un nombre de etiqueta, clase, atributo HTML o una combinación. Ejemplo: button[data-attr="signup"]. Aprende más en los Docs.', mode: htmlMode, setMode: setHtmlMode, value: htmlValue, setValue: setHtmlValue })}
                         {AndBadge()}
-                        {MatchField({ label: 'URL de página', desc: 'La página en la que ocurrió la interacción.', mode: pageUrlMode, setMode: setPageUrlMode })}
+                        {MatchField({ label: 'URL de página', desc: 'La página en la que ocurrió la interacción.', mode: pageUrlMode, setMode: setPageUrlMode, value: pageUrlValue, setValue: setPageUrlValue })}
                         <div>
                           <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
                           <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
@@ -45480,7 +45664,7 @@ function WADataActionsView() {
 
                     {matchTab === 'screen' && (
                       <div className="space-y-4">
-                        {MatchField({ label: 'Nombre de pantalla', mode: screenMode, setMode: setScreenMode, placeholder: 'ej. HomeScreen, Settings' })}
+                        {MatchField({ label: 'Nombre de pantalla', mode: screenMode, setMode: setScreenMode, value: screenValue, setValue: setScreenValue, placeholder: 'ej. HomeScreen, Settings' })}
                         <div>
                           <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
                           <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
@@ -45493,7 +45677,7 @@ function WADataActionsView() {
 
                     {matchTab === 'other' && (
                       <div className="space-y-4">
-                        {MatchField({ label: 'Nombre del evento', mode: urlMode, setMode: setUrlMode, placeholder: 'ej. user_signed_up' })}
+                        {MatchField({ label: 'Nombre del evento', mode: urlMode, setMode: setUrlMode, value: otherEventName, setValue: setOtherEventName, placeholder: 'ej. user_signed_up' })}
                         <div>
                           <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Filtros</p>
                           <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">
@@ -45664,39 +45848,61 @@ function WADataActionsView() {
         <p className="text-[13px] text-[#646462]">Combina varios eventos relacionados en uno, que luego puedes analizar en insights y dashboards como si fuera un único evento.</p>
       </div>
 
-      {/* Empty state */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex items-start gap-8 max-w-xl">
-          {ClainMascot({ size: 120, variant: 'suit' })}
-          <div className="flex flex-col gap-3 pt-4">
-            <h2 className="text-[20px] font-bold text-[#1a1a1a]">Crea tu primera acción</h2>
-            <p className="text-[13px] text-[#646462] leading-[20px]">
-              Usa acciones para combinar eventos que quieres rastrear juntos o para facilitar la reutilización de eventos de Autocaptura detallados.
-            </p>
-            <div className="flex items-center gap-3">
-              <div className="flex">
-                <button
-                  onClick={() => setView('new')}
-                  className="flex items-center gap-1.5 h-8 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-l-lg hover:bg-[#fff5f2]"
-                >
+      {/* List or empty */}
+      {actionsLoading ? (
+        <div className="flex-1 flex items-center justify-center text-[12px] text-[#646462]">Cargando acciones…</div>
+      ) : actions.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-start gap-8 max-w-xl">
+            {ClainMascot({ size: 120, variant: 'suit' })}
+            <div className="flex flex-col gap-3 pt-4">
+              <h2 className="text-[20px] font-bold text-[#1a1a1a]">Crea tu primera acción</h2>
+              <p className="text-[13px] text-[#646462] leading-[20px]">
+                Usa acciones para combinar eventos que quieres rastrear juntos o para facilitar la reutilización de eventos de Autocaptura detallados.
+              </p>
+              <div className="flex items-center gap-3">
+                <button onClick={openNew} className="flex items-center gap-1.5 h-8 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">
                   <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
                   Nueva acción
                 </button>
-                <button
-                  onClick={() => setShowDropdown(d => !d)}
-                  className="h-8 px-2 border border-l-0 border-[#e8572a] text-[#e8572a] rounded-r-lg hover:bg-[#fff5f2]"
-                >
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
-                </button>
+                <a href="https://posthog.com/docs/data/actions" target="_blank" rel="noopener noreferrer" className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
+                  Saber más
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4h2v2M10 6l3-3M7 4H4v8h8v-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </a>
               </div>
-              <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1">
-                Saber más
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4h2v2M10 6l3-3M7 4H4v8h8v-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tipo</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Pasos</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado por</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado</th>
+                <th className="px-4 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e9eae6]">
+              {actions.map((a: any) => (
+                <tr key={a.id} onClick={() => openEdit(a)} className="hover:bg-[#fafaf9] cursor-pointer">
+                  <td className="px-5 py-2.5 text-[13px] font-medium text-[#1a1a1a]">{a.name}</td>
+                  <td className="px-4 py-2.5 text-[12px] text-[#646462]">{a.steps?.[0]?.event === '$pageview' ? 'Vista de página' : a.steps?.[0]?.event === '$autocapture' ? 'Autocaptura' : a.steps?.[0]?.event === '$screen' ? 'Pantalla' : 'Evento'}</td>
+                  <td className="px-4 py-2.5 text-[11px] text-[#646462]">{(a.steps ?? []).length} paso{(a.steps ?? []).length !== 1 ? 's' : ''}</td>
+                  <td className="px-4 py-2.5 text-[12px] text-[#646462]">{a.created_by?.first_name ?? a.created_by?.email ?? '—'}</td>
+                  <td className="px-4 py-2.5 text-[11px] text-[#646462]">{a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button onClick={e => { e.stopPropagation(); deleteAction(a.id, a.name); }} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Click outside to close dropdown */}
       {showDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)}/>}

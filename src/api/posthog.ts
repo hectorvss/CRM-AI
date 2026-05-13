@@ -389,9 +389,28 @@ export const posthog = {
   },
 
   // ── Actions ───────────────────────────────────────────────────────────────
+  annotations: {
+    list: (params?: any) =>
+      phGet(`/api/projects/${_projectId}/annotations/`, params),
+    create: (data: any) =>
+      phPost(`/api/projects/${_projectId}/annotations/`, data),
+    update: (id: number, data: any) =>
+      phPatch(`/api/projects/${_projectId}/annotations/${id}/`, data),
+    delete: (id: number) =>
+      phDelete(`/api/projects/${_projectId}/annotations/${id}/`),
+  },
+
   actions: {
     list: (params?: any) =>
       phGet(`/api/projects/${_projectId}/actions/`, params),
+    get: (id: number) =>
+      phGet(`/api/projects/${_projectId}/actions/${id}/`),
+    create: (data: any) =>
+      phPost(`/api/projects/${_projectId}/actions/`, data),
+    update: (id: number, data: any) =>
+      phPatch(`/api/projects/${_projectId}/actions/${id}/`, data),
+    delete: (id: number) =>
+      phDelete(`/api/projects/${_projectId}/actions/${id}/`),
   },
 
   // ── Cohorts ───────────────────────────────────────────────────────────────
