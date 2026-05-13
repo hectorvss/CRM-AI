@@ -46096,11 +46096,11 @@ function WASettingsView() {
   function GeneralPage() {
     const token = team?.api_token ?? 'cargando…';
     const projectId = team?.id ?? team?.project_id ?? '—';
-    const apiHost = team?.api_host || (typeof window !== 'undefined' ? window.location.origin : 'https://app.example.com');
+    const apiHost = team?.api_host || (import.meta as any).env?.VITE_POSTHOG_HOST || (typeof window !== 'undefined' ? window.location.origin : 'https://app.example.com');
 
     // Snippets por plataforma
     const PLATFORM_SNIPPETS: Record<string, { html?: string; package?: string; code?: string; tabs?: string[] }> = {
-      'Web':     { html: `<script>\n  !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){...})}(document,window.posthog=window.posthog||{});\n  posthog.init('${token}', {\n    api_host: '${apiHost}',\n    defaults: '2026-01-30',\n    person_profiles: 'identified_only',\n  })\n</script>`, package: `npm install posthog-js`, code: `import posthog from 'posthog-js';\n\nposthog.init('${token}', {\n  api_host: '${apiHost}',\n  defaults: '2026-01-30',\n  person_profiles: 'identified_only',\n});` },
+      'Web':     { html: `<script>\n  !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog=window.posthog||{});\n  posthog.init('${token}', {\n    api_host: '${apiHost}',\n    defaults: '2026-01-30',\n    person_profiles: 'identified_only',\n  })\n</script>`, package: `npm install posthog-js`, code: `import posthog from 'posthog-js';\n\nposthog.init('${token}', {\n  api_host: '${apiHost}',\n  defaults: '2026-01-30',\n  person_profiles: 'identified_only',\n});` },
       'React':   { package: `npm install posthog-js`, code: `// main.tsx\nimport posthog from 'posthog-js';\nimport { PostHogProvider } from 'posthog-js/react';\n\nposthog.init('${token}', {\n  api_host: '${apiHost}',\n  defaults: '2026-01-30',\n});\n\n<PostHogProvider client={posthog}>\n  <App />\n</PostHogProvider>` },
       'Next.js': { package: `npm install posthog-js posthog-node`, code: `// app/providers.tsx\n'use client';\nimport posthog from 'posthog-js';\nimport { PostHogProvider } from 'posthog-js/react';\n\nif (typeof window !== 'undefined') {\n  posthog.init('${token}', {\n    api_host: '${apiHost}',\n  });\n}\n\nexport function PHProvider({ children }) {\n  return <PostHogProvider client={posthog}>{children}</PostHogProvider>;\n}` },
       'iOS':     { package: `pod 'PostHog'   # CocoaPods\n// SPM: https://github.com/PostHog/posthog-ios`, code: `import PostHog\n\nlet config = PostHogConfig(\n  apiKey: "${token}",\n  host: "${apiHost}"\n)\nPostHogSDK.shared.setup(config)` },
@@ -46959,7 +46959,7 @@ function WASettingsView() {
   function MCPPage() {
     const [copied, setCopied] = React.useState<string>('');
     const [authMethod, setAuthMethod] = React.useState<'oauth' | 'apikey'>('oauth');
-    const cmd = 'npx @clain/wizard mcp add';
+    const cmd = 'npx -y @clain/wizard@latest mcp add';
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.example.com';
     const mcpUrl = `${origin}/mcp`;
     async function copyText(text: string, key: string) {
@@ -50631,6 +50631,7 @@ function WASettingsView() {
     const [loadingMembers, setLoadingMembers] = React.useState(true);
     const [accessLevel, setAccessLevel] = React.useState<'member' | 'admin'>(team?.access_control ? 'admin' : 'member');
     const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setAccessLevel(team?.access_control ? 'admin' : 'member'); }, [team?.id, team?.access_control]);
     React.useEffect(() => {
       let cancelled = false;
       (async () => {
@@ -50861,7 +50862,12 @@ function WASettingsView() {
         params.set('offset', String(p * LIMIT));
         if (userFilter) params.set('user', userFilter);
         if (dateFrom) params.set('created_after', new Date(dateFrom).toISOString());
-        if (dateTo) params.set('created_before', new Date(dateTo).toISOString());
+        if (dateTo) {
+          const end = new Date(dateTo);
+          end.setHours(23, 59, 59, 999);
+          params.set('created_before', end.toISOString());
+        }
+        if (scopeFilter !== 'all') params.set('scope', scopeFilter);
         const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/activity_log/?${params.toString()}`);
         setLogs(res?.results ?? []);
         setHasMore(!!res?.next);
@@ -50874,7 +50880,8 @@ function WASettingsView() {
       const set = new Set<string>(logs.map(l => l.scope).filter(Boolean));
       return ['all', ...Array.from(set)];
     }, [logs]);
-    const visibleLogs = scopeFilter === 'all' ? logs : logs.filter(l => l.scope === scopeFilter);
+    // Server-side scope filtering applied in loadPage; logs already filtered
+    const visibleLogs = logs;
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl px-8 py-6 space-y-6">
@@ -51047,8 +51054,9 @@ function WASettingsView() {
       setSavingKey('');
     }
     async function saveMinApprovers(v: number) {
-      setMinApprovers(v); setSavingKey('min');
-      const next = { ...(team?.extra_settings || {}), approval_min_approvers: v };
+      const clamped = Math.max(1, Math.min(5, isFinite(v) ? v : 1));
+      setMinApprovers(clamped); setSavingKey('min');
+      const next = { ...(team?.extra_settings || {}), approval_min_approvers: clamped };
       await patchTeam({ extra_settings: next });
       setSavingKey('');
     }
@@ -52182,10 +52190,10 @@ function WASettingsView() {
         setMembers((m as any)?.results ?? []);
       } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
     }
-    const memberIds = new Set(members.map((m: any) => m.user?.uuid ?? m.uuid));
+    const memberIds = new Set(members.flatMap((m: any) => [m.user?.uuid, m.user?.id, m.uuid, m.id].filter(Boolean)));
     const availableToAdd = allMembers.filter((m: any) => {
       const u = m.user || m;
-      return !memberIds.has(u.uuid);
+      return !memberIds.has(u.uuid) && !memberIds.has(u.id);
     });
     return (
       <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-end" onClick={onClose}>
@@ -52282,7 +52290,6 @@ function WASettingsView() {
     const [creating, setCreating] = React.useState(false);
     const [verifyModal, setVerifyModal] = React.useState<any | null>(null);
     const [configModal, setConfigModal] = React.useState<any | null>(null);
-    const [socialProviders, setSocialProviders] = React.useState<any>(organization?.available_features?.social_providers ?? {});
     async function refresh() {
       try {
         const ph = await import('../api/posthog');
@@ -52314,9 +52321,13 @@ function WASettingsView() {
     async function verifyDomain(id: string) {
       try {
         const ph = await import('../api/posthog');
-        await ph.phPost(`/api/organizations/@current/domains/${id}/verify/`, {});
+        const res: any = await ph.phPost(`/api/organizations/@current/domains/${id}/verify/`, {});
         await refresh();
-        setVerifyModal(null);
+        if (res && res.is_verified === false) {
+          alert('Aún no se detecta el registro TXT. Revisa el DNS o espera unos minutos a que se propague.');
+        } else {
+          setVerifyModal(null);
+        }
       } catch (e: any) { alert('Verificación fallida: ' + (e?.message ?? '')); }
     }
     async function toggleJIT(id: string, v: boolean) {
@@ -53077,7 +53088,14 @@ function WASettingsView() {
       try {
         const ph = await import('../api/posthog');
         const updated: any = await ph.phPatch(`/api/users/@me/`, { first_name: firstName, last_name: lastName, email });
-        setMe(updated); setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2000);
+        setMe(updated);
+        // Re-sync local form state from server response (in case backend normalized values)
+        if (updated) {
+          setFirstName(updated.first_name ?? '');
+          setLastName(updated.last_name ?? '');
+          setEmail(updated.email ?? '');
+        }
+        setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2000);
       } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
       finally { setSavingProfile(false); }
     }
