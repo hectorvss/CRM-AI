@@ -36156,6 +36156,13 @@ function WAAppExperimentsView() {
           onArchive={() => archiveExperiment(selectedExp)}
           statusFn={expStatus}
           durationFn={expDuration}
+          onChanged={async () => {
+            try {
+              const ph = await import('../api/posthog');
+              const updated: any = await ph.posthog.experiments.get(selectedExp.id);
+              setSelectedExp(updated);
+            } catch {}
+          }}
         />
       )}
     </div>
@@ -36163,13 +36170,54 @@ function WAAppExperimentsView() {
 }
 
 // ── Experiment detail drawer ─────────────────────────────────────────────────
-function ExperimentDetailDrawer({ exp, onClose, onLaunch, onEnd, onArchive, statusFn, durationFn }: { exp: any; onClose: () => void; onLaunch: () => void; onEnd: () => void; onArchive: () => void; statusFn: (e: any) => any; durationFn: (e: any) => string }) {
+function ExperimentDetailDrawer({ exp, onClose, onLaunch, onEnd, onArchive, statusFn, durationFn, onChanged }: { exp: any; onClose: () => void; onLaunch: () => void; onEnd: () => void; onArchive: () => void; statusFn: (e: any) => any; durationFn: (e: any) => string; onChanged?: () => void }) {
   const st = statusFn(exp);
   const variants = exp.parameters?.feature_flag_variants ?? exp.parameters?.variants ?? [];
   const isRunning = !!exp.start_date && !exp.end_date;
   const isCompleted = !!exp.end_date;
   const [results, setResults] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [showAddMetric, setShowAddMetric] = React.useState<'primary' | 'secondary' | null>(null);
+  const [newMetricName, setNewMetricName] = React.useState('');
+  const [newMetricKind, setNewMetricKind] = React.useState<'count' | 'sum' | 'unique_session'>('count');
+  const [newMetricEvent, setNewMetricEvent] = React.useState('');
+  const [savingMetric, setSavingMetric] = React.useState(false);
+  const [showHypoEdit, setShowHypoEdit] = React.useState(false);
+  const [hypoDraft, setHypoDraft] = React.useState<string>(exp.parameters?.hypothesis ?? exp.description ?? '');
+  React.useEffect(() => { setHypoDraft(exp.parameters?.hypothesis ?? exp.description ?? ''); }, [exp.id]);
+
+  async function addMetric() {
+    if (!newMetricName.trim() || !newMetricEvent.trim()) return;
+    setSavingMetric(true);
+    try {
+      const ph = await import('../api/posthog');
+      const metric = { name: newMetricName.trim(), kind: newMetricKind, query: { kind: 'EventsNode', event: newMetricEvent.trim(), math: newMetricKind === 'unique_session' ? 'unique_session' : 'total' } };
+      const field = showAddMetric === 'primary' ? 'metrics' : 'metrics_secondary';
+      const current = (exp as any)[field] ?? [];
+      await ph.posthog.experiments.update(exp.id, { [field]: [...current, metric] });
+      setShowAddMetric(null); setNewMetricName(''); setNewMetricEvent('');
+      onChanged?.();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    setSavingMetric(false);
+  }
+  async function removeMetric(field: 'metrics' | 'metrics_secondary', i: number) {
+    if (!confirm('¿Eliminar métrica?')) return;
+    try {
+      const ph = await import('../api/posthog');
+      const current = ((exp as any)[field] ?? []).filter((_: any, idx: number) => idx !== i);
+      await ph.posthog.experiments.update(exp.id, { [field]: current });
+      onChanged?.();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
+  async function saveHypothesis() {
+    try {
+      const ph = await import('../api/posthog');
+      const params = { ...(exp.parameters || {}), hypothesis: hypoDraft };
+      await ph.posthog.experiments.update(exp.id, { parameters: params });
+      setShowHypoEdit(false);
+      onChanged?.();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+  }
   React.useEffect(() => {
     if (!exp.feature_flag_key && !exp.feature_flag?.key) return;
     const flagKey = exp.feature_flag_key ?? exp.feature_flag?.key;
@@ -36266,27 +36314,74 @@ function ExperimentDetailDrawer({ exp, onClose, onLaunch, onEnd, onArchive, stat
           )}
 
           {/* Filters / metrics */}
-          {exp.parameters?.feature_flag_variants && (
-            <section className="bg-[#fafaf9] rounded-lg p-3">
-              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Métricas configuradas</h4>
-              {(exp.metrics ?? []).length === 0 && (exp.metrics_secondary ?? []).length === 0 ? (
-                <p className="text-xs text-[#9ca3af] italic">Sin métricas configuradas. Añade primaria y secundaria desde el wizard.</p>
-              ) : (
-                <div className="space-y-1">
-                  {(exp.metrics ?? []).map((m: any, i: number) => <div key={`p-${i}`} className="flex items-center gap-2 text-xs"><span className="text-[9px] bg-[#dcfce7] text-[#16a34a] px-1 py-0.5 rounded font-bold">PRIM</span><span className="text-[#1a1a18]">{m.name ?? m.kind ?? 'Métrica'}</span></div>)}
-                  {(exp.metrics_secondary ?? []).map((m: any, i: number) => <div key={`s-${i}`} className="flex items-center gap-2 text-xs"><span className="text-[9px] bg-[#eff2ff] text-[#3b59f6] px-1 py-0.5 rounded font-bold">SEC</span><span className="text-[#1a1a18]">{m.name ?? m.kind ?? 'Métrica'}</span></div>)}
+          <section className="bg-[#fafaf9] rounded-lg p-3">
+            <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Métricas configuradas</h4>
+            <div className="space-y-1.5">
+              {(exp.metrics ?? []).map((m: any, i: number) => (
+                <div key={`p-${i}`} className="flex items-center gap-2 text-xs bg-white border border-[#e9eae6] rounded px-2 py-1.5">
+                  <span className="text-[9px] bg-[#dcfce7] text-[#16a34a] px-1 py-0.5 rounded font-bold">PRIM</span>
+                  <span className="text-[#1a1a18] flex-1">{m.name ?? m.query?.event ?? m.kind ?? 'Métrica'}</span>
+                  <code className="text-[10px] text-[#646462] font-mono">{m.query?.event ?? ''}</code>
+                  <button onClick={() => removeMetric('metrics', i)} className="text-[#dc2626] text-[11px] hover:underline">×</button>
                 </div>
+              ))}
+              {(exp.metrics_secondary ?? []).map((m: any, i: number) => (
+                <div key={`s-${i}`} className="flex items-center gap-2 text-xs bg-white border border-[#e9eae6] rounded px-2 py-1.5">
+                  <span className="text-[9px] bg-[#eff2ff] text-[#3b59f6] px-1 py-0.5 rounded font-bold">SEC</span>
+                  <span className="text-[#1a1a18] flex-1">{m.name ?? m.query?.event ?? m.kind ?? 'Métrica'}</span>
+                  <code className="text-[10px] text-[#646462] font-mono">{m.query?.event ?? ''}</code>
+                  <button onClick={() => removeMetric('metrics_secondary', i)} className="text-[#dc2626] text-[11px] hover:underline">×</button>
+                </div>
+              ))}
+              {(exp.metrics ?? []).length === 0 && (exp.metrics_secondary ?? []).length === 0 && (
+                <p className="text-xs text-[#9ca3af] italic">Sin métricas configuradas.</p>
               )}
-            </section>
-          )}
+            </div>
+            {showAddMetric ? (
+              <div className="mt-3 p-3 bg-white border border-[#e9eae6] rounded space-y-2">
+                <p className="text-[11px] font-semibold text-[#1a1a18]">Nueva métrica {showAddMetric === 'primary' ? 'primaria' : 'secundaria'}</p>
+                <input value={newMetricName} onChange={e => setNewMetricName(e.target.value)} placeholder="Nombre (ej. Tasa de conversión)" className="w-full h-8 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6]"/>
+                <input value={newMetricEvent} onChange={e => setNewMetricEvent(e.target.value)} placeholder="Evento (ej. purchase_completed)" className="w-full h-8 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6] font-mono"/>
+                <select value={newMetricKind} onChange={e => setNewMetricKind(e.target.value as any)} className="w-full h-8 px-2 border border-[#e9eae6] rounded text-[12px] bg-white">
+                  <option value="count">Conteo de eventos</option>
+                  <option value="unique_session">Sesiones únicas</option>
+                  <option value="sum">Suma de propiedad</option>
+                </select>
+                <div className="flex justify-end gap-1.5">
+                  <button onClick={() => { setShowAddMetric(null); setNewMetricName(''); setNewMetricEvent(''); }} className="h-7 px-2 text-[11px] text-[#646462] hover:underline">Cancelar</button>
+                  <button onClick={addMetric} disabled={savingMetric || !newMetricName.trim() || !newMetricEvent.trim()} className="h-7 px-2 bg-[#e8572a] text-white text-[11px] font-semibold rounded hover:bg-[#c9451e] disabled:opacity-50">{savingMetric ? 'Guardando…' : 'Añadir'}</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => setShowAddMetric('primary')} className="text-[11px] text-[#16a34a] hover:underline">+ Métrica primaria</button>
+                <button onClick={() => setShowAddMetric('secondary')} className="text-[11px] text-[#3b59f6] hover:underline">+ Métrica secundaria</button>
+              </div>
+            )}
+          </section>
 
           {/* Hypothesis */}
-          {(exp.parameters?.hypothesis || exp.description) && (
-            <section>
-              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Hipótesis</h4>
-              <p className="text-sm text-[#1a1a18] bg-[#fffbeb] border border-[#fde68a] rounded-lg p-3">{exp.parameters?.hypothesis ?? exp.description}</p>
-            </section>
-          )}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Hipótesis</h4>
+              {!showHypoEdit && <button onClick={() => setShowHypoEdit(true)} className="text-[11px] text-[#e8572a] hover:underline">Editar</button>}
+            </div>
+            {showHypoEdit ? (
+              <div className="space-y-2">
+                <textarea value={hypoDraft} onChange={e => setHypoDraft(e.target.value)} rows={3} placeholder="Si cambiamos X, esperamos que Y aumente porque Z" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] resize-y"/>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => { setShowHypoEdit(false); setHypoDraft(exp.parameters?.hypothesis ?? exp.description ?? ''); }} className="h-7 px-3 text-[12px] text-[#646462] hover:underline">Cancelar</button>
+                  <button onClick={saveHypothesis} className="h-7 px-3 bg-[#e8572a] text-white text-[12px] font-semibold rounded hover:bg-[#c9451e]">Guardar</button>
+                </div>
+              </div>
+            ) : (
+              (exp.parameters?.hypothesis || exp.description) ? (
+                <p className="text-sm text-[#1a1a18] bg-[#fffbeb] border border-[#fde68a] rounded-lg p-3">{exp.parameters?.hypothesis ?? exp.description}</p>
+              ) : (
+                <p className="text-xs text-[#9ca3af] italic">Sin hipótesis. Haz clic en Editar para añadir una.</p>
+              )
+            )}
+          </section>
 
           {/* Link to flag */}
           {exp.feature_flag?.id && (
@@ -37140,6 +37235,13 @@ if (posthog.isFeatureEnabled('my-flag') ) {
           onToggle={() => toggleActive(selectedFF)}
           onDelete={() => { if (confirm('Eliminar flag?')) { deleteFF(selectedFF); } }}
           flagTypeFn={flagType}
+          onChanged={async () => {
+            try {
+              const ph = await import('../api/posthog');
+              const updated: any = await ph.posthog.featureFlags.get(selectedFF.id);
+              setSelectedFF(updated);
+            } catch {}
+          }}
         />
       )}
     </div>
@@ -37147,11 +37249,55 @@ if (posthog.isFeatureEnabled('my-flag') ) {
 }
 
 // ── FeatureFlagDetailDrawer ──────────────────────────────────────────────────
-function FeatureFlagDetailDrawer({ flag, onClose, onEdit, onToggle, onDelete, flagTypeFn }: { flag: any; onClose: () => void; onEdit: () => void; onToggle: () => void; onDelete: () => void; flagTypeFn: (f: any) => 'boolean'|'variants'|'remote' }) {
+function FeatureFlagDetailDrawer({ flag, onClose, onEdit, onToggle, onDelete, flagTypeFn, onChanged }: { flag: any; onClose: () => void; onEdit: () => void; onToggle: () => void; onDelete: () => void; flagTypeFn: (f: any) => 'boolean'|'variants'|'remote'; onChanged?: () => void }) {
   const [usage, setUsage] = React.useState<{ called: number; uniqueUsers: number; perVariant: Record<string, number> }>({ called: 0, uniqueUsers: 0, perVariant: {} });
   const [loadingUsage, setLoadingUsage] = React.useState(true);
   const [activity, setActivity] = React.useState<any[]>([]);
   const [linkedExperiments, setLinkedExperiments] = React.useState<any[]>([]);
+  // Edit mode + draft state
+  const [editMode, setEditMode] = React.useState(false);
+  const [draftVariants, setDraftVariants] = React.useState<any[]>(flag.filters?.multivariate?.variants ?? []);
+  const [draftGroups, setDraftGroups] = React.useState<any[]>(flag.filters?.groups ?? [{ properties: [], rollout_percentage: 100 }]);
+  const [savingFlag, setSavingFlag] = React.useState(false);
+  React.useEffect(() => {
+    setDraftVariants(flag.filters?.multivariate?.variants ?? []);
+    setDraftGroups(flag.filters?.groups ?? [{ properties: [], rollout_percentage: 100 }]);
+  }, [flag.id]);
+  function startEdit() { setEditMode(true); }
+  function cancelEdit() {
+    setEditMode(false);
+    setDraftVariants(flag.filters?.multivariate?.variants ?? []);
+    setDraftGroups(flag.filters?.groups ?? [{ properties: [], rollout_percentage: 100 }]);
+  }
+  async function saveFlag() {
+    setSavingFlag(true);
+    try {
+      const ph = await import('../api/posthog');
+      const filters: any = { ...(flag.filters || {}), groups: draftGroups };
+      if ((flag.filters?.multivariate?.variants ?? []).length > 0) {
+        filters.multivariate = { variants: draftVariants };
+      }
+      await ph.posthog.featureFlags.update(flag.id, { filters });
+      setEditMode(false);
+      onChanged?.();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    setSavingFlag(false);
+  }
+  function updateVariant(i: number, patch: any) { setDraftVariants(vs => vs.map((v, idx) => idx === i ? { ...v, ...patch } : v)); }
+  function addVariant() { setDraftVariants(vs => [...vs, { key: `variant_${vs.length + 1}`, name: '', rollout_percentage: 0 }]); }
+  function removeVariant(i: number) { setDraftVariants(vs => vs.filter((_, idx) => idx !== i)); }
+  function updateGroup(i: number, patch: any) { setDraftGroups(gs => gs.map((g, idx) => idx === i ? { ...g, ...patch } : g)); }
+  function addGroup() { setDraftGroups(gs => [...gs, { properties: [], rollout_percentage: 100 }]); }
+  function removeGroup(i: number) { setDraftGroups(gs => gs.filter((_, idx) => idx !== i)); }
+  function addPropertyToGroup(gi: number) {
+    setDraftGroups(gs => gs.map((g, idx) => idx === gi ? { ...g, properties: [...(g.properties ?? []), { key: '', value: '', operator: 'exact', type: 'person' }] } : g));
+  }
+  function updateGroupProperty(gi: number, pi: number, patch: any) {
+    setDraftGroups(gs => gs.map((g, idx) => idx === gi ? { ...g, properties: g.properties.map((p: any, j: number) => j === pi ? { ...p, ...patch } : p) } : g));
+  }
+  function removeGroupProperty(gi: number, pi: number) {
+    setDraftGroups(gs => gs.map((g, idx) => idx === gi ? { ...g, properties: g.properties.filter((_: any, j: number) => j !== pi) } : g));
+  }
   React.useEffect(() => {
     let cancelled = false;
     setLoadingUsage(true);
@@ -37222,8 +37368,17 @@ function FeatureFlagDetailDrawer({ flag, onClose, onEdit, onToggle, onDelete, fl
             {flag.description && <p className="text-xs text-[#646462] mt-1">{flag.description}</p>}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={onEdit} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7]">Editar</button>
-            <button onClick={onDelete} className="px-2 py-1 text-[#dc2626] hover:bg-[#fee2e2] rounded text-xs">Eliminar</button>
+            {editMode ? (
+              <>
+                <button onClick={cancelEdit} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7]">Cancelar</button>
+                <button onClick={saveFlag} disabled={savingFlag} className="px-2 py-1 bg-[#e8572a] text-white rounded text-xs hover:bg-[#c9451e] disabled:opacity-50">{savingFlag ? 'Guardando…' : 'Guardar'}</button>
+              </>
+            ) : (
+              <>
+                <button onClick={startEdit} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7]">Editar</button>
+                <button onClick={onDelete} className="px-2 py-1 text-[#dc2626] hover:bg-[#fee2e2] rounded text-xs">Eliminar</button>
+              </>
+            )}
             <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18] ml-1"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
           </div>
         </div>
@@ -37240,41 +37395,94 @@ function FeatureFlagDetailDrawer({ flag, onClose, onEdit, onToggle, onDelete, fl
             <section>
               <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Variantes</h4>
               <div className="space-y-2">
-                {variants.map((v: any, i: number) => {
+                {(editMode ? draftVariants : variants).map((v: any, i: number) => {
                   const palette = ['#3b59f6','#7c3aed','#e8572a','#16a34a','#f59e0b','#06b6d4'];
                   const color = palette[i % palette.length];
                   const called = usage.perVariant[v.key] ?? 0;
                   return (
-                    <div key={v.key} className="border border-[#e9eae6] rounded-lg p-3">
+                    <div key={i} className="border border-[#e9eae6] rounded-lg p-3">
                       <div className="flex items-center gap-3 mb-2">
                         <div className="w-6 h-6 rounded flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ background: color }}>{String.fromCharCode(65 + i)}</div>
-                        <span className="font-mono text-sm text-[#1a1a18]">{v.key}</span>
-                        <span className="text-[10px] text-[#9ca3af]">Rollout: {v.rollout_percentage}%</span>
-                        <span className="ml-auto text-xs font-mono">{called.toLocaleString('es-ES')} llamadas</span>
+                        {editMode ? (
+                          <>
+                            <input value={v.key} onChange={e => updateVariant(i, { key: e.target.value })} className="font-mono text-sm text-[#1a1a18] h-7 px-2 border border-[#e9eae6] rounded outline-none focus:border-[#3b59f6] w-32"/>
+                            <input value={v.name ?? ''} onChange={e => updateVariant(i, { name: e.target.value })} placeholder="Nombre" className="text-[12px] text-[#646462] h-7 px-2 border border-[#e9eae6] rounded outline-none focus:border-[#3b59f6] flex-1"/>
+                            <input type="number" min="0" max="100" value={v.rollout_percentage} onChange={e => updateVariant(i, { rollout_percentage: Number(e.target.value) })} className="h-7 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6] w-16 text-right"/>
+                            <span className="text-[11px] text-[#646462]">%</span>
+                            <button onClick={() => removeVariant(i)} className="text-[#dc2626] text-[11px] hover:underline">×</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-mono text-sm text-[#1a1a18]">{v.key}</span>
+                            <span className="text-[10px] text-[#9ca3af]">Rollout: {v.rollout_percentage}%</span>
+                            <span className="ml-auto text-xs font-mono">{called.toLocaleString('es-ES')} llamadas</span>
+                          </>
+                        )}
                       </div>
                       <div className="h-2 bg-[#f3f3f1] rounded overflow-hidden"><div className="h-full rounded" style={{ width: `${v.rollout_percentage}%`, backgroundColor: color }} /></div>
                     </div>
                   );
                 })}
+                {editMode && (
+                  <button onClick={addVariant} className="h-8 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir variante</button>
+                )}
+                {editMode && (() => {
+                  const sum = draftVariants.reduce((a, b) => a + (b.rollout_percentage || 0), 0);
+                  return sum !== 100 ? <p className="text-[11px] text-[#dc2626] mt-1">⚠ La suma de rollouts es {sum}% (debe ser 100%)</p> : null;
+                })()}
               </div>
             </section>
           )}
 
           {/* Release conditions */}
-          {groups.length > 0 && (
-            <section>
-              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Condiciones de liberación</h4>
-              <div className="space-y-2">
-                {groups.map((g: any, i: number) => (
-                  <div key={i} className="border border-[#e9eae6] rounded-lg p-3">
-                    <p className="text-xs font-semibold text-[#1a1a18] mb-1">Set {i + 1} — Rollout {g.rollout_percentage}%</p>
-                    {(g.properties ?? []).length === 0 ? <p className="text-[11px] text-[#9ca3af] italic">Matches all users</p>
-                    : <div className="space-y-1">{g.properties.map((p: any, j: number) => <div key={j} className="text-[11px] font-mono text-[#646462]">{p.key} {p.operator} {JSON.stringify(p.value)}</div>)}</div>}
+          <section>
+            <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Condiciones de liberación</h4>
+            <div className="space-y-2">
+              {(editMode ? draftGroups : groups).map((g: any, i: number) => (
+                <div key={i} className="border border-[#e9eae6] rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-xs font-semibold text-[#1a1a18] flex-1">Set {i + 1}</p>
+                    {editMode ? (
+                      <>
+                        <input type="number" min="0" max="100" value={g.rollout_percentage} onChange={e => updateGroup(i, { rollout_percentage: Number(e.target.value) })} className="h-7 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6] w-16 text-right"/>
+                        <span className="text-[11px] text-[#646462]">% rollout</span>
+                        <button onClick={() => removeGroup(i)} className="text-[#dc2626] text-[11px] hover:underline">×</button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-[#646462]">Rollout {g.rollout_percentage}%</span>
+                    )}
                   </div>
-                ))}
-              </div>
-            </section>
-          )}
+                  {editMode ? (
+                    <div className="space-y-1">
+                      {(g.properties ?? []).map((p: any, j: number) => (
+                        <div key={j} className="flex items-center gap-1.5">
+                          <input value={p.key ?? ''} onChange={e => updateGroupProperty(i, j, { key: e.target.value })} placeholder="email" className="h-7 px-2 border border-[#e9eae6] rounded text-[11px] flex-1 font-mono outline-none focus:border-[#3b59f6]"/>
+                          <select value={p.operator ?? 'exact'} onChange={e => updateGroupProperty(i, j, { operator: e.target.value })} className="h-7 px-1 border border-[#e9eae6] rounded text-[11px] bg-white">
+                            <option value="exact">=</option>
+                            <option value="is_not">≠</option>
+                            <option value="icontains">contiene</option>
+                            <option value="not_icontains">no contiene</option>
+                            <option value="regex">regex</option>
+                            <option value="is_set">existe</option>
+                            <option value="is_not_set">no existe</option>
+                          </select>
+                          <input value={p.value ?? ''} onChange={e => updateGroupProperty(i, j, { value: e.target.value })} placeholder="valor" className="h-7 px-2 border border-[#e9eae6] rounded text-[11px] flex-1 outline-none focus:border-[#3b59f6]"/>
+                          <button onClick={() => removeGroupProperty(i, j)} className="text-[#dc2626] text-[11px] hover:underline px-1">×</button>
+                        </div>
+                      ))}
+                      <button onClick={() => addPropertyToGroup(i)} className="text-[11px] text-[#e8572a] hover:underline">+ Añadir filtro</button>
+                    </div>
+                  ) : (
+                    (g.properties ?? []).length === 0 ? <p className="text-[11px] text-[#9ca3af] italic">Matches all users</p>
+                    : <div className="space-y-1">{g.properties.map((p: any, j: number) => <div key={j} className="text-[11px] font-mono text-[#646462]">{p.key} {p.operator} {JSON.stringify(p.value)}</div>)}</div>
+                  )}
+                </div>
+              ))}
+              {editMode && (
+                <button onClick={addGroup} className="h-8 px-3 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir set de condiciones</button>
+              )}
+            </div>
+          </section>
 
           {/* Linked experiments */}
           {linkedExperiments.length > 0 && (
