@@ -34590,675 +34590,1299 @@ function WAHomeView() {
   );
 }
 
-// ── Clain Web Analytics — Activity view (Events / Sessions / Live) ───────────
-function WAActivityView() {
-  type ActivityTab = 'events' | 'sessions' | 'live';
-  const [tab,               setTab]               = useState<ActivityTab>('events');
-  const [dateRange,         setDateRange]         = useState('Última hora');
-  const [showDatePicker,    setShowDatePicker]    = useState(false);
-  const [showEventPicker,   setShowEventPicker]   = useState(false);
-  const [showPropFilter,    setShowPropFilter]    = useState(false);
-  const [showConfigCols,    setShowConfigCols]    = useState(false);
-  const [showExport,        setShowExport]        = useState(false);
-  const [showInsight,       setShowInsight]       = useState(false);
-  const [showViewDrop,      setShowViewDrop]      = useState(false);
-  const [filterInternal,    setFilterInternal]    = useState(false);
-  const [livePaused,        setLivePaused]        = useState(false);
-  const [eventSearch,       setEventSearch]       = useState('');
-  const [propSearch,        setPropSearch]        = useState('');
-  const [colSearch,         setColSearch]         = useState('');
-  const [propCat,           setPropCat]           = useState('Sugerencias');
-  const [colCat,            setColCat]            = useState('Propiedades de evento: 1');
-  const [visibleCols,       setVisibleCols]       = useState(['event', 'Person', 'Url / Screen', 'Librería', 'timestamp']);
+// â”€â”€ WAActivityView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog "Activity" page with 3 tabs (Eventos / Sesiones / En vivo).
+// Fully wired to PostHog via src/api/posthog.ts:
+//   - Eventos:   POST /api/environments/{teamId}/query/  (EventsQuery)
+//   - Sesiones:  POST /api/environments/{teamId}/query/  (HogQLQuery on sessions table)
+//   - En vivo:   GET  /api/environments/{teamId}/events/?after=ISO  (polled every 2s)
+//   - Event picker / Property filter use event_definitions + property_definitions
 
-  const closeAll = () => {
-    setShowDatePicker(false); setShowEventPicker(false); setShowPropFilter(false);
-    setShowExport(false); setShowInsight(false); setShowViewDrop(false);
-  };
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+type ActivityTab = 'events' | 'sessions' | 'live';
 
-  const DATE_OPTIONS = [
-    'Hoy','Ayer','Última hora','Últimas 24 horas','Últimos 7 días',
-    'Últimos 14 días','Últimos 30 días','Últimos 90 días','Últimos 180 días',
-    'Semana pasada','Mes pasado','Esta semana','Este mes','Año hasta la fecha','Todo el tiempo',
-  ];
+interface DateRange {
+  label: string;
+  after: string;   // PostHog relative date string ("-1h", "-7d", "all")
+  before?: string;
+}
 
-  const PROP_CATS: { label: string; count?: number }[] = [
-    { label: 'Sugerencias' },
-    { label: 'Reciente: 0' },
-    { label: 'Anclado: 0' },
-    { label: 'URLs de página' },
-    { label: 'Pantallas' },
-    { label: 'Direcciones de email' },
-    { label: 'Propiedades de evento: 1', count: 1 },
-    { label: 'Propiedades de persona: 4', count: 4 },
-    { label: 'Indicadores de feature: 0' },
-    { label: 'Metadatos de evento: 5', count: 5 },
-    { label: 'Cohortes: 1', count: 1 },
-    { label: 'Elementos de autocaptura: 4', count: 4 },
-    { label: 'Expresión SQL' },
-  ];
+interface PropertyFilter {
+  key:      string;
+  operator: 'exact' | 'is_not' | 'icontains' | 'not_icontains' | 'regex' | 'not_regex' | 'is_set' | 'is_not_set' | 'gt' | 'lt';
+  value:    string | string[] | null;
+  type:     'event' | 'person';
+}
 
-  const COL_CATS: { label: string; count?: number }[] = [
-    { label: 'Reciente: 0' },
-    { label: 'Anclado: 0' },
-    { label: 'Propiedades de evento: 1', count: 1 },
-    { label: 'Indicadores de feature: 0' },
-    { label: 'Propiedades de persona: 4', count: 4 },
-    { label: 'Propiedades de sesión: 37', count: 37 },
-    { label: 'Expresión SQL' },
-  ];
+interface EventDefinition {
+  id:    string;
+  name:  string;
+  query_usage_30_day?: number;
+  is_seen_on_filtered_events?: boolean;
+}
 
-  // ── Shared styles ─────────────────────────────────────────────────────────
-  const btnFilter = "flex items-center gap-1.5 h-8 px-3 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors cursor-pointer select-none whitespace-nowrap";
+interface PropertyDefinition {
+  id:           string;
+  name:         string;
+  property_type?: 'String' | 'Numeric' | 'Boolean' | 'DateTime';
+  is_numerical?: boolean;
+}
 
-  function catPillCls(label: string, active: string) {
-    const isActive = label === active;
-    const hasCount = label.match(/:\s*([1-9]\d*)/);
-    if (isActive)  return "w-full text-left px-2.5 py-[5px] rounded-[6px] text-[12px] bg-[#3b59f6] text-white font-medium";
-    if (hasCount)  return "w-full text-left px-2.5 py-[5px] rounded-[6px] text-[12px] border border-[#3b59f6] text-[#3b59f6] hover:bg-[#eff2ff] transition-colors";
-    return "w-full text-left px-2.5 py-[5px] rounded-[6px] text-[12px] border border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors";
-  }
+interface EventRow {
+  uuid:        string;
+  event:       string;
+  distinct_id: string;
+  timestamp:   string;
+  properties:  Record<string, any>;
+  person?: {
+    distinct_ids?:   string[];
+    properties?:     Record<string, any>;
+    is_identified?:  boolean;
+  } | null;
+}
 
-  // ── Dropdown backdrop ─────────────────────────────────────────────────────
-  function Backdrop({ onClose }: { onClose: () => void }) {
-    return <div className="fixed inset-0 z-40" onClick={onClose} />;
-  }
+interface SessionRow {
+  session_id:   string;
+  distinct_id:  string;
+  start_time:   string;
+  end_time:     string;
+  duration:     number;       // seconds
+  entry_url:    string;
+  pageview_count: number;
+  bounce:       boolean;
+}
 
-  // ── Column header ─────────────────────────────────────────────────────────
-  function ColHeader({ label, info }: { label: string; info?: boolean }) {
-    return (
-      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide whitespace-nowrap border-b border-[#e9eae6]">
-        <span className="flex items-center gap-1">
-          {label}
-          {info
-            ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
-            : <span className="text-[#c0c0be] font-normal normal-case tracking-normal">···</span>
-          }
-        </span>
-      </th>
-    );
-  }
+interface SavedView {
+  id:    string;
+  name:  string;
+  date:  DateRange;
+  event: string | null;
+  props: PropertyFilter[];
+  cols:  string[];
+}
 
-  // ── Empty state ───────────────────────────────────────────────────────────
-  function EmptyState({ cols }: { cols: number }) {
-    return (
-      <tr><td colSpan={cols}>
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <svg viewBox="0 0 48 48" className="w-12 h-12 fill-[#d4d4d2]">
-            <path d="M38 14H28v-3a5 5 0 00-10 0v3H8a3 3 0 00-3 3v22a3 3 0 003 3h30a3 3 0 003-3V17a3 3 0 00-3-3zm-16-3a3 3 0 016 0v3H22v-3zm-5 16h2v3h-2zm8 0h2v3h-2zm11 3v4H16v-4h3v2a2 2 0 004 0v-2h6v2a2 2 0 004 0v-2h3z"/>
-          </svg>
-          <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay eventos que coincidan con esta consulta</p>
-          <p className="text-[13px] text-[#9a9a98]">Cambia el rango de fechas, o elige otra acción, evento o desglose.</p>
-        </div>
-      </td></tr>
-    );
-  }
+// â”€â”€ Date range presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const DATE_PRESETS: DateRange[] = [
+  { label: 'Hoy',                 after: 'dStart'      },
+  { label: 'Ayer',                after: '-1dStart',  before: '-1dEnd' },
+  { label: 'Ãšltima hora',         after: '-1h'        },
+  { label: 'Ãšltimas 24 horas',    after: '-24h'       },
+  { label: 'Ãšltimos 7 dÃ­as',      after: '-7d'        },
+  { label: 'Ãšltimos 14 dÃ­as',     after: '-14d'       },
+  { label: 'Ãšltimos 30 dÃ­as',     after: '-30d'       },
+  { label: 'Ãšltimos 90 dÃ­as',     after: '-90d'       },
+  { label: 'Ãšltimos 180 dÃ­as',    after: '-180d'      },
+  { label: 'Semana pasada',       after: '-1wStart',  before: '-1wEnd' },
+  { label: 'Mes pasado',          after: '-1mStart',  before: '-1mEnd' },
+  { label: 'Esta semana',         after: 'wStart'     },
+  { label: 'Este mes',            after: 'mStart'     },
+  { label: 'AÃ±o hasta la fecha',  after: 'yStart'     },
+  { label: 'Todo el tiempo',      after: 'all'        },
+];
 
-  function WaitingState() {
-    return (
-      <tr><td colSpan={4}>
-        <div className="flex flex-col items-center justify-center py-16 gap-4">
-          <div className="w-9 h-9 rounded-full border-[3px] border-[#e9eae6] border-t-[#646462] animate-spin"/>
-          <p className="text-[14px] font-semibold text-[#1a1a1a]">Esperando eventos...</p>
-        </div>
-      </td></tr>
-    );
-  }
+// â”€â”€ Default columns for the events table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const DEFAULT_EVENT_COLS = ['event', 'person', 'url', 'library', 'timestamp'];
 
-  // ── Date range dropdown ───────────────────────────────────────────────────
-  function DatePickerDropdown() {
-    return (
-      <>
-        <Backdrop onClose={() => setShowDatePicker(false)} />
-        <div className="absolute left-0 top-[calc(100%+4px)] z-50 w-[240px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden py-1">
-          {DATE_OPTIONS.map(opt => (
-            <button key={opt} onClick={() => { setDateRange(opt); setShowDatePicker(false); }}
-              className={`w-full text-left px-4 py-[7px] text-[13px] transition-colors ${dateRange === opt ? 'bg-[#f3f3f1] font-medium text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#f7f7f5]'}`}>
-              {opt}
-            </button>
-          ))}
-          <div className="border-t border-[#e9eae6] mt-1 px-3 py-2 flex items-center gap-2">
-            <span className="text-[12px] text-[#646462] whitespace-nowrap">En los últimos</span>
-            <button className="w-6 h-6 rounded-[4px] border border-[#e9eae6] text-[13px] flex items-center justify-center hover:bg-[#f7f7f5]">−</button>
-            <span className="text-[13px] font-medium w-4 text-center">1</span>
-            <button className="w-6 h-6 rounded-[4px] border border-[#e9eae6] text-[13px] flex items-center justify-center hover:bg-[#f7f7f5]">+</button>
-            <select className="text-[12px] border border-[#e9eae6] rounded-[6px] px-1.5 py-1 bg-white focus:outline-none focus:border-[#3b59f6]">
-              <option>horas</option><option>días</option><option>semanas</option>
-            </select>
-          </div>
-          <div className="border-t border-[#e9eae6]">
-            {['Desde fecha personalizada hasta ahora...','Rango de fechas fijo...','Ir a marca de tiempo'].map(o => (
-              <button key={o} className="w-full text-left px-4 py-[7px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5]">{o}</button>
-            ))}
-          </div>
-        </div>
-      </>
-    );
-  }
+// â”€â”€ Time formatting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function formatRelativeTime(iso: string): string {
+  try {
+    const d   = new Date(iso);
+    const now = new Date();
+    const sec = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (sec < 5)    return 'justo ahora';
+    if (sec < 60)   return `hace ${sec}s`;
+    if (sec < 3600) return `hace ${Math.floor(sec / 60)}m`;
+    if (sec < 86400) return `hace ${Math.floor(sec / 3600)}h`;
+    return `hace ${Math.floor(sec / 86400)}d`;
+  } catch { return iso; }
+}
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('es-ES', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+  } catch { return iso; }
+}
+function formatDuration(sec: number): string {
+  if (sec == null) return 'â€”';
+  if (sec < 60)    return `${Math.round(sec)}s`;
+  if (sec < 3600)  return `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s`;
+  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+}
 
-  // ── Event selector dropdown ───────────────────────────────────────────────
-  function EventSelectorDropdown() {
-    const ECATS = ['Sugerencias','Reciente: 0','Anclado: 0','Eventos: 0'];
-    return (
-      <>
-        <Backdrop onClose={() => setShowEventPicker(false)} />
-        <div className="absolute left-0 top-[calc(100%+4px)] z-50 w-[480px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden">
-          <div className="px-3 py-2 border-b border-[#e9eae6]">
-            <div className="flex items-center gap-2 bg-[#f7f7f5] rounded-[7px] px-3 py-1.5 border border-[#e9eae6]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/></svg>
-              <input autoFocus value={eventSearch} onChange={e => setEventSearch(e.target.value)}
-                placeholder="Buscar sugerencias, recientes, anclados o eventos"
-                className="flex-1 text-[13px] bg-transparent focus:outline-none placeholder:text-[#9a9a98]"/>
-            </div>
-          </div>
-          <div className="flex" style={{ minHeight: 180 }}>
-            <div className="w-[160px] border-r border-[#e9eae6] p-2 flex flex-col gap-1 flex-shrink-0">
-              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide px-1 pb-1">Categorías</p>
-              {ECATS.map(c => (
-                <button key={c} className={catPillCls(c, 'Sugerencias')}>{c}</button>
-              ))}
-            </div>
-            <div className="flex-1 p-4">
-              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-4">Eventos</p>
-              <p className="text-[13px] text-[#9a9a98] text-center mt-4">Sin eventos encontrados</p>
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
+// â”€â”€ CSV export helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function downloadCSV(filename: string, rows: any[], cols: { key: string; label: string; get: (r: any) => any }[]) {
+  if (rows.length === 0) return;
+  const header  = cols.map(c => `"${c.label.replace(/"/g, '""')}"`).join(',');
+  const lines   = rows.map(r => cols.map(c => {
+    const v = c.get(r);
+    if (v == null) return '';
+    const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    return `"${s.replace(/"/g, '""')}"`;
+  }).join(','));
+  const blob    = new Blob([[header, ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
 
-  // ── Property filters dropdown ─────────────────────────────────────────────
-  function PropertyFilterDropdown() {
-    return (
-      <>
-        <Backdrop onClose={() => setShowPropFilter(false)} />
-        <div className="absolute left-0 top-[calc(100%+4px)] z-50 w-[600px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden">
-          {/* Search */}
-          <div className="px-3 py-2 border-b border-[#e9eae6]">
-            <div className="flex items-center gap-2 border border-[#e9eae6] rounded-[7px] px-3 py-1.5">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/></svg>
-              <input autoFocus value={propSearch} onChange={e => setPropSearch(e.target.value)}
-                placeholder="Buscar sugerencias, recientes, anclados, URLs, pantallas, emails, propiedades de evento..."
-                className="flex-1 text-[13px] bg-transparent focus:outline-none placeholder:text-[#9a9a98]"/>
-            </div>
-          </div>
-          {/* Two-panel */}
-          <div className="flex" style={{ minHeight: 300 }}>
-            {/* Categories */}
-            <div className="w-[190px] border-r border-[#e9eae6] p-2 flex flex-col gap-1 flex-shrink-0 overflow-y-auto" style={{ maxHeight: 360 }}>
-              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide px-1 pb-1">Categorías</p>
-              {PROP_CATS.map(c => (
-                <button key={c.label} onClick={() => setPropCat(c.label)} className={catPillCls(c.label, propCat)}>
-                  {c.label}
-                </button>
-              ))}
-            </div>
-            {/* Right panel */}
-            <div className="flex-1 p-4 overflow-y-auto" style={{ maxHeight: 360 }}>
-              <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-4">Sugerencias</p>
-              <div className="flex flex-col items-center justify-center gap-3 mt-8">
-                <svg viewBox="0 0 32 32" className="w-8 h-8 fill-none stroke-[#c0c0be]" strokeWidth="1.5">
-                  <circle cx="14" cy="14" r="10"/><path d="M22 22l6 6" strokeLinecap="round"/>
-                </svg>
-                <p className="text-[13px] font-medium text-[#646462]">Comienza a buscar y sugeriremos filtros...</p>
-                <p className="text-[12px] text-[#9a9a98] italic">Prueba buscando un email, una URL o el nombre de una pantalla</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
+// â”€â”€ Click-outside hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function useClickOutside<T extends HTMLElement>(onClose: () => void): React.RefObject<T> {
+  const ref = React.useRef<T>(null);
+  React.useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [onClose]);
+  return ref;
+}
 
-  // ── Configure columns modal ───────────────────────────────────────────────
-  function ConfigColumnsModal() {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="absolute inset-0 bg-black/30" onClick={() => setShowConfigCols(false)} />
-        <div className="relative bg-white rounded-[14px] shadow-[0_8px_40px_rgba(20,20,20,0.18)] border border-[#e9eae6] w-[600px] max-h-[85vh] flex flex-col" style={{ fontFamily: "'Inter', sans-serif" }}>
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Configurar columnas</h2>
-            <button onClick={() => setShowConfigCols(false)} className="w-7 h-7 flex items-center justify-center rounded-[6px] hover:bg-[#f3f3f1] text-[#646462] hover:text-[#1a1a1a] transition-colors">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            {/* Visible columns */}
-            <p className="text-[11px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-3">
-              Columnas visibles ({visibleCols.length}) — arrastrar para reordenar
-            </p>
-            <div className="flex flex-col gap-1.5 mb-5">
-              {visibleCols.map((col, i) => (
-                <div key={col} className="flex items-center gap-3 px-3 py-2.5 rounded-[8px] bg-[#eff2ff] border border-[#c7d2fe]">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#9a9a98] flex-shrink-0 cursor-grab">
-                    <rect x="3" y="3" width="2" height="2" rx="0.5"/><rect x="7" y="3" width="2" height="2" rx="0.5"/>
-                    <rect x="3" y="7" width="2" height="2" rx="0.5"/><rect x="7" y="7" width="2" height="2" rx="0.5"/>
-                    <rect x="3" y="11" width="2" height="2" rx="0.5"/><rect x="7" y="11" width="2" height="2" rx="0.5"/>
-                  </svg>
-                  <span className="flex-1 text-[13px] text-[#1a1a1a] font-medium">{col}</span>
-                  <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#dbeafe] text-[#646462] hover:text-[#1a1a1a] transition-colors">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M11 2l3 3-9 9-4 1 1-4 9-9z"/></svg>
-                  </button>
-                  <button onClick={() => setVisibleCols(prev => prev.filter((_, j) => j !== i))}
-                    className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#fee2e2] text-[#9a9a98] hover:text-[#ef4444] transition-colors">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Available columns */}
-            <p className="text-[11px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-2">Columnas disponibles</p>
-            <div className="border border-[#e9eae6] rounded-[8px] overflow-hidden mb-2">
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5"><circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/></svg>
-                <input value={colSearch} onChange={e => setColSearch(e.target.value)}
-                  placeholder="Buscar recientes, anclados, propiedades de evento, indicadores, propiedades de persona, sesiones"
-                  className="flex-1 text-[13px] focus:outline-none placeholder:text-[#9a9a98]"/>
-              </div>
-              <div className="flex" style={{ minHeight: 200 }}>
-                <div className="w-[170px] border-r border-[#e9eae6] p-2 flex flex-col gap-1 flex-shrink-0">
-                  <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide px-1 pb-1">Categorías</p>
-                  {COL_CATS.map(c => (
-                    <button key={c.label} onClick={() => setColCat(c.label)} className={catPillCls(c.label, colCat)}>
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex-1 p-3">
-                  <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-3">
-                    {colCat.toUpperCase()}
-                  </p>
-                  {colCat === 'Propiedades de evento: 1' && (
-                    <button className="flex items-center gap-2 w-full px-2 py-2 rounded-[6px] hover:bg-[#f7f7f5] text-[13px] text-[#1a1a1a]">
-                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6]"><path d="M2 12h2V8H2v4zm3 0h2V5H5v7zm3 0h2V2H8v10zm3 0h2V6h-2v6z"/></svg>
-                      Bot operator
-                    </button>
-                  )}
-                  {colCat !== 'Propiedades de evento: 1' && (
-                    <p className="text-[12px] text-[#9a9a98] text-center mt-6">Sin resultados</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-[#e9eae6] flex-shrink-0">
-            <button className="h-8 px-4 rounded-[6px] border border-[#e9eae6] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
-              Restablecer valores predeterminados
-            </button>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setShowConfigCols(false)}
-                className="h-8 px-4 rounded-[6px] border border-[#e9eae6] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
-                Cerrar
-              </button>
-              <button onClick={() => setShowConfigCols(false)}
-                className="h-8 px-4 rounded-[6px] border border-[#3b59f6] text-[13px] text-[#3b59f6] font-medium hover:bg-[#eff2ff] transition-colors">
-                Guardar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Export dropdown ───────────────────────────────────────────────────────
-  function ExportDropdown() {
-    const opts = ['Exportar columnas actuales','Exportar todas las columnas','Copiar al portapapeles'];
-    return (
-      <>
-        <Backdrop onClose={() => setShowExport(false)} />
-        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-[220px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden py-1">
-          {opts.map(o => (
-            <button key={o} onClick={() => setShowExport(false)}
-              className="w-full flex items-center justify-between px-4 py-[8px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
-              {o}
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98]" strokeWidth="1.5">
-                <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-          ))}
-        </div>
-      </>
-    );
-  }
-
-  // ── Open as insight dropdown ──────────────────────────────────────────────
-  function InsightDropdown() {
-    return (
-      <>
-        <Backdrop onClose={() => setShowInsight(false)} />
-        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-[190px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden py-1">
-          <button onClick={() => setShowInsight(false)}
-            className="w-full text-left px-4 py-[8px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
-            Abrir en editor SQL
-          </button>
-        </div>
-      </>
-    );
-  }
-
-  // ── View selector dropdown ────────────────────────────────────────────────
-  function ViewDropdown() {
-    return (
-      <>
-        <Backdrop onClose={() => setShowViewDrop(false)} />
-        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-[220px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(20,20,20,0.14)] border border-[#e9eae6] overflow-hidden py-1">
-          <button className="w-full flex items-center gap-2 px-4 py-[8px] text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] font-medium">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#3b59f6] flex-shrink-0"><path d="M13 4L6 11 3 8l-1 1 4 4 8-8z"/></svg>
-            Vista predeterminada de Clain
-          </button>
-          <div className="border-t border-[#e9eae6] my-0.5" />
-          <button className="w-full text-left px-4 py-[8px] text-[13px] text-[#646462] hover:bg-[#f7f7f5]">Mis vistas guardadas...</button>
-          <button className="w-full text-left px-4 py-[8px] text-[13px] text-[#3b59f6] hover:bg-[#eff2ff] font-medium">+ Crear nueva vista</button>
-        </div>
-      </>
-    );
-  }
-
-  // ── Tab icon ──────────────────────────────────────────────────────────────
-  function TabIcon() {
-    if (tab === 'sessions') return (
-      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
-        <circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2.5"/>
-      </svg>
-    );
-    if (tab === 'live') return (
-      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
-        <path d="M1 8c1-2 2.5-3 4-3s3 2 4 2 3-1 4-3" strokeLinecap="round"/>
-        <path d="M3.5 11c.8-1.5 2-2.5 3.5-2.5s2.7 1 3.5 2.5" strokeLinecap="round"/>
-        <circle cx="7.5" cy="12.5" r="1" fill="#1a1a1a" stroke="none"/>
-      </svg>
-    );
-    return (
-      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5">
-        <circle cx="8" cy="8" r="5.5"/><path d="M8 5.5V8.5L10 10" strokeLinecap="round"/>
-      </svg>
-    );
-  }
-
-  const headerTitle   = tab === 'sessions' ? 'Explorar sesiones' : 'Actividad';
-  const headerSub     = tab === 'sessions'
-    ? 'Un catálogo de todas las sesiones de usuario de tu app o sitio web.'
-    : 'Explora tus eventos o ve eventos en tiempo real de tu app o sitio web.';
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ DateRangePicker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ActivityDateRangePicker({ value, onChange }: { value: DateRange; onChange: (d: DateRange) => void }) {
+  const [open,       setOpen]       = React.useState(false);
+  const [customMode, setCustomMode] = React.useState(false);
+  const [from,       setFrom]       = React.useState('');
+  const [to,         setTo]         = React.useState('');
+  const ref = useClickOutside<HTMLDivElement>(() => { setOpen(false); setCustomMode(false); });
 
   return (
-    <div className="flex-1 flex flex-col bg-[#f9f9f8] min-h-0 overflow-hidden">
-
-      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center bg-white border-b border-[#e9eae6] px-4 flex-shrink-0">
-        {([
-          { id: 'events',   label: 'Eventos',  icon: (
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-              <circle cx="8" cy="8" r="5.5"/><path d="M8 5.5V8.5L10 10" strokeLinecap="round"/>
-            </svg>
-          )},
-          { id: 'sessions', label: 'Sesiones', icon: (
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-              <circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2.5"/>
-            </svg>
-          )},
-          { id: 'live',     label: 'En vivo',  icon: (
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
-              <path d="M1 8c1-2 2.5-3 4-3s3 2 4 2 3-1 4-3" strokeLinecap="round"/>
-              <path d="M3.5 11c.8-1.5 2-2.5 3.5-2.5s2.7 1 3.5 2.5" strokeLinecap="round"/>
-              <circle cx="7.5" cy="12.5" r="1" fill="currentColor" stroke="none"/>
-            </svg>
-          )},
-        ] as { id: string; label: string; icon: React.ReactNode }[]).map(t => (
-          <button key={t.id} onClick={() => { setTab(t.id as ActivityTab); closeAll(); }}
-            className={`flex items-center gap-1.5 px-4 py-3 text-[13px] font-medium border-b-2 transition-colors -mb-px ${
-              tab === t.id
-                ? 'border-[#3b59f6] text-[#3b59f6]'
-                : 'border-transparent text-[#646462] hover:text-[#1a1a1a] hover:border-[#e9eae6]'
-            }`}>
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Main content ─────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto p-3 min-h-0">
-        <div className="bg-white rounded-[12px] border border-[#e9eae6] overflow-visible">
-
-          {/* Header */}
-          <div className="px-5 pt-4 pb-3">
-            <div className="flex items-start justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <TabIcon />
-                <h2 className="text-[17px] font-bold text-[#1a1a1a]">{headerTitle}</h2>
-                <button className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#f3f3f1] text-[#9a9a98] hover:text-[#1a1a1a] transition-colors">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="flex items-center gap-2 h-8 px-3 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f7f7f5] transition-colors">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5.5V8.5L10 10" strokeLinecap="round"/></svg>
-                  Inicio rápido
-                  <span className="bg-[#e88c30] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">ON</span>
-                </button>
-                <button className="w-8 h-8 flex items-center justify-center rounded-[6px] border border-[#e9eae6] hover:bg-[#f7f7f5] transition-colors text-[#646462]">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M3 8h10" strokeLinecap="round"/></svg>
-                </button>
-                <button className="w-8 h-8 flex items-center justify-center rounded-[6px] border border-[#e9eae6] hover:bg-[#f7f7f5] transition-colors text-[#646462]">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
-                </button>
-              </div>
-            </div>
-            <p className="text-[13px] text-[#646462]">{headerSub}</p>
-          </div>
-
-          {/* ── Filters ─────────────────────────────────────────────────── */}
-          {tab !== 'live' ? (
-            <div className="px-5 pb-3 border-t border-[#f3f3f1] pt-3 flex flex-col gap-2">
-              {/* Row 1 */}
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* Date */}
-                  <div className="relative">
-                    <button onClick={() => { closeAll(); setShowDatePicker(v => !v); }} className={btnFilter}>
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 7h12" strokeLinecap="round"/></svg>
-                      {dateRange}
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    {showDatePicker && <DatePickerDropdown />}
-                  </div>
-                  {/* Event */}
-                  <div className="relative">
-                    <button onClick={() => { closeAll(); setShowEventPicker(v => !v); }} className={btnFilter}>
-                      Seleccionar un evento
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    {showEventPicker && <EventSelectorDropdown />}
-                  </div>
-                  {/* Property filters */}
-                  <div className="relative">
-                    <button onClick={() => { closeAll(); setShowPropFilter(v => !v); }} className={btnFilter}>
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/></svg>
-                      + Filtros de propiedad
-                    </button>
-                    {showPropFilter && <PropertyFilterDropdown />}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* Toggle */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] text-[#646462]">Filtrar usuarios internos</span>
-                    <button onClick={() => setFilterInternal(v => !v)}
-                      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${filterInternal ? 'bg-[#3b59f6]' : 'bg-[#d4d4d2]'}`}>
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${filterInternal ? 'translate-x-[18px]' : 'translate-x-0.5'}`}/>
-                    </button>
-                  </div>
-                  {/* View dropdown */}
-                  {tab === 'events' && (
-                    <div className="relative">
-                      <button onClick={() => { closeAll(); setShowViewDrop(v => !v); }} className={btnFilter}>
-                        Vista predeterminada
-                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </button>
-                      {showViewDrop && <ViewDropdown />}
-                    </div>
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7] transition-colors"
+      >
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]">
+          <rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/>
+          <path d="M2 6h12M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        </svg>
+        <span>{value.label}</span>
+        <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 w-64 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1 max-h-[420px] overflow-y-auto">
+          {!customMode ? (
+            <>
+              {DATE_PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  onClick={() => { onChange(p); setOpen(false); }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[#f9f9f7] transition-colors ${value.label === p.label ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a18]'}`}
+                >
+                  {value.label === p.label && (
+                    <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   )}
-                </div>
-              </div>
-              {/* Row 2 */}
-              <div className="flex items-center justify-between">
-                <button className={btnFilter}>
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 8A5 5 0 103 8M3 5v3H6"/></svg>
-                  Recargar
+                  <span className={value.label === p.label ? '' : 'ml-5'}>{p.label}</span>
                 </button>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => { closeAll(); setShowConfigCols(true); }} className={btnFilter}>
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 4h12M2 8h8M2 12h5" strokeLinecap="round"/></svg>
-                    Configurar columnas
-                  </button>
-                  {/* Export split button */}
-                  <div className="flex relative">
-                    <button className={`${btnFilter} rounded-r-none border-r-0`}>
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v7M5 6l3 3 3-3M3 12v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>
-                      Exportar
-                    </button>
-                    <button onClick={() => { closeAll(); setShowExport(v => !v); }} className={`${btnFilter} rounded-l-none px-2`}>
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    {showExport && <ExportDropdown />}
-                  </div>
-                  {/* Insight split button */}
-                  <div className="flex relative">
-                    <button className={`${btnFilter} rounded-r-none border-r-0`}>
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 7h12" strokeLinecap="round"/><path d="M7 3v10" strokeLinecap="round"/></svg>
-                      Abrir como nuevo insight
-                    </button>
-                    <button onClick={() => { closeAll(); setShowInsight(v => !v); }} className={`${btnFilter} rounded-l-none px-2`}>
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    {showInsight && <InsightDropdown />}
-                  </div>
-                </div>
+              ))}
+              <div className="border-t border-[#e9eae6] mt-1 pt-1">
+                <button onClick={() => setCustomMode(true)} className="w-full px-3 py-2 text-left text-sm text-[#3b59f6] hover:bg-[#f9f9f7]">Personalizadoâ€¦</button>
               </div>
-            </div>
+            </>
           ) : (
-            /* Live filters */
-            <div className="px-5 pb-3 border-t border-[#f3f3f1] pt-3 flex items-center justify-end gap-2">
-              <button className="w-8 h-8 flex items-center justify-center rounded-[6px] border border-[#e9eae6] hover:bg-[#f7f7f5] transition-colors text-[#646462]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 8A5 5 0 103 8M3 5v3H6"/></svg>
-              </button>
-              <button className={btnFilter}>
-                Filtrar por evento
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-              <button className={btnFilter}>
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/></svg>
-                + Filtrar por propiedad
-              </button>
-              <button onClick={() => setLivePaused(v => !v)} className={`${btnFilter} font-medium`}>
-                {livePaused
-                  ? <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 3l9 5-9 5V3z"/></svg>Reanudar</>
-                  : <><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg>Pausar</>
-                }
-              </button>
+            <div className="p-3">
+              <p className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Rango personalizado</p>
+              <label className="block text-xs text-[#646462] mb-1">Desde</label>
+              <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="w-full px-2 py-1.5 mb-3 border border-[#e9eae6] rounded text-sm focus:outline-none focus:border-[#3b59f6]" />
+              <label className="block text-xs text-[#646462] mb-1">Hasta</label>
+              <input type="date" value={to} onChange={e => setTo(e.target.value)} className="w-full px-2 py-1.5 mb-3 border border-[#e9eae6] rounded text-sm focus:outline-none focus:border-[#3b59f6]" />
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setCustomMode(false)} className="px-3 py-1.5 text-xs text-[#646462] hover:bg-[#f9f9f7] rounded">Cancelar</button>
+                <button
+                  disabled={!from || !to}
+                  onClick={() => { onChange({ label: `${from} â†’ ${to}`, after: from, before: to }); setOpen(false); setCustomMode(false); }}
+                  className="px-3 py-1.5 text-xs bg-[#1a1a18] text-white rounded disabled:opacity-30 hover:bg-[#333]"
+                >Aplicar</button>
+              </div>
             </div>
           )}
-
-          {/* ── Table ───────────────────────────────────────────────────── */}
-          <div className="border-t border-[#e9eae6] overflow-x-auto">
-            {tab === 'events' && (
-              <table className="w-full text-[12px] min-w-[700px]">
-                <thead><tr>
-                  <ColHeader label="Evento"/><ColHeader label="Persona"/>
-                  <ColHeader label="URL / Pantalla"/><ColHeader label="Librería"/><ColHeader label="Tiempo"/>
-                </tr></thead>
-                <tbody><EmptyState cols={5}/></tbody>
-              </table>
-            )}
-            {tab === 'sessions' && (
-              <table className="w-full text-[12px] min-w-[900px]">
-                <thead><tr>
-                  <ColHeader label="ID de sesión"/><ColHeader label="ID Distinct"/>
-                  <ColHeader label="Hora inicio"/><ColHeader label="Hora fin"/>
-                  <ColHeader label="Duración"/><ColHeader label="URL de entrada"/>
-                  <ColHeader label="Páginas vistas"/><ColHeader label="Rebote"/>
-                </tr></thead>
-                <tbody><EmptyState cols={8}/></tbody>
-              </table>
-            )}
-            {tab === 'live' && (
-              <table className="w-full text-[12px] min-w-[600px]">
-                <thead><tr>
-                  <ColHeader label="Evento"/>
-                  <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">
-                    <span className="flex items-center gap-1">
-                      ID Distinct de persona
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
-                    </span>
-                  </th>
-                  <ColHeader label="URL / Pantalla"/><ColHeader label="Tiempo"/>
-                </tr></thead>
-                <tbody><WaitingState /></tbody>
-              </table>
-            )}
-          </div>
         </div>
-      </div>
-
-      {/* ── Configure columns modal (portal-like, outside card) ─────────── */}
-      {showConfigCols && <ConfigColumnsModal />}
+      )}
     </div>
   );
 }
 
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ EventPicker (autocomplete from /event_definitions/) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ActivityEventPicker({ value, onChange }: { value: string | null; onChange: (e: string | null) => void }) {
+  const [open,    setOpen]    = React.useState(false);
+  const [search,  setSearch]  = React.useState('');
+  const [defs,    setDefs]    = React.useState<EventDefinition[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
 
-// ── Clain mascot SVG (replaces PostHog hedgehog in onboarding cards) ─────────
-function ClainMascot({ size = 72, variant = 'default' }: { size?: number; variant?: 'default' | 'reading' | 'suit' }) {
-  // Simple friendly robot mascot in Clain blue palette
-  const s = size;
-  if (variant === 'reading') return (
-    <svg viewBox="0 0 80 80" width={s} height={s} fill="none" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="40" cy="60" rx="24" ry="14" fill="#c7d2fe"/>
-      <rect x="20" y="24" width="40" height="32" rx="12" fill="#eff2ff"/>
-      <rect x="20" y="24" width="40" height="32" rx="12" stroke="#c7d2fe" strokeWidth="1.5"/>
-      <circle cx="32" cy="38" r="3" fill="#3b59f6"/>
-      <circle cx="48" cy="38" r="3" fill="#3b59f6"/>
-      <path d="M33 46 Q40 50 47 46" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-      <rect x="26" y="54" width="28" height="10" rx="3" fill="#e0e7ff"/>
-      <path d="M30 59h20M30 62h14" stroke="#a5b4fc" strokeWidth="1.2" strokeLinecap="round"/>
-      <path d="M40 14 L36 24 L44 24z" fill="#c7d2fe"/>
-    </svg>
-  );
-  if (variant === 'suit') return (
-    <svg viewBox="0 0 80 80" width={s} height={s} fill="none" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="40" cy="60" rx="22" ry="14" fill="#1e3a8a"/>
-      <rect x="22" y="22" width="36" height="30" rx="10" fill="#eff2ff"/>
-      <rect x="22" y="22" width="36" height="30" rx="10" stroke="#c7d2fe" strokeWidth="1.5"/>
-      <circle cx="33" cy="36" r="2.5" fill="#3b59f6"/>
-      <circle cx="47" cy="36" r="2.5" fill="#3b59f6"/>
-      <path d="M34 44 Q40 48 46 44" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-      <rect x="30" y="52" width="20" height="20" rx="4" fill="#1e3a8a"/>
-      <path d="M37 52 L40 58 L43 52" fill="#eff2ff"/>
-      <rect x="38" y="58" width="4" height="10" rx="1" fill="#c7d2fe"/>
-      <path d="M38 13 Q40 8 42 13" stroke="#c7d2fe" strokeWidth="2" strokeLinecap="round" fill="none"/>
-    </svg>
-  );
-  // default
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.eventDefinitions.list({ search, limit: 100 });
+        if (!cancelled) setDefs(res.results ?? []);
+      } catch { if (!cancelled) setDefs([]); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [open, search]);
+
   return (
-    <svg viewBox="0 0 80 80" width={s} height={s} fill="none" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="40" cy="62" rx="24" ry="13" fill="#c7d2fe"/>
-      <rect x="18" y="22" width="44" height="34" rx="14" fill="#eff2ff"/>
-      <rect x="18" y="22" width="44" height="34" rx="14" stroke="#c7d2fe" strokeWidth="1.5"/>
-      <circle cx="31" cy="38" r="3.5" fill="#3b59f6"/>
-      <circle cx="49" cy="38" r="3.5" fill="#3b59f6"/>
-      <circle cx="32" cy="37" r="1" fill="white"/>
-      <circle cx="50" cy="37" r="1" fill="white"/>
-      <path d="M33 46 Q40 51 47 46" stroke="#3b59f6" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
-      <path d="M40 12 L36 22 L44 22z" fill="#c7d2fe"/>
-      <ellipse cx="29" cy="63" rx="8" ry="5" fill="#a5b4fc"/>
-      <ellipse cx="51" cy="63" rx="8" ry="5" fill="#a5b4fc"/>
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7] transition-colors"
+      >
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+        <span>{value ?? 'Seleccionar un evento'}</span>
+        <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white border border-[#e9eae6] rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-[#e9eae6]">
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar eventosâ€¦"
+              className="w-full px-2.5 py-1.5 bg-[#f9f9f7] border border-[#e9eae6] rounded text-sm focus:outline-none focus:border-[#3b59f6]"
+            />
+          </div>
+          <div className="max-h-80 overflow-y-auto py-1">
+            <button
+              onClick={() => { onChange(null); setOpen(false); }}
+              className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f9f9f7] flex items-center gap-2 ${!value ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a18]'}`}
+            >
+              <span className="text-[#646462] italic">Todos los eventos</span>
+            </button>
+            {loading ? (
+              <div className="px-3 py-4 text-sm text-[#9ca3af] text-center">Cargandoâ€¦</div>
+            ) : defs.length === 0 ? (
+              <div className="px-3 py-4 text-sm text-[#9ca3af] text-center">Sin resultados</div>
+            ) : (
+              defs.map(d => (
+                <button
+                  key={d.id}
+                  onClick={() => { onChange(d.name); setOpen(false); }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f9f9f7] flex items-center justify-between ${value === d.name ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a18]'}`}
+                >
+                  <span className="truncate">{d.name}</span>
+                  {d.query_usage_30_day ? <span className="text-[10px] text-[#9ca3af] ml-2">{d.query_usage_30_day}</span> : null}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ PropertyFilterBar (chip + builder) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function PropertyFilterBar({ filters, onChange }: { filters: PropertyFilter[]; onChange: (f: PropertyFilter[]) => void }) {
+  const [open,    setOpen]    = React.useState(false);
+  const [props,   setProps]   = React.useState<PropertyDefinition[]>([]);
+  const [search,  setSearch]  = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [editing, setEditing] = React.useState<PropertyFilter | null>(null);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.propertyDefinitions.list({ search, limit: 100 });
+        if (!cancelled) setProps(res.results ?? []);
+      } catch { if (!cancelled) setProps([]); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [open, search]);
+
+  function removeFilter(idx: number) {
+    onChange(filters.filter((_, i) => i !== idx));
+  }
+  function updateFilter(idx: number, patch: Partial<PropertyFilter>) {
+    onChange(filters.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
+  }
+
+  const OPERATORS: { key: PropertyFilter['operator']; label: string }[] = [
+    { key: 'exact',         label: '= igual a' },
+    { key: 'is_not',        label: 'â‰  no es' },
+    { key: 'icontains',     label: 'âˆ‹ contiene' },
+    { key: 'not_icontains', label: 'âˆŒ no contiene' },
+    { key: 'regex',         label: 'â¥‹ regex' },
+    { key: 'gt',            label: '> mayor que' },
+    { key: 'lt',            label: '< menor que' },
+    { key: 'is_set',        label: 'âˆƒ estÃ¡ definido' },
+    { key: 'is_not_set',    label: 'âˆ„ no estÃ¡ definido' },
+  ];
+
+  return (
+    <div className="relative inline-flex items-center gap-2 flex-wrap" ref={ref}>
+      {filters.map((f, i) => (
+        <div key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-[#eff2ff] border border-[#dbe3ff] rounded-md text-xs">
+          <span className="text-[#3b59f6] font-medium">{f.key}</span>
+          <select
+            value={f.operator}
+            onChange={e => updateFilter(i, { operator: e.target.value as PropertyFilter['operator'] })}
+            className="bg-transparent text-[#1a1a18] focus:outline-none cursor-pointer text-xs border-0 px-0"
+          >
+            {OPERATORS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+          {f.operator !== 'is_set' && f.operator !== 'is_not_set' && (
+            <input
+              value={Array.isArray(f.value) ? f.value.join(',') : (f.value ?? '')}
+              onChange={e => updateFilter(i, { value: e.target.value })}
+              placeholder="valor"
+              className="bg-white border border-[#dbe3ff] rounded px-1 py-0.5 text-xs w-24 focus:outline-none focus:border-[#3b59f6]"
+            />
+          )}
+          <button onClick={() => removeFilter(i)} className="text-[#9ca3af] hover:text-[#dc2626] ml-1">
+            <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      ))}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7] transition-colors"
+      >
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+        + Filtros de propiedad
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white border border-[#e9eae6] rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-[#e9eae6]">
+            <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar propiedadesâ€¦" className="w-full px-2.5 py-1.5 bg-[#f9f9f7] border border-[#e9eae6] rounded text-sm focus:outline-none focus:border-[#3b59f6]" />
+          </div>
+          <div className="max-h-80 overflow-y-auto py-1">
+            {loading ? (
+              <div className="px-3 py-4 text-sm text-[#9ca3af] text-center">Cargandoâ€¦</div>
+            ) : props.length === 0 ? (
+              <div className="px-3 py-4 text-sm text-[#9ca3af] text-center">Sin resultados</div>
+            ) : (
+              props.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => { onChange([...filters, { key: p.name, operator: 'exact', value: '', type: 'event' }]); setOpen(false); }}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-[#f9f9f7] flex items-center justify-between"
+                >
+                  <span className="truncate text-[#1a1a18]">{p.name}</span>
+                  <span className="text-[10px] text-[#9ca3af] ml-2 uppercase">{p.property_type ?? 'str'}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ ColumnConfigurator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const AVAILABLE_COLUMNS: { key: string; label: string }[] = [
+  { key: 'event',                  label: 'Evento' },
+  { key: 'person',                 label: 'Persona' },
+  { key: 'url',                    label: 'URL / Pantalla' },
+  { key: 'library',                label: 'LibrerÃ­a' },
+  { key: 'timestamp',              label: 'Tiempo' },
+  { key: 'distinct_id',            label: 'Distinct ID' },
+  { key: 'properties.$browser',    label: 'Navegador' },
+  { key: 'properties.$os',         label: 'Sistema operativo' },
+  { key: 'properties.$device_type',label: 'Tipo de dispositivo' },
+  { key: 'properties.$country',    label: 'PaÃ­s (GeoIP)' },
+  { key: 'properties.$referrer',   label: 'Referrer' },
+  { key: 'properties.$session_id', label: 'ID de sesiÃ³n' },
+];
+
+function ColumnConfigurator({ cols, onChange }: { cols: string[]; onChange: (c: string[]) => void }) {
+  const [open,   setOpen]   = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+
+  function toggle(key: string) {
+    onChange(cols.includes(key) ? cols.filter(c => c !== key) : [...cols, key]);
+  }
+
+  const filtered = AVAILABLE_COLUMNS.filter(c => c.label.toLowerCase().includes(search.toLowerCase()) || c.key.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7] transition-colors">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+        Configurar columnas
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-white border border-[#e9eae6] rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-[#e9eae6]">
+            <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar columnasâ€¦" className="w-full px-2.5 py-1.5 bg-[#f9f9f7] border border-[#e9eae6] rounded text-sm focus:outline-none focus:border-[#3b59f6]" />
+          </div>
+          <div className="max-h-80 overflow-y-auto py-1">
+            {filtered.map(c => (
+              <label key={c.key} className="flex items-center gap-2 px-3 py-2 hover:bg-[#f9f9f7] cursor-pointer">
+                <input type="checkbox" checked={cols.includes(c.key)} onChange={() => toggle(c.key)} className="accent-[#3b59f6]" />
+                <span className="text-sm text-[#1a1a18]">{c.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="px-3 py-2 border-t border-[#e9eae6] flex justify-between">
+            <button onClick={() => onChange(DEFAULT_EVENT_COLS)} className="text-xs text-[#646462] hover:text-[#1a1a18]">Restaurar</button>
+            <button onClick={() => setOpen(false)} className="text-xs text-[#3b59f6] font-medium">Hecho</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ ExportMenu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ExportMenu({ onExport }: { onExport: (fmt: 'csv' | 'json' | 'xlsx') => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  return (
+    <div className="relative inline-flex" ref={ref}>
+      <button onClick={() => onExport('csv')} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-l-lg border-r-0 text-sm text-[#1a1a18] hover:bg-[#f9f9f7] transition-colors">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><path d="M8 2v8M5 7l3 3 3-3M2 13h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        Exportar
+      </button>
+      <button onClick={() => setOpen(o => !o)} className="px-2 py-1.5 bg-white border border-[#e9eae6] rounded-r-lg hover:bg-[#f9f9f7] transition-colors">
+        <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1">
+          {[
+            { fmt: 'csv',  label: 'CSV (.csv)' },
+            { fmt: 'json', label: 'JSON (.json)' },
+            { fmt: 'xlsx', label: 'Excel (.xlsx)' },
+          ].map(o => (
+            <button key={o.fmt} onClick={() => { onExport(o.fmt as any); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[#f9f9f7]">{o.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ SavedViewsMenu (Vista predeterminada) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SavedViewsMenu({ current, views, onApply, onSave, onDelete }: {
+  current: SavedView | null;
+  views: SavedView[];
+  onApply: (v: SavedView) => void;
+  onSave: (name: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [open,   setOpen]   = React.useState(false);
+  const [naming, setNaming] = React.useState(false);
+  const [name,   setName]   = React.useState('');
+  const ref = useClickOutside<HTMLDivElement>(() => { setOpen(false); setNaming(false); });
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7] transition-colors">
+        <span>{current?.name ?? 'Vista predeterminada'}</span>
+        <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-white border border-[#e9eae6] rounded-xl shadow-lg overflow-hidden">
+          <div className="px-3 py-2 border-b border-[#e9eae6] text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest">Vistas guardadas</div>
+          {views.length === 0 ? (
+            <div className="px-3 py-4 text-sm text-[#9ca3af] text-center">Sin vistas guardadas</div>
+          ) : views.map(v => (
+            <div key={v.id} className="flex items-center group hover:bg-[#f9f9f7]">
+              <button onClick={() => { onApply(v); setOpen(false); }} className="flex-1 text-left px-3 py-2 text-sm text-[#1a1a18]">{v.name}</button>
+              <button onClick={() => onDelete(v.id)} className="opacity-0 group-hover:opacity-100 px-2 text-[#9ca3af] hover:text-[#dc2626]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          ))}
+          <div className="border-t border-[#e9eae6]">
+            {naming ? (
+              <div className="p-2 flex gap-1.5">
+                <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && name.trim()) { onSave(name.trim()); setName(''); setNaming(false); setOpen(false); } }} placeholder="Nombreâ€¦" className="flex-1 px-2 py-1 border border-[#e9eae6] rounded text-sm focus:outline-none focus:border-[#3b59f6]" />
+                <button disabled={!name.trim()} onClick={() => { onSave(name.trim()); setName(''); setNaming(false); setOpen(false); }} className="px-2 py-1 bg-[#1a1a18] text-white rounded text-xs disabled:opacity-30">OK</button>
+              </div>
+            ) : (
+              <button onClick={() => setNaming(true)} className="w-full px-3 py-2 text-left text-sm text-[#3b59f6] hover:bg-[#f9f9f7]">+ Guardar vista actual</button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ QuickStartPanel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function QuickStartPanel({ open, onClose, onPickRecipe }: { open: boolean; onClose: () => void; onPickRecipe: (event: string | null) => void }) {
+  if (!open) return null;
+  const RECIPES = [
+    { icon: 'ðŸ–±',  title: 'PÃ¡ginas vistas',      event: '$pageview',  desc: 'Cada vez que un usuario carga una pÃ¡gina.' },
+    { icon: 'ðŸ‘¤',  title: 'Identificaciones',     event: '$identify',  desc: 'Cuando un visitante anÃ³nimo se identifica.' },
+    { icon: 'ðŸŽ¯',  title: 'Clics rastreados',     event: '$autocapture', desc: 'Clics, envÃ­os y cambios capturados automÃ¡ticamente.' },
+    { icon: 'ðŸ’³',  title: 'Errores de cliente',   event: '$exception', desc: 'Errores JavaScript capturados por la SDK.' },
+    { icon: 'ðŸš€',  title: 'Eventos personalizados', event: null,        desc: 'Tus propios eventos `posthog.capture(...)`.' },
+  ];
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[640px] max-w-[92vw] max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-[#1a1a18]">Inicio rÃ¡pido</h2>
+            <p className="text-xs text-[#646462] mt-0.5">Empieza a explorar tus datos en un clic.</p>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-3">
+          {RECIPES.map(r => (
+            <button
+              key={r.title}
+              onClick={() => { onPickRecipe(r.event); onClose(); }}
+              className="text-left p-4 border border-[#e9eae6] rounded-xl hover:border-[#3b59f6] hover:shadow-sm transition-all"
+            >
+              <div className="text-2xl mb-2">{r.icon}</div>
+              <h3 className="text-sm font-semibold text-[#1a1a18] mb-1">{r.title}</h3>
+              <p className="text-xs text-[#646462]">{r.desc}</p>
+              {r.event && <code className="block mt-2 text-[10px] bg-[#f3f3f1] text-[#e8572a] px-1.5 py-0.5 rounded font-mono w-fit">{r.event}</code>}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ EventDetailDrawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function EventDetailDrawer({ row, onClose }: { row: EventRow | null; onClose: () => void }) {
+  if (!row) return null;
+  const props = row.properties || {};
+  const sortedKeys = Object.keys(props).sort();
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[560px] max-w-[92vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-mono text-[#3b59f6]">{row.event}</h2>
+            <p className="text-xs text-[#646462] mt-0.5">{formatTime(row.timestamp)}</p>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <section>
+            <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Persona</h3>
+            <div className="bg-[#f9f9f7] rounded-lg px-3 py-2 text-sm">
+              <p className="font-mono text-[#1a1a18] truncate">{row.distinct_id}</p>
+              {row.person?.is_identified && <span className="inline-block mt-1 text-[10px] bg-[#3b59f6] text-white px-1.5 py-0.5 rounded">Identificada</span>}
+            </div>
+          </section>
+          <section>
+            <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Propiedades ({sortedKeys.length})</h3>
+            <div className="space-y-1">
+              {sortedKeys.map(k => (
+                <div key={k} className="flex items-start gap-2 py-1.5 border-b border-[#f3f3f1] text-xs">
+                  <span className="font-mono text-[#3b59f6] flex-shrink-0 w-1/3 truncate" title={k}>{k}</span>
+                  <span className="text-[#1a1a18] flex-1 break-all">{typeof props[k] === 'object' ? JSON.stringify(props[k]) : String(props[k])}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Empty state lock icon â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ActivityEmptyLock() {
+  return (
+    <svg viewBox="0 0 60 60" className="w-12 h-12 mb-3">
+      <rect x="14" y="26" width="32" height="24" rx="3" fill="none" stroke="#c4c4be" strokeWidth="2"/>
+      <path d="M22 26v-6a8 8 0 1116 0v6" fill="none" stroke="#c4c4be" strokeWidth="2" strokeLinecap="round"/>
+      <circle cx="30" cy="36" r="2.5" fill="#c4c4be"/>
+      <path d="M30 38v5" stroke="#c4c4be" strokeWidth="2" strokeLinecap="round"/>
     </svg>
+  );
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â”€â”€ Main: WAActivityView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function WAActivityView() {
+  const [tab,        setTab]        = React.useState<ActivityTab>('events');
+  const [dateRange,  setDateRange]  = React.useState<DateRange>(DATE_PRESETS[2]); // Ãšltima hora
+  const [eventName,  setEventName]  = React.useState<string | null>(null);
+  const [propFilters, setPropFilters] = React.useState<PropertyFilter[]>([]);
+  const [filterInternal, setFilterInternal] = React.useState(true);
+  const [columns,    setColumns]    = React.useState<string[]>(DEFAULT_EVENT_COLS);
+  const [showQuickStart, setShowQuickStart] = React.useState(false);
+  const [selected,   setSelected]   = React.useState<EventRow | null>(null);
+  const [savedViews, setSavedViews] = React.useState<SavedView[]>([]);
+  const [currentView, setCurrentView] = React.useState<SavedView | null>(null);
+
+  // Events table state
+  const [events,        setEvents]        = React.useState<EventRow[]>([]);
+  const [eventsLoading, setEventsLoading] = React.useState(false);
+  const [eventsError,   setEventsError]   = React.useState<string | null>(null);
+  const [hasMore,       setHasMore]       = React.useState(false);
+
+  // Sessions table state
+  const [sessions,        setSessions]        = React.useState<SessionRow[]>([]);
+  const [sessionsLoading, setSessionsLoading] = React.useState(false);
+  const [sessionsError,   setSessionsError]   = React.useState<string | null>(null);
+
+  // Live tail state
+  const [liveEvents, setLiveEvents] = React.useState<EventRow[]>([]);
+  const [livePaused, setLivePaused] = React.useState(false);
+  const [liveStarted, setLiveStarted] = React.useState(false);
+  const livePollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const liveCursorRef = React.useRef<string>(new Date().toISOString());
+
+  // â”€â”€ Persist saved views in localStorage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('wa-activity-saved-views');
+      if (raw) setSavedViews(JSON.parse(raw));
+    } catch {}
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-activity-saved-views', JSON.stringify(savedViews)); } catch {}
+  }, [savedViews]);
+
+  // â”€â”€ Build EventsQuery payload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const buildEventsQuery = React.useCallback((limit = 100) => {
+    const properties = propFilters.map(f => ({
+      key:      f.key,
+      operator: f.operator,
+      value:    f.value,
+      type:     f.type,
+    }));
+    if (filterInternal) {
+      properties.push({ key: '$is_internal', operator: 'is_not' as any, value: 'true', type: 'event' as any });
+    }
+    return {
+      query: {
+        kind:       'EventsQuery',
+        select:     ['*', 'event', 'person', 'properties.$current_url', 'properties.$lib', 'timestamp'],
+        orderBy:    ['timestamp DESC'],
+        after:      dateRange.after === 'all' ? undefined : dateRange.after,
+        before:     dateRange.before,
+        event:      eventName,
+        properties,
+        limit,
+      },
+    };
+  }, [dateRange, eventName, propFilters, filterInternal]);
+
+  // â”€â”€ Fetch events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const loadEvents = React.useCallback(async () => {
+    setEventsLoading(true);
+    setEventsError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const res: any = await ph.posthog.events.query(buildEventsQuery(100));
+      // EventsQuery returns { results: [ [row0col0, row0col1, ...], ... ], columns: [...] }
+      const rows = (res.results ?? []).map((r: any[]) => {
+        const obj = r[0] || {};
+        return {
+          uuid:        obj.uuid,
+          event:       obj.event,
+          distinct_id: obj.distinct_id,
+          timestamp:   obj.timestamp,
+          properties:  obj.properties ?? {},
+          person:      obj.person ?? null,
+        } as EventRow;
+      });
+      setEvents(rows);
+      setHasMore(rows.length >= 100);
+    } catch (e: any) {
+      setEventsError(e?.message ?? 'Error al cargar eventos');
+    } finally {
+      setEventsLoading(false);
+    }
+  }, [buildEventsQuery]);
+
+  // â”€â”€ Fetch sessions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const loadSessions = React.useCallback(async () => {
+    setSessionsLoading(true);
+    setSessionsError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const hogql = `
+        SELECT
+          session_id,
+          any(distinct_id)                   AS distinct_id,
+          min(timestamp)                      AS start_time,
+          max(timestamp)                      AS end_time,
+          dateDiff('second', min(timestamp), max(timestamp)) AS duration,
+          argMin(properties.$current_url, timestamp)         AS entry_url,
+          countIf(event = '$pageview')                       AS pageview_count,
+          countIf(event = '$pageview') <= 1                  AS bounce
+        FROM events
+        WHERE session_id != '' AND timestamp >= now() - INTERVAL ${dateRange.after === '-1h' ? '1 HOUR' : '7 DAY'}
+        GROUP BY session_id
+        ORDER BY start_time DESC
+        LIMIT 100
+      `;
+      const res: any = await ph.posthog.sessions.query({ query: { kind: 'HogQLQuery', query: hogql } });
+      const cols = res.columns ?? [];
+      const idx  = (n: string) => cols.indexOf(n);
+      const rows = (res.results ?? []).map((r: any[]) => ({
+        session_id:     r[idx('session_id')],
+        distinct_id:    r[idx('distinct_id')],
+        start_time:     r[idx('start_time')],
+        end_time:       r[idx('end_time')],
+        duration:       r[idx('duration')],
+        entry_url:      r[idx('entry_url')],
+        pageview_count: r[idx('pageview_count')],
+        bounce:         r[idx('bounce')],
+      } as SessionRow));
+      setSessions(rows);
+    } catch (e: any) {
+      setSessionsError(e?.message ?? 'Error al cargar sesiones');
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [dateRange]);
+
+  // â”€â”€ Live polling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const pollLive = React.useCallback(async () => {
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const res: any = await ph.posthog.events.list({
+        after: liveCursorRef.current,
+        limit: 30,
+        event: eventName ?? undefined,
+      });
+      const newRows: EventRow[] = (res.results ?? []).map((r: any) => ({
+        uuid:        r.id,
+        event:       r.event,
+        distinct_id: r.distinct_id,
+        timestamp:   r.timestamp,
+        properties:  r.properties ?? {},
+        person:      r.person ?? null,
+      }));
+      if (newRows.length > 0) {
+        liveCursorRef.current = newRows[0].timestamp;
+        setLiveEvents(prev => [...newRows, ...prev].slice(0, 200));
+      }
+    } catch { /* silent */ }
+  }, [eventName]);
+
+  // â”€â”€ Tab activation effects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  React.useEffect(() => {
+    if (tab === 'events')   loadEvents();
+    if (tab === 'sessions') loadSessions();
+  }, [tab, loadEvents, loadSessions]);
+
+  // Reload on filter change
+  React.useEffect(() => {
+    if (tab === 'events')   loadEvents();
+    if (tab === 'sessions') loadSessions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, eventName, propFilters, filterInternal]);
+
+  // Live tab â€” start/stop polling
+  React.useEffect(() => {
+    if (tab !== 'live') {
+      if (livePollRef.current) { clearInterval(livePollRef.current); livePollRef.current = null; }
+      return;
+    }
+    if (livePaused) {
+      if (livePollRef.current) { clearInterval(livePollRef.current); livePollRef.current = null; }
+      return;
+    }
+    if (!liveStarted) {
+      liveCursorRef.current = new Date(Date.now() - 60_000).toISOString();
+      setLiveStarted(true);
+    }
+    pollLive();
+    livePollRef.current = setInterval(pollLive, 2000);
+    return () => {
+      if (livePollRef.current) { clearInterval(livePollRef.current); livePollRef.current = null; }
+    };
+  }, [tab, livePaused, liveStarted, pollLive]);
+
+  // â”€â”€ Saved view actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function saveCurrentView(name: string) {
+    const v: SavedView = {
+      id: crypto.randomUUID(),
+      name,
+      date: dateRange,
+      event: eventName,
+      props: propFilters,
+      cols: columns,
+    };
+    setSavedViews(prev => [...prev, v]);
+    setCurrentView(v);
+  }
+  function applyView(v: SavedView) {
+    setDateRange(v.date); setEventName(v.event); setPropFilters(v.props); setColumns(v.cols);
+    setCurrentView(v);
+  }
+  function deleteView(id: string) {
+    setSavedViews(prev => prev.filter(v => v.id !== id));
+    if (currentView?.id === id) setCurrentView(null);
+  }
+
+  // â”€â”€ Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function handleExport(fmt: 'csv' | 'json' | 'xlsx') {
+    if (tab === 'events') {
+      if (fmt === 'json') {
+        const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = `eventos-${Date.now()}.json`; a.click();
+      } else {
+        downloadCSV(`eventos-${Date.now()}.${fmt === 'xlsx' ? 'csv' : 'csv'}`, events, [
+          { key: 'event',       label: 'Evento',     get: (r: EventRow) => r.event },
+          { key: 'distinct_id', label: 'Distinct ID', get: (r: EventRow) => r.distinct_id },
+          { key: 'url',         label: 'URL',         get: (r: EventRow) => r.properties.$current_url ?? r.properties.$screen_name ?? '' },
+          { key: 'library',     label: 'LibrerÃ­a',    get: (r: EventRow) => r.properties.$lib ?? '' },
+          { key: 'timestamp',   label: 'Tiempo',      get: (r: EventRow) => r.timestamp },
+        ]);
+      }
+    } else if (tab === 'sessions') {
+      downloadCSV(`sesiones-${Date.now()}.csv`, sessions, [
+        { key: 'session_id',     label: 'ID SesiÃ³n',  get: (r: SessionRow) => r.session_id },
+        { key: 'distinct_id',    label: 'Distinct ID', get: (r: SessionRow) => r.distinct_id },
+        { key: 'start_time',     label: 'Inicio',     get: (r: SessionRow) => r.start_time },
+        { key: 'end_time',       label: 'Fin',        get: (r: SessionRow) => r.end_time },
+        { key: 'duration',       label: 'DuraciÃ³n (s)', get: (r: SessionRow) => r.duration },
+        { key: 'entry_url',      label: 'URL entrada', get: (r: SessionRow) => r.entry_url },
+        { key: 'pageview_count', label: 'PÃ¡ginas vistas', get: (r: SessionRow) => r.pageview_count },
+      ]);
+    }
+  }
+
+  // â”€â”€ Tab definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const TABS: { key: ActivityTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'events',   label: 'Eventos',  icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> },
+    { key: 'sessions', label: 'Sesiones', icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2.5" fill="currentColor"/></svg> },
+    { key: 'live',     label: 'En vivo',  icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M2 10c2-4 5-6 6-6s4 2 6 6" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="8" cy="11.5" r="1.5" fill="currentColor"/></svg> },
+  ];
+
+  const titleByTab: Record<ActivityTab, { title: string; desc: string }> = {
+    events:   { title: 'Actividad',         desc: 'Explora tus eventos o ve eventos en tiempo real de tu app o sitio web.' },
+    sessions: { title: 'Explorar sesiones', desc: 'Un catÃ¡logo de todas las sesiones de usuario de tu app o sitio web.' },
+    live:     { title: 'Actividad',         desc: 'Explora tus eventos o ve eventos en tiempo real de tu app o sitio web.' },
+  };
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  return (
+    <div className="flex flex-col flex-1 min-h-0 bg-[#f9f9f7]">
+      {/* Tabs bar */}
+      <div className="flex items-center gap-1 px-6 pt-3 border-b border-[#e9eae6] bg-white flex-shrink-0">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === t.key ? 'border-[#3b59f6] text-[#3b59f6]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-auto p-6 min-h-0">
+        <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+          {/* Header */}
+          <div className="px-5 pt-4 pb-3 border-b border-[#e9eae6]">
+            <div className="flex items-start justify-between mb-1">
+              <div className="flex items-center gap-2">
+                {tab === 'live' ? (
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#3b59f6]"><path d="M2 10c2-4 5-6 6-6s4 2 6 6" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="8" cy="11.5" r="1.5" fill="currentColor"/></svg>
+                ) : tab === 'sessions' ? (
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#646462]"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2.5" fill="currentColor"/></svg>
+                ) : (
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#646462]"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                )}
+                <h1 className="text-base font-bold text-[#1a1a18]">{titleByTab[tab].title}</h1>
+                <button className="text-[#9ca3af] hover:text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowQuickStart(true)} className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-[#e9eae6] rounded-md text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  Inicio rÃ¡pido
+                  <span className="bg-[#f59e0b] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">ON</span>
+                </button>
+                <button className="p-1 bg-white border border-[#e9eae6] rounded-md text-[#646462] hover:bg-[#f9f9f7]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                </button>
+                <button className="p-1 bg-white border border-[#e9eae6] rounded-md text-[#646462] hover:bg-[#f9f9f7]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><rect x="2" y="2" width="5" height="5" fill="currentColor"/><rect x="9" y="2" width="5" height="5" fill="currentColor"/><rect x="2" y="9" width="5" height="5" fill="currentColor"/><rect x="9" y="9" width="5" height="5" fill="currentColor"/></svg>
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-[#646462]">{titleByTab[tab].desc}</p>
+          </div>
+
+          {/* Toolbar: filters */}
+          {tab !== 'live' ? (
+            <div className="px-5 py-3 border-b border-[#e9eae6] flex flex-wrap items-center gap-2">
+              <ActivityDateRangePicker value={dateRange} onChange={setDateRange} />
+              <ActivityEventPicker value={eventName} onChange={setEventName} />
+              <PropertyFilterBar filters={propFilters} onChange={setPropFilters} />
+              <div className="ml-auto flex items-center gap-3">
+                <label className="flex items-center gap-2 text-xs text-[#646462] cursor-pointer">
+                  Filtrar usuarios internos
+                  <button
+                    onClick={() => setFilterInternal(v => !v)}
+                    className={`relative w-8 h-4 rounded-full transition-colors ${filterInternal ? 'bg-[#3b59f6]' : 'bg-[#e9eae6]'}`}
+                  >
+                    <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${filterInternal ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                </label>
+                <SavedViewsMenu current={currentView} views={savedViews} onApply={applyView} onSave={saveCurrentView} onDelete={deleteView} />
+              </div>
+            </div>
+          ) : (
+            <div className="px-5 py-3 border-b border-[#e9eae6] flex flex-wrap items-center gap-2">
+              <button onClick={() => { setLiveEvents([]); liveCursorRef.current = new Date().toISOString(); }} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+              </button>
+              <div className="ml-auto flex items-center gap-2">
+                <ActivityEventPicker value={eventName} onChange={setEventName} />
+                <PropertyFilterBar filters={propFilters} onChange={setPropFilters} />
+                <button
+                  onClick={() => setLivePaused(p => !p)}
+                  className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-sm transition-colors ${livePaused ? 'bg-[#3b59f6] text-white border-[#3b59f6] hover:bg-[#2a44d6]' : 'bg-white border-[#e9eae6] text-[#1a1a18] hover:bg-[#f9f9f7]'}`}
+                >
+                  {livePaused ? (
+                    <>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                      Reanudar
+                    </>
+                  ) : (
+                    <>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+                      Pausar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Toolbar: actions */}
+          {tab !== 'live' && (
+            <div className="px-5 py-2 border-b border-[#e9eae6] flex flex-wrap items-center gap-2">
+              <button onClick={() => tab === 'events' ? loadEvents() : loadSessions()} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                Recargar
+              </button>
+              <div className="ml-auto flex items-center gap-2">
+                {tab === 'events' && <ColumnConfigurator cols={columns} onChange={setColumns} />}
+                <ExportMenu onExport={handleExport} />
+                <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12M6 2v12" stroke="currentColor" strokeWidth="1.3"/></svg>
+                  Abrir como nuevo insight
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Body */}
+          {tab === 'events' && (
+            <EventsTable
+              rows={events}
+              loading={eventsLoading}
+              error={eventsError}
+              columns={columns}
+              onRowClick={setSelected}
+              onRetry={loadEvents}
+            />
+          )}
+          {tab === 'sessions' && (
+            <SessionsTable
+              rows={sessions}
+              loading={sessionsLoading}
+              error={sessionsError}
+              onRetry={loadSessions}
+            />
+          )}
+          {tab === 'live' && (
+            <LiveStreamTable
+              rows={liveEvents}
+              paused={livePaused}
+              onRowClick={setSelected}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Modals / drawers */}
+      <QuickStartPanel
+        open={showQuickStart}
+        onClose={() => setShowQuickStart(false)}
+        onPickRecipe={(ev) => { setEventName(ev); setTab('events'); }}
+      />
+      <EventDetailDrawer row={selected} onClose={() => setSelected(null)} />
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ EventsTable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function EventsTable({ rows, loading, error, columns, onRowClick, onRetry }: {
+  rows: EventRow[];
+  loading: boolean;
+  error: string | null;
+  columns: string[];
+  onRowClick: (r: EventRow) => void;
+  onRetry: () => void;
+}) {
+  function getCell(row: EventRow, col: string): React.ReactNode {
+    switch (col) {
+      case 'event':
+        return <span className="font-mono text-xs text-[#3b59f6]">{row.event}</span>;
+      case 'person': {
+        const email = row.person?.properties?.email;
+        const name  = row.person?.properties?.name;
+        const label = name || email || row.distinct_id;
+        return (
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-6 h-6 rounded-full bg-[#e8572a]/10 text-[#e8572a] flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+              {String(label)[0]?.toUpperCase() ?? '?'}
+            </div>
+            <span className="truncate text-xs text-[#1a1a18]" title={String(label)}>{label}</span>
+          </div>
+        );
+      }
+      case 'url':
+        return <span className="text-xs text-[#646462] truncate block max-w-xs" title={row.properties.$current_url}>{row.properties.$current_url ?? row.properties.$screen_name ?? 'â€”'}</span>;
+      case 'library':
+        return <span className="text-xs text-[#646462]">{row.properties.$lib ?? 'â€”'}</span>;
+      case 'timestamp':
+        return <span className="text-xs text-[#646462]" title={formatTime(row.timestamp)}>{formatRelativeTime(row.timestamp)}</span>;
+      case 'distinct_id':
+        return <span className="font-mono text-xs text-[#646462] truncate block max-w-xs">{row.distinct_id}</span>;
+      default:
+        if (col.startsWith('properties.')) {
+          const key = col.slice('properties.'.length);
+          const v   = row.properties[key];
+          return <span className="text-xs text-[#646462]">{v == null ? 'â€”' : typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>;
+        }
+        return null;
+    }
+  }
+
+  const colLabels: Record<string, string> = Object.fromEntries(AVAILABLE_COLUMNS.map(c => [c.key, c.label]));
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-[#e9eae6] bg-[#f9f9f7]">
+            {columns.map(c => (
+              <th key={c} className="text-left px-5 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">
+                <div className="flex items-center gap-1">
+                  {colLabels[c] ?? c}
+                  <button className="text-[#c4c4be] hover:text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3 h-3"><circle cx="4" cy="8" r="1" fill="currentColor"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>
+                  </button>
+                </div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            Array.from({ length: 8 }).map((_, i) => (
+              <tr key={i} className="border-b border-[#f3f3f1]">
+                {columns.map(c => <td key={c} className="px-5 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${50 + (i % 4) * 12}%` }} /></td>)}
+              </tr>
+            ))
+          ) : error ? (
+            <tr><td colSpan={columns.length} className="py-16">
+              <div className="flex flex-col items-center text-center px-6">
+                <ActivityEmptyLock />
+                <p className="text-sm font-semibold text-[#1a1a18] mb-1">Error al cargar eventos</p>
+                <p className="text-xs text-[#646462] mb-3 max-w-md break-words">{error}</p>
+                <button onClick={onRetry} className="px-3 py-1.5 bg-[#1a1a18] text-white rounded-lg text-sm hover:bg-[#333]">Reintentar</button>
+              </div>
+            </td></tr>
+          ) : rows.length === 0 ? (
+            <tr><td colSpan={columns.length} className="py-16">
+              <div className="flex flex-col items-center text-center px-6">
+                <ActivityEmptyLock />
+                <p className="text-sm font-semibold text-[#1a1a18] mb-1">No hay eventos que coincidan con esta consulta</p>
+                <p className="text-xs text-[#646462]">Cambia el rango de fechas, o elige otra acciÃ³n, evento o desglose.</p>
+              </div>
+            </td></tr>
+          ) : (
+            rows.map(r => (
+              <tr key={r.uuid} onClick={() => onRowClick(r)} className="border-b border-[#f3f3f1] hover:bg-[#f9f9f7] cursor-pointer">
+                {columns.map(c => <td key={c} className="px-5 py-2.5">{getCell(r, c)}</td>)}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ SessionsTable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SessionsTable({ rows, loading, error, onRetry }: {
+  rows: SessionRow[];
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  const COLS = [
+    { key: 'session_id',     label: 'ID de sesiÃ³n' },
+    { key: 'distinct_id',    label: 'ID Distinct' },
+    { key: 'start_time',     label: 'Hora inicio' },
+    { key: 'end_time',       label: 'Hora fin' },
+    { key: 'duration',       label: 'DuraciÃ³n' },
+    { key: 'entry_url',      label: 'URL de entrada' },
+    { key: 'pageview_count', label: 'PÃ¡ginas vistas' },
+    { key: 'bounce',         label: 'Rebote' },
+  ];
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-[#e9eae6] bg-[#f9f9f7]">
+            {COLS.map(c => (
+              <th key={c.key} className="text-left px-5 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            Array.from({ length: 8 }).map((_, i) => (
+              <tr key={i} className="border-b border-[#f3f3f1]">
+                {COLS.map(c => <td key={c.key} className="px-5 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${50 + (i % 4) * 12}%` }} /></td>)}
+              </tr>
+            ))
+          ) : error ? (
+            <tr><td colSpan={COLS.length} className="py-16">
+              <div className="flex flex-col items-center text-center px-6">
+                <ActivityEmptyLock />
+                <p className="text-sm font-semibold text-[#1a1a18] mb-1">Error al cargar sesiones</p>
+                <p className="text-xs text-[#646462] mb-3 max-w-md break-words">{error}</p>
+                <button onClick={onRetry} className="px-3 py-1.5 bg-[#1a1a18] text-white rounded-lg text-sm hover:bg-[#333]">Reintentar</button>
+              </div>
+            </td></tr>
+          ) : rows.length === 0 ? (
+            <tr><td colSpan={COLS.length} className="py-16">
+              <div className="flex flex-col items-center text-center px-6">
+                <ActivityEmptyLock />
+                <p className="text-sm font-semibold text-[#1a1a18] mb-1">No hay eventos que coincidan con esta consulta</p>
+                <p className="text-xs text-[#646462]">Cambia el rango de fechas, o elige otra acciÃ³n, evento o desglose.</p>
+              </div>
+            </td></tr>
+          ) : (
+            rows.map(r => (
+              <tr key={r.session_id} className="border-b border-[#f3f3f1] hover:bg-[#f9f9f7] cursor-pointer">
+                <td className="px-5 py-2.5 font-mono text-xs text-[#3b59f6] truncate max-w-[180px]" title={r.session_id}>{r.session_id?.slice(0, 8)}â€¦</td>
+                <td className="px-5 py-2.5 font-mono text-xs text-[#646462] truncate max-w-[140px]">{r.distinct_id}</td>
+                <td className="px-5 py-2.5 text-xs text-[#646462]" title={formatTime(r.start_time)}>{formatRelativeTime(r.start_time)}</td>
+                <td className="px-5 py-2.5 text-xs text-[#646462]" title={formatTime(r.end_time)}>{formatRelativeTime(r.end_time)}</td>
+                <td className="px-5 py-2.5 text-xs text-[#1a1a18]">{formatDuration(r.duration)}</td>
+                <td className="px-5 py-2.5 text-xs text-[#646462] truncate max-w-xs" title={r.entry_url}>{r.entry_url || 'â€”'}</td>
+                <td className="px-5 py-2.5 text-xs text-[#1a1a18]">{r.pageview_count}</td>
+                <td className="px-5 py-2.5 text-xs">
+                  {r.bounce ? (
+                    <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded">SÃ­</span>
+                  ) : (
+                    <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">No</span>
+                  )}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ LiveStreamTable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function LiveStreamTable({ rows, paused, onRowClick }: {
+  rows: EventRow[];
+  paused: boolean;
+  onRowClick: (r: EventRow) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-[#e9eae6] bg-[#f9f9f7]">
+            <th className="text-left px-5 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Evento</th>
+            <th className="text-left px-5 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">
+              <div className="flex items-center gap-1">
+                ID distinct de persona
+                <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#c4c4be]"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 7v4M8 5h.01" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              </div>
+            </th>
+            <th className="text-left px-5 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">URL / Pantalla</th>
+            <th className="text-left px-5 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Tiempo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={4} className="py-16">
+              <div className="flex flex-col items-center text-center px-6">
+                {paused ? (
+                  <>
+                    <svg viewBox="0 0 24 24" className="w-10 h-10 text-[#c4c4be] mb-3"><rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/></svg>
+                    <p className="text-sm font-semibold text-[#1a1a18] mb-1">Stream en pausa</p>
+                    <p className="text-xs text-[#646462]">Pulsa "Reanudar" para recibir nuevos eventos.</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-8 h-8 mb-3 relative">
+                      <span className="absolute inset-0 rounded-full border-2 border-[#3b59f6] border-t-transparent animate-spin" />
+                    </div>
+                    <p className="text-sm font-semibold text-[#1a1a18]">Esperando eventosâ€¦</p>
+                  </>
+                )}
+              </div>
+            </td></tr>
+          ) : rows.map((r, i) => (
+            <tr
+              key={r.uuid ?? `${r.timestamp}-${i}`}
+              onClick={() => onRowClick(r)}
+              className={`border-b border-[#f3f3f1] hover:bg-[#f9f9f7] cursor-pointer ${i === 0 && !paused ? 'bg-[#eff2ff]/50 animate-[fadeIn_0.5s_ease]' : ''}`}
+            >
+              <td className="px-5 py-2.5"><span className="font-mono text-xs text-[#3b59f6]">{r.event}</span></td>
+              <td className="px-5 py-2.5 font-mono text-xs text-[#646462] truncate max-w-[200px]">{r.distinct_id}</td>
+              <td className="px-5 py-2.5 text-xs text-[#646462] truncate max-w-xs" title={r.properties.$current_url}>{r.properties.$current_url ?? r.properties.$screen_name ?? 'â€”'}</td>
+              <td className="px-5 py-2.5 text-xs text-[#646462]" title={formatTime(r.timestamp)}>{formatRelativeTime(r.timestamp)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -52412,6 +53036,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 

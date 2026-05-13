@@ -390,6 +390,35 @@ export const posthog = {
       phGet(`/api/environments/${_teamId}/event_definitions/`, params),
   },
 
+  // ── Property definitions ──────────────────────────────────────────────────
+  propertyDefinitions: {
+    list: (params?: any) =>
+      phGet(`/api/environments/${_teamId}/property_definitions/`, params),
+  },
+
+  // ── Raw events (live tail + classic API) ──────────────────────────────────
+  events: {
+    /** Classic events endpoint — supports `after` ISO timestamp for live tail. */
+    list: (params?: any) =>
+      phGet(`/api/environments/${_teamId}/events/`, params),
+    get: (id: string) =>
+      phGet(`/api/environments/${_teamId}/events/${id}/`),
+    /** HogQL EventsQuery — full power, supports filters/ordering/select. */
+    query: (data: any) =>
+      phPost(`/api/environments/${_teamId}/query/`, data),
+  },
+
+  // ── Sessions (via query endpoint) ─────────────────────────────────────────
+  sessions: {
+    /** Run a HogQL query that selects from the `sessions` table. */
+    query: (data: any) =>
+      phPost(`/api/environments/${_teamId}/query/`, data),
+  },
+
+  // ── Generic query runner (HogQL / EventsQuery / ActorsQuery / etc.) ──────
+  query: (data: any) =>
+    phPost(`/api/environments/${_teamId}/query/`, data),
+
   // ── Error tracking ────────────────────────────────────────────────────────
   errorTracking: {
     list: (params?: any) =>
