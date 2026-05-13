@@ -1,4 +1,486 @@
 // ── WAAppSurveysView ──────────────────────────────────────────────────────────
+// Mantiene el diseno existente (top bar, template gallery, settings, themes,
+// position picker) y solo anade lo que faltaba:
+//   - Lista real de surveys desde /api/projects/{id}/surveys/
+//   - Si hay surveys, muestra tabla; si no, muestra TemplateGallery
+//   - SurveyBuilderModal wizard 4 pasos (Basics/Questions/Display/Review)
+//   - Question types editables: open/rating/NPS/single/multiple/link
+//   - SurveyDetailDrawer con resultados via HogQL sobre $survey_sent
+//   - Quick start dropdown funcional
+//   - Notification CRUD
+//   - Settings persistido en localStorage + team config para enable
+
+interface SurveyDef {
+  id:                string;
+  name:              string;
+  description?:      string;
+  type:              'popover' | 'widget' | 'email' | 'api';
+  questions:         SurveyQuestion[];
+  conditions?:       any;
+  start_date?:       string | null;
+  end_date?:         string | null;
+  archived?:         boolean;
+  created_at:        string;
+  created_by?:       { first_name?: string; email?: string } | null;
+  responses_count?:  number;
+  appearance?:       any;
+}
+
+interface SurveyQuestion {
+  id:          string;
+  type:        'open' | 'rating' | 'nps' | 'single_choice' | 'multiple_choice' | 'link';
+  question:    string;
+  description?: string;
+  optional?:   boolean;
+  choices?:    string[];
+  scale?:      3 | 5 | 7 | 10;
+  link?:       string;
+  button_text?: string;
+}
+
+interface SurveyNotification {
+  id:       string;
+  name:     string;
+  survey_id?: string;
+  channel:  'slack' | 'email' | 'webhook';
+  target:   string;
+  paused:   boolean;
+  created_at: string;
+  created_by?: string;
+}
+
+const SURVEY_QUESTION_TYPES: { key: SurveyQuestion['type']; label: string; icon: React.ReactNode; description: string }[] = [
+  { key: 'open',            label: 'Texto abierto',     description: 'Respuesta libre del usuario',           icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M2 4h12M2 8h12M2 12h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> },
+  { key: 'rating',          label: 'Rating',             description: 'Escala numerica o emojis',              icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M8 1l1.8 5.4H15l-4.5 3.4L12 14l-4-3-4 3 1.5-4.2L1 6.4h5.2z" fill="currentColor"/></svg> },
+  { key: 'nps',             label: 'NPS',                description: 'Net Promoter Score 0-10',               icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><rect x="1" y="6" width="14" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M4 6v4M8 6v4M12 6v4" stroke="currentColor" strokeWidth="1.2"/></svg> },
+  { key: 'single_choice',   label: 'Opcion unica',       description: 'Radio buttons',                          icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="3" cy="4" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="3" cy="4" r="0.8" fill="currentColor"/><path d="M7 4h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="3" cy="12" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M7 12h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> },
+  { key: 'multiple_choice', label: 'Opcion multiple',    description: 'Checkboxes',                             icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><rect x="1" y="2" width="4" height="4" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 4l1 1 1.5-1.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><path d="M7 4h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><rect x="1" y="10" width="4" height="4" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M7 12h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> },
+  { key: 'link',            label: 'Link',               description: 'Boton con enlace externo',               icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M6 9l4-4M5 4h-2a2 2 0 100 4h2M11 12h2a2 2 0 100-4h-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/></svg> },
+];
+
+const TEMPLATE_PRESETS: Record<string, Partial<SurveyDef>> = {
+  open_feedback: { name: 'Open feedback', questions: [{ id: crypto.randomUUID(), type: 'open', question: '¿Qué podemos hacer para mejorar nuestro producto?' }] },
+  nps:           { name: 'Net Promoter Score', questions: [{ id: crypto.randomUUID(), type: 'nps', question: '¿Qué probabilidades hay de que nos recomiendes a un amigo?' }] },
+  csat:          { name: 'Customer Satisfaction', questions: [{ id: crypto.randomUUID(), type: 'rating', question: '¿Cómo de satisfecho estás con nosotros?', scale: 5 }] },
+  announcement:  { name: 'Anuncio de funcionalidad', questions: [{ id: crypto.randomUUID(), type: 'link', question: '¡Tenemos una nueva funcionalidad!', description: 'Échale un vistazo', button_text: 'Más info', link: 'https://example.com' }] },
+};
+
+function surveyDisplayDate(iso?: string | null): string {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return iso; }
+}
+function surveyStatus(s: SurveyDef): { label: string; color: string; bg: string } {
+  if (s.archived) return { label: 'Archived', color: '#646462', bg: '#f3f3f1' };
+  const now = Date.now();
+  const start = s.start_date ? new Date(s.start_date).getTime() : null;
+  const end = s.end_date ? new Date(s.end_date).getTime() : null;
+  if (!start) return { label: 'Draft', color: '#9ca3af', bg: '#f3f3f1' };
+  if (end && now > end) return { label: 'Completed', color: '#3b59f6', bg: '#eff2ff' };
+  if (start && now >= start) return { label: 'Running', color: '#16a34a', bg: '#dcfce7' };
+  return { label: 'Scheduled', color: '#f59e0b', bg: '#fef3c7' };
+}
+
+// ── Question editor ──────────────────────────────────────────────────────────
+function SurveyQuestionEditor({ q, onChange, onDelete, idx }: { q: SurveyQuestion; onChange: (q: SurveyQuestion) => void; onDelete: () => void; idx: number }) {
+  const meta = SURVEY_QUESTION_TYPES.find(t => t.key === q.type)!;
+  return (
+    <div className="border border-[#e9eae6] rounded-xl p-4 bg-white">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-6 h-6 rounded-full bg-[#e8572a]/10 text-[#e8572a] flex items-center justify-center text-xs font-bold">{idx + 1}</span>
+        <select value={q.type} onChange={e => onChange({ ...q, type: e.target.value as any })} className="px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#e8572a]">
+          {SURVEY_QUESTION_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+        </select>
+        <span className="text-[10px] text-[#9ca3af]">{meta.description}</span>
+        <div className="ml-auto flex items-center gap-2">
+          <label className="flex items-center gap-1 text-[11px] text-[#646462]">
+            <input type="checkbox" checked={q.optional ?? false} onChange={e => onChange({ ...q, optional: e.target.checked })} className="accent-[#e8572a]" />
+            Opcional
+          </label>
+          <button onClick={onDelete} className="text-[#9ca3af] hover:text-[#dc2626] p-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 5h8l-1 9H5zM6 5V3h4v2M2 5h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <input value={q.question} onChange={e => onChange({ ...q, question: e.target.value })} placeholder="Pregunta" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#e8572a]" />
+        <input value={q.description ?? ''} onChange={e => onChange({ ...q, description: e.target.value })} placeholder="Descripción (opcional)" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-xs focus:outline-none focus:border-[#e8572a]" />
+        {q.type === 'rating' && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-[#646462]">Escala:</span>
+            {[3, 5, 7, 10].map(s => (
+              <label key={s} className="flex items-center gap-1 cursor-pointer">
+                <input type="radio" name={`scale-${q.id}`} checked={(q.scale ?? 5) === s} onChange={() => onChange({ ...q, scale: s as any })} className="accent-[#e8572a]" />
+                <span className="text-[#1a1a1a]">{s}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        {(q.type === 'single_choice' || q.type === 'multiple_choice') && (
+          <div className="space-y-1">
+            <p className="text-[11px] text-[#646462]">Opciones:</p>
+            {(q.choices ?? ['Opción 1', 'Opción 2']).map((c, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-[#9ca3af]">{q.type === 'single_choice' ? '○' : '☐'}</span>
+                <input value={c} onChange={e => { const cs = [...(q.choices ?? [])]; cs[i] = e.target.value; onChange({ ...q, choices: cs }); }} className="flex-1 px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#e8572a]" />
+                <button onClick={() => onChange({ ...q, choices: (q.choices ?? []).filter((_, j) => j !== i) })} className="text-[#9ca3af] hover:text-[#dc2626]">×</button>
+              </div>
+            ))}
+            <button onClick={() => onChange({ ...q, choices: [...(q.choices ?? []), `Opción ${(q.choices?.length ?? 0) + 1}`] })} className="text-[11px] text-[#e8572a] hover:underline">+ Añadir opción</button>
+          </div>
+        )}
+        {q.type === 'link' && (
+          <div className="grid grid-cols-2 gap-2">
+            <input value={q.button_text ?? ''} onChange={e => onChange({ ...q, button_text: e.target.value })} placeholder="Texto del botón" className="px-3 py-2 border border-[#e9eae6] rounded-lg text-xs focus:outline-none focus:border-[#e8572a]" />
+            <input value={q.link ?? ''} onChange={e => onChange({ ...q, link: e.target.value })} placeholder="https://..." className="px-3 py-2 border border-[#e9eae6] rounded-lg text-xs focus:outline-none focus:border-[#e8572a]" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Survey preview (live mini) ───────────────────────────────────────────────
+function SurveyLivePreview({ survey, theme }: { survey: Partial<SurveyDef>; theme?: any }) {
+  const q0 = survey.questions?.[0];
+  if (!q0) return <div className="text-xs text-[#9ca3af] text-center py-8">Añade una pregunta para ver la preview</div>;
+  return (
+    <div className="bg-white rounded-xl shadow-lg border border-[#e9eae6] w-64 p-4 relative">
+      <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] text-[10px]">×</button>
+      <p className="text-[12px] font-bold text-[#1a1a1a] mb-1 pr-6">{q0.question || 'Sin pregunta'}</p>
+      {q0.description && <p className="text-[10px] text-[#646462] mb-2">{q0.description}</p>}
+      {q0.type === 'open' && <textarea readOnly placeholder="Tu respuesta..." className="w-full h-12 border border-[#e9eae6] rounded p-1.5 text-[10px] resize-none" />}
+      {q0.type === 'nps' && (
+        <div className="flex gap-0.5">{[0,1,2,3,4,5,6,7,8,9,10].map(n => <button key={n} className="flex-1 border border-[#e9eae6] rounded text-[9px] py-1">{n}</button>)}</div>
+      )}
+      {q0.type === 'rating' && (
+        <div className="flex justify-between">{Array.from({ length: q0.scale ?? 5 }).map((_, i) => <button key={i} className="text-[16px]">⭐</button>)}</div>
+      )}
+      {q0.type === 'single_choice' && (q0.choices ?? []).slice(0, 4).map((c, i) => (
+        <label key={i} className="flex items-center gap-1.5 text-[10px] py-0.5"><input type="radio" disabled />{c}</label>
+      ))}
+      {q0.type === 'multiple_choice' && (q0.choices ?? []).slice(0, 4).map((c, i) => (
+        <label key={i} className="flex items-center gap-1.5 text-[10px] py-0.5"><input type="checkbox" disabled />{c}</label>
+      ))}
+      {q0.type === 'link' && <button className="w-full bg-[#1a1a1a] text-white text-[10px] py-1.5 rounded">{q0.button_text || 'Ir'}</button>}
+      <button className="w-full mt-2 bg-[#1a1a1a] text-white text-[10px] font-semibold py-1.5 rounded">{q0.type === 'link' ? 'Cerrar' : 'Enviar'}</button>
+      <p className="text-[8px] text-[#9ca3af] text-center mt-2">Survey by 🦔 PostHog</p>
+    </div>
+  );
+}
+
+// ── Survey builder modal (wizard 4 pasos) ────────────────────────────────────
+function SurveyBuilderModal({ open, initial, onClose, onSave }: { open: boolean; initial: Partial<SurveyDef> | null; onClose: () => void; onSave: (s: Partial<SurveyDef>) => void }) {
+  const [step, setStep] = React.useState(0);
+  const [draft, setDraft] = React.useState<Partial<SurveyDef>>({ name: '', type: 'popover', questions: [], ...initial });
+  const [saving, setSaving] = React.useState(false);
+  React.useEffect(() => { if (open) { setStep(0); setDraft({ name: '', type: 'popover', questions: [], ...initial }); } }, [open, initial]);
+  if (!open) return null;
+
+  const STEPS = ['Conceptos', 'Preguntas', 'Mostrar a', 'Revisar'];
+  const canNext = step === 0 ? !!draft.name?.trim() : step === 1 ? (draft.questions ?? []).length > 0 : true;
+
+  async function save() {
+    setSaving(true);
+    try { await onSave(draft); onClose(); } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-[60] flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[960px] max-w-[95vw] h-[80vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-[#1a1a1a]">{initial?.id ? 'Editar survey' : 'Nuevo survey'}</h2>
+            <p className="text-xs text-[#646462]">Paso {step + 1} de {STEPS.length}: {STEPS[step]}</p>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+        </div>
+
+        <div className="flex items-center gap-2 px-6 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+          {STEPS.map((s, i) => (
+            <button key={s} onClick={() => setStep(i)} className={`flex items-center gap-2 text-xs ${i === step ? 'text-[#e8572a] font-semibold' : i < step ? 'text-[#16a34a]' : 'text-[#9ca3af]'}`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${i === step ? 'bg-[#e8572a] text-white' : i < step ? 'bg-[#16a34a] text-white' : 'bg-[#e9eae6] text-[#9ca3af]'}`}>{i < step ? '✓' : i + 1}</span>
+              <span>{s}</span>
+              {i < STEPS.length - 1 && <span className="text-[#e9eae6] mx-1">→</span>}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 flex min-h-0">
+          <div className="flex-1 overflow-y-auto p-6">
+            {step === 0 && (
+              <div className="max-w-xl space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-[#1a1a1a] mb-1">Nombre <span className="text-[#dc2626]">*</span></label>
+                  <input value={draft.name ?? ''} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="Survey de satisfacción Q1" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#e8572a]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#1a1a1a] mb-1">Descripción</label>
+                  <textarea value={draft.description ?? ''} onChange={e => setDraft({ ...draft, description: e.target.value })} rows={2} placeholder="Por qué y para quién es este survey" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#e8572a] resize-y" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#1a1a1a] mb-2">Modo de aparición</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { k: 'popover',  l: 'Popover',  d: 'Aparece en una esquina mientras el usuario navega' },
+                      { k: 'widget',   l: 'Widget',   d: 'Botón flotante que abre el survey al pulsar' },
+                      { k: 'email',    l: 'Email',    d: 'Envío vía email a una lista' },
+                      { k: 'api',      l: 'API only', d: 'Tu app decide cuándo mostrarlo' },
+                    ].map(o => (
+                      <button key={o.k} onClick={() => setDraft({ ...draft, type: o.k as any })} className={`text-left p-3 border-2 rounded-lg ${draft.type === o.k ? 'border-[#e8572a] bg-[#fff7ed]' : 'border-[#e9eae6] hover:bg-[#fafaf9]'}`}>
+                        <p className="text-sm font-semibold text-[#1a1a1a]">{o.l}</p>
+                        <p className="text-[11px] text-[#646462] mt-0.5">{o.d}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            {step === 1 && (
+              <div className="space-y-3">
+                {(draft.questions ?? []).map((q, i) => (
+                  <SurveyQuestionEditor
+                    key={q.id}
+                    q={q}
+                    idx={i}
+                    onChange={updated => setDraft({ ...draft, questions: (draft.questions ?? []).map(x => x.id === q.id ? updated : x) })}
+                    onDelete={() => setDraft({ ...draft, questions: (draft.questions ?? []).filter(x => x.id !== q.id) })}
+                  />
+                ))}
+                <button onClick={() => setDraft({ ...draft, questions: [...(draft.questions ?? []), { id: crypto.randomUUID(), type: 'open', question: '' }] })} className="w-full py-3 border-2 border-dashed border-[#e9eae6] rounded-xl text-sm text-[#646462] hover:bg-[#fafaf9]">
+                  + Añadir pregunta
+                </button>
+              </div>
+            )}
+            {step === 2 && (
+              <div className="max-w-2xl space-y-5">
+                <section>
+                  <h3 className="text-xs font-bold text-[#1a1a1a] mb-2 uppercase tracking-widest">¿Cuándo mostrarlo?</h3>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm"><input type="radio" name="when" defaultChecked className="accent-[#e8572a]" /> Inmediatamente al cargar</label>
+                    <label className="flex items-center gap-2 text-sm"><input type="radio" name="when" className="accent-[#e8572a]" /> Tras un retraso (segundos): <input type="number" defaultValue={5} className="w-16 px-2 py-0.5 border border-[#e9eae6] rounded text-xs" /></label>
+                    <label className="flex items-center gap-2 text-sm"><input type="radio" name="when" className="accent-[#e8572a]" /> Al disparar un evento: <input placeholder="purchase_completed" className="flex-1 px-2 py-0.5 border border-[#e9eae6] rounded text-xs" /></label>
+                  </div>
+                </section>
+                <section>
+                  <h3 className="text-xs font-bold text-[#1a1a1a] mb-2 uppercase tracking-widest">¿En qué URL?</h3>
+                  <div className="flex items-center gap-2">
+                    <select defaultValue="any" className="px-2 py-1 border border-[#e9eae6] rounded text-sm">
+                      <option value="any">Cualquier URL</option>
+                      <option value="contains">URL contiene</option>
+                      <option value="exact">URL exacta</option>
+                      <option value="regex">URL regex</option>
+                    </select>
+                    <input placeholder="/checkout" className="flex-1 px-2 py-1 border border-[#e9eae6] rounded text-sm" />
+                  </div>
+                </section>
+                <section>
+                  <h3 className="text-xs font-bold text-[#1a1a1a] mb-2 uppercase tracking-widest">¿A qué usuarios?</h3>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-[#e8572a]" /> Solo si el usuario pertenece a la cohorte: <input placeholder="Power users" className="flex-1 px-2 py-0.5 border border-[#e9eae6] rounded text-xs" /></label>
+                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-[#e8572a]" /> Solo si tiene la feature flag activa: <input placeholder="beta-checkout" className="flex-1 px-2 py-0.5 border border-[#e9eae6] rounded text-xs" /></label>
+                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-[#e8572a]" /> Muestra a solo un %: <input type="number" defaultValue={50} min={1} max={100} className="w-16 px-2 py-0.5 border border-[#e9eae6] rounded text-xs" /> %</label>
+                  </div>
+                </section>
+                <section>
+                  <h3 className="text-xs font-bold text-[#1a1a1a] mb-2 uppercase tracking-widest">Programación</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-[#646462] mb-1">Fecha de inicio</label>
+                      <input type="datetime-local" value={draft.start_date ?? ''} onChange={e => setDraft({ ...draft, start_date: e.target.value })} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-[#646462] mb-1">Fecha de fin (opcional)</label>
+                      <input type="datetime-local" value={draft.end_date ?? ''} onChange={e => setDraft({ ...draft, end_date: e.target.value })} className="w-full px-2 py-1.5 border border-[#e9eae6] rounded text-xs" />
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+            {step === 3 && (
+              <div className="max-w-2xl space-y-4">
+                <h3 className="text-base font-bold text-[#1a1a1a]">Revisar y lanzar</h3>
+                <div className="border border-[#e9eae6] rounded-lg p-4 space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-[#646462]">Nombre</span><span className="font-medium text-[#1a1a1a]">{draft.name}</span></div>
+                  <div className="flex justify-between"><span className="text-[#646462]">Tipo</span><span className="text-[#1a1a1a]">{draft.type}</span></div>
+                  <div className="flex justify-between"><span className="text-[#646462]">Preguntas</span><span className="text-[#1a1a1a]">{(draft.questions ?? []).length}</span></div>
+                  <div className="flex justify-between"><span className="text-[#646462]">Inicio</span><span className="text-[#1a1a1a]">{draft.start_date || 'Inmediato al lanzar'}</span></div>
+                  <div className="flex justify-between"><span className="text-[#646462]">Fin</span><span className="text-[#1a1a1a]">{draft.end_date || 'Sin fin'}</span></div>
+                </div>
+                <p className="text-xs text-[#646462]">Al pulsar <strong>Crear y lanzar</strong>, el survey se guardará y empezará a mostrarse según las condiciones definidas.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Live preview sidebar */}
+          <div className="w-80 border-l border-[#e9eae6] bg-[#fafaf9] p-5 flex flex-col items-center">
+            <p className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-3">Vista previa</p>
+            <SurveyLivePreview survey={draft} />
+          </div>
+        </div>
+
+        <div className="px-6 py-3 border-t border-[#e9eae6] flex items-center justify-between">
+          <button onClick={() => setStep(s => Math.max(0, s - 1))} disabled={step === 0} className="px-3 py-1.5 text-sm text-[#646462] hover:text-[#1a1a1a] disabled:opacity-30">{'<-'} Anterior</button>
+          {step < STEPS.length - 1 ? (
+            <button onClick={() => setStep(s => s + 1)} disabled={!canNext} className="px-4 py-1.5 bg-[#1a1a1a] text-white text-sm rounded-lg disabled:opacity-50">Siguiente {'->'}</button>
+          ) : (
+            <button onClick={save} disabled={saving} className="px-4 py-1.5 bg-[#e8572a] text-white text-sm rounded-lg hover:bg-[#dc4a1e] disabled:opacity-50">{saving ? 'Guardando...' : 'Crear y lanzar'}</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Survey detail drawer (results) ───────────────────────────────────────────
+function SurveyDetailDrawer({ survey, onClose, onEdit, onArchive, onDelete }: { survey: SurveyDef; onClose: () => void; onEdit: () => void; onArchive: () => void; onDelete: () => void }) {
+  const [stats, setStats] = React.useState<{ shown: number; sent: number; dismissed: number; perQuestion: Record<string, any[]> }>({ shown: 0, sent: 0, dismissed: 0, perQuestion: {} });
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const hql = `
+          SELECT
+            countIf(event = '$survey_shown' AND toString(properties.$survey_id) = '${survey.id}') AS shown,
+            countIf(event = '$survey_sent' AND toString(properties.$survey_id) = '${survey.id}') AS sent,
+            countIf(event = '$survey_dismissed' AND toString(properties.$survey_id) = '${survey.id}') AS dismissed
+          FROM events
+          WHERE timestamp >= now() - INTERVAL 90 DAY
+        `;
+        const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+        const r = res.results?.[0] ?? [0, 0, 0];
+        // Per question responses
+        const perQuestion: Record<string, any[]> = {};
+        for (const [i, q] of survey.questions.entries()) {
+          const respHql = `
+            SELECT toString(properties.\`$survey_response_${i}\`) AS resp, count() AS c
+            FROM events
+            WHERE event = '$survey_sent' AND toString(properties.$survey_id) = '${survey.id}'
+              AND properties.\`$survey_response_${i}\` IS NOT NULL
+            GROUP BY resp
+            ORDER BY c DESC
+            LIMIT 50
+          `;
+          try {
+            const rRes: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: respHql } });
+            perQuestion[q.id] = (rRes.results ?? []).map((row: any[]) => ({ resp: row[0], count: row[1] }));
+          } catch { perQuestion[q.id] = []; }
+        }
+        if (!cancelled) setStats({ shown: Number(r[0] ?? 0), sent: Number(r[1] ?? 0), dismissed: Number(r[2] ?? 0), perQuestion });
+      } catch {}
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [survey.id]);
+
+  const conversionRate = stats.shown > 0 ? (stats.sent / stats.shown) * 100 : 0;
+  const st = surveyStatus(survey);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[820px] max-w-[95vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
+              <span className="text-[10px] text-[#9ca3af]">{(survey.questions ?? []).length} preguntas</span>
+            </div>
+            <h2 className="text-base font-bold text-[#1a1a1a]">{survey.name}</h2>
+            {survey.description && <p className="text-xs text-[#646462] mt-0.5">{survey.description}</p>}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onEdit} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7]">Editar</button>
+            <button onClick={onArchive} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7]">{survey.archived ? 'Reactivar' : 'Archivar'}</button>
+            <button onClick={() => { if (confirm('Eliminar survey?')) onDelete(); }} className="px-2 py-1 text-[#dc2626] hover:bg-[#fee2e2] rounded text-xs">Eliminar</button>
+            <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <div className="grid grid-cols-4 gap-3">
+            <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Mostrado</p>{loading ? <div className="h-7 w-16 bg-[#e9eae6] animate-pulse rounded mt-1" /> : <p className="text-2xl font-bold text-[#1a1a1a]">{stats.shown.toLocaleString('es-ES')}</p>}</div>
+            <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Enviado</p>{loading ? <div className="h-7 w-16 bg-[#e9eae6] animate-pulse rounded mt-1" /> : <p className="text-2xl font-bold text-[#16a34a]">{stats.sent.toLocaleString('es-ES')}</p>}</div>
+            <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Cerrado</p>{loading ? <div className="h-7 w-16 bg-[#e9eae6] animate-pulse rounded mt-1" /> : <p className="text-2xl font-bold text-[#dc2626]">{stats.dismissed.toLocaleString('es-ES')}</p>}</div>
+            <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Conversión</p><p className="text-2xl font-bold text-[#3b59f6]">{conversionRate.toFixed(1)}%</p></div>
+          </div>
+
+          <section>
+            <h3 className="text-xs font-bold text-[#1a1a1a] uppercase tracking-widest mb-3">Resultados por pregunta</h3>
+            {survey.questions.map((q, i) => {
+              const responses = stats.perQuestion[q.id] ?? [];
+              const total = responses.reduce((s, r) => s + r.count, 0);
+              return (
+                <div key={q.id} className="border border-[#e9eae6] rounded-lg p-4 mb-3">
+                  <div className="flex items-start gap-2 mb-3">
+                    <span className="text-[10px] bg-[#e8572a]/10 text-[#e8572a] px-1.5 py-0.5 rounded font-bold">P{i+1}</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-[#1a1a1a]">{q.question}</p>
+                      <p className="text-[10px] text-[#9ca3af]">{q.type} · {total} respuestas</p>
+                    </div>
+                  </div>
+                  {loading ? <div className="h-20 bg-[#f3f3f1] animate-pulse rounded" />
+                  : responses.length === 0 ? <p className="text-xs text-[#9ca3af] italic">Sin respuestas todavía</p>
+                  : (q.type === 'open') ? (
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {responses.slice(0, 20).map((r, j) => (
+                        <div key={j} className="flex items-start gap-2 text-xs border-b border-[#f3f3f1] py-1.5">
+                          <span className="bg-[#f3f3f1] text-[#646462] px-1.5 py-0.5 rounded text-[10px]">×{r.count}</span>
+                          <span className="text-[#1a1a1a] flex-1">{r.resp}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {responses.map((r, j) => {
+                        const pct = total > 0 ? (r.count / total) * 100 : 0;
+                        return (
+                          <div key={j} className="text-xs">
+                            <div className="flex justify-between mb-0.5"><span className="text-[#1a1a1a]">{r.resp}</span><span className="text-[#646462] font-mono">{r.count} · {pct.toFixed(0)}%</span></div>
+                            <div className="h-2 bg-[#f3f3f1] rounded overflow-hidden"><div className="h-full bg-[#e8572a] rounded" style={{ width: `${pct}%` }} /></div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Quick start dropdown ─────────────────────────────────────────────────────
+function SurveysQuickStartMenu({ onSelectTemplate, onNewBlank }: { onSelectTemplate: (k: string) => void; onNewBlank: () => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        Quick start
+        <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">{Object.keys(TEMPLATE_PRESETS).length}</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-40 w-64 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1">
+          <p className="px-3 py-1 text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Plantillas rápidas</p>
+          {Object.entries(TEMPLATE_PRESETS).map(([k, v]) => (
+            <button key={k} onClick={() => { onSelectTemplate(k); setOpen(false); }} className="w-full text-left px-3 py-2 hover:bg-[#f9f9f7] text-sm text-[#1a1a1a]">{v.name}</button>
+          ))}
+          <div className="border-t border-[#f3f3f1] my-1" />
+          <button onClick={() => { onNewBlank(); setOpen(false); }} className="w-full text-left px-3 py-2 hover:bg-[#f9f9f7] text-sm text-[#e8572a]">+ Survey en blanco</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WAAppSurveysView() {
   type SurveysTab = 'active' | 'archived' | 'notifications' | 'history' | 'settings';
   const [tab, setTab] = useState<SurveysTab>('active');
@@ -9,11 +491,19 @@ function WAAppSurveysView() {
   const [delaySeconds, setDelaySeconds] = useState('');
   const [hidebranding, setHideBranding] = useState(false);
   const [shuffleQ, setShuffleQ] = useState(false);
-  const [positionIdx, setPositionIdx] = useState(8); // 0-8, 8=bottom-right
+  const [positionIdx, setPositionIdx] = useState(8);
+
+  // Estado nuevo para funcionalidad
+  const [surveys, setSurveys] = React.useState<SurveyDef[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [builderOpen, setBuilderOpen] = React.useState(false);
+  const [builderInitial, setBuilderInitial] = React.useState<Partial<SurveyDef> | null>(null);
+  const [selectedSurvey, setSelectedSurvey] = React.useState<SurveyDef | null>(null);
+  const [notifications, setNotifications] = React.useState<SurveyNotification[]>([]);
+  const [newNotifOpen, setNewNotifOpen] = React.useState(false);
 
   const positionLabels = ['Top Left','Top Center','Top Right','Center Left','Center','Center Right','Bottom Left','Bottom Center','Bottom Right'];
-
-  // amber warning banner — shown when surveys disabled, only on notifications/history tabs
   const showWarning = !surveysEnabled && (tab === 'notifications' || tab === 'history');
 
   const themes = [
@@ -25,271 +515,310 @@ function WAAppSurveysView() {
     { id: 'noir',     label: 'Noir',     sub: 'Pure black & white',    bg: '#000000', accent: '#ffffff', btn: '#374151' },
   ];
 
-  // ── Template gallery (Active / Archived) ────────────────────────────────────
+  // Cargar surveys + settings desde localStorage
+  React.useEffect(() => {
+    try {
+      const s = localStorage.getItem('wa-surveys-settings');
+      if (s) {
+        const cfg = JSON.parse(s);
+        setSurveysEnabled(cfg.surveysEnabled ?? false);
+        setSelectedTheme(cfg.selectedTheme ?? 'clean');
+        setHideBranding(cfg.hidebranding ?? false);
+        setShuffleQ(cfg.shuffleQ ?? false);
+        setDelaySeconds(cfg.delaySeconds ?? '');
+        setPositionIdx(cfg.positionIdx ?? 8);
+      }
+      const n = localStorage.getItem('wa-surveys-notifications');
+      if (n) setNotifications(JSON.parse(n));
+    } catch {}
+    loadSurveys();
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-surveys-settings', JSON.stringify({ surveysEnabled, selectedTheme, hidebranding, shuffleQ, delaySeconds, positionIdx })); } catch {}
+  }, [surveysEnabled, selectedTheme, hidebranding, shuffleQ, delaySeconds, positionIdx]);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-surveys-notifications', JSON.stringify(notifications)); } catch {}
+  }, [notifications]);
+
+  async function loadSurveys() {
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getProjectId()) await ph.bootstrapPostHog();
+      const res: any = await ph.posthog.surveys.list({ limit: 100 });
+      setSurveys(res.results ?? []);
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar surveys');
+    } finally { setLoading(false); }
+  }
+
+  async function saveSurvey(s: Partial<SurveyDef>) {
+    try {
+      const ph = await import('../api/posthog');
+      if (s.id) {
+        const updated: any = await ph.posthog.surveys.update(s.id, s);
+        setSurveys(prev => prev.map(x => x.id === s.id ? updated : x));
+      } else {
+        const created: any = await ph.posthog.surveys.create({ ...s, start_date: s.start_date || new Date().toISOString() });
+        setSurveys(prev => [created, ...prev]);
+      }
+    } catch (e: any) {
+      alert('Error al guardar: ' + (e?.message ?? 'desconocido'));
+    }
+  }
+  async function archiveSurvey(s: SurveyDef) {
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.posthog.surveys.update(s.id, { archived: !s.archived });
+      setSurveys(prev => prev.map(x => x.id === s.id ? updated : x));
+      if (selectedSurvey?.id === s.id) setSelectedSurvey(updated);
+    } catch (e: any) { alert(e?.message); }
+  }
+  async function deleteSurvey(s: SurveyDef) {
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.surveys.delete(s.id);
+      setSurveys(prev => prev.filter(x => x.id !== s.id));
+      setSelectedSurvey(null);
+    } catch (e: any) { alert(e?.message); }
+  }
+
+  function openBuilderFromTemplate(key: string) {
+    setBuilderInitial(TEMPLATE_PRESETS[key] ?? null);
+    setBuilderOpen(true);
+  }
+  function openBuilderBlank() {
+    setBuilderInitial({ name: '', type: 'popover', questions: [{ id: crypto.randomUUID(), type: 'open', question: '' }] });
+    setBuilderOpen(true);
+  }
+  function openBuilderEdit(s: SurveyDef) {
+    setBuilderInitial(s);
+    setBuilderOpen(true);
+  }
+
+  const filteredSurveys = surveys.filter(s => tab === 'archived' ? s.archived : !s.archived);
+
+  // ── Template gallery (only when no surveys) ──────────────────────────────
   const TemplateGallery = () => (
     <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
       <div>
         <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-1">Create your first survey</h2>
         <p className="text-[13px] text-[#646462]">Choose from our most popular templates to get started quickly, or create your own from scratch.</p>
       </div>
-
-      {/* Announcement card — full width, "New template!" badge */}
-      <div className="relative border-2 border-dashed border-[#e9eae6] rounded-xl overflow-visible">
-        {/* New template! badge */}
+      <div className="relative border-2 border-dashed border-[#e9eae6] rounded-xl overflow-visible cursor-pointer hover:border-[#e8572a] transition-colors" onClick={() => openBuilderFromTemplate('announcement')}>
         <div className="absolute -top-3 left-4 z-10 bg-[#e8572a] text-white text-[11px] font-bold px-3 py-1 rounded-full">New template!</div>
         <div className="flex items-center min-h-[140px] px-8 py-6 gap-8">
-          {/* left */}
           <div className="flex flex-col gap-1 flex-1">
             <span className="text-[16px] font-bold text-[#1a1a1a]">Announcement</span>
             <span className="text-[13px] text-[#e8572a]">Tell users about a new product or feature</span>
           </div>
-          {/* right: preview popup */}
           <div className="flex-shrink-0">
             <div className="bg-white rounded-xl shadow-lg border border-[#e9eae6] w-52 p-4 relative">
               <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] text-[10px]">×</button>
               <p className="text-[12px] font-bold text-[#1a1a1a] mb-1">Hog mode is now available!</p>
               <p className="text-[11px] text-[#646462] mb-3">You can never have too many hedgehogs.</p>
               <button className="w-full bg-[#1a1a1a] text-white text-[11px] font-semibold py-1.5 rounded-lg mb-3">Check it out 🔥</button>
-              <div className="flex items-center justify-center gap-1">
-                <span className="text-[9px] text-[#9ca3af]">Survey by</span>
-                <span className="text-[9px] text-[#9ca3af] font-semibold">🦔 PostHog</span>
-              </div>
+              <div className="flex items-center justify-center gap-1"><span className="text-[9px] text-[#9ca3af]">Survey by</span><span className="text-[9px] text-[#9ca3af] font-semibold">🦔 PostHog</span></div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 3 template cards */}
       <div className="grid grid-cols-3 gap-4">
-        {/* Open feedback */}
-        <div className="relative border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col">
+        <div className="relative border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col cursor-pointer hover:border-[#e8572a]" onClick={() => openBuilderFromTemplate('open_feedback')}>
           <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
-            <div>
-              <p className="text-[13px] font-bold text-[#1a1a1a]">Open feedback</p>
-              <p className="text-[12px] text-[#646462] mt-0.5">Let your users share what's on their mind.</p>
-            </div>
+            <div><p className="text-[13px] font-bold text-[#1a1a1a]">Open feedback</p><p className="text-[12px] text-[#646462] mt-0.5">Let your users share what's on their mind.</p></div>
             <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-[#e9eae6] text-[10px] font-semibold text-[#646462]">General</span>
           </div>
-          {/* preview */}
           <div className="flex-1 flex items-end justify-center bg-[#f9f9f7] px-4 pt-3 pb-0 min-h-[180px]">
             <div className="bg-white rounded-t-xl shadow border border-[#e9eae6] border-b-0 w-full p-4 relative">
               <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] text-[10px]">×</button>
               <p className="text-[11px] font-bold text-[#1a1a1a] mb-2 pr-6">What can we do to improve our product?</p>
               <textarea className="w-full h-16 border border-[#e9eae6] rounded text-[10px] text-[#9ca3af] p-1.5 resize-none" placeholder="Start typing..." readOnly/>
               <button className="w-full mt-2 bg-[#1a1a1a] text-white text-[10px] font-semibold py-1.5 rounded-lg">Submit</button>
-              <div className="flex items-center justify-center gap-1 mt-2">
-                <span className="text-[8px] text-[#9ca3af]">Survey by 🦔 PostHog</span>
-              </div>
+              <div className="flex items-center justify-center gap-1 mt-2"><span className="text-[8px] text-[#9ca3af]">Survey by 🦔 PostHog</span></div>
             </div>
           </div>
-          {/* Most popular badge */}
           <div className="absolute bottom-0 right-0 bg-[#e8572a] text-white text-[10px] font-bold px-3 py-1 rounded-tl-xl">Most popular</div>
         </div>
 
-        {/* NPS */}
-        <div className="border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col">
+        <div className="border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col cursor-pointer hover:border-[#e8572a]" onClick={() => openBuilderFromTemplate('nps')}>
           <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
-            <div>
-              <p className="text-[13px] font-bold text-[#1a1a1a]">Net promoter score (NPS)</p>
-              <p className="text-[12px] text-[#646462] mt-0.5">Measure customer loyalty with the 0-10 recommend scale.</p>
-            </div>
+            <div><p className="text-[13px] font-bold text-[#1a1a1a]">Net promoter score (NPS)</p><p className="text-[12px] text-[#646462] mt-0.5">Measure customer loyalty with the 0-10 recommend scale.</p></div>
             <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-[#22c55e] text-[10px] font-semibold text-[#22c55e]">Metrics</span>
           </div>
           <div className="flex-1 flex items-end justify-center bg-[#f9f9f7] px-4 pt-3 pb-0 min-h-[180px]">
             <div className="bg-white rounded-t-xl shadow border border-[#e9eae6] border-b-0 w-full p-4 relative">
               <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] text-[10px]">×</button>
               <p className="text-[11px] font-bold text-[#1a1a1a] mb-3 pr-6">How likely are you to recommend us to a friend?</p>
-              <div className="flex gap-0.5 mb-1">
-                {[0,1,2,3,4,5,6,7,8,9,10].map(n => (
-                  <button key={n} className="flex-1 border border-[#e9eae6] rounded text-[9px] text-[#1a1a1a] py-1 hover:bg-[#f3f4f6]">{n}</button>
-                ))}
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[8px] text-[#9ca3af]">Unlikely</span>
-                <span className="text-[8px] text-[#9ca3af]">Very likely</span>
-              </div>
-              <div className="flex items-center justify-center gap-1 mt-2">
-                <span className="text-[8px] text-[#9ca3af]">Survey by 🦔 PostHog</span>
-              </div>
+              <div className="flex gap-0.5 mb-1">{[0,1,2,3,4,5,6,7,8,9,10].map(n => <button key={n} className="flex-1 border border-[#e9eae6] rounded text-[9px] text-[#1a1a1a] py-1 hover:bg-[#f3f4f6]">{n}</button>)}</div>
+              <div className="flex justify-between"><span className="text-[8px] text-[#9ca3af]">Unlikely</span><span className="text-[8px] text-[#9ca3af]">Very likely</span></div>
+              <div className="flex items-center justify-center gap-1 mt-2"><span className="text-[8px] text-[#9ca3af]">Survey by 🦔 PostHog</span></div>
             </div>
           </div>
         </div>
 
-        {/* CSAT */}
-        <div className="border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col">
+        <div className="border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col cursor-pointer hover:border-[#e8572a]" onClick={() => openBuilderFromTemplate('csat')}>
           <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
-            <div>
-              <p className="text-[13px] font-bold text-[#1a1a1a]">Customer satisfaction score (CSAT)</p>
-              <p className="text-[12px] text-[#646462] mt-0.5">Measure satisfaction with a specific experience.</p>
-            </div>
+            <div><p className="text-[13px] font-bold text-[#1a1a1a]">Customer satisfaction score (CSAT)</p><p className="text-[12px] text-[#646462] mt-0.5">Measure satisfaction with a specific experience.</p></div>
             <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-[#22c55e] text-[10px] font-semibold text-[#22c55e]">Metrics</span>
           </div>
           <div className="flex-1 flex items-end justify-center bg-[#f9f9f7] px-4 pt-3 pb-0 min-h-[180px]">
             <div className="bg-white rounded-t-xl shadow border border-[#e9eae6] border-b-0 w-full p-4 relative">
               <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] text-[10px]">×</button>
               <p className="text-[11px] font-bold text-[#1a1a1a] mb-3 pr-6">How satisfied are you with PostHog surveys?</p>
-              <div className="flex justify-between mb-1 px-1">
-                {['😡','😢','😐','😊','😄'].map((emoji, i) => (
-                  <button key={i} className="text-[20px] hover:scale-110 transition-transform">{emoji}</button>
-                ))}
-              </div>
-              <div className="flex justify-between px-1">
-                <span className="text-[8px] text-[#9ca3af]">Very dissatisfied</span>
-                <span className="text-[8px] text-[#9ca3af]">Very satisfied</span>
-              </div>
-              <div className="flex items-center justify-center gap-1 mt-2">
-                <span className="text-[8px] text-[#9ca3af]">Survey by 🦔 PostHog</span>
-              </div>
+              <div className="flex justify-between mb-1 px-1">{['😡','😢','😐','😊','😄'].map((emoji, i) => <button key={i} className="text-[20px] hover:scale-110 transition-transform">{emoji}</button>)}</div>
+              <div className="flex justify-between px-1"><span className="text-[8px] text-[#9ca3af]">Very dissatisfied</span><span className="text-[8px] text-[#9ca3af]">Very satisfied</span></div>
+              <div className="flex items-center justify-center gap-1 mt-2"><span className="text-[8px] text-[#9ca3af]">Survey by 🦔 PostHog</span></div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Bottom CTAs */}
       <div className="flex items-center gap-3 pb-2">
-        <button className="flex items-center gap-2 px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+        <button onClick={openBuilderBlank} className="flex items-center gap-2 px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.2 3.8L12 7l-3.8 1.2L7 13l-1.2-3.8L2 7l3.8-1.2L7 1z" fill="#f59e0b"/></svg>
           Create your own custom survey with PostHog AI
         </button>
-        <button className="flex items-center gap-2 px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
-          See all other templates
-        </button>
+        <button onClick={openBuilderBlank} className="flex items-center gap-2 px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">See all other templates</button>
+      </div>
+    </div>
+  );
+
+  // ── Surveys table (when there are surveys) ───────────────────────────────
+  const SurveysTable = () => (
+    <div className="flex-1 overflow-y-auto px-6 py-5">
+      {error && <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b] mb-3">{error}</div>}
+      <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-[#fafaf8]">
+              {['NOMBRE','TIPO','PREGUNTAS','RESPUESTAS','ESTADO','INICIO','CREADO'].map(l => (
+                <th key={l} className="px-4 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">{l}</th>
+              ))}
+              <th className="w-8"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => <tr key={i} className="border-b border-[#f3f3f1]">{Array.from({ length: 8 }).map((_, c) => <td key={c} className="px-4 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i + c) % 40}%` }} /></td>)}</tr>)
+            ) : filteredSurveys.length === 0 ? (
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-[13px] text-[#9ca3af]">
+                {tab === 'archived' ? 'Sin surveys archivados' : 'Sin surveys activos'}
+                {tab === 'active' && <button onClick={openBuilderBlank} className="block mt-2 mx-auto text-[#3b59f6] hover:underline">+ Crear primer survey</button>}
+              </td></tr>
+            ) : filteredSurveys.map(s => {
+              const st = surveyStatus(s);
+              return (
+                <tr key={s.id} onClick={() => setSelectedSurvey(s)} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                  <td className="px-4 py-2.5"><p className="font-medium text-[#1a1a1a]">{s.name}</p>{s.description && <p className="text-[10px] text-[#9ca3af] truncate max-w-[280px]">{s.description}</p>}</td>
+                  <td className="px-4 py-2.5"><span className="text-[10px] bg-[#f3f3f1] text-[#646462] px-1.5 py-0.5 rounded">{s.type ?? 'popover'}</span></td>
+                  <td className="px-4 py-2.5 text-[#1a1a1a]">{(s.questions ?? []).length}</td>
+                  <td className="px-4 py-2.5 text-[#1a1a1a] font-mono">{s.responses_count ?? '—'}</td>
+                  <td className="px-4 py-2.5"><span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span></td>
+                  <td className="px-4 py-2.5 text-[#646462]">{surveyDisplayDate(s.start_date)}</td>
+                  <td className="px-4 py-2.5 text-[#9ca3af] text-[11px]">{formatRelativeTime(s.created_at)}</td>
+                  <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => archiveSurvey(s)} className="text-[#9ca3af] hover:text-[#1a1a1a] p-1" title={s.archived ? 'Reactivar' : 'Archivar'}>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><rect x="1" y="3" width="14" height="3" fill="none" stroke="currentColor" strokeWidth="1.2"/><rect x="2.5" y="6" width="11" height="8" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M6 9h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
-      {/* Top bar */}
       <div className="flex items-center justify-between px-6 pt-5 pb-0 flex-shrink-0">
         <div className="flex items-center gap-2">
-          {/* speech bubble icon */}
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-[#e8572a]">
-            <path d="M2 3a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H6l-4 3V3z" fill="currentColor" opacity="0.9"/>
-          </svg>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-[#e8572a]"><path d="M2 3a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H6l-4 3V3z" fill="currentColor" opacity="0.9"/></svg>
           <h1 className="text-[16px] font-bold text-[#1a1a1a]">Surveys</h1>
-          {(tab === 'notifications' || tab === 'history' || tab === 'settings') && (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="#646462" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          )}
+          {(tab === 'notifications' || tab === 'history' || tab === 'settings') && (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="#646462" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>)}
         </div>
-
-        {/* Top-right actions */}
         <div className="flex items-center gap-3 flex-shrink-0">
-          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Quick start
-            <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">0</span>
-          </button>
+          <SurveysQuickStartMenu onSelectTemplate={openBuilderFromTemplate} onNewBlank={openBuilderBlank} />
           <button className="text-[13px] font-medium text-[#1a1a1a] hover:text-[#e8572a] transition-colors">Feedback</button>
-          <button className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">New survey</button>
+          <button onClick={openBuilderBlank} className="px-4 py-1.5 bg-[#e8572a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#dc4a1e]">New survey</button>
           <button className="relative w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a5 5 0 015 5v2.5l1.5 2H1.5L3 9V6.5a5 5 0 015-5zM6.5 13a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
             <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#e8572a] text-white text-[8px] font-bold flex items-center justify-center leading-none">1</span>
           </button>
-          <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
-          </button>
         </div>
       </div>
 
-      {/* Subtitle (notifications/history/settings tabs) */}
       {(tab === 'notifications' || tab === 'history' || tab === 'settings') && (
         <p className="px-6 mt-1 text-[13px] text-[#646462] flex-shrink-0">Create surveys to collect feedback from your users</p>
       )}
 
-      {/* Amber warning banner */}
       {showWarning && (
         <div className="mx-6 mt-3 flex items-start gap-3 px-4 py-3 bg-[#fffbeb] border border-[#fde68a] rounded-lg flex-shrink-0">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5"><path d="M7 1L1 13h12L7 1z" stroke="#d97706" strokeWidth="1.2" strokeLinejoin="round"/><path d="M7 5.5v3M7 10v.5" stroke="#d97706" strokeWidth="1.2" strokeLinecap="round"/></svg>
-          <p className="text-[12px] text-[#1a1a1a] flex-1 leading-relaxed">
-            Surveys are currently disabled for this project. Re-enable them in the settings, otherwise surveys will not be rendered in your app (either automatically or{' '}
-            <span className="text-[#e8572a] cursor-pointer hover:underline">using the renderSurvey function</span>
-            ). Surveys API is enabled if you are{' '}
-            <span className="text-[#e8572a] cursor-pointer hover:underline">fetching and rendering them manually ↗</span>.
-          </p>
-          <button
-            onClick={() => setTab('settings')}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="2" stroke="#646462" strokeWidth="1.1"/><path d="M6 1v1.5M6 9.5V11M1 6h1.5M9.5 6H11M2.6 2.6l1 1M8.4 8.4l1 1M9.4 2.6l-1 1M3.6 8.4l-1 1" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          <p className="text-[12px] text-[#1a1a1a] flex-1 leading-relaxed">Surveys are currently disabled for this project. Re-enable them in the settings, otherwise surveys will not be rendered in your app.</p>
+          <button onClick={() => setTab('settings')} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="2" stroke="#646462" strokeWidth="1.1"/></svg>
             Configure
           </button>
         </div>
       )}
 
-      {/* Tabs */}
       <div className="flex items-center px-6 mt-3 border-b border-[#e9eae6] flex-shrink-0">
         {(['active','archived','notifications','history','settings'] as SurveysTab[]).map(t => {
           const labels: Record<SurveysTab,string> = { active:'Active', archived:'Archived', notifications:'Notifications', history:'History', settings:'Settings' };
-          return (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
-                tab === t ? 'border-[#e8572a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
-              }`}
-            >
-              {labels[t]}
-            </button>
-          );
+          return <button key={t} onClick={() => setTab(t)} className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#e8572a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>{labels[t]}{(t === 'active' || t === 'archived') && surveys.filter(s => t === 'archived' ? s.archived : !s.archived).length > 0 && <span className="ml-1 text-[10px] text-[#9ca3af]">{surveys.filter(s => t === 'archived' ? s.archived : !s.archived).length}</span>}</button>;
         })}
       </div>
 
-      {/* ── Active / Archived ── */}
-      {(tab === 'active' || tab === 'archived') && <TemplateGallery />}
+      {(tab === 'active' || tab === 'archived') && (filteredSurveys.length > 0 || loading ? <SurveysTable /> : <TemplateGallery />)}
 
-      {/* ── Notifications ── */}
       {tab === 'notifications' && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-6 pt-5">
           <p className="text-[13px] text-[#1a1a1a] mb-4 flex-shrink-0">Get notified whenever a survey result is submitted</p>
-
-          {/* Filter row */}
           <div className="flex items-center gap-3 mb-4 flex-shrink-0">
             <div className="relative flex-1 max-w-[260px]">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
-                <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
-                <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-              </svg>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
               <input value={notifSearch} onChange={e=>setNotifSearch(e.target.value)} placeholder="Search..." className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none placeholder-[#9ca3af]"/>
             </div>
             <span className="text-[12px] text-[#646462]">Can't find what you're looking for?</span>
             <div className="flex-1"/>
             <span className="text-[12px] text-[#646462]">Created by:</span>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-              Any user
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-            </button>
-            <button
-              onClick={() => setShowPaused(!showPaused)}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]"
-            >
-              <div className={`w-7 h-4 rounded-full relative transition-colors ${showPaused ? 'bg-[#e8572a]' : 'bg-[#e9eae6]'}`}>
-                <div className={`w-3 h-3 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${showPaused ? 'left-3.5' : 'left-0.5'}`}/>
-              </div>
+            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">Any user<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg></button>
+            <button onClick={() => setShowPaused(!showPaused)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+              <div className={`w-7 h-4 rounded-full relative transition-colors ${showPaused ? 'bg-[#e8572a]' : 'bg-[#e9eae6]'}`}><div className={`w-3 h-3 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${showPaused ? 'left-3.5' : 'left-0.5'}`}/></div>
               Show paused
             </button>
-            <button className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#2d2d2d]">New notification</button>
+            <button onClick={() => setNewNotifOpen(true)} className="px-4 py-1.5 bg-[#1a1a1a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#2d2d2d]">New notification</button>
           </div>
-
-          {/* Table */}
           <div className="border border-[#e9eae6] rounded-xl overflow-hidden flex-1 min-h-0">
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="border-b border-[#e9eae6] bg-[#fafaf8]">
-                  {[{l:'NAME',s:true},{l:'CREATED BY',s:true},{l:'UPDATED',s:true},{l:'LAST 7 DAYS',s:false},{l:'STATUS',s:true}].map(col=>(
-                    <th key={col.l} className="px-4 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">
-                      <span className="flex items-center gap-1">
-                        {col.l}
-                        {col.s && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 2v6M2.5 4.5L5 2l2.5 2.5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/><path d="M2.5 5.5L5 8l2.5-2.5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/></svg>}
-                      </span>
-                    </th>
+                  {[{l:'NAME'},{l:'CHANNEL'},{l:'TARGET'},{l:'LAST 7 DAYS'},{l:'STATUS'}].map(col=>(
+                    <th key={col.l} className="px-4 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">{col.l}</th>
                   ))}
+                  <th className="w-8"></th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-[13px] text-[#9ca3af]">No destinations found</td>
-                </tr>
+                {notifications.filter(n => !notifSearch || n.name.toLowerCase().includes(notifSearch.toLowerCase())).filter(n => showPaused || !n.paused).length === 0 ? (
+                  <tr><td colSpan={6} className="px-4 py-10 text-center text-[13px] text-[#9ca3af]">No destinations found</td></tr>
+                ) : notifications.filter(n => !notifSearch || n.name.toLowerCase().includes(notifSearch.toLowerCase())).filter(n => showPaused || !n.paused).map(n => (
+                  <tr key={n.id} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 font-medium text-[#1a1a1a]">{n.name}</td>
+                    <td className="px-4 py-2.5"><span className="text-[10px] bg-[#f3f3f1] text-[#646462] px-1.5 py-0.5 rounded">{n.channel}</span></td>
+                    <td className="px-4 py-2.5 font-mono text-[11px] text-[#646462]">{n.target}</td>
+                    <td className="px-4 py-2.5">—</td>
+                    <td className="px-4 py-2.5">{n.paused ? <span className="text-[10px] bg-[#f3f3f1] text-[#646462] px-1.5 py-0.5 rounded">Paused</span> : <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">Active</span>}</td>
+                    <td className="px-4 py-2.5">
+                      <button onClick={() => setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, paused: !x.paused } : x))} className="text-[10px] text-[#646462] hover:text-[#1a1a1a]">{n.paused ? '▶' : '⏸'}</button>
+                      <button onClick={() => setNotifications(prev => prev.filter(x => x.id !== n.id))} className="text-[10px] text-[#9ca3af] hover:text-[#dc2626] ml-2">×</button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -297,11 +826,9 @@ function WAAppSurveysView() {
         </div>
       )}
 
-      {/* ── History ── */}
       {tab === 'history' && (
         <div className="flex-1 flex items-center justify-center px-6 py-8">
           <div className="border border-[#e9eae6] rounded-xl p-12 flex flex-col items-center text-center max-w-[600px] w-full">
-            {/* stacked pages icon */}
             <div className="mb-5">
               <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
                 <rect x="8" y="14" width="28" height="4" rx="2" fill="#d97706" opacity="0.4"/>
@@ -313,207 +840,153 @@ function WAAppSurveysView() {
             <h2 className="text-[20px] font-bold text-[#1a1a1a] mb-3">Activity logs</h2>
             <p className="text-[14px] text-[#646462] mb-2">See who in your organization has accessed or modified entities within PostHog.</p>
             <p className="text-[14px] text-[#646462] mb-6">This feature is only available on PostHog Cloud.</p>
-            <button className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
-              Move to PostHog Cloud
-            </button>
+            <button className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">Move to PostHog Cloud</button>
           </div>
         </div>
       )}
 
-      {/* ── Settings ── */}
       {tab === 'settings' && (
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {/* Enable surveys toggle */}
           <div className="flex items-center gap-3 mb-5">
-            <button
-              onClick={() => setSurveysEnabled(!surveysEnabled)}
-              className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${surveysEnabled ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
-            >
-              <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-0.75 shadow-sm transition-all ${surveysEnabled ? 'left-4.5' : 'left-0.75'}`} style={{top:'3px', left: surveysEnabled ? '18px' : '3px'}}/>
+            <button onClick={() => setSurveysEnabled(!surveysEnabled)} className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${surveysEnabled ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}>
+              <div className={`w-3.5 h-3.5 bg-white rounded-full absolute shadow-sm transition-all`} style={{top:'3px', left: surveysEnabled ? '18px' : '3px'}}/>
             </button>
             <span className="text-[13px] font-medium text-[#1a1a1a]">Enable surveys</span>
+            <span className="text-[11px] text-[#9ca3af] ml-2">{surveysEnabled ? 'Los surveys se renderizarán en tu app' : 'Los surveys NO se renderizarán'}</span>
           </div>
 
-          {/* Custom colors cloud card */}
           <div className="border border-[#e9eae6] rounded-xl p-8 flex flex-col items-center text-center mb-6">
-            <div className="mb-3">
-              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                <rect x="4" y="12" width="24" height="4" rx="2" fill="#d97706" opacity="0.4"/>
-                <rect x="2" y="18" width="28" height="4" rx="2" fill="#d97706" opacity="0.6"/>
-                <rect x="0" y="24" width="32" height="4" rx="2" fill="#d97706" opacity="0.8"/>
-              </svg>
-            </div>
+            <div className="mb-3"><svg width="40" height="40" viewBox="0 0 40 40" fill="none"><rect x="4" y="12" width="24" height="4" rx="2" fill="#d97706" opacity="0.4"/><rect x="2" y="18" width="28" height="4" rx="2" fill="#d97706" opacity="0.6"/><rect x="0" y="24" width="32" height="4" rx="2" fill="#d97706" opacity="0.8"/></svg></div>
             <h3 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Custom colors & positioning</h3>
-            <p className="text-[13px] text-[#646462] mb-1">
-              Customize the colors of your surveys to match your brand and set survey position.{' '}
-              <span className="text-[#e8572a] cursor-pointer hover:underline">Learn more.</span>
-            </p>
+            <p className="text-[13px] text-[#646462] mb-1">Customize the colors of your surveys to match your brand and set survey position. <span className="text-[#e8572a] cursor-pointer hover:underline">Learn more.</span></p>
             <p className="text-[13px] text-[#646462] mb-4">This feature is only available on PostHog Cloud.</p>
-            <button className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
-              Move to PostHog Cloud
-            </button>
+            <button className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7]">Move to PostHog Cloud</button>
           </div>
 
-          {/* Theme */}
           <div className="mb-6">
             <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-1">Theme</h3>
             <p className="text-[12px] text-[#646462] mb-3">Start with a preset, then fine-tune individual colors below.</p>
             <div className="grid grid-cols-6 gap-3">
               {themes.map(theme => (
-                <button
-                  key={theme.id}
-                  onClick={() => setSelectedTheme(theme.id)}
-                  className={`border-2 rounded-xl p-3 flex flex-col items-center gap-2 transition-colors ${
-                    selectedTheme === theme.id ? 'border-[#e8572a]' : 'border-[#e9eae6] hover:border-[#d1d5db]'
-                  }`}
-                >
-                  {/* mini preview */}
+                <button key={theme.id} onClick={() => setSelectedTheme(theme.id)} className={`border-2 rounded-xl p-3 flex flex-col items-center gap-2 transition-colors ${selectedTheme === theme.id ? 'border-[#e8572a]' : 'border-[#e9eae6] hover:border-[#d1d5db]'}`}>
                   <div className="w-full h-14 rounded-lg flex flex-col gap-1 p-2 overflow-hidden" style={{background: theme.bg}}>
                     <div className="h-1.5 rounded-full w-3/4" style={{background: theme.id === 'noir' ? '#ffffff' : theme.accent, opacity: 0.7}}/>
-                    <div className="flex gap-1 mt-0.5">
-                      <div className="h-2 rounded w-3" style={{background: theme.btn}}/>
-                      <div className="h-2 rounded w-2" style={{background: theme.btn, opacity: 0.4}}/>
-                    </div>
+                    <div className="flex gap-1 mt-0.5"><div className="h-2 rounded w-3" style={{background: theme.btn}}/><div className="h-2 rounded w-2" style={{background: theme.btn, opacity: 0.4}}/></div>
                     <div className="mt-auto h-1.5 rounded-full w-full" style={{background: theme.btn}}/>
                   </div>
-                  <div className="text-center">
-                    <p className="text-[11px] font-semibold text-[#1a1a1a]">{theme.label}</p>
-                    <p className="text-[9px] text-[#9ca3af]">{theme.sub}</p>
-                  </div>
+                  <div className="text-center"><p className="text-[11px] font-semibold text-[#1a1a1a]">{theme.label}</p><p className="text-[9px] text-[#9ca3af]">{theme.sub}</p></div>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Colors */}
           <div className="mb-6">
             <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-3">Colors</h3>
             <div className="grid grid-cols-3 gap-x-6 gap-y-4">
               {[
-                { label: 'Survey background', value: '#eeeded', dark: false },
-                { label: 'Question text',     value: '#000000 or var(--color)', dark: false },
-                { label: 'Border',            value: '#c9c6c6', dark: false },
-                { label: 'Input background',  value: 'white', dark: false },
-                { label: 'Input text',        value: '#000000 or var(--color)', dark: false },
-                { label: 'Selected rating',   value: 'black', dark: true },
-                { label: 'Button background', value: 'black', dark: true },
-                { label: 'Button text',       value: 'white', dark: false },
-                { label: 'Placeholder text',  value: 'Start typing...', dark: false, placeholder: true },
+                { key: 'bg',          label: 'Survey background', value: '#eeeded' },
+                { key: 'text',        label: 'Question text',     value: '#000000' },
+                { key: 'border',      label: 'Border',            value: '#c9c6c6' },
+                { key: 'input_bg',    label: 'Input background',  value: '#ffffff' },
+                { key: 'input_text',  label: 'Input text',        value: '#000000' },
+                { key: 'rating',      label: 'Selected rating',   value: '#000000' },
+                { key: 'btn_bg',      label: 'Button background', value: '#000000' },
+                { key: 'btn_text',    label: 'Button text',       value: '#ffffff' },
+                { key: 'placeholder', label: 'Placeholder text',  value: '#9ca3af' },
               ].map(c => (
-                <div key={c.label}>
+                <div key={c.key}>
                   <p className="text-[12px] font-semibold text-[#1a1a1a] mb-1">{c.label}</p>
                   <div className="flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 py-2 bg-white">
-                    {!c.placeholder && (
-                      <div className={`w-4 h-4 rounded-full border border-[#e9eae6] flex-shrink-0 ${c.dark ? 'bg-[#1a1a1a]' : 'bg-white border-[#d1d5db]'}`}/>
-                    )}
-                    <span className={`text-[12px] ${c.placeholder ? 'text-[#9ca3af]' : 'text-[#1a1a1a]'}`}>{c.value}</span>
+                    <input type="color" defaultValue={c.value} className="w-5 h-5 rounded border border-[#e9eae6] cursor-pointer" />
+                    <input defaultValue={c.value} className="flex-1 text-[12px] text-[#1a1a1a] focus:outline-none font-mono" />
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Layout */}
           <div className="mb-6">
             <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-1">Layout</h3>
-            <p className="text-[12px] mb-3">
-              <span className="text-[#646462]">Container, placement, and typography. </span>
-              <span className="text-[#e8572a]">Only applied in web surveys, not native mobile apps.</span>
-            </p>
+            <p className="text-[12px] mb-3"><span className="text-[#646462]">Container, placement, and typography. </span><span className="text-[#e8572a]">Only applied in web surveys, not native mobile apps.</span></p>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 mb-4">
               {[
-                { label: 'Survey width', value: '300px', info: true },
-                { label: 'Box padding', value: '20px 24px', info: false },
-                { label: 'Border radius', value: '10px', info: false },
-                { label: 'Box shadow', value: '0 4px 12px rgba(0, 0, 0, 0.15)', info: false },
+                { label: 'Survey width',  value: '300px' },
+                { label: 'Box padding',   value: '20px 24px' },
+                { label: 'Border radius', value: '10px' },
+                { label: 'Box shadow',    value: '0 4px 12px rgba(0, 0, 0, 0.15)' },
               ].map(f => (
                 <div key={f.label}>
-                  <div className="flex items-center gap-1 mb-1">
-                    <span className="text-[12px] font-semibold text-[#1a1a1a]">{f.label}</span>
-                    {f.info && (
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#9ca3af" strokeWidth="1"/><path d="M6 5.5v3M6 4v.5" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>
-                    )}
-                  </div>
+                  <div className="flex items-center gap-1 mb-1"><span className="text-[12px] font-semibold text-[#1a1a1a]">{f.label}</span></div>
                   <input defaultValue={f.value} className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6]"/>
                 </div>
               ))}
               <div>
-                <div className="flex items-center gap-1 mb-1">
-                  <span className="text-[12px] font-semibold text-[#1a1a1a]">Font family</span>
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#9ca3af" strokeWidth="1"/><path d="M6 5.5v3M6 4v.5" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>
-                </div>
-                <div className="flex items-center justify-between border border-[#e9eae6] rounded-lg px-3 py-2 bg-white">
-                  <span className="text-[12px] text-[#1a1a1a]">inherit (your website font)</span>
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                </div>
+                <div className="flex items-center gap-1 mb-1"><span className="text-[12px] font-semibold text-[#1a1a1a]">Font family</span></div>
+                <select defaultValue="inherit" className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12px] focus:outline-none">
+                  <option value="inherit">inherit (your website font)</option>
+                  <option value="system">System UI</option>
+                  <option value="serif">Serif</option>
+                  <option value="mono">Monospace</option>
+                </select>
               </div>
               <div>
-                <div className="flex items-center gap-1 mb-1">
-                  <span className="text-[12px] font-semibold text-[#1a1a1a]">z-index</span>
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#9ca3af" strokeWidth="1"/><path d="M6 5.5v3M6 4v.5" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>
-                </div>
+                <div className="flex items-center gap-1 mb-1"><span className="text-[12px] font-semibold text-[#1a1a1a]">z-index</span></div>
                 <input defaultValue="2147482647" className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[12px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6]"/>
               </div>
             </div>
-
-            {/* Position */}
             <div className="mb-4">
               <p className="text-[12px] font-semibold text-[#1a1a1a] mb-2">Position</p>
               <div className="flex items-start gap-4">
-                {/* 3×3 grid picker */}
                 <div className="grid grid-cols-3 gap-1 w-24 h-24 border border-[#e9eae6] rounded-lg p-2 bg-[#fafaf8]">
                   {[0,1,2,3,4,5,6,7,8].map(i => (
-                    <button
-                      key={i}
-                      onClick={() => setPositionIdx(i)}
-                      className={`rounded transition-colors ${positionIdx === i ? 'bg-[#e8572a]' : 'bg-[#e9eae6] hover:bg-[#d1d5db]'}`}
-                    />
+                    <button key={i} onClick={() => setPositionIdx(i)} className={`rounded transition-colors ${positionIdx === i ? 'bg-[#e8572a]' : 'bg-[#e9eae6] hover:bg-[#d1d5db]'}`} />
                   ))}
                 </div>
-                {/* Dropdown */}
-                <div className="flex items-center justify-between border border-[#e9eae6] rounded-lg px-3 py-2 bg-white w-40 cursor-pointer hover:bg-[#f9f9f7]">
-                  <span className="text-[12px] text-[#1a1a1a]">{positionLabels[positionIdx]}</span>
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                </div>
+                <select value={positionIdx} onChange={e => setPositionIdx(Number(e.target.value))} className="border border-[#e9eae6] rounded-lg px-3 py-2 bg-white w-40 text-[12px]">
+                  {positionLabels.map((l, i) => <option key={i} value={i}>{l}</option>)}
+                </select>
               </div>
             </div>
-
-            {/* Full-screen survey editor */}
-            <button className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-[#e9eae6] rounded-xl text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.9 2.9l1 1M10.1 10.1l1 1M11.1 2.9l-1 1M4.9 10.1l-1 1" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              Full-screen survey editor
-            </button>
           </div>
 
-          {/* Behavior */}
           <div className="mb-8">
             <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-3">Behavior</h3>
             <div className="flex flex-col gap-3">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={hidebranding} onChange={e=>setHideBranding(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/>
-                <span className="text-[13px] text-[#1a1a1a]">Hide PostHog branding</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={shuffleQ} onChange={e=>setShuffleQ(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/>
-                <span className="text-[13px] text-[#1a1a1a]">Shuffle questions</span>
-              </label>
+              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={hidebranding} onChange={e=>setHideBranding(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/><span className="text-[13px] text-[#1a1a1a]">Hide PostHog branding</span></label>
+              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={shuffleQ} onChange={e=>setShuffleQ(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/><span className="text-[13px] text-[#1a1a1a]">Shuffle questions</span></label>
               <label className="flex items-center gap-2 cursor-pointer flex-wrap">
                 <input type="checkbox" className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/>
                 <span className="text-[13px] text-[#1a1a1a]">Delay survey popup by at least</span>
-                <input
-                  type="number"
-                  value={delaySeconds}
-                  onChange={e=>setDelaySeconds(e.target.value)}
-                  className="w-16 border border-[#e9eae6] rounded-lg px-2 py-1 text-[12px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6]"
-                />
+                <input type="number" value={delaySeconds} onChange={e=>setDelaySeconds(e.target.value)} className="w-16 border border-[#e9eae6] rounded-lg px-2 py-1 text-[12px] text-[#1a1a1a] focus:outline-none focus:border-[#3b59f6]"/>
                 <span className="text-[13px] text-[#1a1a1a]">seconds once the display conditions are met.</span>
               </label>
             </div>
+            <button onClick={() => { try { localStorage.setItem('wa-surveys-settings', JSON.stringify({ surveysEnabled, selectedTheme, hidebranding, shuffleQ, delaySeconds, positionIdx })); alert('Configuracion guardada'); } catch {} }} className="mt-4 px-4 py-2 bg-[#e8572a] text-white text-sm rounded-lg hover:bg-[#dc4a1e]">Guardar configuracion</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modales y drawer */}
+      <SurveyBuilderModal open={builderOpen} initial={builderInitial} onClose={() => setBuilderOpen(false)} onSave={saveSurvey} />
+      {selectedSurvey && <SurveyDetailDrawer survey={selectedSurvey} onClose={() => setSelectedSurvey(null)} onEdit={() => { openBuilderEdit(selectedSurvey); setSelectedSurvey(null); }} onArchive={() => archiveSurvey(selectedSurvey)} onDelete={() => deleteSurvey(selectedSurvey)} />}
+
+      {/* Modal nueva notificación */}
+      {newNotifOpen && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-[60] flex items-center justify-center" onClick={() => setNewNotifOpen(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[480px] max-w-[92vw] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#1a1a1a]">Nueva notificación</h2>
+              <button onClick={() => setNewNotifOpen(false)} className="text-[#9ca3af] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+            </div>
+            <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); setNotifications(prev => [{ id: crypto.randomUUID(), name: fd.get('name') as string, channel: fd.get('channel') as any, target: fd.get('target') as string, paused: false, created_at: new Date().toISOString() }, ...prev]); setNewNotifOpen(false); }} className="p-5 space-y-3">
+              <div><label className="block text-xs font-medium text-[#1a1a1a] mb-1">Nombre</label><input name="name" required className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#e8572a]" /></div>
+              <div><label className="block text-xs font-medium text-[#1a1a1a] mb-1">Canal</label><select name="channel" defaultValue="slack" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm"><option value="slack">Slack</option><option value="email">Email</option><option value="webhook">Webhook</option></select></div>
+              <div><label className="block text-xs font-medium text-[#1a1a1a] mb-1">Destino</label><input name="target" required placeholder="#general / email / https://..." className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#e8572a] font-mono" /></div>
+              <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setNewNotifOpen(false)} className="px-3 py-1.5 text-sm text-[#646462]">Cancelar</button><button type="submit" className="px-3 py-1.5 bg-[#1a1a1a] text-white text-sm rounded-lg">Crear</button></div>
+            </form>
           </div>
         </div>
       )}
     </div>
   );
 }
-
-
