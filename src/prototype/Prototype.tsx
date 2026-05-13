@@ -46222,6 +46222,91 @@ function WASettingsView() {
   }
 
   function CustomizationPage() {
+    const TZ_LIST: string[] = React.useMemo(() => {
+      try {
+        const anyIntl: any = Intl as any;
+        if (typeof anyIntl.supportedValuesOf === 'function') return anyIntl.supportedValuesOf('timeZone');
+      } catch {}
+      return ['UTC','Europe/Madrid','Europe/London','Europe/Paris','Europe/Berlin','Europe/Lisbon','Europe/Amsterdam','Europe/Rome','Europe/Athens','Europe/Moscow','America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Anchorage','America/Sao_Paulo','America/Mexico_City','America/Toronto','America/Argentina/Buenos_Aires','Asia/Tokyo','Asia/Shanghai','Asia/Hong_Kong','Asia/Singapore','Asia/Kolkata','Asia/Dubai','Asia/Seoul','Australia/Sydney','Australia/Melbourne','Pacific/Auckland','Africa/Cairo','Africa/Johannesburg'];
+    }, []);
+    const CURRENCIES: { code: string; name: string; flag: string }[] = [
+      { code: 'USD', name: 'Dólar estadounidense', flag: '🇺🇸' },
+      { code: 'EUR', name: 'Euro', flag: '🇪🇺' },
+      { code: 'GBP', name: 'Libra esterlina', flag: '🇬🇧' },
+      { code: 'JPY', name: 'Yen japonés', flag: '🇯🇵' },
+      { code: 'CNY', name: 'Yuan chino', flag: '🇨🇳' },
+      { code: 'CAD', name: 'Dólar canadiense', flag: '🇨🇦' },
+      { code: 'AUD', name: 'Dólar australiano', flag: '🇦🇺' },
+      { code: 'CHF', name: 'Franco suizo', flag: '🇨🇭' },
+      { code: 'SEK', name: 'Corona sueca', flag: '🇸🇪' },
+      { code: 'NOK', name: 'Corona noruega', flag: '🇳🇴' },
+      { code: 'DKK', name: 'Corona danesa', flag: '🇩🇰' },
+      { code: 'BRL', name: 'Real brasileño', flag: '🇧🇷' },
+      { code: 'MXN', name: 'Peso mexicano', flag: '🇲🇽' },
+      { code: 'ARS', name: 'Peso argentino', flag: '🇦🇷' },
+      { code: 'INR', name: 'Rupia india', flag: '🇮🇳' },
+      { code: 'KRW', name: 'Won surcoreano', flag: '🇰🇷' },
+      { code: 'SGD', name: 'Dólar de Singapur', flag: '🇸🇬' },
+      { code: 'HKD', name: 'Dólar de Hong Kong', flag: '🇭🇰' },
+      { code: 'NZD', name: 'Dólar neozelandés', flag: '🇳🇿' },
+      { code: 'ZAR', name: 'Rand sudafricano', flag: '🇿🇦' },
+      { code: 'TRY', name: 'Lira turca', flag: '🇹🇷' },
+      { code: 'PLN', name: 'Zloty polaco', flag: '🇵🇱' },
+      { code: 'RUB', name: 'Rublo ruso', flag: '🇷🇺' },
+      { code: 'AED', name: 'Dírham emiratí', flag: '🇦🇪' },
+    ];
+    const [tzOpen, setTzOpen] = React.useState(false);
+    const [tzQuery, setTzQuery] = React.useState('');
+    const tzRef = useClickOutside<HTMLDivElement>(() => setTzOpen(false));
+    const [curOpen, setCurOpen] = React.useState(false);
+    const [curQuery, setCurQuery] = React.useState('');
+    const curRef = useClickOutside<HTMLDivElement>(() => setCurOpen(false));
+    const [renaming, setRenaming] = React.useState(false);
+    const [renamedMsg, setRenamedMsg] = React.useState('');
+    const [savingTz, setSavingTz] = React.useState(false);
+    const [savingWeek, setSavingWeek] = React.useState(false);
+    const [savingBM, setSavingBM] = React.useState(false);
+    const [savingCur, setSavingCur] = React.useState(false);
+
+    const filteredTz = TZ_LIST.filter(t => t.toLowerCase().includes(tzQuery.toLowerCase()));
+    const filteredCur = CURRENCIES.filter(c =>
+      c.code.toLowerCase().includes(curQuery.toLowerCase()) ||
+      c.name.toLowerCase().includes(curQuery.toLowerCase())
+    );
+    const curObj = CURRENCIES.find(c => c.code === baseCurrency) || CURRENCIES[0];
+    const tzOffset = (() => {
+      try {
+        const d = new Date();
+        const fmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'shortOffset' });
+        const part = fmt.formatToParts(d).find(p => p.type === 'timeZoneName');
+        return part?.value || '';
+      } catch { return ''; }
+    })();
+
+    async function doRename() {
+      if (!displayName.trim()) return;
+      setRenaming(true);
+      const ok = await patchTeam({ name: displayName.trim() });
+      setRenaming(false);
+      if (ok) { setRenamedMsg('Proyecto renombrado correctamente'); setTimeout(() => setRenamedMsg(''), 2500); }
+    }
+    async function pickTimezone(tz: string) {
+      setTimezone(tz); setTzOpen(false); setTzQuery('');
+      setSavingTz(true); await patchTeam({ timezone: tz }); setSavingTz(false);
+    }
+    async function changeWeekStart(v: number) {
+      setWeekStart(v); setSavingWeek(true); await patchTeam({ week_start_day: v }); setSavingWeek(false);
+    }
+    async function changeBusinessModel(v: string) {
+      setBusinessModel(v); setSavingBM(true);
+      const next = { ...(team?.extra_settings || {}), business_model: v };
+      await patchTeam({ extra_settings: next }); setSavingBM(false);
+    }
+    async function pickCurrency(code: string) {
+      setBaseCurrency(code); setCurOpen(false); setCurQuery('');
+      setSavingCur(true); await patchTeam({ base_currency: code }); setSavingCur(false);
+    }
+
     return (
       <div className="flex-1 overflow-y-auto">
         <InfoBanner />
@@ -46230,34 +46315,82 @@ function WASettingsView() {
           <div className="pb-6 border-b border-[#e9eae6]">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Nombre de visualización</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]" title="Nombre legible mostrado en la UI"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
             </div>
             <p className="text-[13px] text-[#646462] mb-3">Un nombre legible para este entorno.</p>
             <input
               type="text"
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') doRename(); }}
               className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] mb-2.5"
             />
-            <button className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Renombrar proyecto</button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={doRename}
+                disabled={renaming || !displayName.trim() || displayName.trim() === (team?.name || '')}
+                className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50 disabled:cursor-not-allowed"
+              >{renaming ? 'Renombrando…' : 'Renombrar proyecto'}</button>
+              {renamedMsg && <span className="text-[12px] text-[#16a34a]">✓ {renamedMsg}</span>}
+            </div>
           </div>
 
           {/* Date & time */}
           <div className="pb-6 border-b border-[#e9eae6]">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Fecha y hora</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Zona horaria del proyecto y día inicio de semana"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
             </div>
             <p className="text-[13px] text-[#646462] mb-4">Establece la zona horaria y el día de inicio de semana para mostrar y agrupar datos de series temporales en insights y dashboards. Puede que necesites actualizar los insights para que los cambios se apliquen.</p>
             <div className="flex items-start gap-6">
-              <div className="flex-1">
-                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Zona horaria</p>
-                <input type="text" value={timezone} onChange={e => setTimezone(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              <div className="flex-1" ref={tzRef}>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Zona horaria {savingTz && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setTzOpen(o => !o)}
+                    className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] flex items-center justify-between"
+                  >
+                    <span className="text-[#1a1a1a] truncate">{timezone}{tzOffset && <span className="text-[#646462] ml-2">({tzOffset})</span>}</span>
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current text-[#646462]" strokeWidth="1.5"><path d="M3 6l5 5 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                  {tzOpen && (
+                    <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg max-h-72 overflow-hidden flex flex-col">
+                      <div className="p-2 border-b border-[#e9eae6]">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={tzQuery}
+                          onChange={e => setTzQuery(e.target.value)}
+                          placeholder="Buscar zona horaria…"
+                          className="w-full h-8 px-2.5 border border-[#e9eae6] rounded text-[13px] outline-none focus:border-[#3b59f6]"
+                        />
+                      </div>
+                      <div className="overflow-y-auto flex-1">
+                        {filteredTz.length === 0 && <div className="px-3 py-2 text-[12px] text-[#646462]">Sin resultados</div>}
+                        {filteredTz.slice(0, 200).map(tz => (
+                          <button
+                            key={tz}
+                            type="button"
+                            onClick={() => pickTimezone(tz)}
+                            className={`w-full text-left px-3 py-1.5 text-[13px] hover:bg-[#f3f3f1] ${tz === timezone ? 'bg-[#fff5f2] text-[#e8572a]' : 'text-[#1a1a1a]'}`}
+                          >{tz}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
-                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">La semana empieza el</p>
-                <select value={weekStart} onChange={e => setWeekStart(e.target.value)} className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] appearance-none cursor-pointer">
-                  {['Domingo','Lunes','Sábado'].map(d => <option key={d}>{d}</option>)}
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">La semana empieza el {savingWeek && <span className="text-[11px] font-normal">guardando…</span>}</p>
+                <select
+                  value={weekStart}
+                  onChange={e => changeWeekStart(Number(e.target.value))}
+                  className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] appearance-none cursor-pointer"
+                >
+                  <option value={0}>Domingo</option>
+                  <option value={1}>Lunes</option>
+                  <option value={6}>Sábado</option>
                 </select>
               </div>
             </div>
@@ -46267,12 +46400,19 @@ function WASettingsView() {
           <div className="pb-6 border-b border-[#e9eae6]">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Modelo de negocio</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="B2B, B2C o B2B2C — adapta la experiencia de Clain"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
             </div>
             <p className="text-[13px] text-[#646462] mb-3">Indica si este proyecto atiende a clientes B2B o B2C para que Clain pueda adaptar la experiencia y las recomendaciones.</p>
-            <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Modelo de negocio</p>
-            <select value={businessModel} onChange={e => setBusinessModel(e.target.value)} className="w-full max-w-xs h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]">
-              {['No especificado','B2B','B2C','B2B2C'].map(m => <option key={m}>{m}</option>)}
+            <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Modelo de negocio {savingBM && <span className="text-[11px] font-normal">guardando…</span>}</p>
+            <select
+              value={businessModel}
+              onChange={e => changeBusinessModel(e.target.value)}
+              className="w-full max-w-xs h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] cursor-pointer"
+            >
+              <option value="">No especificado</option>
+              <option value="B2B">B2B</option>
+              <option value="B2C">B2C</option>
+              <option value="B2B2C">B2B2C</option>
             </select>
           </div>
 
@@ -46280,14 +46420,53 @@ function WASettingsView() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Moneda base</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Moneda usada para conversiones de ingresos"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              {savingCur && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </div>
             <p className="text-[13px] text-[#646462] mb-1.5">Establece la moneda predeterminada para cálculos de ingresos y monetarios.</p>
             <p className="text-[13px] text-[#646462] mb-3">Clain convertirá todos los valores de moneda del equipo a esta moneda antes de mostrártelos. Si no podemos detectar correctamente tu moneda, asumiremos que está en esta moneda también.</p>
-            <button className="flex items-center gap-2 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f3f3f1]">
-              🇺🇸 Dólar estadounidense (USD)
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
-            </button>
+            <div className="relative inline-block" ref={curRef}>
+              <button
+                type="button"
+                onClick={() => setCurOpen(o => !o)}
+                className="flex items-center gap-2 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f3f3f1] min-w-[280px] justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <span>{curObj.flag}</span>
+                  <span>{curObj.name} ({curObj.code})</span>
+                </span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current text-[#646462]" strokeWidth="1.5"><path d="M3 6l5 5 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              {curOpen && (
+                <div className="absolute z-20 top-full left-0 mt-1 min-w-[320px] bg-white border border-[#e9eae6] rounded-lg shadow-lg max-h-72 overflow-hidden flex flex-col">
+                  <div className="p-2 border-b border-[#e9eae6]">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={curQuery}
+                      onChange={e => setCurQuery(e.target.value)}
+                      placeholder="Buscar moneda…"
+                      className="w-full h-8 px-2.5 border border-[#e9eae6] rounded text-[13px] outline-none focus:border-[#3b59f6]"
+                    />
+                  </div>
+                  <div className="overflow-y-auto flex-1">
+                    {filteredCur.length === 0 && <div className="px-3 py-2 text-[12px] text-[#646462]">Sin resultados</div>}
+                    {filteredCur.map(c => (
+                      <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => pickCurrency(c.code)}
+                        className={`w-full text-left px-3 py-1.5 text-[13px] flex items-center gap-2 hover:bg-[#f3f3f1] ${c.code === baseCurrency ? 'bg-[#fff5f2] text-[#e8572a]' : 'text-[#1a1a1a]'}`}
+                      >
+                        <span>{c.flag}</span>
+                        <span className="flex-1">{c.name}</span>
+                        <span className="text-[#646462]">{c.code}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
