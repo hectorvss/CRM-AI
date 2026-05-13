@@ -36308,9 +36308,177 @@ function WAAppFeatureFlagsView() {
   const [showBootstrapOpt, setShowBootstrapOpt] = useState(false);
   const [showLocalOpt, setShowLocalOpt] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [ffPayload, setFfPayload] = React.useState('');
+  const [ffVariants, setFfVariants] = React.useState<{ key: string; name: string; rollout_percentage: number }[]>([
+    { key: 'control', name: 'Control', rollout_percentage: 50 },
+    { key: 'test',    name: 'Test',    rollout_percentage: 50 },
+  ]);
+  const [ffTags, setFfTags] = React.useState<string[]>([]);
+  const [editingFF, setEditingFF] = React.useState<any | null>(null);
 
   // Search/filter state
   const [ffSearch, setFfSearch] = useState('');
+
+  // ── State real ────────────────────────────────────────────────────────────
+  const [flags, setFlags] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [members, setMembers] = React.useState<any[]>([]);
+  const [selectedFF, setSelectedFF] = React.useState<any | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set());
+  const [filterType, setFilterType] = React.useState<string | null>(null);     // 'boolean' | 'variants' | 'remote' | null
+  const [filterStatus, setFilterStatus] = React.useState<string | null>(null); // 'active' | 'inactive' | null
+  const [filterCreator, setFilterCreator] = React.useState<string | null>(null);
+  const [filterTag, setFilterTag] = React.useState<string | null>(null);
+  const [showFilterDrop, setShowFilterDrop] = React.useState<string | null>(null);
+  const filterDropRef = useClickOutside<HTMLDivElement>(() => setShowFilterDrop(null));
+
+  // Consume nav intent
+  React.useEffect(() => {
+    const intent = consumeNavIntent<number>('flag');
+    if (intent?.id != null && flags.length > 0) {
+      const f = flags.find(x => x.id === intent.id);
+      if (f) setSelectedFF(f);
+    }
+  }, [flags]);
+
+  // ── Load flags ────────────────────────────────────────────────────────────
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getProjectId()) await ph.bootstrapPostHog();
+      const res: any = await ph.posthog.featureFlags.list({ limit: 200 });
+      setFlags(res.results ?? []);
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar flags');
+    } finally { setLoading(false); }
+  }, []);
+  React.useEffect(() => {
+    load();
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getCurrentUser()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.organization.members();
+        setMembers(res.results ?? res ?? []);
+      } catch {}
+    })();
+  }, [load]);
+
+  // ── Save/edit/delete ──────────────────────────────────────────────────────
+  function startEdit(flag: any) {
+    setEditingFF(flag);
+    setFfName(flag.name ?? flag.key ?? 'Unnamed');
+    setFfKey(flag.key ?? '');
+    setFfDesc(flag.description ?? '');
+    setEnableFlag(flag.active !== false);
+    setPersistAuth(!!flag.ensure_experience_continuity);
+    setFfTags(flag.tags ?? []);
+    const multivariate = flag.filters?.multivariate;
+    if (multivariate?.variants?.length) {
+      setServedValue('variants');
+      setFfVariants(multivariate.variants);
+    } else if (flag.is_remote_configuration) {
+      setServedValue('remote');
+    } else {
+      setServedValue('boolean');
+    }
+    setRolloutPct(flag.filters?.groups?.[0]?.rollout_percentage ?? 100);
+    setFfPayload(flag.filters?.payloads ? JSON.stringify(flag.filters.payloads, null, 2) : '');
+    setShowNewFF(true);
+  }
+  function resetForm() {
+    setEditingFF(null);
+    setFfName('Unnamed'); setFfKey(''); setFfDesc(''); setEnableFlag(true); setPersistAuth(false);
+    setFfTags([]); setServedValue('boolean'); setRolloutPct(0); setFfPayload('');
+    setFfVariants([
+      { key: 'control', name: 'Control', rollout_percentage: 50 },
+      { key: 'test',    name: 'Test',    rollout_percentage: 50 },
+    ]);
+  }
+  async function saveFF() {
+    if (!ffKey.trim()) { alert('La clave (key) es obligatoria'); return; }
+    setSaving(true);
+    try {
+      const ph = await import('../api/posthog');
+      let payloadParsed: any = undefined;
+      if (ffPayload.trim()) {
+        try { payloadParsed = { 'true': JSON.parse(ffPayload.trim()) }; }
+        catch { alert('Payload no es JSON válido'); setSaving(false); return; }
+      }
+      const body: any = {
+        key:  ffKey.trim(),
+        name: ffName.trim() === 'Unnamed' ? ffKey.trim() : ffName.trim(),
+        description: ffDesc.trim() || undefined,
+        active: enableFlag,
+        ensure_experience_continuity: persistAuth,
+        tags: ffTags,
+        filters: {
+          groups: [{ properties: [], rollout_percentage: rolloutPct, variant: null }],
+          ...(servedValue === 'variants' ? { multivariate: { variants: ffVariants } } : {}),
+          ...(payloadParsed ? { payloads: payloadParsed } : {}),
+          aggregation_group_type_index: matchBy === 'group' ? 0 : null,
+        },
+      };
+      if (editingFF?.id) {
+        const updated: any = await ph.posthog.featureFlags.update(editingFF.id, body);
+        setFlags(prev => prev.map(f => f.id === editingFF.id ? updated : f));
+      } else {
+        const created: any = await ph.posthog.featureFlags.create(body);
+        setFlags(prev => [created, ...prev]);
+      }
+      setShowNewFF(false); resetForm();
+    } catch (e: any) {
+      alert('Error al guardar: ' + (e?.message ?? ''));
+    } finally { setSaving(false); }
+  }
+  async function toggleActive(flag: any) {
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.posthog.featureFlags.update(flag.id, { active: !flag.active });
+      setFlags(prev => prev.map(f => f.id === flag.id ? updated : f));
+      if (selectedFF?.id === flag.id) setSelectedFF(updated);
+    } catch (e: any) { alert(e?.message); }
+  }
+  async function deleteFF(flag: any) {
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.featureFlags.delete(flag.id);
+      setFlags(prev => prev.filter(f => f.id !== flag.id));
+      setSelectedFF(null);
+    } catch (e: any) { alert(e?.message); }
+  }
+  async function bulkDelete() {
+    if (!confirm(`¿Eliminar ${selectedIds.size} flags?`)) return;
+    for (const id of selectedIds) {
+      try { const ph = await import('../api/posthog'); await ph.posthog.featureFlags.delete(id); } catch {}
+    }
+    setFlags(prev => prev.filter(f => !selectedIds.has(f.id)));
+    setSelectedIds(new Set());
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function flagType(f: any): 'boolean' | 'variants' | 'remote' {
+    if (f.is_remote_configuration) return 'remote';
+    if (f.filters?.multivariate?.variants?.length) return 'variants';
+    return 'boolean';
+  }
+  function allTagsFlags(): string[] {
+    const s = new Set<string>();
+    flags.forEach(f => (f.tags ?? []).forEach((t: string) => s.add(t)));
+    return Array.from(s).sort();
+  }
+  const filtered = flags.filter(f => {
+    if (ffSearch && !`${f.key} ${f.name ?? ''} ${f.description ?? ''}`.toLowerCase().includes(ffSearch.toLowerCase())) return false;
+    if (filterType   && flagType(f) !== filterType) return false;
+    if (filterStatus === 'active' && !f.active) return false;
+    if (filterStatus === 'inactive' && f.active) return false;
+    if (filterCreator && f.created_by?.uuid !== filterCreator && f.created_by?.id !== filterCreator) return false;
+    if (filterTag    && !(f.tags ?? []).includes(filterTag)) return false;
+    return true;
+  });
 
   // ── New Feature Flag full-page ─────────────────────────────────────────────
   if (showNewFF) {
@@ -36350,8 +36518,8 @@ if (posthog.isFeatureEnabled('my-flag') ) {
               Quick start
               <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">?</span>
             </button>
-            <button onClick={() => setShowNewFF(false)} className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#646462] hover:bg-[#f9f9f7]">Cancel</button>
-            <button className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7]">Save</button>
+            <button onClick={() => { setShowNewFF(false); resetForm(); }} className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#646462] hover:bg-[#f9f9f7]">Cancel</button>
+            <button onClick={saveFF} disabled={saving || !ffKey.trim()} className="px-4 py-1.5 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] disabled:opacity-50">{saving ? 'Guardando…' : (editingFF ? 'Update' : 'Save')}</button>
             <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
             </button>
@@ -36421,10 +36589,30 @@ if (posthog.isFeatureEnabled('my-flag') ) {
                 <span className="text-[#e8572a] cursor-pointer hover:underline">payload documentation</span>.
               </p>
               <textarea
+                value={ffPayload}
+                onChange={e => setFfPayload(e.target.value)}
                 rows={2}
                 placeholder={`Examples: "A string", 2500, {"key": "value"}`}
                 className="w-full border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[12px] font-mono focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af] resize-none bg-white"
               />
+              {servedValue === 'variants' && (
+                <div className="mt-4">
+                  <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Variants</h3>
+                  <div className="border border-[#e9eae6] rounded-lg overflow-hidden">
+                    {ffVariants.map((v, i) => (
+                      <div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6] last:border-0">
+                        <span className="w-6 h-6 rounded flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ background: ['#3b59f6','#7c3aed','#e8572a','#16a34a','#f59e0b','#06b6d4'][i % 6] }}>{String.fromCharCode(65 + i)}</span>
+                        <input value={v.key} onChange={e => setFfVariants(prev => prev.map((x, idx) => idx === i ? { ...x, key: e.target.value, name: x.name } : x))} placeholder="key" className="flex-1 border border-[#e9eae6] rounded px-2 py-1 text-[12px] focus:outline-none focus:border-[#3b59f6] font-mono" />
+                        <input type="number" value={v.rollout_percentage} onChange={e => setFfVariants(prev => prev.map((x, idx) => idx === i ? { ...x, rollout_percentage: Math.min(100, Math.max(0, Number(e.target.value))) } : x))} className="w-16 border border-[#e9eae6] rounded px-2 py-1 text-[12px] text-right focus:outline-none" />
+                        <span className="text-[11px] text-[#646462]">%</span>
+                        {ffVariants.length > 2 && <button onClick={() => setFfVariants(prev => prev.filter((_, idx) => idx !== i))} className="text-[#9ca3af] hover:text-[#dc2626] text-[14px]">×</button>}
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => setFfVariants(prev => [...prev, { key: `variant_${prev.length + 1}`, name: `Variant ${prev.length + 1}`, rollout_percentage: 0 }])} className="mt-2 text-[11px] text-[#3b59f6] hover:underline">+ Añadir variante</button>
+                  <p className="text-[10px] text-[#9ca3af] mt-1">Total: {ffVariants.reduce((s, v) => s + v.rollout_percentage, 0)}% (debe sumar 100%)</p>
+                </div>
+              )}
             </div>
 
             {/* Release conditions */}
@@ -36642,8 +36830,8 @@ if (posthog.isFeatureEnabled('my-flag') ) {
 
             {/* Bottom Save/Cancel */}
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#e9eae6]">
-              <button onClick={() => setShowNewFF(false)} className="px-4 py-2 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] transition-colors">Cancel</button>
-              <button className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors">Save</button>
+              <button onClick={() => { setShowNewFF(false); resetForm(); }} className="px-4 py-2 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] transition-colors">Cancel</button>
+              <button onClick={saveFF} disabled={saving || !ffKey.trim()} className="px-5 py-2 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] transition-colors disabled:opacity-50">{saving ? 'Guardando…' : (editingFF ? 'Update flag' : 'Save')}</button>
             </div>
           </div>
         </div>
@@ -36791,7 +36979,7 @@ if (posthog.isFeatureEnabled('my-flag') ) {
           )}
 
           {/* Filter row */}
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap" ref={filterDropRef}>
             <div className="relative flex-1 min-w-[240px] max-w-[340px]">
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
                 <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
@@ -36800,20 +36988,39 @@ if (posthog.isFeatureEnabled('my-flag') ) {
               <input value={ffSearch} onChange={e=>setFfSearch(e.target.value)} placeholder="Search for feature flags (or experiment keys)" className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none placeholder-[#9ca3af]"/>
             </div>
             {[
-              { label: 'Type', value: 'All' },
-              { label: 'Status', value: 'All' },
-              { label: 'Created by', value: 'Any user' },
-              { label: 'Tags', value: 'Any tags' },
+              { label: 'Type',       key: 'type',    value: filterType,    setter: setFilterType,    options: [{k:'boolean',l:'Boolean'},{k:'variants',l:'Variants'},{k:'remote',l:'Remote config'}] },
+              { label: 'Status',     key: 'status',  value: filterStatus,  setter: setFilterStatus,  options: [{k:'active',l:'Active'},{k:'inactive',l:'Inactive'}] },
+              { label: 'Created by', key: 'creator', value: filterCreator, setter: setFilterCreator, options: members.map((m: any) => ({k: m.user?.uuid ?? m.uuid, l: m.user?.first_name || m.user?.email || 'Usuario'})) },
+              { label: 'Tags',       key: 'tags',    value: filterTag,     setter: setFilterTag,     options: allTagsFlags().map(t => ({k: t, l: t})) },
             ].map(f => (
-              <div key={f.label} className="flex items-center gap-1.5">
+              <div key={f.label} className="flex items-center gap-1.5 relative">
                 <span className="text-[12px] text-[#646462]">{f.label}</span>
-                <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-                  {f.value}
+                <button onClick={() => setShowFilterDrop(showFilterDrop === f.key ? null : f.key)} className={`flex items-center gap-1 px-2 py-1 border rounded-lg text-[12px] hover:bg-[#f9f9f7] ${f.value ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'border-[#e9eae6] bg-white text-[#1a1a1a]'}`}>
+                  {f.value ? f.options.find(o => o.k === f.value)?.l ?? f.value : (f.key === 'creator' ? 'Any user' : f.key === 'tags' ? 'Any tags' : 'All')}
+                  {f.value && <span onClick={e => { e.stopPropagation(); (f.setter as any)(null); }} className="text-[#9ca3af] hover:text-[#dc2626] cursor-pointer">×</span>}
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
                 </button>
+                {showFilterDrop === f.key && (
+                  <div className="absolute top-full left-0 mt-1 w-44 z-40 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto">
+                    {f.options.length === 0 ? <p className="px-3 py-2 text-xs text-[#9ca3af]">Sin opciones</p>
+                    : f.options.map(o => (
+                      <button key={o.k} onClick={() => { (f.setter as any)(o.k); setShowFilterDrop(null); }} className={`w-full text-left px-3 py-1.5 text-xs hover:bg-[#f9f9f7] ${f.value === o.k ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a1a]'}`}>{o.l}</button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
+
+          {selectedIds.size > 0 && (
+            <div className="bg-[#1a1a1a] text-white rounded-lg px-3 py-2 flex items-center justify-between text-xs">
+              <span>{selectedIds.size} flags seleccionados</span>
+              <div className="flex gap-2">
+                <button onClick={bulkDelete} className="px-2 py-1 bg-[#dc2626] rounded">Eliminar</button>
+                <button onClick={() => setSelectedIds(new Set())} className="px-2 py-1 hover:bg-[#2a2a28] rounded">Cancelar</button>
+              </div>
+            </div>
+          )}
 
           {/* Table */}
           <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
@@ -36842,14 +37049,51 @@ if (posthog.isFeatureEnabled('my-flag') ) {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td colSpan={8} className="px-4 py-4 text-[13px] text-[#646462]">
-                    No results for this filter,{' '}
-                    <span className="text-[#e8572a] cursor-pointer hover:underline">change filter</span>
-                    {' '}or{' '}
-                    <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => setShowNewFF(true)}>create a new flag</span>.
-                  </td>
-                </tr>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => <tr key={i} className="border-b border-[#f3f3f1]">{Array.from({ length: 8 }).map((_, c) => <td key={c} className="px-3 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i + c) % 40}%` }} /></td>)}</tr>)
+                ) : filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-4 text-[13px] text-[#646462]">
+                      {flags.length === 0 ? <>No tienes flags todavía. <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => setShowNewFF(true)}>Crea el primero</span>.</> : <>No results for this filter, <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => { setFfSearch(''); setFilterType(null); setFilterStatus(null); setFilterCreator(null); setFilterTag(null); }}>change filter</span> or <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => setShowNewFF(true)}>create a new flag</span>.</>}
+                    </td>
+                  </tr>
+                ) : filtered.map(f => {
+                  const t = flagType(f);
+                  const rollout = f.filters?.groups?.[0]?.rollout_percentage ?? 100;
+                  return (
+                    <tr key={f.id} onClick={() => setSelectedFF(f)} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => setSelectedIds(prev => { const n = new Set(prev); if (n.has(f.id)) n.delete(f.id); else n.add(f.id); return n; })} className="w-3.5 h-3.5 rounded border-[#d1d5db]" />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-[#3b59f6] text-[12px] truncate max-w-[200px]" title={f.key}>{f.key}</span>
+                          {t === 'variants' && <span className="text-[9px] bg-[#ede9fe] text-[#7c3aed] px-1 py-0.5 rounded font-bold">A/B</span>}
+                          {t === 'remote'   && <span className="text-[9px] bg-[#dbeafe] text-[#1e40af] px-1 py-0.5 rounded font-bold">REMOTE</span>}
+                          <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(f.key); }} className="text-[#9ca3af] hover:text-[#1a1a1a]" title="Copiar key">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="4" y="4" width="9" height="9" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M11 4V3a1 1 0 00-1-1H4a1 1 0 00-1 1v6a1 1 0 001 1h1" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>
+                          </button>
+                        </div>
+                        {f.name && f.name !== f.key && <p className="text-[10px] text-[#9ca3af] truncate max-w-[260px]">{f.name}</p>}
+                      </td>
+                      <td className="px-3 py-2.5"><div className="flex gap-1 flex-wrap">{(f.tags ?? []).slice(0, 3).map((t: string) => <span key={t} className="text-[9px] bg-[#f3f3f1] text-[#646462] px-1 py-0.5 rounded">{t}</span>)}</div></td>
+                      <td className="px-3 py-2.5 text-[#646462]">{f.created_by?.first_name || f.created_by?.email || '—'}</td>
+                      <td className="px-3 py-2.5 text-[#9ca3af]">{f.created_at ? formatRelativeTime(f.created_at) : '—'}</td>
+                      <td className="px-3 py-2.5 text-[#9ca3af]">{f.last_modified ? formatRelativeTime(f.last_modified) : '—'}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-[#646462]">
+                          <div className="w-12 h-1.5 bg-[#f3f3f1] rounded overflow-hidden"><div className="h-full bg-[#e8572a]" style={{ width: `${rollout}%` }} /></div>
+                          {rollout}%
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => toggleActive(f)} className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${f.active ? 'bg-[#3b59f6]' : 'bg-[#d1d5db]'}`}>
+                          <div className="w-3.5 h-3.5 bg-white rounded-full absolute shadow-sm transition-all top-[3px]" style={{ left: f.active ? '18px' : '3px' }} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -36876,11 +37120,194 @@ if (posthog.isFeatureEnabled('my-flag') ) {
           </div>
         </div>
       )}
+      {selectedFF && (
+        <FeatureFlagDetailDrawer
+          flag={selectedFF}
+          onClose={() => setSelectedFF(null)}
+          onEdit={() => { startEdit(selectedFF); setSelectedFF(null); }}
+          onToggle={() => toggleActive(selectedFF)}
+          onDelete={() => { if (confirm('Eliminar flag?')) { deleteFF(selectedFF); } }}
+          flagTypeFn={flagType}
+        />
+      )}
     </div>
   );
 }
 
+// ── FeatureFlagDetailDrawer ──────────────────────────────────────────────────
+function FeatureFlagDetailDrawer({ flag, onClose, onEdit, onToggle, onDelete, flagTypeFn }: { flag: any; onClose: () => void; onEdit: () => void; onToggle: () => void; onDelete: () => void; flagTypeFn: (f: any) => 'boolean'|'variants'|'remote' }) {
+  const [usage, setUsage] = React.useState<{ called: number; uniqueUsers: number; perVariant: Record<string, number> }>({ called: 0, uniqueUsers: 0, perVariant: {} });
+  const [loadingUsage, setLoadingUsage] = React.useState(true);
+  const [activity, setActivity] = React.useState<any[]>([]);
+  const [linkedExperiments, setLinkedExperiments] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoadingUsage(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const escKey = flag.key.replace(/'/g, "''");
+        // Usage stats via HogQL
+        const hql = `
+          SELECT
+            toString(properties.\`$feature/${escKey}\`) AS variant,
+            count() AS called,
+            uniq(distinct_id) AS users
+          FROM events
+          WHERE event = '$feature_flag_called' AND toString(properties.$feature_flag) = '${escKey}'
+            AND timestamp >= now() - INTERVAL 7 DAY
+          GROUP BY variant
+          ORDER BY called DESC
+        `;
+        const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+        if (!cancelled) {
+          let total = 0, uniqUsers = 0;
+          const perVariant: Record<string, number> = {};
+          (res.results ?? []).forEach((r: any[]) => {
+            total += Number(r[1]);
+            uniqUsers = Math.max(uniqUsers, Number(r[2]));
+            perVariant[String(r[0])] = Number(r[1]);
+          });
+          setUsage({ called: total, uniqueUsers: uniqUsers, perVariant });
+        }
+        // Linked experiments
+        try {
+          const exps: any = await ph.posthog.experiments.list({ feature_flag_id: flag.id });
+          if (!cancelled) setLinkedExperiments(exps.results ?? []);
+        } catch {}
+        // Activity
+        try {
+          const act: any = await ph.posthog.featureFlags.activity(flag.id);
+          if (!cancelled) setActivity(act.results ?? []);
+        } catch {}
+      } catch {}
+      finally { if (!cancelled) setLoadingUsage(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [flag.id, flag.key]);
 
+  const t = flagTypeFn(flag);
+  const variants = flag.filters?.multivariate?.variants ?? [];
+  const groups = flag.filters?.groups ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[820px] max-w-[95vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <button onClick={onToggle} className={`relative w-8 h-5 rounded-full ${flag.active ? 'bg-[#3b59f6]' : 'bg-[#d1d5db]'}`}>
+                <div className="w-3.5 h-3.5 bg-white rounded-full absolute shadow-sm transition-all top-[3px]" style={{ left: flag.active ? '16px' : '3px' }} />
+              </button>
+              <span className="text-[10px] font-mono bg-[#eff2ff] text-[#3b59f6] px-1.5 py-0.5 rounded">{flag.key}</span>
+              {t === 'variants' && <span className="text-[10px] bg-[#ede9fe] text-[#7c3aed] px-1.5 py-0.5 rounded font-bold">A/B</span>}
+              {t === 'remote'   && <span className="text-[10px] bg-[#dbeafe] text-[#1e40af] px-1.5 py-0.5 rounded font-bold">REMOTE</span>}
+              {flag.active ? <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">Activo</span> : <span className="text-[10px] bg-[#f3f3f1] text-[#9ca3af] px-1.5 py-0.5 rounded">Pausado</span>}
+            </div>
+            <h2 className="text-base font-bold text-[#1a1a18]">{flag.name || flag.key}</h2>
+            {flag.description && <p className="text-xs text-[#646462] mt-1">{flag.description}</p>}
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={onEdit} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7]">Editar</button>
+            <button onClick={onDelete} className="px-2 py-1 text-[#dc2626] hover:bg-[#fee2e2] rounded text-xs">Eliminar</button>
+            <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18] ml-1"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Stats últimos 7 días */}
+          <section className="grid grid-cols-3 gap-3">
+            <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Llamadas (7d)</p>{loadingUsage ? <div className="h-7 w-20 bg-[#e9eae6] animate-pulse rounded mt-1" /> : <p className="text-2xl font-bold text-[#1a1a18]">{usage.called.toLocaleString('es-ES')}</p>}</div>
+            <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Usuarios únicos</p>{loadingUsage ? <div className="h-7 w-16 bg-[#e9eae6] animate-pulse rounded mt-1" /> : <p className="text-2xl font-bold text-[#1a1a18]">{usage.uniqueUsers.toLocaleString('es-ES')}</p>}</div>
+            <div className="bg-[#f9f9f7] rounded-lg p-3"><p className="text-[10px] text-[#9ca3af] uppercase">Rollout</p><p className="text-2xl font-bold text-[#1a1a18]">{groups[0]?.rollout_percentage ?? 100}%</p></div>
+          </section>
+
+          {/* Variants */}
+          {t === 'variants' && (
+            <section>
+              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Variantes</h4>
+              <div className="space-y-2">
+                {variants.map((v: any, i: number) => {
+                  const palette = ['#3b59f6','#7c3aed','#e8572a','#16a34a','#f59e0b','#06b6d4'];
+                  const color = palette[i % palette.length];
+                  const called = usage.perVariant[v.key] ?? 0;
+                  return (
+                    <div key={v.key} className="border border-[#e9eae6] rounded-lg p-3">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-6 h-6 rounded flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ background: color }}>{String.fromCharCode(65 + i)}</div>
+                        <span className="font-mono text-sm text-[#1a1a18]">{v.key}</span>
+                        <span className="text-[10px] text-[#9ca3af]">Rollout: {v.rollout_percentage}%</span>
+                        <span className="ml-auto text-xs font-mono">{called.toLocaleString('es-ES')} llamadas</span>
+                      </div>
+                      <div className="h-2 bg-[#f3f3f1] rounded overflow-hidden"><div className="h-full rounded" style={{ width: `${v.rollout_percentage}%`, backgroundColor: color }} /></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Release conditions */}
+          {groups.length > 0 && (
+            <section>
+              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Condiciones de liberación</h4>
+              <div className="space-y-2">
+                {groups.map((g: any, i: number) => (
+                  <div key={i} className="border border-[#e9eae6] rounded-lg p-3">
+                    <p className="text-xs font-semibold text-[#1a1a18] mb-1">Set {i + 1} — Rollout {g.rollout_percentage}%</p>
+                    {(g.properties ?? []).length === 0 ? <p className="text-[11px] text-[#9ca3af] italic">Matches all users</p>
+                    : <div className="space-y-1">{g.properties.map((p: any, j: number) => <div key={j} className="text-[11px] font-mono text-[#646462]">{p.key} {p.operator} {JSON.stringify(p.value)}</div>)}</div>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Linked experiments */}
+          {linkedExperiments.length > 0 && (
+            <section>
+              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Experimentos asociados</h4>
+              <div className="space-y-1">
+                {linkedExperiments.map((e: any) => (
+                  <button key={e.id} onClick={() => navigateWA('appExperiments', { kind: 'experiment', id: e.id })} className="w-full text-left p-2 bg-[#f5f3ff] hover:bg-[#ede9fe] rounded text-xs flex items-center gap-2">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#7c3aed]"><path d="M6 1v5.5L2.5 13.5h11L10 6.5V1" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/><path d="M4.5 1h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    <span className="text-[#1a1a18] flex-1">{e.name}</span>
+                    <span className="text-[#9ca3af]">→</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Activity log */}
+          {activity.length > 0 && (
+            <section>
+              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Historial de cambios</h4>
+              <div className="space-y-1">
+                {activity.slice(0, 10).map((a: any, i: number) => (
+                  <div key={i} className="text-[11px] text-[#646462] py-1 border-b border-[#f3f3f1]">
+                    <span className="font-medium text-[#1a1a18]">{a.user?.first_name || a.user?.email}</span>
+                    <span> {a.activity} </span>
+                    <span className="text-[#9ca3af]">{a.created_at ? formatRelativeTime(a.created_at) : ''}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Code snippet */}
+          <section className="bg-[#1e2030] rounded-lg p-3">
+            <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Cómo usarlo</h4>
+            <pre className="text-[11px] text-[#e9eae6] font-mono whitespace-pre-wrap overflow-x-auto">{`if (posthog.isFeatureEnabled('${flag.key}')) {
+  // do something
+}`}</pre>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── WAAppNotebooksView ────────────────────────────────────────────────────────
 function WAAppNotebooksView() {
