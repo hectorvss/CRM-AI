@@ -50150,8 +50150,156 @@ function WASettingsView() {
     );
   }
 
+  // ── AccountProfilePage ────────────────────────────────────────────────────
+  function AccountProfilePage() {
+    const [me, setMe] = React.useState<any>(null);
+    const [loading, setLoading] = React.useState(true);
+    const [firstName, setFirstName] = React.useState('');
+    const [lastName, setLastName] = React.useState('');
+    const [email, setEmail] = React.useState('');
+    const [savingProfile, setSavingProfile] = React.useState(false);
+    const [profileSaved, setProfileSaved] = React.useState(false);
+    const [currentPwd, setCurrentPwd] = React.useState('');
+    const [newPwd, setNewPwd] = React.useState('');
+    const [confirmPwd, setConfirmPwd] = React.useState('');
+    const [changingPwd, setChangingPwd] = React.useState(false);
+    React.useEffect(() => {
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const u: any = await ph.posthog.me();
+          setMe(u);
+          setFirstName(u.first_name ?? ''); setLastName(u.last_name ?? ''); setEmail(u.email ?? '');
+        } catch {} finally { setLoading(false); }
+      })();
+    }, []);
+    async function saveProfile() {
+      setSavingProfile(true);
+      try {
+        const ph = await import('../api/posthog');
+        const updated: any = await ph.phPatch(`/api/users/@me/`, { first_name: firstName, last_name: lastName, email });
+        setMe(updated); setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2000);
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      finally { setSavingProfile(false); }
+    }
+    async function changePassword() {
+      if (!newPwd || newPwd !== confirmPwd) { alert('Las contraseñas no coinciden'); return; }
+      if (newPwd.length < 8) { alert('La contraseña debe tener al menos 8 caracteres'); return; }
+      setChangingPwd(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPatch(`/api/users/@me/`, { current_password: currentPwd, password: newPwd });
+        alert('Contraseña actualizada');
+        setCurrentPwd(''); setNewPwd(''); setConfirmPwd('');
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      finally { setChangingPwd(false); }
+    }
+    if (loading) return <div className="flex-1 p-6 text-[13px] text-[#646462]">Cargando perfil…</div>;
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl px-8 py-6 space-y-8">
+          <div className="space-y-3">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Perfil</h2>
+            <p className="text-[13px] text-[#646462]">Tu información personal mostrada en la interfaz.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Nombre</label>
+                <input value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Apellidos</label>
+                <input value={lastName} onChange={e => setLastName(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <div className="space-y-1 col-span-2">
+                <label className="text-[12px] font-semibold text-[#646462]">Email</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={saveProfile} disabled={savingProfile} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{savingProfile ? 'Guardando…' : 'Guardar perfil'}</button>
+              {profileSaved && <span className="text-[12px] text-[#16a34a]">✓ Guardado</span>}
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-6 border-t border-[#e9eae6]">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Cambiar contraseña</h2>
+            <p className="text-[13px] text-[#646462]">Para cambiar tu contraseña, introduce la actual y la nueva.</p>
+            <div className="grid grid-cols-1 gap-3 max-w-sm">
+              <input type="password" placeholder="Contraseña actual" value={currentPwd} onChange={e => setCurrentPwd(e.target.value)} className="h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              <input type="password" placeholder="Nueva contraseña (mín. 8)" value={newPwd} onChange={e => setNewPwd(e.target.value)} className="h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              <input type="password" placeholder="Confirmar nueva contraseña" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} className="h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+            <button onClick={changePassword} disabled={changingPwd || !currentPwd || !newPwd} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{changingPwd ? 'Cambiando…' : 'Cambiar contraseña'}</button>
+          </div>
+
+          <div className="space-y-2 pt-6 border-t border-[#e9eae6]">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Autenticación de dos factores</h2>
+            <p className="text-[13px] text-[#646462]">Estado: {me?.is_2fa_enabled ? <span className="text-[#16a34a] font-semibold">Activa</span> : <span className="text-[#dc2626] font-semibold">No activa</span>}</p>
+            <button onClick={() => window.open('/account/two_factor/', '_blank')} className="h-8 px-4 border border-[#e9eae6] text-[#1a1a1a] text-[12px] font-semibold rounded-lg hover:bg-[#f3f3f1]">{me?.is_2fa_enabled ? 'Gestionar 2FA' : 'Activar 2FA'}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccountNotificationsPage ──────────────────────────────────────────────
+  function AccountNotificationsPage() {
+    const [me, setMe] = React.useState<any>(null);
+    const [loading, setLoading] = React.useState(true);
+    const [savingKey, setSavingKey] = React.useState('');
+    const ns = me?.notification_settings || {};
+    React.useEffect(() => {
+      (async () => {
+        try { const ph = await import('../api/posthog'); const u: any = await ph.posthog.me(); setMe(u); } catch {}
+        finally { setLoading(false); }
+      })();
+    }, []);
+    async function toggleNotif(field: string, v: boolean) {
+      setSavingKey(field);
+      try {
+        const ph = await import('../api/posthog');
+        const next = { ...(me?.notification_settings || {}), [field]: v };
+        const updated: any = await ph.phPatch(`/api/users/@me/`, { notification_settings: next });
+        setMe(updated);
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      finally { setSavingKey(''); }
+    }
+    if (loading) return <div className="flex-1 p-6 text-[13px] text-[#646462]">Cargando…</div>;
+    const items: { key: string; label: string; desc: string }[] = [
+      { key: 'plugin_disabled', label: 'Plugins/destinos deshabilitados', desc: 'Notificar cuando se desactive un plugin o destino CDP.' },
+      { key: 'all_weekly_digest_disabled', label: 'Digest semanal del proyecto', desc: 'Resumen semanal por correo con métricas, insights y cambios.' },
+      { key: 'project_weekly_digest_disabled', label: 'Digests por proyecto', desc: 'Activar/desactivar el digest individualmente por proyecto.' },
+    ];
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl px-8 py-6 space-y-6">
+          <div className="space-y-2">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Notificaciones por email</h2>
+            <p className="text-[13px] text-[#646462]">Elige qué notificaciones quieres recibir en tu correo.</p>
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] divide-y divide-[#e9eae6]">
+            {items.map(it => {
+              const value = !ns[it.key]; // disabled flags - invert
+              return (
+                <div key={it.key} className="flex items-center justify-between px-4 py-3 gap-4">
+                  <div>
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">{it.label} {savingKey === it.key && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                    <p className="text-[12px] text-[#646462]">{it.desc}</p>
+                  </div>
+                  <Toggle checked={value} onChange={(v: boolean) => toggleNotif(it.key, !v)}/>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── AccountCustomizationPage ──────────────────────────────────────────────
   function AccountCustomizationPage() {
+    const [me, setMe] = React.useState<any>(null);
+    const [savingKey, setSavingKey] = React.useState('');
     const [anonymize, setAnonymize] = useState(false);
     const [suggestApps, setSuggestApps] = useState(true);
     const [hedgehogEnabled, setHedgehogEnabled] = useState(false);
@@ -50163,6 +50311,40 @@ function WASettingsView() {
     const [selectedSkin, setSelectedSkin] = useState(0);
     const [freeRoam, setFreeRoam] = useState(true);
     const [keyboardControls, setKeyboardControls] = useState(true);
+    React.useEffect(() => {
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const u: any = await ph.posthog.me();
+          setMe(u);
+          setAnonymize(!!u.anonymize_data);
+          setSuggestApps(u.partial_notification_settings?.app_suggestions !== false);
+          const hh = u.hedgehog_config || {};
+          setHedgehogEnabled(!!hh.use_as_profile_photo || !!hh.enabled);
+          setHedgehogProfile(!!hh.use_as_profile_photo);
+          setFreeRoam(hh.free_movement !== false);
+          setKeyboardControls(hh.controls_enabled !== false);
+        } catch {}
+      })();
+    }, []);
+    async function patchUser(patch: any) {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.phPatch(`/api/users/@me/`, patch);
+      setMe(updated);
+    }
+    async function toggleField(field: string, v: boolean, key: string, setter: (b: boolean) => void) {
+      setter(v); setSavingKey(key);
+      try { await patchUser({ [field]: v }); } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      setSavingKey('');
+    }
+    async function patchHedgehog(patch: any) {
+      setSavingKey('hh');
+      try {
+        const next = { ...(me?.hedgehog_config || {}), ...patch };
+        await patchUser({ hedgehog_config: next });
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      setSavingKey('');
+    }
 
     const colorPalette = ['#8B4513','#4a7c2f','#e05c8a','#4488cc','#9966cc','#7a6a5a','#c4b06a','#888888','#c8a84b','#3399aa','#6b6b6b'];
     const headwearPalette = ['#6b8cba','#5a8a4a','#f0f0f0','#c49a2e','#7ab3cc','#c85a2a','#cc8844','#7ab870','#333333','#e05c5c','#8B6914'];
@@ -50198,8 +50380,8 @@ function WASettingsView() {
               <h2 className="text-[15px] font-bold text-[#1a1a1a]">Anonimizar recopilación de datos</h2>
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
             </div>
-            <p className="text-[13px] text-[#646462]">Clain usa Clain para capturar información sobre cómo las personas usan el producto. Anonimiza tus datos de uso si prefieres no compartirlos.</p>
-            <Toggle label="Anonimizar mis datos" checked={anonymize} onChange={setAnonymize} />
+            <p className="text-[13px] text-[#646462]">Clain usa Clain para capturar información sobre cómo las personas usan el producto. Anonimiza tus datos de uso si prefieres no compartirlos. {savingKey === 'anonymize_data' && <span className="text-[11px] text-[#646462]">guardando…</span>}</p>
+            <Toggle label="Anonimizar mis datos" checked={anonymize} onChange={(v: boolean) => toggleField('anonymize_data', v, 'anonymize_data', setAnonymize)} />
           </div>
 
           {/* Suggest new apps */}
@@ -50220,8 +50402,8 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462]">Activa la mascota de Clain que te acompaña por la aplicación.</p>
             <div className="flex items-center gap-6">
-              <Toggle label="Activar modo mascota" checked={hedgehogEnabled} onChange={setHedgehogEnabled} />
-              <Toggle label="Usar como foto de perfil" checked={hedgehogProfile} onChange={setHedgehogProfile} />
+              <Toggle label="Activar modo mascota" checked={hedgehogEnabled} onChange={(v: boolean) => { setHedgehogEnabled(v); patchHedgehog({ enabled: v }); }} />
+              <Toggle label="Usar como foto de perfil" checked={hedgehogProfile} onChange={(v: boolean) => { setHedgehogProfile(v); patchHedgehog({ use_as_profile_photo: v }); }} />
             </div>
 
             {/* Mascot card */}
@@ -50907,13 +51089,15 @@ function WASettingsView() {
         {page === 'org-cimd'            && <OrgCIMDPage />}
         {page === 'org-proxy'               && <OrgProxyPage />}
         {page === 'org-danger-zone'         && <OrgDangerZonePage />}
+        {page === 'account-profile'         && <AccountProfilePage />}
+        {page === 'account-notifications'   && <AccountNotificationsPage />}
         {page === 'account-customization'   && <AccountCustomizationPage />}
         {page === 'account-previews'        && <AccountPreviewsPage />}
         {page === 'account-integrations'    && <AccountIntegrationsPage />}
         {page === 'account-connected-apps'  && <AccountConnectedAppsPage />}
         {page === 'account-api-keys'        && <AccountApiKeysPage />}
         {page === 'account-danger-zone'     && <AccountDangerZonePage />}
-        {!['general','customization','autocapture','ai','mcp','error-tracking','experiments','feature-flags','heatmaps','product-analytics','revenue-analytics','session-replay','support','surveys','web-analytics','privacy','access-control','activity-logs','approvals','discussions','org-general','org-members','org-roles','org-sso','org-security','org-oauth','org-cimd','org-proxy','org-danger-zone','account-customization','account-previews','account-integrations','account-connected-apps','account-api-keys','account-danger-zone'].includes(page) && <DevPage title={pageTitles[page]}/>}
+        {!['general','customization','autocapture','ai','mcp','error-tracking','experiments','feature-flags','heatmaps','product-analytics','revenue-analytics','session-replay','support','surveys','web-analytics','privacy','access-control','activity-logs','approvals','discussions','org-general','org-members','org-roles','org-sso','org-security','org-oauth','org-cimd','org-proxy','org-danger-zone','account-profile','account-notifications','account-customization','account-previews','account-integrations','account-connected-apps','account-api-keys','account-danger-zone'].includes(page) && <DevPage title={pageTitles[page]}/>}
       </div>
 
       {/* Quick start modal */}
