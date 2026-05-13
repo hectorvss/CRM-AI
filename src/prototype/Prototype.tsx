@@ -46474,6 +46474,58 @@ function WASettingsView() {
   }
 
   function AutocapturePage() {
+    const [dataAttrs, setDataAttrs] = React.useState<string[]>(team?.data_attributes ?? ['data-attr']);
+    const [newAttr, setNewAttr] = React.useState('');
+    const [savingAttrs, setSavingAttrs] = React.useState(false);
+    const [attrsMsg, setAttrsMsg] = React.useState('');
+    const [savingFlag, setSavingFlag] = React.useState<string>('');
+
+    React.useEffect(() => {
+      if (team?.data_attributes) setDataAttrs(team.data_attributes);
+    }, [team?.id]);
+
+    async function toggleAutocapture(v: boolean) {
+      setAutocaptureWeb(v);
+      setSavingFlag('autocapture');
+      await patchTeam({ autocapture_opt_out: !v });
+      setSavingFlag('');
+    }
+    async function toggleWebVitals(v: boolean) {
+      setWebVitals(v);
+      setSavingFlag('webvitals');
+      await patchTeam({ autocapture_web_vitals_opt_in: v });
+      setSavingFlag('');
+    }
+    async function toggleMetric(metric: 'CLS' | 'FCP' | 'LCP' | 'INP', v: boolean) {
+      const setters: Record<string, (b: boolean) => void> = {
+        CLS: setCaptureCLS, FCP: setCaptureFCP, LCP: setCaptureLCP, INP: setCaptureINP,
+      };
+      const current: Record<string, boolean> = { CLS: captureCLS, FCP: captureFCP, LCP: captureLCP, INP: captureINP };
+      current[metric] = v; setters[metric](v);
+      const allowed = (['CLS','FCP','LCP','INP'] as const).filter(m => current[m]);
+      setSavingFlag('metric-' + metric);
+      await patchTeam({ autocapture_web_vitals_allowed_metrics: allowed });
+      setSavingFlag('');
+    }
+    async function toggleDeadClicks(v: boolean) {
+      setDeadClicks(v);
+      setSavingFlag('deadclicks');
+      await patchTeam({ capture_dead_clicks: v });
+      setSavingFlag('');
+    }
+    function addAttr() {
+      const v = newAttr.trim();
+      if (!v || dataAttrs.includes(v)) return;
+      setDataAttrs([...dataAttrs, v]); setNewAttr('');
+    }
+    function removeAttr(a: string) { setDataAttrs(dataAttrs.filter(x => x !== a)); }
+    async function saveAttrs() {
+      setSavingAttrs(true);
+      const ok = await patchTeam({ data_attributes: dataAttrs });
+      setSavingAttrs(false);
+      if (ok) { setAttrsMsg('Atributos guardados'); setTimeout(() => setAttrsMsg(''), 2500); }
+    }
+
     return (
       <div className="flex-1 overflow-y-auto">
         <InfoBanner />
@@ -46482,7 +46534,7 @@ function WASettingsView() {
           <div className="pb-6 border-b border-[#e9eae6]">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Captura eventos del SDK web sin código adicional"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
               <div className="flex items-center gap-2 ml-2">
                 <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
                 <PlatformBadge label="Web" check/>
@@ -46495,8 +46547,9 @@ function WASettingsView() {
               <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
             </p>
             <div className="flex items-center gap-2.5">
-              <Toggle val={autocaptureWeb} set={setAutocaptureWeb}/>
+              <Toggle val={autocaptureWeb} set={toggleAutocapture}/>
               <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura para web</span>
+              {savingFlag === 'autocapture' && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </div>
           </div>
 
@@ -46504,29 +46557,45 @@ function WASettingsView() {
           <div className="pb-6 border-b border-[#e9eae6]">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Atributos de datos</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Atributos HTML usados para identificar elementos (ej. data-attr)"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
             </div>
             <p className="text-[13px] text-[#646462] mb-3">
               Especifica atributos de datos utilizados en tu app (ej. data-attr, data-custom-id). Estos atributos ayudan a la barra de herramientas y definiciones de acciones a identificar elementos únicos en tus páginas. Usa * como comodín.{' '}
               <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
             </p>
-            <div className="flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 h-10 bg-white mb-3">
-              <span className="flex items-center gap-1.5 bg-[#f3f3f1] px-2 h-6 rounded text-[12px] text-[#1a1a1a]">
-                data-attr
-                <button className="text-[#646462] hover:text-[#1a1a1a]">
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="2"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-                </button>
-              </span>
-              <input type="text" placeholder="Añadir valor" className="flex-1 text-[13px] outline-none bg-transparent text-[#646462]"/>
+            <div className="flex items-center gap-2 flex-wrap border border-[#e9eae6] rounded-lg px-3 py-2 min-h-10 bg-white mb-3">
+              {dataAttrs.map(a => (
+                <span key={a} className="flex items-center gap-1.5 bg-[#f3f3f1] px-2 h-6 rounded text-[12px] text-[#1a1a1a]">
+                  {a}
+                  <button onClick={() => removeAttr(a)} className="text-[#646462] hover:text-[#1a1a1a]" title={`Eliminar ${a}`}>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="2"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                value={newAttr}
+                onChange={e => setNewAttr(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addAttr(); } }}
+                placeholder="Añadir valor (Enter)"
+                className="flex-1 min-w-[120px] text-[13px] outline-none bg-transparent text-[#1a1a1a]"
+              />
             </div>
-            <button className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Guardar</button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={saveAttrs}
+                disabled={savingAttrs}
+                className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50"
+              >{savingAttrs ? 'Guardando…' : 'Guardar'}</button>
+              {attrsMsg && <span className="text-[12px] text-[#16a34a]">✓ {attrsMsg}</span>}
+            </div>
           </div>
 
           {/* Web vitals autocapture */}
           <div className="pb-6 border-b border-[#e9eae6]">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura de Web Vitals</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="LCP, CLS, FCP, INP — Core Web Vitals de Chrome"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
               <div className="flex items-center gap-2 ml-2">
                 <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
                 <PlatformBadge label="Web" check/>
@@ -46537,22 +46606,24 @@ function WASettingsView() {
               <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
             </p>
             <div className="flex items-center gap-2.5 mb-4">
-              <Toggle val={webVitals} set={setWebVitals}/>
+              <Toggle val={webVitals} set={toggleWebVitals}/>
               <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura de Web Vitals</span>
+              {savingFlag === 'webvitals' && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </div>
             <p className="text-[13px] text-[#646462] mb-3">
               También puedes elegir capturar solo métricas de Web Vitals específicas. Por defecto, se capturan las cuatro métricas principales: CLS, FCP, LCP e INP.
             </p>
             <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: 'Capturar CLS', val: captureCLS, set: setCaptureCLS },
-                { label: 'Capturar FCP', val: captureFCP, set: setCaptureFCP },
-                { label: 'Capturar LCP', val: captureLCP, set: setCaptureLCP },
-                { label: 'Capturar INP', val: captureINP, set: setCaptureINP },
-              ].map(({ label, val, set }) => (
-                <div key={label} className="flex items-center gap-2.5">
-                  <Toggle val={val} set={set}/>
-                  <span className="text-[13px] text-[#1a1a1a]">{label}</span>
+              {([
+                { metric: 'CLS' as const, val: captureCLS },
+                { metric: 'FCP' as const, val: captureFCP },
+                { metric: 'LCP' as const, val: captureLCP },
+                { metric: 'INP' as const, val: captureINP },
+              ]).map(({ metric, val }) => (
+                <div key={metric} className="flex items-center gap-2.5">
+                  <Toggle val={val} set={(b: boolean) => toggleMetric(metric, b)}/>
+                  <span className="text-[13px] text-[#1a1a1a]">Capturar {metric}</span>
+                  {savingFlag === 'metric-' + metric && <span className="text-[11px] text-[#646462]">…</span>}
                 </div>
               ))}
             </div>
@@ -46562,7 +46633,7 @@ function WASettingsView() {
           <div>
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura de clics muertos</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Detecta clics que no producen ninguna acción visible"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
               <div className="flex items-center gap-2 ml-2">
                 <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
                 <PlatformBadge label="Web" check/>
@@ -46573,8 +46644,9 @@ function WASettingsView() {
               <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
             </p>
             <div className="flex items-center gap-2.5">
-              <Toggle val={deadClicks} set={setDeadClicks}/>
+              <Toggle val={deadClicks} set={toggleDeadClicks}/>
               <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura de clics muertos</span>
+              {savingFlag === 'deadclicks' && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </div>
           </div>
         </div>
@@ -46584,8 +46656,32 @@ function WASettingsView() {
 
   // ── AI Page ───────────────────────────────────────────────────────────────────
   function AIPage() {
-    const [aiMemory, setAiMemory] = useState('');
     const maxChars = 10000;
+    const initial = (team?.extra_settings?.ai_memory as string) ?? '';
+    const [aiMemory, setAiMemory] = useState<string>(initial);
+    const [saving, setSaving] = useState(false);
+    const [savedMsg, setSavedMsg] = useState('');
+    const [clearing, setClearing] = useState(false);
+    React.useEffect(() => {
+      const v = (team?.extra_settings?.ai_memory as string) ?? '';
+      setAiMemory(v);
+    }, [team?.id]);
+    async function saveMemory() {
+      setSaving(true);
+      const next = { ...(team?.extra_settings || {}), ai_memory: aiMemory };
+      const ok = await patchTeam({ extra_settings: next });
+      setSaving(false);
+      if (ok) { setSavedMsg('Memoria guardada'); setTimeout(() => setSavedMsg(''), 2500); }
+    }
+    async function clearMemory() {
+      if (!confirm('¿Vaciar toda la memoria de Clain AI? Esta acción no se puede deshacer.')) return;
+      setClearing(true);
+      setAiMemory('');
+      const next = { ...(team?.extra_settings || {}), ai_memory: '' };
+      await patchTeam({ extra_settings: next });
+      setClearing(false);
+    }
+    const dirty = aiMemory !== ((team?.extra_settings?.ai_memory as string) ?? '');
     return (
       <div className="flex-1 overflow-y-auto">
         <InfoBanner />
@@ -46594,7 +46690,7 @@ function WASettingsView() {
           <div className="pb-6 border-b border-[#e9eae6]">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Memoria</h3>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Contexto que Clain AI recuerda sobre tu empresa y producto"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
             </div>
             <p className="text-[13px] text-[#646462] mb-1.5">Clain AI recuerda automáticamente detalles sobre tu empresa y producto. Este contexto ayuda a nuestro asistente de IA a proporcionar respuestas y sugerencias relevantes. Si hay detalles que no quieres que Clain AI recuerde, puedes editarlos o eliminarlos a continuación.</p>
             <p className="text-[13px] text-[#646462] mb-4">Cuando la memoria supera los 5.000 caracteres, solo los primeros y últimos 2.500 caracteres son visibles para Clain AI. El tamaño máximo de memoria es de 10.000 caracteres.</p>
@@ -46611,7 +46707,19 @@ function WASettingsView() {
                 <span className="text-[11px] text-[#646462]">{aiMemory.length} / {maxChars}</span>
               </div>
             </div>
-            <button className="mt-3 h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Guardar memoria</button>
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={saveMemory}
+                disabled={saving || !dirty}
+                className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50 disabled:cursor-not-allowed"
+              >{saving ? 'Guardando…' : 'Guardar memoria'}</button>
+              <button
+                onClick={clearMemory}
+                disabled={clearing || !aiMemory}
+                className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1] disabled:opacity-50 disabled:cursor-not-allowed"
+              >{clearing ? 'Vaciando…' : 'Vaciar memoria'}</button>
+              {savedMsg && <span className="text-[12px] text-[#16a34a]">✓ {savedMsg}</span>}
+            </div>
           </div>
           {/* Changelog */}
           <div>
@@ -46629,13 +46737,26 @@ function WASettingsView() {
 
   // ── MCP Page ──────────────────────────────────────────────────────────────────
   function MCPPage() {
+    const [copied, setCopied] = React.useState(false);
+    const cmd = 'npx @clain/wizard mcp add';
+    async function copyCmd() {
+      try { await navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
+    }
+    const clients = [
+      { name: 'Claude Desktop', supported: true },
+      { name: 'Claude Code', supported: true },
+      { name: 'Cursor', supported: true },
+      { name: 'VS Code', supported: true },
+      { name: 'Zed', supported: true },
+      { name: 'Windsurf', supported: false },
+    ];
     return (
       <div className="flex-1 overflow-y-auto">
         <InfoBanner />
-        <div className="p-6 max-w-2xl space-y-4">
+        <div className="p-6 max-w-2xl space-y-5">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="text-[14px] font-bold text-[#1a1a1a]">Servidor Model Context Protocol (MCP)</h3>
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Protocolo para conectar asistentes de IA con datos externos"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
           </div>
           <p className="text-[13px] text-[#646462]">
             Conecta Clain a herramientas de IA como Claude, Cursor y Copilot a través del protocolo MCP para asistencia de IA basada en datos.{' '}
@@ -46644,10 +46765,37 @@ function WASettingsView() {
           <p className="text-[13px] text-[#646462]">Los servidores MCP permiten a los asistentes de IA conectarse directamente a tu instancia de Clain, permitiéndoles recuperar insights y realizar acciones en tu nombre.</p>
           <p className="text-[13px] text-[#646462]">Puedes instalar el servidor MCP de Clain en Cursor, Claude Code, Claude Desktop, VS Code y Zed ejecutando el siguiente comando:</p>
           <div className="flex items-center border border-[#e9eae6] rounded-lg bg-white overflow-hidden">
-            <code className="flex-1 px-4 py-2.5 text-[13px] font-mono text-[#1a1a1a]">npx @clain/wizard mcp add</code>
-            <button className="px-3 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1]">
+            <code className="flex-1 px-4 py-2.5 text-[13px] font-mono text-[#1a1a1a]">{cmd}</code>
+            <button onClick={copyCmd} title="Copiar al portapapeles" className="px-3 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] flex items-center gap-1.5">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+              {copied && <span className="text-[11px] text-[#16a34a]">✓</span>}
             </button>
+          </div>
+          {/* Compatibility list */}
+          <div className="border border-[#e9eae6] rounded-lg p-4 bg-[#fafaf9]">
+            <p className="text-[12px] font-semibold text-[#1a1a1a] mb-2">Clientes compatibles</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {clients.map(c => (
+                <div key={c.name} className="flex items-center gap-2 text-[12px]">
+                  <span className={`w-1.5 h-1.5 rounded-full ${c.supported ? 'bg-[#16a34a]' : 'bg-[#e9eae6]'}`}/>
+                  <span className={c.supported ? 'text-[#1a1a1a]' : 'text-[#9ca3af]'}>{c.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Connection info */}
+          <div className="border border-[#e9eae6] rounded-lg p-4 bg-white">
+            <p className="text-[12px] font-semibold text-[#1a1a1a] mb-2">Datos de conexión</p>
+            <div className="space-y-1.5 text-[12px]">
+              <div className="flex items-center gap-2">
+                <span className="text-[#646462] w-24">Project ID:</span>
+                <code className="flex-1 px-2 py-1 bg-[#f3f3f1] rounded font-mono text-[11px]">{team?.id ?? '—'}</code>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[#646462] w-24">Host:</span>
+                <code className="flex-1 px-2 py-1 bg-[#f3f3f1] rounded font-mono text-[11px] truncate">{typeof window !== 'undefined' ? window.location.origin : '—'}</code>
+              </div>
+            </div>
           </div>
           <p className="text-[13px] text-[#646462]">
             Puedes obtener más información sobre qué herramientas están disponibles y otras opciones de instalación{' '}
