@@ -47086,21 +47086,34 @@ function WASettingsView() {
       await patchTeam({ autocapture_exceptions_opt_in: v });
       setSaving(false);
     }
+    const [activeSection, setActiveSection] = React.useState<string>('autocapture');
+    const sections = [
+      { id: 'autocapture', label: 'Autocaptura' },
+      { id: 'suppression', label: 'Reglas de supresión' },
+      { id: 'assignment', label: 'Asignación automática' },
+      { id: 'grouping', label: 'Agrupación' },
+      { id: 'alerts', label: 'Alertas' },
+      { id: 'symbol-sets', label: 'Symbol sets' },
+      { id: 'releases', label: 'Releases' },
+      { id: 'integrations', label: 'Integraciones' },
+    ];
     return (
       <div className="flex-1 overflow-y-auto">
         <InfoBanner />
-        <div className="p-6 max-w-2xl space-y-8">
-          {/* Moved notice */}
-          <div className="flex items-start gap-2.5 border border-[#e9eae6] rounded-lg px-4 py-3 bg-[#fafaf9]">
-            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
-            <p className="text-[13px] text-[#1a1a1a] leading-[20px]">
-              <strong>La configuración de Error tracking se ha movido.</strong> Las configuraciones de alertas, reglas de supresión, detección de picos, asignación automática, agrupación personalizada, symbol sets y releases están ahora en la{' '}
-              <span className="text-[#e8572a] cursor-pointer hover:underline">página de configuración de Error tracking</span>.
-              {' '}Puedes acceder desde la barra lateral: Error tracking → Configuración.
-            </p>
+        <div className="p-6 max-w-3xl space-y-6">
+          {/* Section nav */}
+          <div className="flex items-center gap-1 border-b border-[#e9eae6] overflow-x-auto">
+            {sections.map(s => (
+              <button
+                key={s.id}
+                onClick={() => setActiveSection(s.id)}
+                className={`h-9 px-3 text-[12px] font-semibold border-b-2 transition-colors whitespace-nowrap ${activeSection === s.id ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}
+              >{s.label}</button>
+            ))}
           </div>
-          {/* Exception autocapture */}
-          <div className="pb-6 border-b border-[#e9eae6]">
+
+          {activeSection === 'autocapture' && (
+          <div className="pb-6 space-y-3">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura de excepciones</h3>
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
@@ -47116,7 +47129,7 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462] mb-3">
               Captura automáticamente excepciones de frontend usando listeners onError y onUnhandledRejection en el SDK de JavaScript web.{' '}
-              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+              <a href="https://posthog.com/docs/error-tracking" target="_blank" rel="noopener noreferrer" className="text-[#e8572a] hover:underline">Docs ↗</a>
             </p>
             <div className="flex items-center gap-2.5">
               <Toggle val={exceptionCapture} set={toggleException}/>
@@ -47124,6 +47137,16 @@ function WASettingsView() {
               {saving && <span className="text-[11px] text-[#646462]">guardando…</span>}
             </div>
           </div>
+          )}
+
+          {activeSection === 'suppression' && <ETSuppressionRules/>}
+          {activeSection === 'assignment' && <ETAssignmentRules/>}
+          {activeSection === 'grouping' && <ETGroupingRules/>}
+          {activeSection === 'alerts' && <ETAlerts/>}
+          {activeSection === 'symbol-sets' && <ETSymbolSets/>}
+          {activeSection === 'releases' && <ETReleases/>}
+          {activeSection === 'integrations' && (
+          <div>
           {/* Integrations */}
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -47151,7 +47174,543 @@ function WASettingsView() {
               ))}
             </div>
           </div>
+          </div>
+          )}
         </div>
+      </div>
+    );
+  }
+
+  // ── Error Tracking sub-screens ────────────────────────────────────────────
+  function ETSuppressionRules() {
+    const [rules, setRules] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [exceptionType, setExceptionType] = React.useState('');
+    const [messagePattern, setMessagePattern] = React.useState('');
+    const [creating, setCreating] = React.useState(false);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/error_tracking/suppression_rules/`);
+        setRules(res?.results ?? res ?? []);
+      } catch { setRules([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function create() {
+      setCreating(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/projects/${ph.getTeamId()}/error_tracking/suppression_rules/`, {
+          filters: { exception_type: exceptionType.trim() || null, message: messagePattern.trim() || null },
+        });
+        setExceptionType(''); setMessagePattern(''); setShowAdd(false);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      finally { setCreating(false); }
+    }
+    async function toggleRule(id: string, enabled: boolean) {
+      try { const ph = await import('../api/posthog'); await ph.phPatch(`/api/projects/${ph.getTeamId()}/error_tracking/suppression_rules/${id}/`, { enabled: !enabled }); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function deleteRule(id: string) {
+      if (!confirm('¿Eliminar regla de supresión?')) return;
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/projects/${ph.getTeamId()}/error_tracking/suppression_rules/${id}/`); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Reglas de supresión</h3>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Las reglas suprimen excepciones que coincidan, no se mostrarán en Issues"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          </div>
+          <p className="text-[13px] text-[#646462]">Suprime excepciones que coincidan con un tipo o mensaje específico. Las excepciones suprimidas no aparecerán en la lista de issues.</p>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando reglas…</div>
+          ) : rules.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Sin reglas de supresión.</div>
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tipo</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Patrón mensaje</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {rules.map((r: any) => (
+                  <tr key={r.id} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono">{r.filters?.exception_type ?? '*'}</code></td>
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono">{r.filters?.message ?? '*'}</code></td>
+                    <td className="px-4 py-2.5">
+                      <button onClick={() => toggleRule(r.id, r.enabled !== false)} className={`px-2 py-0.5 rounded text-[11px] font-semibold ${r.enabled !== false ? 'bg-[#f0fdf4] text-[#16a34a]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                        {r.enabled !== false ? 'Activa' : 'Desactivada'}
+                      </button>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => deleteRule(r.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 space-y-2 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Tipo de excepción (opcional)</p>
+              <input value={exceptionType} onChange={e => setExceptionType(e.target.value)} placeholder="TypeError" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Patrón de mensaje (opcional)</p>
+              <input value={messagePattern} onChange={e => setMessagePattern(e.target.value)} placeholder="Cannot read properties of undefined" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={create} disabled={creating || (!exceptionType.trim() && !messagePattern.trim())} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{creating ? 'Creando…' : 'Crear regla'}</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir regla de supresión</button>
+        )}
+      </div>
+    );
+  }
+
+  function ETAssignmentRules() {
+    const [rules, setRules] = React.useState<any[]>([]);
+    const [members, setMembers] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [assigneeId, setAssigneeId] = React.useState<string>('');
+    const [exceptionType, setExceptionType] = React.useState('');
+    const [creating, setCreating] = React.useState(false);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const [r, m] = await Promise.all([
+          ph.phGet(`/api/projects/${ph.getTeamId()}/error_tracking/assignment_rules/`).catch(() => ({ results: [] })),
+          (ph.posthog as any).organization.members().catch(() => ({ results: [] })),
+        ]);
+        setRules((r as any)?.results ?? []);
+        setMembers((m as any)?.results ?? []);
+      } catch { setRules([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function create() {
+      setCreating(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/projects/${ph.getTeamId()}/error_tracking/assignment_rules/`, {
+          assignee: assigneeId ? { type: 'user_group', id: assigneeId } : null,
+          filters: { exception_type: exceptionType.trim() || null },
+        });
+        setExceptionType(''); setAssigneeId(''); setShowAdd(false);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      finally { setCreating(false); }
+    }
+    async function deleteRule(id: string) {
+      if (!confirm('¿Eliminar regla de asignación?')) return;
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/projects/${ph.getTeamId()}/error_tracking/assignment_rules/${id}/`); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Asignación automática</h3>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Asigna automáticamente issues a miembros según reglas. La primera regla que coincide gana."><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          </div>
+          <p className="text-[13px] text-[#646462]">Asigna nuevos issues automáticamente a miembros del equipo según el tipo de excepción. <strong>La primera regla que coincide se aplica.</strong></p>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando reglas…</div>
+          ) : rules.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Sin reglas de asignación.</div>
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-12">#</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tipo de excepción</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Asignado a</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {rules.map((r: any, i: number) => {
+                  const assignee = members.find((m: any) => (m.user?.uuid ?? m.uuid) === r.assignee?.id);
+                  return (
+                    <tr key={r.id} className="hover:bg-[#fafaf9]">
+                      <td className="px-4 py-2.5 text-[12px] text-[#646462]">{i + 1}</td>
+                      <td className="px-4 py-2.5 text-[12px]"><code className="font-mono">{r.filters?.exception_type ?? '*'}</code></td>
+                      <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a]">{assignee?.user?.email ?? r.assignee?.id ?? 'Sin asignar'}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button onClick={() => deleteRule(r.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 space-y-2 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Tipo de excepción</p>
+              <input value={exceptionType} onChange={e => setExceptionType(e.target.value)} placeholder="TypeError, NetworkError, … (vacío = cualquier)" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Asignar a</p>
+              <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+                <option value="">— Selecciona miembro —</option>
+                {members.map((m: any) => {
+                  const u = m.user || m;
+                  return <option key={u.uuid ?? u.id} value={u.uuid ?? u.id}>{u.first_name || u.email}</option>;
+                })}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={create} disabled={creating || !assigneeId} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{creating ? 'Creando…' : 'Crear regla'}</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir regla de asignación</button>
+        )}
+      </div>
+    );
+  }
+
+  function ETGroupingRules() {
+    const [rules, setRules] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [fingerprint, setFingerprint] = React.useState('');
+    const [exceptionType, setExceptionType] = React.useState('');
+    const [creating, setCreating] = React.useState(false);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/error_tracking/grouping_rules/`);
+        setRules(res?.results ?? res ?? []);
+      } catch { setRules([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function create() {
+      setCreating(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/projects/${ph.getTeamId()}/error_tracking/grouping_rules/`, {
+          fingerprint: fingerprint.trim(),
+          filters: { exception_type: exceptionType.trim() || null },
+        });
+        setFingerprint(''); setExceptionType(''); setShowAdd(false);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      finally { setCreating(false); }
+    }
+    async function deleteRule(id: string) {
+      if (!confirm('¿Eliminar regla de agrupación?')) return;
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/projects/${ph.getTeamId()}/error_tracking/grouping_rules/${id}/`); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Agrupación personalizada</h3>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Override del fingerprint para forzar agrupación de issues"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          </div>
+          <p className="text-[13px] text-[#646462]">Sobreescribe el fingerprint que usa Clain para agrupar excepciones en issues. Útil cuando issues distintos deberían tratarse como uno solo.</p>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando reglas…</div>
+          ) : rules.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Sin reglas de agrupación.</div>
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Filtro</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fingerprint</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {rules.map((r: any) => (
+                  <tr key={r.id} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono">{r.filters?.exception_type ?? '*'}</code></td>
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono">{r.fingerprint}</code></td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => deleteRule(r.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 space-y-2 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Filtro: tipo de excepción</p>
+              <input value={exceptionType} onChange={e => setExceptionType(e.target.value)} placeholder="ChunkLoadError" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Fingerprint personalizado</p>
+              <input value={fingerprint} onChange={e => setFingerprint(e.target.value)} placeholder="chunk-load-error-grouped" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={create} disabled={creating || !fingerprint.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{creating ? 'Creando…' : 'Crear'}</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir regla de agrupación</button>
+        )}
+      </div>
+    );
+  }
+
+  function ETAlerts() {
+    const [alerts, setAlerts] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/alerts/?subject=error_tracking`);
+        setAlerts(res?.results ?? []);
+      } catch { setAlerts([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Alertas de Error Tracking</h3>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Alertas por volumen, spike o issue específico"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          </div>
+          <p className="text-[13px] text-[#646462]">Configura alertas para issues específicos, picos (spikes) o volumen general. Las alertas se gestionan desde cada issue individualmente.</p>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando alertas…</div>
+          ) : alerts.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">No hay alertas configuradas. Crea una desde la página de detalle de un issue.</div>
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Alerta</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tipo</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {alerts.map((a: any) => (
+                  <tr key={a.id} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a]">{a.name ?? a.subject_name}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#646462]">{a.condition?.type ?? a.alert_type ?? 'volumen'}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${a.enabled ? 'bg-[#f0fdf4] text-[#16a34a]' : 'bg-[#f3f3f1] text-[#646462]'}`}>{a.enabled ? 'Activa' : 'Pausada'}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <p className="text-[12px] text-[#646462]">💡 La detección de picos (spike detection) se activa automáticamente cuando un issue supera 2x su volumen medio en 1h.</p>
+      </div>
+    );
+  }
+
+  function ETSymbolSets() {
+    const [sets, setSets] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [uploading, setUploading] = React.useState(false);
+    const fileRef = React.useRef<HTMLInputElement>(null);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/error_tracking/symbol_sets/`);
+        setSets(res?.results ?? res ?? []);
+      } catch { setSets([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function upload(file: File) {
+      setUploading(true);
+      try {
+        const ph = await import('../api/posthog');
+        const fd = new FormData(); fd.append('source_map', file); fd.append('ref', file.name);
+        await fetch(`${window.location.origin}/api/projects/${ph.getTeamId()}/error_tracking/symbol_sets/`, { method: 'POST', body: fd, credentials: 'include' });
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      setUploading(false);
+    }
+    async function deleteSet(id: string) {
+      if (!confirm('¿Eliminar symbol set?')) return;
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/projects/${ph.getTeamId()}/error_tracking/symbol_sets/${id}/`); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    const missingCount = sets.filter((s: any) => !s.uploaded).length;
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Symbol sets (source maps)</h3>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Source maps para desofuscar stack traces minificados"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          </div>
+          <p className="text-[13px] text-[#646462]">Sube source maps para que Clain pueda desofuscar stack traces minificados y mostrar líneas de código originales.</p>
+          {missingCount > 0 && <p className="text-[12px] text-[#92400e] bg-[#fffbeb] border border-[#fde68a] rounded px-2.5 py-1.5 mt-2">⚠ {missingCount} symbol set(s) detectados pero no subidos.</p>}
+        </div>
+        <input ref={fileRef} type="file" accept=".map,.js.map" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); }}/>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando…</div>
+          ) : sets.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Sin symbol sets.</div>
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Ref / nombre</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Subido</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {sets.map((s: any) => (
+                  <tr key={s.id} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono truncate max-w-xs inline-block">{s.ref ?? s.symbol_set_ref}</code></td>
+                    <td className="px-4 py-2.5">
+                      {s.uploaded
+                        ? <span className="px-2 py-0.5 bg-[#f0fdf4] text-[#16a34a] rounded text-[11px] font-semibold">Subido</span>
+                        : <span className="px-2 py-0.5 bg-[#fef3c7] text-[#92400e] rounded text-[11px] font-semibold">Falta</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-[11px] text-[#646462]">{s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => deleteSet(s.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <button onClick={() => fileRef.current?.click()} disabled={uploading} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{uploading ? 'Subiendo…' : '+ Subir source map'}</button>
+      </div>
+    );
+  }
+
+  function ETReleases() {
+    const [releases, setReleases] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [version, setVersion] = React.useState('');
+    const [commitSha, setCommitSha] = React.useState('');
+    const [creating, setCreating] = React.useState(false);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/error_tracking/releases/`);
+        setReleases(res?.results ?? res ?? []);
+      } catch { setReleases([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function create() {
+      setCreating(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/projects/${ph.getTeamId()}/error_tracking/releases/`, {
+          version: version.trim(),
+          metadata: commitSha.trim() ? { commit_sha: commitSha.trim() } : {},
+        });
+        setVersion(''); setCommitSha(''); setShowAdd(false);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      finally { setCreating(false); }
+    }
+    async function deleteRelease(id: string) {
+      if (!confirm('¿Eliminar release?')) return;
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/projects/${ph.getTeamId()}/error_tracking/releases/${id}/`); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Releases</h3>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Asocia versiones de tu app con stack traces para 'regression detection'"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          </div>
+          <p className="text-[13px] text-[#646462]">Registra cada release de tu app para asociar issues con la versión que los introdujo. Útil para detectar regresiones.</p>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando releases…</div>
+          ) : releases.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[12px] text-[#646462]">Sin releases registrados.</div>
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Versión</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Commit SHA</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {releases.map((r: any) => (
+                  <tr key={r.id} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px] font-medium text-[#1a1a1a]">{r.version}</td>
+                    <td className="px-4 py-2.5 text-[11px]"><code className="font-mono text-[#646462]">{(r.metadata?.commit_sha ?? '').substring(0, 8) || '—'}</code></td>
+                    <td className="px-4 py-2.5 text-[11px] text-[#646462]">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => deleteRelease(r.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 space-y-2 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Versión</p>
+              <input value={version} onChange={e => setVersion(e.target.value)} placeholder="1.4.0" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Commit SHA (opcional)</p>
+              <input value={commitSha} onChange={e => setCommitSha(e.target.value)} placeholder="abc1234567890abcdef…" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={create} disabled={creating || !version.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{creating ? 'Creando…' : 'Crear release'}</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Registrar release</button>
+        )}
       </div>
     );
   }
