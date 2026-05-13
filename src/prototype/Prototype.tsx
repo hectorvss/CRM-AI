@@ -52211,6 +52211,9 @@ function WASettingsView() {
     const [showAdd, setShowAdd] = React.useState(false);
     const [newDomain, setNewDomain] = React.useState('');
     const [creating, setCreating] = React.useState(false);
+    const [verifyModal, setVerifyModal] = React.useState<any | null>(null);
+    const [configModal, setConfigModal] = React.useState<any | null>(null);
+    const [socialProviders, setSocialProviders] = React.useState<any>(organization?.available_features?.social_providers ?? {});
     async function refresh() {
       try {
         const ph = await import('../api/posthog');
@@ -52239,6 +52242,36 @@ function WASettingsView() {
         await refresh();
       } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
     }
+    async function verifyDomain(id: string) {
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/organizations/@current/domains/${id}/verify/`, {});
+        await refresh();
+        setVerifyModal(null);
+      } catch (e: any) { alert('Verificación fallida: ' + (e?.message ?? '')); }
+    }
+    async function toggleJIT(id: string, v: boolean) {
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPatch(`/api/organizations/@current/domains/${id}/`, { jit_provisioning_enabled: v });
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function changeSSOEnforcement(id: string, v: string) {
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPatch(`/api/organizations/@current/domains/${id}/`, { sso_enforcement: v || null });
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function saveSamlConfig(id: string, config: any) {
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPatch(`/api/organizations/@current/domains/${id}/`, config);
+        await refresh();
+        setConfigModal(null);
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-8">
@@ -52255,15 +52288,17 @@ function WASettingsView() {
                   <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Dominio</th>
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Verificado</th>
-                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">SSO</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">SSO forzado</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">JIT</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">SAML</th>
                     <th className="px-4 py-2.5"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e9eae6]">
                   {loading ? (
-                    <tr><td colSpan={4} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando…</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando…</td></tr>
                   ) : domains.length === 0 ? (
-                    <tr><td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">Sin dominios configurados.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-4 text-[13px] text-[#646462]">Sin dominios configurados.</td></tr>
                   ) : (
                     domains.map((d: any) => (
                       <tr key={d.id} className="hover:bg-[#fafaf9]">
@@ -52271,10 +52306,24 @@ function WASettingsView() {
                         <td className="px-4 py-2.5">
                           {d.is_verified
                             ? <span className="px-2 py-0.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded text-[11px] font-semibold text-[#16a34a]">Verificado</span>
-                            : <span className="px-2 py-0.5 bg-[#fef3c7] border border-[#fde68a] rounded text-[11px] font-semibold text-[#92400e]">Pendiente</span>}
+                            : <button onClick={() => setVerifyModal(d)} className="px-2 py-0.5 bg-[#fef3c7] border border-[#fde68a] rounded text-[11px] font-semibold text-[#92400e] hover:bg-[#fde68a]">Verificar →</button>}
                         </td>
-                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{d.sso_enforcement || 'No forzado'}</td>
+                        <td className="px-4 py-2.5">
+                          <select value={d.sso_enforcement || ''} onChange={e => changeSSOEnforcement(d.id, e.target.value)} disabled={!d.is_verified} className="h-7 px-2 border border-[#e9eae6] rounded text-[11px] bg-white disabled:opacity-50">
+                            <option value="">No forzado</option>
+                            <option value="google-oauth2">Google</option>
+                            <option value="github">GitHub</option>
+                            <option value="saml">SAML</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Toggle checked={!!d.jit_provisioning_enabled} onChange={(v: boolean) => toggleJIT(d.id, v)}/>
+                        </td>
+                        <td className="px-4 py-2.5 text-[11px]">
+                          {d.saml_entity_id ? <span className="px-2 py-0.5 bg-[#f0fdf4] text-[#16a34a] rounded font-semibold">Configurado</span> : <span className="text-[#646462]">—</span>}
+                        </td>
                         <td className="px-4 py-2.5 text-right">
+                          <button onClick={() => setConfigModal(d)} className="text-[#e8572a] text-[12px] hover:underline mr-2">SAML</button>
                           <button onClick={() => deleteDomain(d.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
                         </td>
                       </tr>
@@ -52303,6 +52352,109 @@ function WASettingsView() {
                 Añadir dominio
               </button>
             )}
+          </div>
+
+          {/* Social providers */}
+          <div className="space-y-3 pt-6 border-t border-[#e9eae6]">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Proveedores sociales</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Login con Google/GitHub/GitLab"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Permite login con proveedores sociales. Estos se configuran a nivel de instancia (variables de entorno).</p>
+            <div className="border border-[#e9eae6] rounded-[10px] divide-y divide-[#e9eae6]">
+              {[
+                { id: 'google-oauth2', name: 'Google', envVars: 'SOCIAL_AUTH_GOOGLE_OAUTH2_KEY' },
+                { id: 'github', name: 'GitHub', envVars: 'SOCIAL_AUTH_GITHUB_KEY' },
+                { id: 'gitlab', name: 'GitLab', envVars: 'SOCIAL_AUTH_GITLAB_KEY' },
+              ].map(p => (
+                <div key={p.id} className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">{p.name}</p>
+                    <p className="text-[11px] text-[#646462]">Configura <code className="font-mono">{p.envVars}</code> en el servidor</p>
+                  </div>
+                  <span className="px-2 py-0.5 bg-[#f3f3f1] text-[#646462] rounded text-[11px] font-semibold">Por env vars</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Verify domain modal */}
+        {verifyModal && (
+          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center px-4" onClick={() => setVerifyModal(null)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white border border-[#e9eae6] rounded-[12px] shadow-2xl w-full max-w-md p-5 space-y-3">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Verificar {verifyModal.domain}</h3>
+              <p className="text-[13px] text-[#646462]">Añade el siguiente registro TXT al DNS de <strong>{verifyModal.domain}</strong>:</p>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-[11px] font-semibold text-[#646462] mb-1">Nombre</p>
+                  <code className="block px-3 py-2 bg-[#f3f3f1] rounded text-[12px] font-mono">_clain-verify.{verifyModal.domain}</code>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold text-[#646462] mb-1">Tipo</p>
+                  <code className="block px-3 py-2 bg-[#f3f3f1] rounded text-[12px] font-mono">TXT</code>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold text-[#646462] mb-1">Valor</p>
+                  <code className="block px-3 py-2 bg-[#f3f3f1] rounded text-[12px] font-mono break-all">{verifyModal.verification_challenge ?? `clain-verification=${verifyModal.id}`}</code>
+                </div>
+              </div>
+              <p className="text-[12px] text-[#646462]">Después de añadirlo, haz clic en Verificar. La propagación DNS puede tardar unos minutos.</p>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#e9eae6]">
+                <button onClick={() => setVerifyModal(null)} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cerrar</button>
+                <button onClick={() => verifyDomain(verifyModal.id)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Verificar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SAML config modal */}
+        {configModal && <SAMLConfigModal domain={configModal} onClose={() => setConfigModal(null)} onSave={saveSamlConfig}/>}
+      </div>
+    );
+  }
+
+  function SAMLConfigModal({ domain, onClose, onSave }: { domain: any; onClose: () => void; onSave: (id: string, cfg: any) => void }) {
+    const [entityId, setEntityId] = React.useState<string>(domain.saml_entity_id ?? '');
+    const [acsUrl, setAcsUrl] = React.useState<string>(domain.saml_acs_url ?? '');
+    const [x509, setX509] = React.useState<string>(domain.saml_x509_cert ?? '');
+    const ourAcsUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/complete/saml/`;
+    return (
+      <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center px-4" onClick={onClose}>
+        <div onClick={e => e.stopPropagation()} className="bg-white border border-[#e9eae6] rounded-[12px] shadow-2xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
+          <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-1">Configurar SAML para {domain.domain}</h3>
+          <p className="text-[12px] text-[#646462] mb-4">Configura el IdP de tu proveedor SAML con los siguientes datos, luego pega aquí los datos del IdP.</p>
+
+          <div className="bg-[#fafaf9] border border-[#e9eae6] rounded-lg p-3 mb-4 space-y-2">
+            <p className="text-[11px] font-semibold text-[#646462] uppercase">Datos para tu IdP</p>
+            <div>
+              <p className="text-[11px] text-[#646462]">ACS URL</p>
+              <code className="block text-[11px] font-mono text-[#1a1a1a] mt-0.5">{ourAcsUrl}</code>
+            </div>
+            <div>
+              <p className="text-[11px] text-[#646462]">SP Entity ID</p>
+              <code className="block text-[11px] font-mono text-[#1a1a1a] mt-0.5">{typeof window !== 'undefined' ? window.location.origin : ''}/saml/metadata</code>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">IdP Entity ID</p>
+              <input value={entityId} onChange={e => setEntityId(e.target.value)} placeholder="https://example.okta.com/exk1abcd" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">IdP SSO URL</p>
+              <input value={acsUrl} onChange={e => setAcsUrl(e.target.value)} placeholder="https://example.okta.com/app/sso/saml" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">x509 Certificate</p>
+              <textarea value={x509} onChange={e => setX509(e.target.value)} rows={5} placeholder="-----BEGIN CERTIFICATE-----" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[11px] outline-none focus:border-[#3b59f6] font-mono resize-y"/>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-5 pt-3 border-t border-[#e9eae6]">
+            <button onClick={onClose} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+            <button onClick={() => onSave(domain.id, { saml_entity_id: entityId, saml_acs_url: acsUrl, saml_x509_cert: x509 })} disabled={!entityId.trim() || !acsUrl.trim() || !x509.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">Guardar SAML</button>
           </div>
         </div>
       </div>
@@ -53488,14 +53640,20 @@ function WASettingsView() {
   // ── AccountApiKeysPage ────────────────────────────────────────────────────
   function AccountApiKeysPage() {
     const [showModal, setShowModal] = useState(false);
+    const [editingKey, setEditingKey] = React.useState<any | null>(null);
     const [label, setLabel] = useState('');
     const [orgAccess, setOrgAccess] = useState<'all'|'orgs'|'projects'>('all');
+    const [scopedOrgs, setScopedOrgs] = React.useState<string[]>([]);
+    const [scopedTeams, setScopedTeams] = React.useState<number[]>([]);
     const [scopeSearch, setScopeSearch] = useState('');
     const [scopes, setScopes] = useState<Record<string, 'none'|'read'|'write'>>({});
+    const [showPresetMenu, setShowPresetMenu] = React.useState(false);
     const [keys, setKeys] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [creating, setCreating] = React.useState(false);
     const [newKeyShown, setNewKeyShown] = React.useState<string | null>(null);
+    const [allTeams, setAllTeams] = React.useState<any[]>([]);
+    const [allOrgs, setAllOrgs] = React.useState<any[]>([]);
     async function refresh() {
       try {
         const ph = await import('../api/posthog');
@@ -53505,7 +53663,53 @@ function WASettingsView() {
       finally { setLoading(false); }
     }
     React.useEffect(() => { refresh(); }, []);
-    async function createKey() {
+    React.useEffect(() => {
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const [orgs, projs] = await Promise.all([
+            ph.phGet(`/api/users/@me/`).then((u: any) => u.organizations ?? []).catch(() => []),
+            ph.phGet(`/api/projects/`).catch(() => ({ results: [] })),
+          ]);
+          setAllOrgs(orgs); setAllTeams((projs as any)?.results ?? []);
+        } catch {}
+      })();
+    }, []);
+    function applyPreset(preset: 'all' | 'readonly' | 'mcp' | 'feature-flags' | 'analytics') {
+      const next: Record<string, 'none' | 'read' | 'write'> = {};
+      if (preset === 'all') allScopes.forEach(s => { next[s.name] = s.noWrite ? 'read' : 'write'; });
+      else if (preset === 'readonly') allScopes.forEach(s => { next[s.name] = 'read'; });
+      else if (preset === 'mcp') {
+        ['Insight','Dashboard','Feature flag','Experiment','Query','Person','Event definition','Property definition','Cohort','Action'].forEach(n => { next[n] = 'read'; });
+      } else if (preset === 'feature-flags') {
+        next['Feature flag'] = 'write'; next['Experiment'] = 'read'; next['Cohort'] = 'read';
+      } else if (preset === 'analytics') {
+        ['Insight','Dashboard','Query','Event definition','Property definition','Person'].forEach(n => { next[n] = 'read'; });
+      }
+      setScopes(next);
+      setShowPresetMenu(false);
+    }
+    function openCreate() {
+      setEditingKey(null); setLabel(''); setOrgAccess('all'); setScopedOrgs([]); setScopedTeams([]); setScopes({}); setScopeSearch('');
+      setShowModal(true);
+    }
+    function openEdit(k: any) {
+      setEditingKey(k);
+      setLabel(k.label ?? '');
+      setOrgAccess(k.scoped_organizations?.length ? 'orgs' : k.scoped_teams?.length ? 'projects' : 'all');
+      setScopedOrgs(k.scoped_organizations ?? []);
+      setScopedTeams(k.scoped_teams ?? []);
+      const parsed: Record<string, 'none' | 'read' | 'write'> = {};
+      (k.scopes ?? []).forEach((sc: string) => {
+        if (sc === '*') return;
+        const [n, lvl] = sc.split(':');
+        const scope = allScopes.find(s => s.name.toLowerCase().replace(/ /g, '_') === n);
+        if (scope) parsed[scope.name] = (lvl as any) ?? 'read';
+      });
+      setScopes(parsed);
+      setShowModal(true);
+    }
+    async function saveKey() {
       if (!label.trim()) return;
       setCreating(true);
       try {
@@ -53514,23 +53718,38 @@ function WASettingsView() {
         Object.entries(scopes).forEach(([n, v]) => {
           if (v !== 'none') scopesArr.push(`${n.toLowerCase().replace(/ /g, '_')}:${v}`);
         });
-        const res: any = await ph.phPost(`/api/personal_api_keys/`, {
+        const payload: any = {
           label: label.trim(),
           scopes: scopesArr.length ? scopesArr : ['*'],
-          scoped_organizations: orgAccess === 'orgs' ? [] : undefined,
-          scoped_teams: orgAccess === 'projects' ? [] : undefined,
-        });
-        const tok = res?.value ?? res?.key;
-        if (tok) setNewKeyShown(tok);
+          scoped_organizations: orgAccess === 'orgs' ? scopedOrgs : [],
+          scoped_teams: orgAccess === 'projects' ? scopedTeams : [],
+        };
+        if (editingKey) {
+          await ph.phPatch(`/api/personal_api_keys/${editingKey.id}/`, payload);
+        } else {
+          const res: any = await ph.phPost(`/api/personal_api_keys/`, payload);
+          const tok = res?.value ?? res?.key;
+          if (tok) setNewKeyShown(tok);
+        }
         setShowModal(false);
         await refresh();
-      } catch (e: any) { alert('No se pudo crear la clave: ' + (e?.message ?? '')); }
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
       finally { setCreating(false); }
     }
     async function deleteKey(id: string) {
       if (!confirm('¿Eliminar clave?')) return;
       try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/personal_api_keys/${id}/`); await refresh(); }
       catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function regenerateKey(id: string) {
+      if (!confirm('¿Regenerar clave?\n\nEl valor actual quedará inválido inmediatamente. Tendrás que actualizar los lugares donde se use.')) return;
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phPost(`/api/personal_api_keys/${id}/regenerate/`, {});
+        const tok = res?.value ?? res?.key;
+        if (tok) setNewKeyShown(tok);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
     }
     async function copyKey(t: string) { try { await navigator.clipboard.writeText(t); } catch {} }
 
@@ -53596,7 +53815,7 @@ function WASettingsView() {
           </div>
 
           <button
-            onClick={() => { setLabel(''); setOrgAccess('all'); setScopeSearch(''); setScopes({}); setShowModal(true); }}
+            onClick={openCreate}
             className="flex items-center gap-1.5 h-9 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white"
           >
             <span className="text-[15px] leading-none">+</span> Crear clave API personal
@@ -53618,7 +53837,9 @@ function WASettingsView() {
               <thead>
                 <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Etiqueta</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Vista previa</th>
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Alcances</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acceso</th>
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Último uso</th>
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado</th>
                   <th className="px-4 py-2.5"></th>
@@ -53626,21 +53847,28 @@ function WASettingsView() {
               </thead>
               <tbody className="divide-y divide-[#e9eae6]">
                 {loading ? (
-                  <tr><td colSpan={5} className="px-4 py-3 text-center text-[12px] text-[#646462]">Cargando claves…</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-3 text-center text-[12px] text-[#646462]">Cargando claves…</td></tr>
                 ) : keys.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-3 text-[13px] text-[#646462]">Sin claves API personales</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-3 text-[13px] text-[#646462]">Sin claves API personales</td></tr>
                 ) : (
-                  keys.map((k: any) => (
-                    <tr key={k.id} className="hover:bg-[#fafaf9]">
-                      <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a] font-medium">{k.label ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-[11px] text-[#646462]">{(k.scopes ?? []).slice(0, 3).join(', ')}{(k.scopes ?? []).length > 3 ? ` +${k.scopes.length - 3}` : ''}</td>
-                      <td className="px-4 py-2.5 text-[11px] text-[#646462]">{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Nunca'}</td>
-                      <td className="px-4 py-2.5 text-[11px] text-[#646462]">{k.created_at ? new Date(k.created_at).toLocaleDateString() : '—'}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        <button onClick={() => deleteKey(k.id)} className="text-[#dc2626] text-[11px] hover:underline">Eliminar</button>
-                      </td>
-                    </tr>
-                  ))
+                  keys.map((k: any) => {
+                    const accessLabel = k.scoped_organizations?.length ? `${k.scoped_organizations.length} org` : k.scoped_teams?.length ? `${k.scoped_teams.length} proj` : 'Todo';
+                    return (
+                      <tr key={k.id} className="hover:bg-[#fafaf9]">
+                        <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a] font-medium">{k.label ?? '—'}</td>
+                        <td className="px-4 py-2.5"><code className="text-[11px] font-mono text-[#646462] bg-[#f3f3f1] px-1.5 py-0.5 rounded">{k.mask_value ?? k.value_prefix ?? `phx_…${(k.id ?? '').toString().slice(-4)}`}</code></td>
+                        <td className="px-4 py-2.5 text-[11px] text-[#646462]">{(k.scopes ?? []).length === 1 && k.scopes[0] === '*' ? 'Todos' : `${(k.scopes ?? []).length} alcance(s)`}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-[#646462]">{accessLabel}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-[#646462]">{k.last_used_at ? humanFriendlyTime(new Date(k.last_used_at)) : 'Nunca'}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-[#646462]">{k.created_at ? new Date(k.created_at).toLocaleDateString() : '—'}</td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                          <button onClick={() => openEdit(k)} className="text-[#e8572a] text-[11px] hover:underline mr-2">Editar</button>
+                          <button onClick={() => regenerateKey(k.id)} className="text-[#f59e0b] text-[11px] hover:underline mr-2">Regenerar</button>
+                          <button onClick={() => deleteKey(k.id)} className="text-[#dc2626] text-[11px] hover:underline">Eliminar</button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -53653,7 +53881,7 @@ function WASettingsView() {
             <div className="bg-white rounded-[12px] shadow-xl w-[560px] max-h-[80vh] flex flex-col">
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
-                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Crear clave API personal</h2>
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">{editingKey ? 'Editar' : 'Crear'} clave API personal</h2>
                 <button onClick={() => setShowModal(false)} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
                   <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
                 </button>
@@ -53675,7 +53903,7 @@ function WASettingsView() {
                 </div>
 
                 {/* Org & project access */}
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-[13px] font-bold text-[#1a1a1a]">Acceso a organización y proyecto</label>
                     <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
@@ -53692,16 +53920,54 @@ function WASettingsView() {
                       ))}
                     </div>
                   </div>
+                  {orgAccess === 'orgs' && (
+                    <div className="border border-[#e9eae6] rounded-lg p-2 max-h-32 overflow-y-auto space-y-1">
+                      {allOrgs.length === 0 ? <p className="text-[11px] text-[#646462] p-2">Sin organizaciones disponibles</p> : allOrgs.map((o: any) => (
+                        <label key={o.id} className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={scopedOrgs.includes(o.id)} onChange={e => setScopedOrgs(s => e.target.checked ? [...s, o.id] : s.filter(x => x !== o.id))} className="w-3.5 h-3.5 accent-[#e8572a]"/>
+                          <span className="text-[12px] text-[#1a1a1a]">{o.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {orgAccess === 'projects' && (
+                    <div className="border border-[#e9eae6] rounded-lg p-2 max-h-32 overflow-y-auto space-y-1">
+                      {allTeams.length === 0 ? <p className="text-[11px] text-[#646462] p-2">Sin proyectos</p> : allTeams.map((t: any) => (
+                        <label key={t.id} className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={scopedTeams.includes(t.id)} onChange={e => setScopedTeams(s => e.target.checked ? [...s, t.id] : s.filter(x => x !== t.id))} className="w-3.5 h-3.5 accent-[#e8572a]"/>
+                          <span className="text-[12px] text-[#1a1a1a]">{t.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Scopes */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-[13px] font-bold text-[#1a1a1a]">Alcances</label>
-                    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                      Seleccionar preset
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-                    </button>
+                    <div className="relative">
+                      <button onClick={() => setShowPresetMenu(p => !p)} className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                        Seleccionar preset
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                      </button>
+                      {showPresetMenu && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowPresetMenu(false)}/>
+                          <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1">
+                            {[
+                              { v: 'all', l: 'Todo el acceso (read+write)' },
+                              { v: 'readonly', l: 'Solo lectura' },
+                              { v: 'mcp', l: 'MCP Server (read insights/flags)' },
+                              { v: 'feature-flags', l: 'Solo feature flags' },
+                              { v: 'analytics', l: 'Solo analytics (read)' },
+                            ].map(p => (
+                              <button key={p.v} onClick={() => applyPreset(p.v as any)} className="w-full px-3 py-1.5 text-left text-[12px] hover:bg-[#fafaf9] text-[#1a1a1a]">{p.l}</button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <p className="text-[12px] text-[#646462] leading-relaxed">
                     Las claves API personales tienen alcances para limitar qué acciones pueden realizar. Recomendamos encarecidamente que solo concedas a la clave los permisos que necesita para hacer su trabajo. Puedes añadir o revocar alcances más adelante.
@@ -53746,7 +54012,7 @@ function WASettingsView() {
               {/* Footer */}
               <div className="border-t border-[#e9eae6] px-6 py-4 flex justify-end gap-2">
                 <button onClick={() => setShowModal(false)} className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
-                <button onClick={createKey} disabled={creating || !label.trim()} className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white disabled:opacity-50">{creating ? 'Creando…' : 'Crear clave'}</button>
+                <button onClick={saveKey} disabled={creating || !label.trim()} className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white disabled:opacity-50">{creating ? (editingKey ? 'Guardando…' : 'Creando…') : (editingKey ? 'Guardar cambios' : 'Crear clave')}</button>
               </div>
             </div>
           </div>
