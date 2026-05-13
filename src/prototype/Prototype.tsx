@@ -45826,6 +45826,21 @@ function WASettingsView() {
       } catch {}
     })();
   }, []);
+  function humanFriendlyTime(date: Date): string {
+    const diff = Date.now() - date.getTime();
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return 'hace un momento';
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `hace ${min} min`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `hace ${hr} h`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `hace ${day} días`;
+    if (day < 30) return `hace ${Math.floor(day / 7)} semanas`;
+    if (day < 365) return `hace ${Math.floor(day / 30)} meses`;
+    return `hace ${Math.floor(day / 365)} años`;
+  }
+
   async function patchOrganization(patch: any): Promise<boolean> {
     try {
       const ph = await import('../api/posthog');
@@ -49662,15 +49677,38 @@ function WASettingsView() {
     const [orgName, setOrgName] = useState<string>(organization?.name ?? 'Hector prueba');
     const [aiAnalysis, setAiAnalysis] = useState<boolean>(!!organization?.is_ai_data_processing_approved);
     const [discardIPDefault, setDiscardIPDefault] = useState<boolean>(!!organization?.default_discard_client_ip_data);
+    const [billingEmail, setBillingEmail] = useState<string>(organization?.customer_id ?? organization?.billing_email ?? '');
+    const [savingBilling, setSavingBilling] = React.useState(false);
+    const [billingSaved, setBillingSaved] = React.useState(false);
     const [savingName, setSavingName] = React.useState(false);
     const [nameSaved, setNameSaved] = React.useState(false);
     const [savingAI, setSavingAI] = React.useState(false);
     const [savingIP, setSavingIP] = React.useState(false);
+    const [uploadingLogo, setUploadingLogo] = React.useState(false);
+    const logoFileRef = React.useRef<HTMLInputElement>(null);
     React.useEffect(() => {
       setOrgName(organization?.name ?? 'Hector prueba');
       setAiAnalysis(!!organization?.is_ai_data_processing_approved);
       setDiscardIPDefault(!!organization?.default_discard_client_ip_data ?? false);
+      setBillingEmail(organization?.billing_email ?? '');
     }, [organization?.id]);
+    async function uploadLogo(file: File) {
+      setUploadingLogo(true);
+      try {
+        const ph = await import('../api/posthog');
+        const fd = new FormData(); fd.append('image', file);
+        const res: any = await fetch(`${window.location.origin}/api/uploaded_media/`, { method: 'POST', body: fd, credentials: 'include' }).then(r => r.json());
+        if (res?.id) await patchOrganization({ logo_media_id: res.id });
+      } catch (e: any) { alert('Error al subir logo: ' + (e?.message ?? '')); }
+      setUploadingLogo(false);
+    }
+    async function saveBillingEmail() {
+      if (!billingEmail.trim()) return;
+      setSavingBilling(true);
+      const ok = await patchOrganization({ billing_email: billingEmail.trim() });
+      setSavingBilling(false);
+      if (ok) { setBillingSaved(true); setTimeout(() => setBillingSaved(false), 2000); }
+    }
     async function saveName() {
       if (!orgName.trim() || orgName.trim() === (organization?.name || '')) return;
       setSavingName(true);
@@ -49701,12 +49739,21 @@ function WASettingsView() {
             <p className="text-[13px] text-[#646462]">El nombre y el logo de tu organización se muestran en toda la interfaz de Clain. Haz clic en el avatar para subir un logo personalizado.</p>
             <div className="flex items-end gap-4">
               <div className="flex flex-col items-center gap-1">
-                <div className="w-16 h-16 rounded-[12px] bg-[#f59e0b] flex items-center justify-center text-white text-2xl font-bold cursor-pointer hover:opacity-90">
-                  H
+                <input ref={logoFileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); }}/>
+                <div
+                  onClick={() => logoFileRef.current?.click()}
+                  className="w-16 h-16 rounded-[12px] bg-[#f59e0b] flex items-center justify-center text-white text-2xl font-bold cursor-pointer hover:opacity-90 overflow-hidden"
+                  title="Haz clic para subir un logo"
+                >
+                  {organization?.logo_url ? (
+                    <img src={organization.logo_url} alt="logo" className="w-full h-full object-cover"/>
+                  ) : (
+                    (orgName.charAt(0) || 'H').toUpperCase()
+                  )}
                 </div>
-                <button className="flex items-center gap-1 text-[11px] text-[#646462] hover:text-[#1a1a1a]">
+                <button onClick={() => logoFileRef.current?.click()} className="flex items-center gap-1 text-[11px] text-[#646462] hover:text-[#1a1a1a]" disabled={uploadingLogo}>
                   <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M8 2l3 4H9v5H7V6H5l3-4z"/></svg>
-                  Subir
+                  {uploadingLogo ? 'Subiendo…' : 'Subir'}
                 </button>
               </div>
               <div className="flex-1 space-y-2">
@@ -49762,6 +49809,31 @@ function WASettingsView() {
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
               <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente por defecto en nuevos proyectos {savingIP && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
               <Toggle checked={discardIPDefault} onChange={toggleIP}/>
+            </div>
+          </div>
+
+          {/* Billing email */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Email de facturación</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Dirección donde se enviarán facturas y avisos de pago"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Recibirás facturas y avisos de pago en este correo.</p>
+            <div className="flex items-center gap-2 max-w-md">
+              <input
+                type="email"
+                value={billingEmail}
+                onChange={e => setBillingEmail(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveBillingEmail(); }}
+                placeholder="finanzas@empresa.com"
+                className="flex-1 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+              />
+              <button
+                onClick={saveBillingEmail}
+                disabled={savingBilling || !billingEmail.trim() || billingEmail === (organization?.billing_email ?? '')}
+                className="h-9 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50 disabled:cursor-not-allowed"
+              >{savingBilling ? 'Guardando…' : 'Guardar'}</button>
+              {billingSaved && <span className="text-[12px] text-[#16a34a]">✓</span>}
             </div>
           </div>
         </div>
@@ -50264,11 +50336,14 @@ function WASettingsView() {
   function OrgSecurityPage() {
     const [enforce2FA, setEnforce2FA] = React.useState<boolean>(!!organization?.enforce_2fa);
     const [allowPublicShare, setAllowPublicShare] = React.useState<boolean>(organization?.members_can_use_personal_api_keys !== false);
+    const [allowPubliclySharedResources, setAllowPubliclySharedResources] = React.useState<boolean>(organization?.allow_publicly_shared_resources !== false);
     const [sessionTimeout, setSessionTimeout] = React.useState<string>(String(organization?.session_cookie_age ?? '14'));
     const [savingKey, setSavingKey] = React.useState('');
+    const [showDisableSharingConfirm, setShowDisableSharingConfirm] = React.useState(false);
     React.useEffect(() => {
       setEnforce2FA(!!organization?.enforce_2fa);
       setAllowPublicShare(organization?.members_can_use_personal_api_keys !== false);
+      setAllowPubliclySharedResources(organization?.allow_publicly_shared_resources !== false);
       setSessionTimeout(String(organization?.session_cookie_age ?? '14'));
     }, [organization?.id]);
     async function toggle2FA(v: boolean) {
@@ -50279,6 +50354,18 @@ function WASettingsView() {
     async function togglePublicShare(v: boolean) {
       setAllowPublicShare(v); setSavingKey('share');
       await patchOrganization({ members_can_use_personal_api_keys: v });
+      setSavingKey('');
+    }
+    async function togglePubliclyShared(v: boolean) {
+      if (!v) { setShowDisableSharingConfirm(true); return; }
+      setAllowPubliclySharedResources(true); setSavingKey('publicly');
+      await patchOrganization({ allow_publicly_shared_resources: true });
+      setSavingKey('');
+    }
+    async function confirmDisableSharing() {
+      setAllowPubliclySharedResources(false); setSavingKey('publicly');
+      await patchOrganization({ allow_publicly_shared_resources: false });
+      setShowDisableSharingConfirm(false);
       setSavingKey('');
     }
     async function saveTimeout() {
@@ -50298,6 +50385,13 @@ function WASettingsView() {
             <p className="text-[13px] text-[#646462]">Configura las políticas de seguridad de toda la organización, incluyendo el uso compartido público, los tiempos de espera de sesión y los requisitos de contraseña.</p>
 
             <div className="border border-[#e9eae6] rounded-[10px] divide-y divide-[#e9eae6]">
+              <div className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Permitir recursos compartidos públicamente {savingKey === 'publicly' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                  <p className="text-[12px] text-[#646462]">Los miembros pueden generar enlaces públicos a insights, dashboards y notebooks.</p>
+                </div>
+                <Toggle checked={allowPubliclySharedResources} onChange={togglePubliclyShared}/>
+              </div>
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
                   <p className="text-[13px] font-medium text-[#1a1a1a]">Forzar autenticación de dos factores {savingKey === '2fa' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
@@ -50333,6 +50427,24 @@ function WASettingsView() {
             </div>
           </div>
         </div>
+
+        {/* Disable public sharing confirmation modal */}
+        {showDisableSharingConfirm && (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4" onClick={() => setShowDisableSharingConfirm(false)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white border-2 border-[#dc2626] rounded-[12px] shadow-2xl w-full max-w-md p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#dc2626]"><path d="M8 1L1 14h14L8 1zm0 5v4M8 12h.01" stroke="#dc2626" strokeWidth="1.5" fill="none"/></svg>
+                <h3 className="text-[15px] font-bold text-[#dc2626]">Desactivar compartición pública</h3>
+              </div>
+              <p className="text-[13px] text-[#1a1a1a]">Al desactivar esta opción, <strong>todos los enlaces públicos existentes</strong> a insights, dashboards y notebooks dejarán de funcionar inmediatamente.</p>
+              <p className="text-[13px] text-[#646462]">Los recursos compartidos públicamente seguirán existiendo pero solo serán accesibles para miembros con permisos.</p>
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => setShowDisableSharingConfirm(false)} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+                <button onClick={confirmDisableSharing} className="h-8 px-4 bg-[#dc2626] text-white text-[12px] font-semibold rounded-lg hover:bg-[#b91c1c]">Desactivar y romper enlaces</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -50377,17 +50489,60 @@ function WASettingsView() {
                   <p className="text-[13px] text-[#646462]">Las aplicaciones aparecerán aquí cuando herramientas de terceros se conecten a tu organización.</p>
                 </div>
               ) : (
-                <div className="divide-y divide-[#e9eae6]">
-                  {apps.map((a: any) => (
-                    <div key={a.id} className="flex items-center justify-between px-4 py-3">
-                      <div>
-                        <p className="text-[13px] font-medium text-[#1a1a1a]">{a.name ?? a.client_id}</p>
-                        <p className="text-[12px] text-[#646462]">Autorizada {a.created_at ? new Date(a.created_at).toLocaleDateString() : ''}</p>
-                      </div>
-                      <button onClick={() => revoke(a.id, a.name ?? 'app')} className="text-[#dc2626] text-[12px] hover:underline">Revocar</button>
-                    </div>
-                  ))}
-                </div>
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Aplicación</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Client ID</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Redirect URIs</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Conectada</th>
+                      <th className="px-4 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e9eae6]">
+                    {apps.map((a: any) => {
+                      const uris: string[] = a.redirect_uris_list ?? (a.redirect_uris ? String(a.redirect_uris).split(/\s+/) : []);
+                      const connectedAt = a.created_at ? new Date(a.created_at) : null;
+                      const relTime = connectedAt ? humanFriendlyTime(connectedAt) : '—';
+                      return (
+                        <tr key={a.id} className="hover:bg-[#fafaf9]">
+                          <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a]">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium">{a.name ?? a.client_id}</span>
+                              {a.is_verified && <span className="px-1.5 py-0.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded text-[10px] font-semibold text-[#16a34a]">Verificada</span>}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <code className="text-[11px] font-mono text-[#646462] bg-[#f3f3f1] px-1.5 py-0.5 rounded">{a.client_id ?? '—'}</code>
+                              {a.client_id && (
+                                <button onClick={() => navigator.clipboard.writeText(a.client_id).catch(() => {})} className="text-[#646462] hover:text-[#1a1a1a]" title="Copiar Client ID">
+                                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="space-y-0.5">
+                              {uris.length === 0 ? <span className="text-[11px] text-[#646462]">—</span> : uris.map(u => (
+                                <div key={u} className="flex items-center gap-1.5">
+                                  <code className="text-[11px] font-mono text-[#646462] truncate max-w-[200px]">{u}</code>
+                                  <button onClick={() => navigator.clipboard.writeText(u).catch(() => {})} className="text-[#646462] hover:text-[#1a1a1a]" title="Copiar URI">
+                                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-[11px] text-[#646462]" title={connectedAt?.toLocaleString()}>{relTime}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <button onClick={() => revoke(a.id, a.name ?? 'app')} className="text-[#dc2626] text-[12px] hover:underline">Revocar</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
@@ -50428,7 +50583,7 @@ function WASettingsView() {
       finally { setCreating(false); }
     }
     async function deleteToken(id: string) {
-      if (!confirm('¿Eliminar token?')) return;
+      if (!confirm('¿Eliminar token de verificación?\n\nLos socios que estén usando este token en su metadata CIMD ya no serán reconocidos y caerán al tier de tasa anónima.')) return;
       try {
         const ph = await import('../api/posthog');
         await ph.phDelete(`/api/organizations/@current/verification_tokens/${id}/`);
@@ -50485,15 +50640,21 @@ function WASettingsView() {
                   <thead>
                     <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
                       <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Etiqueta</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Token</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Último uso</th>
                       <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado</th>
                       <th className="px-4 py-2.5"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#e9eae6]">
                     {tokens.map((t: any) => (
-                      <tr key={t.id}>
+                      <tr key={t.id} className="hover:bg-[#fafaf9]">
                         <td className="px-4 py-2.5 text-[13px] text-[#1a1a1a]">{t.label ?? '—'}</td>
-                        <td className="px-4 py-2.5 text-[12px] text-[#646462]">{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}</td>
+                        <td className="px-4 py-2.5">
+                          <code className="text-[11px] font-mono text-[#646462] bg-[#f3f3f1] px-1.5 py-0.5 rounded">{t.masked_value ?? t.token_prefix ?? `phc_${t.id?.toString().slice(0,6) ?? '••••••'}…`}</code>
+                        </td>
+                        <td className="px-4 py-2.5 text-[11px] text-[#646462]">{t.last_used_at ? humanFriendlyTime(new Date(t.last_used_at)) : 'Nunca'}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-[#646462]">{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}</td>
                         <td className="px-4 py-2.5 text-right">
                           <button onClick={() => deleteToken(t.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
                         </td>
@@ -50526,7 +50687,7 @@ function WASettingsView() {
                   className="w-full h-9 px-3 border border-[#3b59f6] rounded-lg text-[13px] bg-white outline-none"
                   autoFocus
                 />
-                <p className="text-[12px] text-[#646462]">Elige una etiqueta que te ayude a identificar este token más tarde. Solo verás el valor en texto plano una vez.</p>
+                <p className="text-[12px] text-[#646462]">Elige una etiqueta que te ayude a identificar este token más tarde. Solo verás el valor en texto plano una vez. Los socios que usen este token en su metadata CIMD obtendrán límites de tasa más altos.</p>
               </div>
               <div className="border-t border-[#e9eae6] pt-4 flex justify-end gap-2">
                 <button onClick={() => setShowModal(false)} className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
