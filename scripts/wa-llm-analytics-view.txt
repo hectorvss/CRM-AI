@@ -1,0 +1,529 @@
+// ── WAAppLlmAnalyticsView ────────────────────────────────────────────────────
+function WAAppLlmAnalyticsView() {
+  type LLMTab = 'overview' | 'traces' | 'generations' | 'users';
+  const [llmTab, setLlmTab] = useState<LLMTab>('overview');
+  const [dateRange, setDateRange] = useState('Últimos 7 días');
+  const [showDateDrop, setShowDateDrop] = useState(false);
+  const [selectedTrace, setSelectedTrace] = useState<string | null>(null);
+  const [showBetaBanner, setShowBetaBanner] = useState(true);
+
+  const DATE_OPTIONS = ['Hoy','Ayer','Últimas 24 horas','Últimos 7 días','Últimas 2 semanas','Últimos 30 días','Últimos 90 días','Último año'];
+
+  const traces = [
+    { id: 'trc_001', name: 'Chat completion', model: 'gpt-4o', provider: 'OpenAI', duration: '1.24s', cost: '$0.0034', tokens: '1,204', inputTokens: '892', outputTokens: '312', status: 'success', user: 'u_alice', ts: 'Hace 2 min', input: 'Summarize the following support ticket and suggest a resolution...', output: 'The ticket describes a billing issue where the customer was charged twice. I recommend issuing a refund and...' },
+    { id: 'trc_002', name: 'Embeddings batch', model: 'text-embedding-3-small', provider: 'OpenAI', duration: '0.43s', cost: '$0.0002', tokens: '4,120', inputTokens: '4,120', outputTokens: '0', status: 'success', user: 'u_bob', ts: 'Hace 5 min', input: 'Batch of 41 documents for embedding...', output: '(vector output)' },
+    { id: 'trc_003', name: 'Customer intent classification', model: 'claude-3-5-sonnet', provider: 'Anthropic', duration: '0.88s', cost: '$0.0021', tokens: '620', inputTokens: '540', outputTokens: '80', status: 'success', user: 'u_alice', ts: 'Hace 8 min', input: 'Classify the intent of: "I need to upgrade my plan but the button is broken"', output: '{"intent": "billing_upgrade", "sentiment": "frustrated", "priority": "high"}' },
+    { id: 'trc_004', name: 'RAG pipeline', model: 'gpt-4o-mini', provider: 'OpenAI', duration: '2.11s', cost: '$0.0008', tokens: '3,880', inputTokens: '3,420', outputTokens: '460', status: 'success', user: 'u_carol', ts: 'Hace 12 min', input: 'Using retrieved context from knowledge base, answer: What are the refund policies?', output: 'Based on the retrieved documents, refunds are processed within 5-7 business days...' },
+    { id: 'trc_005', name: 'Code generation', model: 'claude-3-5-sonnet', provider: 'Anthropic', duration: '3.42s', cost: '$0.0089', tokens: '2,140', inputTokens: '980', outputTokens: '1,160', status: 'success', user: 'u_dave', ts: 'Hace 15 min', input: 'Write a TypeScript function to validate email addresses with regex', output: 'function validateEmail(email: string): boolean {\n  const regex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  return regex.test(email);\n}' },
+    { id: 'trc_006', name: 'Sentiment analysis', model: 'gpt-4o-mini', provider: 'OpenAI', duration: '0.61s', cost: '$0.0003', tokens: '340', inputTokens: '290', outputTokens: '50', status: 'error', user: 'u_eve', ts: 'Hace 19 min', input: 'Analyze sentiment of customer review: "This product is absolutely terrible..."', output: 'Error: rate limit exceeded' },
+    { id: 'trc_007', name: 'Chat completion', model: 'gemini-2.0-flash', provider: 'Google', duration: '0.79s', cost: '$0.0001', tokens: '880', inputTokens: '720', outputTokens: '160', status: 'success', user: 'u_frank', ts: 'Hace 22 min', input: 'Help me draft a professional apology email to a client whose project was delayed.', output: 'Subject: Sincere Apologies for the Project Delay\n\nDear [Client Name],\n\nI am writing to personally apologize...' },
+    { id: 'trc_008', name: 'Document summarization', model: 'gpt-4o', provider: 'OpenAI', duration: '4.88s', cost: '$0.0156', tokens: '8,320', inputTokens: '7,890', outputTokens: '430', status: 'success', user: 'u_alice', ts: 'Hace 31 min', input: 'Summarize this 40-page legal document into key bullet points...', output: '• Parties involved: Clain Inc. and Vendora Corp.\n• Contract term: 24 months\n• Payment schedule: quarterly...' },
+  ];
+
+  const users = [
+    { id: 'u_alice', email: 'alice@acmecorp.com', generations: 142, cost: '$1.24', avgDuration: '1.8s', errorRate: '0%' },
+    { id: 'u_bob',   email: 'bob@startupxyz.io',  generations:  87, cost: '$0.43', avgDuration: '0.9s', errorRate: '2%' },
+    { id: 'u_carol', email: 'carol@techfirm.dev', generations:  63, cost: '$0.89', avgDuration: '2.1s', errorRate: '0%' },
+    { id: 'u_dave',  email: 'dave@bigco.com',     generations:  58, cost: '$2.31', avgDuration: '3.4s', errorRate: '1%' },
+    { id: 'u_eve',   email: 'eve@freelance.me',   generations:  34, cost: '$0.12', avgDuration: '0.7s', errorRate: '8%' },
+    { id: 'u_frank', email: 'frank@agency.io',    generations:  21, cost: '$0.08', avgDuration: '0.8s', errorRate: '0%' },
+  ];
+
+  const modelBreakdown = [
+    { model: 'gpt-4o', provider: 'OpenAI', calls: 312, cost: '$3.42', pct: 58, color: '#10b981' },
+    { model: 'claude-3-5-sonnet', provider: 'Anthropic', calls: 142, cost: '$1.89', pct: 24, color: '#3b59f6' },
+    { model: 'gpt-4o-mini', provider: 'OpenAI', calls: 89, cost: '$0.34', pct: 15, color: '#f59e0b' },
+    { model: 'gemini-2.0-flash', provider: 'Google', calls: 21, cost: '$0.04', pct: 3, color: '#8b5cf6' },
+  ];
+
+  // Tiny sparkline-style bar chart
+  const SparkBars = ({ data, color }: { data: number[]; color: string }) => {
+    const max = Math.max(...data);
+    return (
+      <div className="flex items-end gap-[2px] h-10">
+        {data.map((v, i) => (
+          <div key={i} style={{ height: `${(v / max) * 100}%`, backgroundColor: color, opacity: i === data.length - 1 ? 1 : 0.45 }} className="w-1.5 rounded-sm flex-shrink-0" />
+        ))}
+      </div>
+    );
+  };
+
+  // Full area chart (SVG)
+  const AreaChart = ({ data, color, label }: { data: number[]; color: string; label: string }) => {
+    const max = Math.max(...data, 1);
+    const w = 600; const h = 120; const pad = 8;
+    const pts = data.map((v, i) => ({ x: pad + (i / (data.length - 1)) * (w - 2 * pad), y: h - pad - (v / max) * (h - 2 * pad) }));
+    const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    const areaPath = `${linePath} L${pts[pts.length - 1].x},${h - pad} L${pts[0].x},${h - pad} Z`;
+    const days = ['L','M','M','J','V','S','D','L','M','M','J','V','S','D'];
+    return (
+      <div className="w-full">
+        <div className="text-[11px] text-[#646462] mb-1">{label}</div>
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height: 120 }} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id={`grad-${color.replace('#','')}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+              <stop offset="100%" stopColor={color} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={areaPath} fill={`url(#grad-${color.replace('#','')})`} />
+          <path d={linePath} fill="none" stroke={color} strokeWidth="1.5" />
+          {pts.map((p, i) => i % 2 === 0 && <line key={i} x1={p.x} y1={h - pad} x2={p.x} y2={h - pad + 4} stroke="#e9eae6" strokeWidth="1" />)}
+        </svg>
+        <div className="flex justify-between mt-1">
+          {days.slice(0, Math.min(days.length, data.length)).filter((_, i) => i % 2 === 0).map((d, i) => (
+            <span key={i} className="text-[10px] text-[#9ca3af]">{d}</span>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const kpiCards = [
+    { label: 'Generaciones', value: '564', sub: '+12% vs anterior', trend: 'up', sparkData: [22,18,28,31,24,36,40,28,32,45,38,52,48,64], color: '#3b59f6' },
+    { label: 'Coste total', value: '$5.72', sub: '+8% vs anterior', trend: 'up', sparkData: [0.3,0.25,0.4,0.45,0.35,0.5,0.6,0.42,0.48,0.65,0.55,0.75,0.7,0.92], color: '#e8572a' },
+    { label: 'Duración media', value: '1.84s', sub: '-5% vs anterior', trend: 'down', sparkData: [2.1,2.3,1.9,2.0,1.8,1.7,1.9,1.8,1.7,1.6,1.9,1.8,1.7,1.6], color: '#10b981' },
+    { label: 'Tasa de error', value: '1.2%', sub: '-0.3pp vs anterior', trend: 'down', sparkData: [1.8,2.1,1.6,1.4,1.9,1.2,1.5,1.3,1.1,1.4,1.0,1.3,1.1,1.2], color: '#f59e0b' },
+    { label: 'Tokens de entrada', value: '1.24M', sub: '+15% vs anterior', trend: 'up', sparkData: [40,38,52,58,45,68,72,55,62,80,71,95,88,112], color: '#8b5cf6' },
+    { label: 'Tokens de salida', value: '312K', sub: '+9% vs anterior', trend: 'up', sparkData: [12,10,15,17,14,20,22,16,18,24,21,28,26,31], color: '#06b6d4' },
+  ];
+
+  // Selected trace detail
+  const activeTrace = traces.find(t => t.id === selectedTrace);
+
+  if (activeTrace) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-white overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
+          <button onClick={() => setSelectedTrace(null)} className="flex items-center gap-1.5 text-[#646462] hover:text-[#1a1a1a] text-[13px]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            LLM Analytics
+          </button>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#d1d5db]"><path d="M6 12L10 8 6 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span className="text-[13px] font-semibold text-[#1a1a1a]">{activeTrace.name}</span>
+          <span className={`ml-2 text-[11px] font-semibold px-2 py-0.5 rounded-full ${activeTrace.status === 'error' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>{activeTrace.status === 'error' ? 'Error' : 'Éxito'}</span>
+        </div>
+        <div className="p-6 flex flex-col gap-5">
+          {/* Meta row */}
+          <div className="flex flex-wrap gap-4">
+            {[
+              { label: 'Modelo', value: activeTrace.model },
+              { label: 'Proveedor', value: activeTrace.provider },
+              { label: 'Usuario', value: activeTrace.user },
+              { label: 'Duración', value: activeTrace.duration },
+              { label: 'Coste', value: activeTrace.cost },
+              { label: 'Tokens totales', value: activeTrace.tokens },
+              { label: 'Tokens entrada', value: activeTrace.inputTokens },
+              { label: 'Tokens salida', value: activeTrace.outputTokens },
+              { label: 'Hora', value: activeTrace.ts },
+            ].map(m => (
+              <div key={m.label} className="flex flex-col gap-0.5 min-w-[80px]">
+                <span className="text-[11px] text-[#646462]">{m.label}</span>
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">{m.value}</span>
+              </div>
+            ))}
+          </div>
+          {/* Input/Output */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-lg border border-[#e9eae6] overflow-hidden">
+              <div className="px-4 py-2 bg-[#f9f9f7] border-b border-[#e9eae6] flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Entrada</span>
+                <span className="ml-auto text-[11px] text-[#9ca3af]">{activeTrace.inputTokens} tokens</span>
+              </div>
+              <div className="p-4 text-[13px] text-[#1a1a1a] leading-relaxed font-mono whitespace-pre-wrap bg-white min-h-[120px]">{activeTrace.input}</div>
+            </div>
+            <div className="rounded-lg border border-[#e9eae6] overflow-hidden">
+              <div className="px-4 py-2 bg-[#f9f9f7] border-b border-[#e9eae6] flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Salida</span>
+                <span className="ml-auto text-[11px] text-[#9ca3af]">{activeTrace.outputTokens} tokens</span>
+              </div>
+              <div className="p-4 text-[13px] text-[#1a1a1a] leading-relaxed font-mono whitespace-pre-wrap bg-white min-h-[120px]">{activeTrace.output}</div>
+            </div>
+          </div>
+          {/* Timeline */}
+          <div className="rounded-lg border border-[#e9eae6] overflow-hidden">
+            <div className="px-4 py-2 bg-[#f9f9f7] border-b border-[#e9eae6]">
+              <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Línea de tiempo</span>
+            </div>
+            <div className="p-4 flex flex-col gap-3">
+              {[
+                { label: 'Solicitud enviada', time: '0ms', color: '#3b59f6' },
+                { label: 'Primera respuesta (TTFT)', time: `${Math.round(parseFloat(activeTrace.duration) * 280)}ms`, color: '#10b981' },
+                { label: 'Respuesta completa', time: activeTrace.duration, color: '#e8572a' },
+              ].map((step, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: step.color }} />
+                  <span className="text-[13px] text-[#1a1a1a] flex-1">{step.label}</span>
+                  <span className="text-[12px] font-semibold text-[#646462] font-mono">{step.time}</span>
+                </div>
+              ))}
+              {/* bar */}
+              <div className="mt-2 h-2 rounded-full bg-[#f3f4f6] overflow-hidden relative">
+                <div className="absolute left-0 top-0 h-full rounded-full bg-[#3b59f6]" style={{ width: '5%' }} />
+                <div className="absolute top-0 h-full rounded-full bg-[#10b981]" style={{ left: '5%', width: '30%' }} />
+                <div className="absolute top-0 h-full rounded-full bg-[#e8572a]" style={{ left: '35%', width: '65%' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+      {/* Beta banner */}
+      {showBetaBanner && (
+        <div className="flex items-center gap-3 px-5 py-2.5 bg-[#eff2ff] border-b border-[#c7d0fd] flex-shrink-0">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#3b59f6] flex-shrink-0"><path d="M8 1.5a6.5 6.5 0 100 13A6.5 6.5 0 008 1.5zM7.25 5a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0V5zm.75 6.75a.75.75 0 100-1.5.75.75 0 000 1.5z" fill="currentColor"/></svg>
+          <span className="text-[13px] text-[#3b59f6] flex-1">LLM Analytics está en <strong>beta pública</strong>. Necesitas instrumentar tu código con el SDK de Clain para ver datos. <span className="underline cursor-pointer">Ver guía de integración →</span></span>
+          <button onClick={() => setShowBetaBanner(false)} className="text-[#3b59f6] hover:opacity-70 ml-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-center gap-4 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#fef3c7] flex items-center justify-center flex-shrink-0">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2C5 2 3 5 3 8s2 6 5 6 5-3 5-6-2-6-5-6z" stroke="#f59e0b" strokeWidth="1.2"/><path d="M6 7.5c0-.83.67-1.5 1.5-1.5h1c.83 0 1.5.67 1.5 1.5v.5H6v-.5z" fill="#f59e0b"/><path d="M6 8h4v1.5A2 2 0 016 9.5V8z" fill="#f59e0b" opacity=".5"/><circle cx="8" cy="5" r="1" fill="#f59e0b"/></svg>
+          </div>
+          <h1 className="text-[16px] font-bold text-[#1a1a1a]">LLM Analytics</h1>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#fef3c7] text-[#92400e]">BETA</span>
+        </div>
+
+        <div className="flex gap-0 ml-1 bg-[#f3f4f6] rounded-lg p-0.5">
+          {(['overview','traces','generations','users'] as LLMTab[]).map(t => {
+            const labels: Record<LLMTab, string> = { overview: 'Resumen', traces: 'Trazas', generations: 'Generaciones', users: 'Usuarios' };
+            return (
+              <button key={t} onClick={() => setLlmTab(t)} className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${llmTab === t ? 'bg-white text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>
+                {labels[t]}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Date range */}
+        <div className="relative">
+          <button onClick={() => setShowDateDrop(!showDateDrop)} className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2" width="11" height="10" rx="1.5" stroke="#646462" strokeWidth="1.2"/><path d="M4 1v2M9 1v2M1 5h11" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            {dateRange}
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 4l3 3 3-3" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          </button>
+          {showDateDrop && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-48 py-1">
+              {DATE_OPTIONS.map(opt => (
+                <button key={opt} onClick={() => { setDateRange(opt); setShowDateDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${dateRange === opt ? 'text-[#3b59f6] font-semibold' : 'text-[#1a1a1a]'}`}>{opt}</button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] bg-white hover:bg-[#f9f9f7]">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="5.5" cy="5.5" r="3.5" stroke="#646462" strokeWidth="1.2"/><path d="M8.5 8.5L11 11" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          Filtrar
+        </button>
+      </div>
+
+      {/* ── OVERVIEW TAB ── */}
+      {llmTab === 'overview' && (
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+          {/* KPI cards */}
+          <div className="grid grid-cols-3 gap-3">
+            {kpiCards.map(card => (
+              <div key={card.label} className="rounded-xl border border-[#e9eae6] p-4 bg-white flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-[#646462] font-medium">{card.label}</span>
+                  <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${card.trend === 'up' ? 'text-[#10b981]' : 'text-[#e8572a]'}`}>
+                    {card.trend === 'up' ? '↑' : '↓'} {card.sub.split(' ')[0]}
+                  </span>
+                </div>
+                <div className="flex items-end justify-between gap-2">
+                  <span className="text-[24px] font-bold text-[#1a1a1a] leading-none">{card.value}</span>
+                  <SparkBars data={card.sparkData} color={card.color} />
+                </div>
+                <span className="text-[11px] text-[#9ca3af]">{card.sub}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Charts row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-xl border border-[#e9eae6] p-4 bg-white">
+              <AreaChart data={[22,18,28,31,24,36,40,28,32,45,38,52,48,64]} color="#3b59f6" label="Generaciones por día" />
+            </div>
+            <div className="rounded-xl border border-[#e9eae6] p-4 bg-white">
+              <AreaChart data={[0.30,0.25,0.40,0.45,0.35,0.50,0.60,0.42,0.48,0.65,0.55,0.75,0.70,0.92]} color="#e8572a" label="Coste por día ($)" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Model breakdown */}
+            <div className="rounded-xl border border-[#e9eae6] p-4 bg-white">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Desglose por modelo</h3>
+              <div className="flex flex-col gap-2.5">
+                {modelBreakdown.map(m => (
+                  <div key={m.model} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-[12px]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
+                        <span className="font-medium text-[#1a1a1a]">{m.model}</span>
+                        <span className="text-[#9ca3af]">{m.provider}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[#646462]">
+                        <span>{m.calls.toLocaleString()} llamadas</span>
+                        <span className="font-semibold text-[#1a1a1a]">{m.cost}</span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-[#f3f4f6] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${m.pct}%`, backgroundColor: m.color }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Latency & errors */}
+            <div className="rounded-xl border border-[#e9eae6] p-4 bg-white flex flex-col gap-4">
+              <div>
+                <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Duración media (ms)</h3>
+                <AreaChart data={[2100,2300,1900,2000,1800,1700,1900,1800,1700,1600,1900,1800,1700,1840]} color="#10b981" label="" />
+              </div>
+              <div className="pt-2 border-t border-[#e9eae6]">
+                <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Tasa de error (%)</h3>
+                <AreaChart data={[1.8,2.1,1.6,1.4,1.9,1.2,1.5,1.3,1.1,1.4,1.0,1.3,1.1,1.2]} color="#f59e0b" label="" />
+              </div>
+            </div>
+          </div>
+
+          {/* Recent traces preview */}
+          <div className="rounded-xl border border-[#e9eae6] overflow-hidden bg-white">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e9eae6]">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Trazas recientes</h3>
+              <button onClick={() => setLlmTab('traces')} className="text-[12px] text-[#3b59f6] font-medium hover:underline">Ver todas →</button>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[#f9f9f7]">
+                  {['Nombre','Modelo','Usuario','Duración','Coste','Estado','Hora'].map(h => (
+                    <th key={h} className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {traces.slice(0, 5).map((trace, i) => (
+                  <tr key={trace.id} onClick={() => setSelectedTrace(trace.id)} className={`cursor-pointer hover:bg-[#f9f9f7] border-t border-[#e9eae6] ${i % 2 === 0 ? '' : ''}`}>
+                    <td className="px-4 py-2.5 text-[12px] font-medium text-[#1a1a1a]">{trace.name}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#f3f4f6] text-[#646462]">{trace.model}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#646462]">{trace.user}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#646462] font-mono">{trace.duration}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#646462] font-mono">{trace.cost}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${trace.status === 'error' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                        {trace.status === 'error' ? 'Error' : 'OK'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#9ca3af]">{trace.ts}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── TRACES TAB ── */}
+      {llmTab === 'traces' && (
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          {/* Search + filters */}
+          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0 bg-[#f9f9f7]">
+            <div className="flex-1 relative">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              <input type="text" placeholder="Buscar trazas por nombre, usuario o modelo..." className="w-full pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
+            </div>
+            <select className="px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white">
+              <option>Todos los modelos</option>
+              <option>gpt-4o</option>
+              <option>claude-3-5-sonnet</option>
+              <option>gpt-4o-mini</option>
+              <option>gemini-2.0-flash</option>
+            </select>
+            <select className="px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white">
+              <option>Todos los estados</option>
+              <option>Éxito</option>
+              <option>Error</option>
+            </select>
+          </div>
+
+          {/* Table */}
+          <div className="flex-1 overflow-y-auto">
+            <table className="w-full">
+              <thead className="sticky top-0 bg-[#f9f9f7] z-10">
+                <tr>
+                  {['Nombre','Modelo','Usuario','Tokens (E/S)','Duración','Coste','Estado','Hora'].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {traces.map((trace, i) => (
+                  <tr key={trace.id} onClick={() => setSelectedTrace(trace.id)} className="cursor-pointer hover:bg-[#f9f9f7] border-b border-[#e9eae6] group">
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[12px] font-semibold text-[#1a1a1a] group-hover:text-[#3b59f6]">{trace.name}</span>
+                        <span className="text-[11px] text-[#9ca3af] font-mono">{trace.id}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[12px] font-medium text-[#1a1a1a]">{trace.model}</span>
+                        <span className="text-[11px] text-[#9ca3af]">{trace.provider}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-[#646462]">{trace.user}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[12px] text-[#1a1a1a] font-mono">{trace.tokens}</span>
+                        <span className="text-[11px] text-[#9ca3af] font-mono">{trace.inputTokens} → {trace.outputTokens}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-[#646462] font-mono">{trace.duration}</td>
+                    <td className="px-4 py-3 text-[12px] font-mono font-semibold text-[#1a1a1a]">{trace.cost}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${trace.status === 'error' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                        {trace.status === 'error' ? 'Error' : 'OK'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-[#9ca3af]">{trace.ts}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-5 py-3 border-t border-[#e9eae6] flex-shrink-0 bg-white">
+            <span className="text-[12px] text-[#646462]">Mostrando 1–{traces.length} de 564 trazas</span>
+            <div className="flex items-center gap-1">
+              {[1,2,3,'...',24].map((p, i) => (
+                <button key={i} className={`w-7 h-7 flex items-center justify-center rounded text-[12px] ${p === 1 ? 'bg-[#3b59f6] text-white' : 'text-[#646462] hover:bg-[#f3f4f6]'}`}>{p}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── GENERATIONS TAB ── */}
+      {llmTab === 'generations' && (
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0 bg-[#f9f9f7]">
+            <div className="flex-1 relative">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              <input type="text" placeholder="Buscar generaciones..." className="w-full pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
+            </div>
+            <span className="text-[12px] text-[#646462]">564 generaciones</span>
+          </div>
+          <table className="w-full">
+            <thead className="sticky top-0 bg-[#f9f9f7] z-10">
+              <tr>
+                {['Traza','Modelo','Entrada (preview)','Salida (preview)','Tokens','Coste','Estado'].map(h => (
+                  <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {traces.map(trace => (
+                <tr key={trace.id} onClick={() => setSelectedTrace(trace.id)} className="cursor-pointer hover:bg-[#f9f9f7] border-b border-[#e9eae6] group">
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[12px] font-semibold text-[#1a1a1a] group-hover:text-[#3b59f6]">{trace.name}</span>
+                      <span className="text-[11px] text-[#9ca3af] font-mono">{trace.id}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#f3f4f6] text-[#646462]">{trace.model}</span>
+                  </td>
+                  <td className="px-4 py-3 max-w-[200px]">
+                    <p className="text-[12px] text-[#646462] truncate">{trace.input}</p>
+                  </td>
+                  <td className="px-4 py-3 max-w-[200px]">
+                    <p className="text-[12px] text-[#646462] truncate">{trace.output}</p>
+                  </td>
+                  <td className="px-4 py-3 text-[12px] font-mono text-[#646462]">{trace.tokens}</td>
+                  <td className="px-4 py-3 text-[12px] font-mono font-semibold text-[#1a1a1a]">{trace.cost}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${trace.status === 'error' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                      {trace.status === 'error' ? 'Error' : 'OK'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── USERS TAB ── */}
+      {llmTab === 'users' && (
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0 bg-[#f9f9f7]">
+            <div className="flex-1 relative">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              <input type="text" placeholder="Buscar usuarios..." className="w-full pl-8 pr-4 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
+            </div>
+            <span className="text-[12px] text-[#646462]">{users.length} usuarios</span>
+          </div>
+          <table className="w-full">
+            <thead className="sticky top-0 bg-[#f9f9f7] z-10">
+              <tr>
+                {['Usuario','Generaciones','Coste total','Duración media','Tasa de error','Acciones'].map(h => (
+                  <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user, i) => (
+                <tr key={user.id} className="hover:bg-[#f9f9f7] border-b border-[#e9eae6]">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold text-white" style={{ backgroundColor: ['#3b59f6','#e8572a','#10b981','#f59e0b','#8b5cf6','#06b6d4'][i % 6] }}>
+                        {user.email[0].toUpperCase()}
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[12px] font-semibold text-[#1a1a1a]">{user.email}</span>
+                        <span className="text-[11px] text-[#9ca3af] font-mono">{user.id}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-bold text-[#1a1a1a]">{user.generations}</span>
+                      <div className="flex-1 max-w-[80px] h-1.5 bg-[#f3f4f6] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-[#3b59f6]" style={{ width: `${(user.generations / users[0].generations) * 100}%` }} />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-[13px] font-semibold font-mono text-[#1a1a1a]">{user.cost}</td>
+                  <td className="px-4 py-3 text-[12px] font-mono text-[#646462]">{user.avgDuration}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[12px] font-semibold font-mono ${parseFloat(user.errorRate) > 3 ? 'text-red-500' : 'text-[#646462]'}`}>{user.errorRate}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => { setLlmTab('traces'); }} className="text-[11px] text-[#3b59f6] font-medium hover:underline">Ver trazas →</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
