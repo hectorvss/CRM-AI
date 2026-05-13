@@ -37851,21 +37851,124 @@ function NotebookDetailView({ shortId, onBack, onDelete, onUpdate }: { shortId: 
 
 // ── WAAppToolbarView ──────────────────────────────────────────────────────────
 function WAAppToolbarView() {
+  const [appUrls, setAppUrls] = React.useState<string[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [showAdd, setShowAdd] = React.useState(false);
+  const [newUrl, setNewUrl] = React.useState('');
+  const [editingIdx, setEditingIdx] = React.useState<number | null>(null);
+  const [editingValue, setEditingValue] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [suggestions, setSuggestions] = React.useState<{ url: string; pageviews: number }[]>([]);
+  const [fetchingSuggestions, setFetchingSuggestions] = React.useState(false);
+
+  // Carga inicial: team.app_urls
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const team: any = await ph.posthog.team.get();
+        if (!cancelled) setAppUrls(team.app_urls ?? []);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? 'Error al cargar URLs autorizadas');
+      } finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function saveUrls(urls: string[]) {
+    setSaving(true);
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.team.update({ app_urls: urls });
+      setAppUrls(urls);
+    } catch (e: any) {
+      alert('Error al guardar: ' + (e?.message ?? ''));
+    } finally { setSaving(false); }
+  }
+
+  async function addUrl() {
+    const trimmed = newUrl.trim();
+    if (!trimmed) return;
+    // Validación básica
+    try {
+      const u = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+      const normalized = u.origin + (u.pathname === '/' ? '' : u.pathname);
+      if (appUrls.includes(normalized)) { alert('Esa URL ya está autorizada'); return; }
+      await saveUrls([...appUrls, normalized]);
+      setShowAdd(false); setNewUrl('');
+    } catch {
+      alert('URL no válida. Debe incluir esquema (https://...) o ser un dominio válido.');
+    }
+  }
+  async function deleteUrl(idx: number) {
+    if (!confirm(`¿Eliminar ${appUrls[idx]} de las URLs autorizadas?`)) return;
+    await saveUrls(appUrls.filter((_, i) => i !== idx));
+  }
+  async function saveEdit() {
+    if (editingIdx == null) return;
+    const trimmed = editingValue.trim();
+    if (!trimmed) { setEditingIdx(null); return; }
+    try {
+      const u = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+      const normalized = u.origin + (u.pathname === '/' ? '' : u.pathname);
+      await saveUrls(appUrls.map((x, i) => i === editingIdx ? normalized : x));
+      setEditingIdx(null); setEditingValue('');
+    } catch {
+      alert('URL no válida'); setEditingIdx(null);
+    }
+  }
+  function launchToolbar(url: string) {
+    // Construye URL con parámetros de toolbar de PostHog
+    const params = new URLSearchParams({ __posthog: JSON.stringify({ action: 'ph_authorize', token: 'authorize' }) });
+    window.open(`${url}#${params.toString()}`, '_blank');
+  }
+  async function fetchSuggestions() {
+    setFetchingSuggestions(true);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const hql = `
+        SELECT
+          concat(properties.$lib_custom_api_host ?? '', '') AS host_pref,
+          coalesce(toString(properties.$host), regexpExtract(toString(properties.$current_url), '^https?://[^/]+', 0)) AS origin,
+          count() AS c
+        FROM events
+        WHERE event = '$pageview' AND timestamp >= now() - INTERVAL 30 DAY
+          AND toString(properties.$current_url) != ''
+        GROUP BY origin
+        ORDER BY c DESC
+        LIMIT 20
+      `;
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+      const sugs = (res.results ?? [])
+        .map((r: any[]) => ({ url: String(r[1] ?? ''), pageviews: Number(r[2] ?? 0) }))
+        .filter((s: any) => s.url && s.url.startsWith('http') && !appUrls.includes(s.url));
+      setSuggestions(sugs);
+      if (sugs.length === 0) alert('Sin sugerencias nuevas. Tus eventos ya están cubiertos por las URLs autorizadas.');
+    } catch (e: any) {
+      alert('Error obteniendo sugerencias: ' + (e?.message ?? ''));
+    } finally { setFetchingSuggestions(false); }
+  }
+  async function addSuggestion(url: string) {
+    await saveUrls([...appUrls, url]);
+    setSuggestions(prev => prev.filter(s => s.url !== url));
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 pt-5 pb-0 flex-shrink-0">
         <div className="flex items-center gap-2">
-          {/* toolbar icon */}
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-[#1a1a1a]">
             <rect x="2" y="2" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/>
             <path d="M5 15h8M9 12v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
             <path d="M5 6h2M5 8.5h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
           </svg>
           <h1 className="text-[16px] font-bold text-[#1a1a1a]">Toolbar</h1>
-          <button className="text-[#9ca3af] hover:text-[#646462]">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </button>
+          {saving && <span className="text-[10px] text-[#9ca3af] flex items-center gap-1"><div className="w-2 h-2 bg-[#f59e0b] rounded-full animate-pulse" />Guardando…</span>}
         </div>
         <div className="flex items-center gap-2">
           <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
@@ -37879,42 +37982,117 @@ function WAAppToolbarView() {
       </p>
 
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
-        {/* Authorized URLs section */}
+        {error && <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b]">{error}</div>}
+
         <div>
           <h2 className="text-[14px] font-bold text-[#1a1a1a] mb-1">Authorized URLs for Toolbar</h2>
           <p className="text-[12px] text-[#646462] mb-3">Click on the URL to launch the toolbar.</p>
 
-          {/* Empty state card */}
-          <div className="border border-[#e9eae6] rounded-xl p-5 flex items-start justify-between gap-6 mb-3">
-            <div>
-              <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1.5">There are no authorized URLs.</p>
-              <p className="text-[13px] text-[#646462] leading-relaxed max-w-[500px]">
-                Add one to get started. When you send us events we'll suggest the ones that you should authorize. It'll allow you to use these in web analytics, web experiments and our toolbar.
-              </p>
+          {/* URLs list / empty state */}
+          {loading ? (
+            <div className="space-y-2 mb-3">{[0,1,2].map(i => <div key={i} className="h-12 bg-[#f3f3f1] rounded-xl animate-pulse" />)}</div>
+          ) : appUrls.length === 0 ? (
+            <div className="border border-[#e9eae6] rounded-xl p-5 flex items-start justify-between gap-6 mb-3">
+              <div>
+                <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1.5">There are no authorized URLs.</p>
+                <p className="text-[13px] text-[#646462] leading-relaxed max-w-[500px]">
+                  Add one to get started. When you send us events we'll suggest the ones that you should authorize. It'll allow you to use these in web analytics, web experiments and our toolbar.
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                <button onClick={fetchSuggestions} disabled={fetchingSuggestions} className="flex items-center gap-2 px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] whitespace-nowrap transition-colors disabled:opacity-50">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className={fetchingSuggestions ? 'animate-spin' : ''}><path d="M11 6.5A4.5 4.5 0 112 6.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11 3v3.5h-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  {fetchingSuggestions ? 'Buscando…' : 'Fetch suggestions'}
+                </button>
+                <p className="text-[11px] text-[#9ca3af]">Sent an event? Refetch suggestions.</p>
+              </div>
             </div>
-            <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-              <button className="flex items-center gap-2 px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] whitespace-nowrap transition-colors">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M11 6.5A4.5 4.5 0 112 6.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11 3v3.5h-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Fetch suggestions
-              </button>
-              <p className="text-[11px] text-[#9ca3af]">Sent an event? Refetch suggestions.</p>
+          ) : (
+            <div className="space-y-2 mb-3">
+              {appUrls.map((url, i) => (
+                <div key={i} className="border border-[#e9eae6] rounded-xl px-4 py-3 flex items-center gap-3 hover:bg-[#fafaf9] group">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#16a34a] flex-shrink-0"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M5 8l2.5 2.5L11 6" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  {editingIdx === i ? (
+                    <input
+                      autoFocus
+                      value={editingValue}
+                      onChange={e => setEditingValue(e.target.value)}
+                      onBlur={saveEdit}
+                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditingIdx(null); }}
+                      className="flex-1 px-2 py-1 border border-[#3b59f6] rounded text-[13px] font-mono focus:outline-none"
+                    />
+                  ) : (
+                    <button onClick={() => launchToolbar(url)} className="flex-1 text-left text-[13px] font-mono text-[#3b59f6] hover:underline truncate" title={`Lanzar toolbar en ${url}`}>{url}</button>
+                  )}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => launchToolbar(url)} title="Lanzar toolbar" className="p-1.5 hover:bg-[#eff2ff] rounded text-[#3b59f6]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M2 14L14 2M14 2H6M14 2v8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                    <button onClick={() => { setEditingIdx(i); setEditingValue(url); }} title="Editar" className="p-1.5 hover:bg-[#f3f3f1] rounded text-[#646462]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M11 2l3 3-8 8H3v-3z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                    </button>
+                    <button onClick={() => deleteUrl(i)} title="Eliminar" className="p-1.5 hover:bg-[#fee2e2] rounded text-[#dc2626]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 5h8l-1 9H5zM6 5V3h4v2M2 5h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
+
+          {/* Suggestions */}
+          {suggestions.length > 0 && (
+            <div className="mb-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[12px] font-semibold text-[#646462]">Sugerencias detectadas en tus eventos (últimos 30 días):</p>
+                <button onClick={() => setSuggestions([])} className="text-[11px] text-[#9ca3af] hover:text-[#1a1a1a]">Limpiar</button>
+              </div>
+              {suggestions.map((s, i) => (
+                <div key={i} className="border border-dashed border-[#fcd34d] bg-[#fffbeb] rounded-xl px-4 py-3 flex items-center gap-3">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#f59e0b] flex-shrink-0"><path d="M8 1l1.5 4H14l-3.5 2.6 1.3 4L8 9.8l-3.8 2.3 1.3-4L2 5h4.5z" fill="currentColor"/></svg>
+                  <span className="flex-1 text-[13px] font-mono text-[#1a1a1a] truncate">{s.url}</span>
+                  <span className="text-[10px] text-[#92400e] bg-[#fef3c7] px-1.5 py-0.5 rounded">{s.pageviews.toLocaleString('es-ES')} pageviews</span>
+                  <button onClick={() => addSuggestion(s.url)} className="text-[11px] text-[#3b59f6] hover:underline">+ Añadir</button>
+                  <button onClick={() => setSuggestions(prev => prev.filter(x => x.url !== s.url))} className="text-[#9ca3af] hover:text-[#dc2626]">×</button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Add authorized URL */}
-          <button className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-dashed border-[#d1d5db] rounded-xl text-[13px] font-medium text-[#646462] hover:bg-[#f9f9f7] hover:border-[#9ca3af] transition-colors mb-3">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-            Add authorized URL
-          </button>
+          {showAdd ? (
+            <div className="mb-3 border border-[#3b59f6] rounded-xl p-4 bg-white">
+              <label className="block text-[12px] font-semibold text-[#1a1a18] mb-2">Nueva URL autorizada</label>
+              <div className="flex gap-2">
+                <input autoFocus value={newUrl} onChange={e => setNewUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addUrl(); if (e.key === 'Escape') { setShowAdd(false); setNewUrl(''); } }} placeholder="https://midominio.com o https://*.midominio.com" className="flex-1 px-3 py-2 border border-[#e9eae6] rounded text-sm focus:outline-none focus:border-[#3b59f6] font-mono" />
+                <button onClick={addUrl} disabled={!newUrl.trim() || saving} className="px-3 py-2 bg-[#3b59f6] text-white text-sm rounded hover:bg-[#2a44d6] disabled:opacity-50">Añadir</button>
+                <button onClick={() => { setShowAdd(false); setNewUrl(''); }} className="px-3 py-2 text-sm text-[#646462] hover:bg-[#f3f3f1] rounded">Cancelar</button>
+              </div>
+              <p className="text-[10px] text-[#9ca3af] mt-2">Soporta wildcards: <code className="bg-[#f3f3f1] px-1 rounded">https://*.midominio.com</code></p>
+            </div>
+          ) : (
+            <div className="flex gap-2 mb-3">
+              <button onClick={() => setShowAdd(true)} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-dashed border-[#d1d5db] rounded-xl text-[13px] font-medium text-[#646462] hover:bg-[#f9f9f7] hover:border-[#9ca3af] transition-colors">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                Add authorized URL
+              </button>
+              {appUrls.length > 0 && (
+                <button onClick={fetchSuggestions} disabled={fetchingSuggestions} className="flex items-center gap-2 px-4 py-3 border border-[#e9eae6] rounded-xl text-[13px] font-medium text-[#1a1a18] hover:bg-[#f9f9f7] disabled:opacity-50">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className={fetchingSuggestions ? 'animate-spin' : ''}><path d="M11 6.5A4.5 4.5 0 112 6.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11 3v3.5h-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  {fetchingSuggestions ? 'Buscando…' : 'Sugerencias'}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Info row */}
           <div className="flex items-center gap-2 border border-[#e9eae6] rounded-xl px-4 py-3 bg-[#fafaf8]">
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="flex-shrink-0"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
             <p className="text-[13px] text-[#646462]">
               Make sure you're using the{' '}
-              <span className="text-[#e8572a] cursor-pointer hover:underline font-medium">HTML snippet</span>
+              <a href="https://posthog.com/docs/libraries/js" target="_blank" rel="noreferrer" className="text-[#e8572a] cursor-pointer hover:underline font-medium">HTML snippet</a>
               {' '}or the latest{' '}
-              <span className="text-[#e8572a] cursor-pointer hover:underline font-medium">posthog-js</span>
+              <a href="https://posthog.com/docs/libraries/js" target="_blank" rel="noreferrer" className="text-[#e8572a] cursor-pointer hover:underline font-medium">posthog-js</a>
               {' '}version.
             </p>
           </div>
@@ -37924,20 +38102,20 @@ function WAAppToolbarView() {
         <div className="flex justify-center py-4">
           <div className="grid grid-cols-2 gap-x-16 gap-y-6 max-w-xl">
             {[
-              { icon: '🔥', name: 'Heatmaps',     desc: 'Understand where your users interact the most.' },
-              { icon: '📋', name: 'Actions',      desc: 'Create actions visually from elements in your website.' },
-              { icon: '🚩', name: 'Feature Flags',desc: 'Toggle feature flags on/off right on your app.' },
-              { icon: '🔍', name: 'Inspect',      desc: 'Inspect clickable elements on your website.' },
-              { icon: '⚡', name: 'Web Vitals',   desc: "Measure your website's performance." },
-              { icon: '🧪', name: 'Experiments',  desc: 'Run experiments and A/B test your website.' },
+              { icon: '🔥', name: 'Heatmaps',     desc: 'Understand where your users interact the most.',           nav: 'appHeatmaps' },
+              { icon: '📋', name: 'Actions',      desc: 'Create actions visually from elements in your website.',  nav: null },
+              { icon: '🚩', name: 'Feature Flags',desc: 'Toggle feature flags on/off right on your app.',           nav: 'appFeatureFlags' },
+              { icon: '🔍', name: 'Inspect',      desc: 'Inspect clickable elements on your website.',              nav: null },
+              { icon: '⚡', name: 'Web Vitals',   desc: "Measure your website's performance.",                      nav: 'appWebAnalytics' },
+              { icon: '🧪', name: 'Experiments',  desc: 'Run experiments and A/B test your website.',                nav: 'appExperiments' },
             ].map(f => (
-              <div key={f.name} className="flex items-start gap-3">
+              <button key={f.name} onClick={() => f.nav && navigateWA(f.nav as any)} disabled={!f.nav} className="flex items-start gap-3 text-left hover:bg-[#fafaf9] rounded-lg p-2 -m-2 disabled:hover:bg-transparent disabled:cursor-default">
                 <span className="text-[20px] flex-shrink-0 mt-0.5">{f.icon}</span>
                 <div>
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">{f.name}</p>
+                  <p className="text-[13px] font-semibold text-[#1a1a1a]">{f.name}{f.nav && <span className="text-[#3b59f6] ml-1 text-[10px]">→</span>}</p>
                   <p className="text-[12px] text-[#646462] leading-relaxed mt-0.5">{f.desc}</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
