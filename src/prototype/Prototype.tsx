@@ -50512,8 +50512,21 @@ function WASettingsView() {
   // ── AccountPreviewsPage ───────────────────────────────────────────────────
   function AccountPreviewsPage() {
     const [search, setSearch] = useState('');
-    const [flags, setFlags] = useState<Record<string, boolean>>({});
-    const toggle = (k: string) => setFlags(f => ({ ...f, [k]: !f[k] }));
+    const [flags, setFlags] = useState<Record<string, boolean>>(() => {
+      try { return JSON.parse(localStorage.getItem('wa-preview-flags') ?? '{}'); } catch { return {}; }
+    });
+    const toggle = async (k: string) => {
+      setFlags(f => {
+        const next = { ...f, [k]: !f[k] };
+        try { localStorage.setItem('wa-preview-flags', JSON.stringify(next)); } catch {}
+        return next;
+      });
+      // Best-effort: persist to backend as user-level early access flags
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/users/@me/early_access_features/`, { feature_key: k, enabled: !flags[k] }).catch(() => {});
+      } catch {}
+    };
 
     const features: { id: string; title: string; desc: string; warning?: string; links?: string[] }[] = [
       {
@@ -50645,28 +50658,63 @@ function WASettingsView() {
 
   // ── AccountIntegrationsPage ───────────────────────────────────────────────
   function AccountIntegrationsPage() {
+    const [installations, setInstallations] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/users/@me/integrations/github/`);
+        setInstallations(res?.results ?? []);
+      } catch { setInstallations([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function disconnect(id: string) {
+      if (!confirm('¿Desconectar instalación?')) return;
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/users/@me/integrations/github/${id}/`); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    function connectGitHub() {
+      // GitHub App install URL — opens GitHub flow
+      window.open('https://github.com/apps/clain-bot/installations/new', '_blank', 'noopener,noreferrer');
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <h2 className="text-[15px] font-bold text-[#1a1a1a]">Integraciones personales</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Conexiones de GitHub a nivel de usuario"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
             </div>
             <p className="text-[13px] text-[#646462]">Tus integraciones personales de GitHub para acceso a repositorios, atribución de código y autoría de pull requests.</p>
             <p className="text-[13px] text-[#646462]">Puedes conectar múltiples cuentas u organizaciones de GitHub.</p>
           </div>
 
           <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
-            {/* Empty state */}
-            <div className="flex flex-col items-center gap-3 py-10 px-6 text-center">
-              <svg viewBox="0 0 24 24" className="w-9 h-9 fill-[#999]"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85.004 1.7.115 2.5.337 1.9-1.29 2.74-1.02 2.74-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
-              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin instalaciones de GitHub conectadas aún</h3>
-              <p className="text-[13px] text-[#646462] max-w-lg">Conéctate para que Clain pueda acceder a tus repositorios, atribuir commits, abrir pull requests y asignarte issues. Puedes añadir múltiples instalaciones para diferentes cuentas u organizaciones.</p>
-            </div>
-            {/* Connect button row */}
+            {loading ? (
+              <div className="p-10 text-center text-[12px] text-[#646462]">Cargando integraciones…</div>
+            ) : installations.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-10 px-6 text-center">
+                <svg viewBox="0 0 24 24" className="w-9 h-9 fill-[#999]"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85.004 1.7.115 2.5.337 1.9-1.29 2.74-1.02 2.74-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
+                <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin instalaciones de GitHub conectadas aún</h3>
+                <p className="text-[13px] text-[#646462] max-w-lg">Conéctate para que Clain pueda acceder a tus repositorios, atribuir commits, abrir pull requests y asignarte issues.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#e9eae6]">
+                {installations.map((i: any) => (
+                  <div key={i.id} className="px-4 py-3 flex items-center gap-3">
+                    <svg viewBox="0 0 24 24" className="w-7 h-7 fill-[#1a1a1a]"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85.004 1.7.115 2.5.337 1.9-1.29 2.74-1.02 2.74-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-[#1a1a1a]">{i.account_name ?? i.account?.login ?? '—'}</p>
+                      <p className="text-[12px] text-[#646462]">{i.repositories_count ?? 0} repositorios accesibles</p>
+                    </div>
+                    <button onClick={() => disconnect(i.id)} className="text-[#dc2626] text-[12px] hover:underline">Desconectar</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="border-t border-[#e9eae6] px-4 py-3 flex items-center gap-3 flex-wrap bg-[#fafaf9]">
-              <button className="flex items-center gap-1.5 h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+              <button onClick={connectGitHub} className="flex items-center gap-1.5 h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
                 + Conectar GitHub
               </button>
               <p className="text-[13px] text-[#646462]">
@@ -50681,13 +50729,29 @@ function WASettingsView() {
 
   // ── AccountConnectedAppsPage ──────────────────────────────────────────────
   function AccountConnectedAppsPage() {
+    const [apps, setApps] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/users/@me/oauth_applications/`);
+        setApps(res?.results ?? []);
+      } catch { setApps([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function revoke(id: string, name: string) {
+      if (!confirm(`¿Revocar acceso a "${name}"?`)) return;
+      try { const ph = await import('../api/posthog'); await ph.phDelete(`/api/users/@me/oauth_applications/${id}/`); await refresh(); }
+      catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <h2 className="text-[15px] font-bold text-[#1a1a1a]">Aplicaciones conectadas</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Aplicaciones externas con acceso OAuth a tu cuenta"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
             </div>
             <p className="text-[13px] text-[#646462]">Aplicaciones a las que se ha concedido acceso a tu cuenta de Clain mediante OAuth. Puedes revocar el acceso en cualquier momento.</p>
           </div>
@@ -50699,25 +50763,36 @@ function WASettingsView() {
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-1/2">Aplicación</th>
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Alcances</th>
                   <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Autorizado</th>
+                  <th className="px-4 py-2.5"></th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td colSpan={3} className="px-4 py-8">
+              <tbody className="divide-y divide-[#e9eae6]">
+                {loading ? (
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-[12px] text-[#646462]">Cargando aplicaciones…</td></tr>
+                ) : apps.length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-8">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-[#e8d5b0] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                        <svg viewBox="0 0 40 40" className="w-10 h-10"><rect x="8" y="14" width="24" height="18" rx="3" fill="#8B6914"/><rect x="12" y="10" width="16" height="8" rx="2" fill="#6b4f10"/><circle cx="20" cy="32" r="2" fill="#c49a2e"/><rect x="16" y="20" width="8" height="6" rx="1" fill="#c49a2e"/><path d="M14 14 Q20 8 26 14" fill="none" stroke="#6b4f10" strokeWidth="2"/></svg>
+                        <svg viewBox="0 0 40 40" className="w-10 h-10"><rect x="8" y="14" width="24" height="18" rx="3" fill="#8B6914"/><rect x="12" y="10" width="16" height="8" rx="2" fill="#6b4f10"/><circle cx="20" cy="32" r="2" fill="#c49a2e"/><rect x="16" y="20" width="8" height="6" rx="1" fill="#c49a2e"/></svg>
                       </div>
                       <div>
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M14 7H9V2a1 1 0 00-2 0v5H2a1 1 0 000 2h5v5a1 1 0 002 0V9h5a1 1 0 000-2z" transform="rotate(45 8 8)"/><circle cx="4" cy="4" r="2.5"/></svg>
-                          <span className="text-[13px] font-bold text-[#1a1a1a]">Sin aplicaciones conectadas</span>
-                        </div>
+                        <span className="text-[13px] font-bold text-[#1a1a1a] block mb-0.5">Sin aplicaciones conectadas</span>
                         <p className="text-[13px] text-[#646462]">Las aplicaciones aparecerán aquí cuando herramientas de terceros se conecten a tu cuenta.</p>
                       </div>
                     </div>
-                  </td>
-                </tr>
+                  </td></tr>
+                ) : (
+                  apps.map((a: any) => (
+                    <tr key={a.id}>
+                      <td className="px-4 py-3 text-[13px] text-[#1a1a1a] font-medium">{a.name ?? a.application_name ?? a.client_id}</td>
+                      <td className="px-4 py-3 text-[12px] text-[#646462]">{(a.scopes ?? []).join(', ') || '—'}</td>
+                      <td className="px-4 py-3 text-[12px] text-[#646462]">{a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={() => revoke(a.id, a.name ?? 'app')} className="text-[#dc2626] text-[12px] hover:underline">Revocar</button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
