@@ -47300,16 +47300,37 @@ function WASettingsView() {
       if (!secureKey) return;
       try { await navigator.clipboard.writeText(secureKey); setSecureKeyCopied(true); setTimeout(() => setSecureKeyCopied(false), 2000); } catch {}
     }
-    async function rotateSecure() {
-      if (!confirm('¿Rotar la clave segura de feature flags?\n\nLa clave primaria actual pasará a ser de respaldo. Actualiza tus SDKs antes de que expire.')) return;
+    const [showRotateModal, setShowRotateModal] = React.useState(false);
+    const [gracePeriod, setGracePeriod] = React.useState<'24h' | '7d' | '30d'>('7d');
+    const [backupKey, setBackupKey] = React.useState<string | null>(team?.secret_api_token_backup ?? null);
+    const [backupExpiresAt, setBackupExpiresAt] = React.useState<string | null>(team?.secret_api_token_backup_expires_at ?? null);
+    React.useEffect(() => {
+      setBackupKey(team?.secret_api_token_backup ?? null);
+      setBackupExpiresAt(team?.secret_api_token_backup_expires_at ?? null);
+    }, [team?.id]);
+    async function doRotate() {
       setRotating(true);
       try {
         const ph = await import('../api/posthog');
-        const res: any = await ph.phPost(`/api/environments/${ph.getTeamId()}/rotate_secret_token/`, {});
+        const graceDays = gracePeriod === '24h' ? 1 : gracePeriod === '7d' ? 7 : 30;
+        const res: any = await ph.phPost(`/api/environments/${ph.getTeamId()}/rotate_secret_token/`, { grace_period_days: graceDays });
         const newKey = res.secret_api_token ?? res.token ?? '';
-        if (newKey) { setSecureKey(newKey); setTeam((t: any) => ({ ...t, secret_api_token: newKey })); }
+        if (newKey) {
+          const oldKey = secureKey;
+          setSecureKey(newKey);
+          setBackupKey(res.secret_api_token_backup ?? oldKey);
+          const expiry = res.secret_api_token_backup_expires_at ?? new Date(Date.now() + graceDays * 86400000).toISOString();
+          setBackupExpiresAt(expiry);
+          setTeam((t: any) => ({ ...t, secret_api_token: newKey, secret_api_token_backup: oldKey, secret_api_token_backup_expires_at: expiry }));
+        }
+        setShowRotateModal(false);
       } catch (e: any) { alert('No se pudo rotar la clave: ' + (e?.message ?? '')); }
       setRotating(false);
+    }
+    function daysUntilExpiry(): number {
+      if (!backupExpiresAt) return 0;
+      const diff = new Date(backupExpiresAt).getTime() - Date.now();
+      return Math.max(0, Math.ceil(diff / 86400000));
     }
     return (
       <div className="flex-1 overflow-y-auto">
@@ -47374,7 +47395,7 @@ function WASettingsView() {
               ) : (
                 <p className="flex-1 px-4 py-2.5 text-[12px] text-[#9ca3af] italic">Haz clic en el botón de rotación a la derecha para generar una nueva clave.</p>
               )}
-              <button onClick={rotateSecure} disabled={rotating} title="Rotar clave" className="px-2.5 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] disabled:opacity-50">
+              <button onClick={() => setShowRotateModal(true)} disabled={rotating} title="Rotar clave" className="px-2.5 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] disabled:opacity-50">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M13 3a6.5 6.5 0 11-2.5 12.5M13 3V7h-4"/></svg>
               </button>
               <button onClick={copySecure} disabled={!secureKey} title="Copiar clave" className="px-2.5 py-2.5 border-l border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1] disabled:opacity-50 inline-flex items-center gap-1">
@@ -47382,22 +47403,93 @@ function WASettingsView() {
                 {secureKeyCopied && <span className="text-[11px] text-[#16a34a]">✓</span>}
               </button>
             </div>
-            <p className="text-[12px] text-[#646462]">Al rotar la clave, la clave primaria actual pasará a ser de respaldo para que puedas migrar de forma segura.</p>
+            <p className="text-[12px] text-[#646462] mb-3">Al rotar la clave, la clave primaria actual pasará a ser de respaldo para que puedas migrar de forma segura.</p>
+
+            {backupKey && (
+              <>
+                <p className="text-[12px] text-[#646462] mb-1.5 mt-4">
+                  Clave de respaldo <span className="text-[#92400e] font-medium">(expira en {daysUntilExpiry()} días)</span>
+                </p>
+                <div className="flex items-center border border-[#fde68a] bg-[#fffbeb] rounded-lg overflow-hidden">
+                  <code className="flex-1 px-4 py-2.5 text-[12px] font-mono text-[#92400e] truncate">{backupKey}</code>
+                  <button onClick={() => navigator.clipboard.writeText(backupKey).catch(() => {})} title="Copiar clave de respaldo" className="px-2.5 py-2.5 border-l border-[#fde68a] text-[#92400e] hover:bg-[#fef3c7]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                  </button>
+                </div>
+                <p className="text-[12px] text-[#92400e] mt-1.5">⚠ Migra todos tus SDKs antes de la expiración o dejarán de funcionar.</p>
+              </>
+            )}
           </div>
         </div>
+
+        {/* Rotate modal */}
+        {showRotateModal && (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4" onClick={() => !rotating && setShowRotateModal(false)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white border border-[#e9eae6] rounded-[12px] shadow-2xl w-full max-w-md p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#f59e0b]"><path d="M8 1L1 14h14L8 1zm0 5v4M8 12h.01" stroke="#f59e0b" strokeWidth="1.5" fill="none"/></svg>
+                <h3 className="text-[15px] font-bold text-[#1a1a1a]">Rotar clave segura</h3>
+              </div>
+              <p className="text-[13px] text-[#1a1a1a]">Se generará una nueva clave primaria. La clave actual pasará a ser <strong>clave de respaldo</strong> y seguirá funcionando durante el período de gracia que elijas para que migres tus SDKs.</p>
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Período de gracia</p>
+                <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden w-fit">
+                  {(['24h', '7d', '30d'] as const).map(g => (
+                    <button
+                      key={g}
+                      onClick={() => setGracePeriod(g)}
+                      className={`h-8 px-4 text-[12px] font-semibold ${gracePeriod === g ? 'bg-[#fff5f2] text-[#e8572a]' : 'bg-white text-[#646462] hover:bg-[#f3f3f1]'} ${g !== '24h' ? 'border-l border-[#e9eae6]' : ''}`}
+                    >{g === '24h' ? '24 horas' : g === '7d' ? '7 días' : '30 días'}</button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-[#646462] mt-1.5">La clave de respaldo expirará después de este tiempo. Asegúrate de actualizar tus SDKs antes.</p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#e9eae6]">
+                <button onClick={() => setShowRotateModal(false)} disabled={rotating} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+                <button onClick={doRotate} disabled={rotating} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{rotating ? 'Rotando…' : 'Rotar clave'}</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   // ── HeatmapsPage ─────────────────────────────────────────────────────────
   function HeatmapsPage() {
+    const xs = team?.extra_settings || {};
     const [heatmapsWeb, setHeatmapsWeb] = useState<boolean>(!!team?.heatmaps_opt_in);
-    const [saving, setSaving] = React.useState(false);
-    React.useEffect(() => { setHeatmapsWeb(!!team?.heatmaps_opt_in); }, [team?.id]);
+    const [heatmapsMobile, setHeatmapsMobile] = useState<boolean>(!!xs.heatmaps_mobile_opt_in);
+    const [sampleRate, setSampleRate] = useState<number>(Number(team?.heatmaps_sample_rate ?? xs.heatmaps_sample_rate ?? 1));
+    const [captureClicks, setCaptureClicks] = useState<boolean>(xs.heatmaps_capture_clicks !== false);
+    const [captureMouse, setCaptureMouse] = useState<boolean>(xs.heatmaps_capture_mouse !== false);
+    const [captureScroll, setCaptureScroll] = useState<boolean>(xs.heatmaps_capture_scroll !== false);
+    const [captureRageclicks, setCaptureRageclicks] = useState<boolean>(!!xs.heatmaps_capture_rageclicks);
+    const [savingKey, setSavingKey] = React.useState('');
+    React.useEffect(() => {
+      const s = team?.extra_settings || {};
+      setHeatmapsWeb(!!team?.heatmaps_opt_in);
+      setHeatmapsMobile(!!s.heatmaps_mobile_opt_in);
+      setSampleRate(Number(team?.heatmaps_sample_rate ?? s.heatmaps_sample_rate ?? 1));
+      setCaptureClicks(s.heatmaps_capture_clicks !== false);
+      setCaptureMouse(s.heatmaps_capture_mouse !== false);
+      setCaptureScroll(s.heatmaps_capture_scroll !== false);
+      setCaptureRageclicks(!!s.heatmaps_capture_rageclicks);
+    }, [team?.id]);
+    async function toggleExtra(field: string, v: boolean, key: string, setter: (b: boolean) => void) {
+      setter(v); setSavingKey(key);
+      const next = { ...(team?.extra_settings || {}), [field]: v };
+      await patchTeam({ extra_settings: next }); setSavingKey('');
+    }
+    async function saveSampleRate(v: number) {
+      setSampleRate(v); setSavingKey('sample');
+      await patchTeam({ heatmaps_sample_rate: v });
+      setSavingKey('');
+    }
     async function toggleHeatmaps(v: boolean) {
-      setHeatmapsWeb(v); setSaving(true);
+      setHeatmapsWeb(v); setSavingKey('web');
       await patchTeam({ heatmaps_opt_in: v });
-      setSaving(false);
+      setSavingKey('');
     }
     return (
       <div className="flex-1 overflow-y-auto">
@@ -47426,8 +47518,75 @@ function WASettingsView() {
               <a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a>
             </p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar mapas de calor para web {saving && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar mapas de calor para web {savingKey === 'web' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
               <Toggle checked={heatmapsWeb} onChange={toggleHeatmaps}/>
+            </div>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar mapas de calor para móvil (iOS/Android) {savingKey === 'mobile' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={heatmapsMobile} onChange={(v: boolean) => toggleExtra('heatmaps_mobile_opt_in', v, 'mobile', setHeatmapsMobile)}/>
+            </div>
+          </div>
+
+          {/* Sample rate */}
+          <div className="space-y-3 pt-6 border-t border-[#e9eae6]">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tasa de muestreo</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Porcentaje de sesiones para las que se capturan datos de heatmap"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Reduce la tasa de muestreo si tienes mucho tráfico y solo necesitas datos representativos.</p>
+            <div className="flex items-center gap-3 max-w-md">
+              <input
+                type="range"
+                min="0.01"
+                max="1"
+                step="0.01"
+                value={sampleRate}
+                onChange={e => setSampleRate(Number(e.target.value))}
+                onMouseUp={() => saveSampleRate(sampleRate)}
+                onTouchEnd={() => saveSampleRate(sampleRate)}
+                className="flex-1 accent-[#e8572a]"
+              />
+              <span className="text-[13px] font-mono font-semibold text-[#1a1a1a] w-16 text-right">{Math.round(sampleRate * 100)}%</span>
+              {savingKey === 'sample' && <span className="text-[11px] text-[#646462]">guardando…</span>}
+            </div>
+          </div>
+
+          {/* Capture types */}
+          <div className="space-y-3 pt-6 border-t border-[#e9eae6]">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tipos de captura</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Controla qué interacciones se capturan para los mapas de calor"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Por defecto se capturan los 4 tipos. Desactiva los que no necesites para reducir el volumen de datos.</p>
+            <div className="border border-[#e9eae6] rounded-[10px] divide-y divide-[#e9eae6]">
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <div>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Clicks {savingKey === 'clicks' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                  <p className="text-[12px] text-[#646462]">Captura clicks en cualquier punto de la página.</p>
+                </div>
+                <Toggle checked={captureClicks} onChange={(v: boolean) => toggleExtra('heatmaps_capture_clicks', v, 'clicks', setCaptureClicks)}/>
+              </div>
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <div>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Movimientos del ratón {savingKey === 'mouse' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                  <p className="text-[12px] text-[#646462]">Posiciones del cursor para generar mapas de movimiento.</p>
+                </div>
+                <Toggle checked={captureMouse} onChange={(v: boolean) => toggleExtra('heatmaps_capture_mouse', v, 'mouse', setCaptureMouse)}/>
+              </div>
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <div>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Profundidad de scroll {savingKey === 'scroll' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                  <p className="text-[12px] text-[#646462]">Hasta dónde llegan los usuarios al hacer scroll en la página.</p>
+                </div>
+                <Toggle checked={captureScroll} onChange={(v: boolean) => toggleExtra('heatmaps_capture_scroll', v, 'scroll', setCaptureScroll)}/>
+              </div>
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <div>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Rageclicks {savingKey === 'rage' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
+                  <p className="text-[12px] text-[#646462]">Detecta clicks rápidos repetidos en el mismo elemento (frustración del usuario).</p>
+                </div>
+                <Toggle checked={captureRageclicks} onChange={(v: boolean) => toggleExtra('heatmaps_capture_rageclicks', v, 'rage', setCaptureRageclicks)}/>
+              </div>
             </div>
           </div>
         </div>
@@ -48880,18 +49039,56 @@ function WASettingsView() {
 
   // ── PrivacyPage ───────────────────────────────────────────────────────────
   function PrivacyPage() {
+    const xs = team?.extra_settings || {};
+    const mask = team?.session_recording_masking_config || {};
     const [discardIP, setDiscardIP] = useState<boolean>(!!team?.discard_client_ip_data);
-    const [saving, setSaving] = React.useState(false);
-    React.useEffect(() => { setDiscardIP(!!team?.discard_client_ip_data); }, [team?.id]);
+    const [personProcessingOptOut, setPersonProcessingOptOut] = useState<boolean>(!!team?.person_processing_opt_out);
+    const [retentionDays, setRetentionDays] = useState<number>(Number(xs.event_retention_days ?? 365));
+    const [maskAllInputs, setMaskAllInputs] = useState<string>(mask.maskAllInputs ?? 'password');
+    const [maskTextSelector, setMaskTextSelector] = useState<string>(mask.maskTextSelector ?? '');
+    const [blockSelector, setBlockSelector] = useState<string>(mask.blockSelector ?? '');
+    const [ignoreSelector, setIgnoreSelector] = useState<string>(mask.ignoreSelector ?? '');
+    const [savingKey, setSavingKey] = React.useState('');
+    React.useEffect(() => {
+      const s = team?.extra_settings || {};
+      const m = team?.session_recording_masking_config || {};
+      setDiscardIP(!!team?.discard_client_ip_data);
+      setPersonProcessingOptOut(!!team?.person_processing_opt_out);
+      setRetentionDays(Number(s.event_retention_days ?? 365));
+      setMaskAllInputs(m.maskAllInputs ?? 'password');
+      setMaskTextSelector(m.maskTextSelector ?? '');
+      setBlockSelector(m.blockSelector ?? '');
+      setIgnoreSelector(m.ignoreSelector ?? '');
+    }, [team?.id]);
     async function toggleDiscardIP(v: boolean) {
-      setDiscardIP(v); setSaving(true);
-      // Try field on team, fall back to extra_settings
+      setDiscardIP(v); setSavingKey('ip');
       try { const ok = await patchTeam({ discard_client_ip_data: v }); if (!ok) throw new Error('no'); }
       catch {
         const next = { ...(team?.extra_settings || {}), discard_client_ip_data: v };
         await patchTeam({ extra_settings: next });
       }
-      setSaving(false);
+      setSavingKey('');
+    }
+    async function togglePersonProcessing(v: boolean) {
+      setPersonProcessingOptOut(v); setSavingKey('persons');
+      try { await patchTeam({ person_processing_opt_out: v }); }
+      catch {
+        const next = { ...(team?.extra_settings || {}), person_processing_opt_out: v };
+        await patchTeam({ extra_settings: next });
+      }
+      setSavingKey('');
+    }
+    async function saveRetention(v: number) {
+      setRetentionDays(v); setSavingKey('retention');
+      const next = { ...(team?.extra_settings || {}), event_retention_days: v };
+      await patchTeam({ extra_settings: next });
+      setSavingKey('');
+    }
+    async function saveMaskingConfig() {
+      setSavingKey('mask');
+      const config = { maskAllInputs, maskTextSelector, blockSelector, ignoreSelector };
+      await patchTeam({ session_recording_masking_config: config });
+      setSavingKey('');
     }
     return (
       <div className="flex-1 overflow-y-auto">
@@ -48900,18 +49097,123 @@ function WASettingsView() {
             <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
             <p className="text-[13px] text-[#1a1a1a]">Estos ajustes solo afectan al proyecto actual <strong>(Proyecto Clain)</strong>.</p>
           </div>
+
+          {/* IP capture */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <h2 className="text-[15px] font-bold text-[#1a1a1a]">Configuración de captura de datos IP</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Controla si las IPs se almacenan en eventos"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
             </div>
             <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
               Cuando está activado, las direcciones IP de los clientes no se almacenarán con tus eventos. Las transformaciones como el enriquecimiento GeoIP y la detección de bots pueden seguir usando la IP antes de que se descarte.{' '}
-              <a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a>
+              <a href="https://posthog.com/docs/privacy/data-collection" target="_blank" rel="noopener noreferrer" className="text-[#e8572a] hover:underline">Docs ↗</a>
             </p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente {saving && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Descartar datos IP del cliente {savingKey === 'ip' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
               <Toggle checked={discardIP} onChange={toggleDiscardIP}/>
+            </div>
+          </div>
+
+          {/* Person processing opt-out */}
+          <div className="space-y-3 pt-6 border-t border-[#e9eae6]">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Procesamiento de personas (Persons-on-Events)</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Desactiva la asociación de eventos a perfiles de persona"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
+              Cuando está activado, los eventos no se asociarán a perfiles de persona. Útil para cumplimiento GDPR/CCPA estricto si no necesitas identidad de usuario.
+            </p>
+            <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Desactivar procesamiento de personas {savingKey === 'persons' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={personProcessingOptOut} onChange={togglePersonProcessing}/>
+            </div>
+          </div>
+
+          {/* Retention */}
+          <div className="space-y-3 pt-6 border-t border-[#e9eae6]">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Retención de eventos</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Tiempo durante el que se almacenan los eventos antes de borrarse"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Define cuánto tiempo se almacenan los eventos en este entorno. Los eventos más antiguos se borran automáticamente.</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {[
+                { v: 90, label: '90 días' },
+                { v: 365, label: '1 año' },
+                { v: 730, label: '2 años' },
+                { v: 1825, label: '5 años' },
+                { v: 3650, label: '10 años' },
+              ].map(opt => (
+                <button
+                  key={opt.v}
+                  onClick={() => saveRetention(opt.v)}
+                  className={`h-8 px-3 border rounded-lg text-[13px] font-medium ${retentionDays === opt.v ? 'border-[#e8572a] text-[#e8572a] bg-[#fff5f2]' : 'border-[#e9eae6] text-[#646462] hover:bg-[#f3f3f1]'}`}
+                >{opt.label}</button>
+              ))}
+              {savingKey === 'retention' && <span className="text-[11px] text-[#646462]">guardando…</span>}
+            </div>
+          </div>
+
+          {/* Masking config */}
+          <div className="space-y-3 pt-6 border-t border-[#e9eae6]">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Enmascaramiento de session replay</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Controla qué elementos se ocultan en las grabaciones"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura qué inputs, texto y elementos se enmascaran u ocultan en las grabaciones de sesión. Útil para proteger PII y datos sensibles.</p>
+
+            <div className="space-y-3">
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Enmascarar inputs</p>
+                <select
+                  value={maskAllInputs}
+                  onChange={e => setMaskAllInputs(e.target.value)}
+                  className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none cursor-pointer min-w-[260px]"
+                >
+                  <option value="none">No enmascarar inputs</option>
+                  <option value="password">Solo passwords (recomendado)</option>
+                  <option value="all">Enmascarar todos los inputs</option>
+                </select>
+              </div>
+
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Selector CSS de texto a enmascarar</p>
+                <input
+                  type="text"
+                  value={maskTextSelector}
+                  onChange={e => setMaskTextSelector(e.target.value)}
+                  placeholder=".sensitive, #email-text"
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"
+                />
+              </div>
+
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Selector CSS de elementos a bloquear (ocultos por completo)</p>
+                <input
+                  type="text"
+                  value={blockSelector}
+                  onChange={e => setBlockSelector(e.target.value)}
+                  placeholder=".ph-no-capture, .private"
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"
+                />
+              </div>
+
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Selector CSS de inputs a ignorar (no capturar valor)</p>
+                <input
+                  type="text"
+                  value={ignoreSelector}
+                  onChange={e => setIgnoreSelector(e.target.value)}
+                  placeholder="input[type='hidden'], .ignore-input"
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"
+                />
+              </div>
+
+              <button
+                onClick={saveMaskingConfig}
+                disabled={savingKey === 'mask'}
+                className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50"
+              >{savingKey === 'mask' ? 'Guardando…' : 'Guardar enmascaramiento'}</button>
             </div>
           </div>
         </div>
