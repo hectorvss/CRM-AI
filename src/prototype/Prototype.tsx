@@ -30697,6 +30697,677 @@ function WAAppSurveysView() {
 
 
 
+// ── WAAppExperimentsView ───────────────────────────────────────────────────────
+function WAAppExperimentsView() {
+  type ExpTab = 'experiments' | 'sharedMetrics' | 'holdoutGroups' | 'history' | 'settings';
+  const [tab, setTab] = useState<ExpTab>('experiments');
+  const [showNewExp, setShowNewExp] = useState(false);
+  const [newExpStep, setNewExpStep] = useState(1);
+  const [guideOpen, setGuideOpen] = useState(true);
+
+  // Step 1 form state
+  const [expName, setExpName] = useState('');
+  const [hypothesis, setHypothesis] = useState('');
+  const [flagKey, setFlagKey] = useState('');
+
+  // Step 2 state
+  const [rolloutPct, setRolloutPct] = useState(100);
+  const [persistFlag, setPersistFlag] = useState(false);
+
+  // Step 3 state
+  const [filterInternal, setFilterInternal] = useState(true);
+
+  // List filters
+  const [search, setSearch] = useState('');
+  const [smSearch, setSmSearch] = useState('');
+
+  // ── Step indicator ─────────────────────────────────────────────────────────
+  const StepIndicator = () => {
+    const steps = [
+      { n: 1, label: 'Description' },
+      { n: 2, label: 'Variant rollout' },
+      { n: 3, label: 'Analytics' },
+    ];
+    return (
+      <div className="flex items-center gap-0 mb-8">
+        {steps.map((s, i) => {
+          const done   = s.n < newExpStep;
+          const active = s.n === newExpStep;
+          const future = s.n > newExpStep;
+          // step 2 done on step 3 → show green
+          const greenDone = s.n === 2 && newExpStep === 3;
+          return (
+            <div key={s.n} className="flex items-center gap-0">
+              <div className="flex items-center gap-2">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${
+                  greenDone ? 'bg-green-500 text-white' :
+                  done      ? 'bg-[#e8572a] text-white' :
+                  active    ? 'bg-[#e8572a] text-white' :
+                              'bg-[#e9eae6] text-[#9ca3af]'
+                }`}>
+                  {greenDone ? (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  ) : done ? (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  ) : s.n}
+                </div>
+                <span className={`text-[13px] font-medium ${active ? 'text-[#1a1a1a]' : future ? 'text-[#9ca3af]' : 'text-[#646462]'}`}>{s.label}</span>
+              </div>
+              {i < steps.length - 1 && (
+                <div className={`w-12 h-px mx-3 ${s.n < newExpStep ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}/>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Guide content per step
+  const guideContent = [
+    {
+      title: 'Feature flags',
+      bullets: [
+        'Feature flags are placed in your codebase to switch between variants. We will give you a code snippet at the end of the wizard.',
+        'Feature flags also control the rollout process, which you can configure in the next step.',
+        'In most cases you will want a new feature flag for this experiment. If you however want to use an existing one, the rollout configuration can only be modified on the feature flag directly.',
+      ],
+    },
+    {
+      title: 'Configuring variants',
+      bullets: [
+        'The more variants you add, the more traffic you need to get reliable results.',
+        'It is recommended to split traffic equally between variants. The lower the traffic a variant has, the longer it will take to reach reliable results.',
+      ],
+    },
+    {
+      title: 'Measuring impact',
+      bullets: [
+        'By default every user exposed to the experiment is included in the analysis.',
+        'You can customize it to narrow it down further, but be careful not to introduce bias.',
+        'You can change inclusion criteria and metrics afterwards. This impacts only the analysis, not what your user sees or data collection.',
+      ],
+    },
+  ];
+  const guide = guideContent[newExpStep - 1];
+
+  // ── New Experiment wizard ──────────────────────────────────────────────────
+  if (showNewExp) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[#fafaf8] overflow-hidden">
+        <div className="flex-1 overflow-y-auto px-12 py-8">
+          {/* Breadcrumb + title */}
+          <button
+            onClick={() => { setShowNewExp(false); setNewExpStep(1); setGuideOpen(true); }}
+            className="flex items-center gap-2 text-[13px] text-[#646462] hover:text-[#1a1a1a] mb-3 transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Experiments
+          </button>
+          <h1 className="text-[24px] font-bold text-[#1a1a1a] mb-8">New experiment</h1>
+
+          <div className="flex gap-6 items-start">
+            {/* Main form area */}
+            <div className="flex-1 min-w-0 flex flex-col gap-0">
+              <StepIndicator />
+
+              {/* ── Step 1: Description ── */}
+              {newExpStep === 1 && (
+                <div className="bg-white border border-[#e9eae6] rounded-xl p-8 flex flex-col gap-5">
+                  <h2 className="text-[18px] font-bold text-[#1a1a1a]">What are we testing?</h2>
+                  <div>
+                    <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1.5">Experiment name</label>
+                    <input
+                      value={expName}
+                      onChange={e => setExpName(e.target.value)}
+                      placeholder="e.g., New checkout flow test"
+                      className="w-full border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af]"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="text-[13px] font-semibold text-[#1a1a1a]">Hypothesis</label>
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                    </div>
+                    <div className="relative">
+                      <textarea
+                        value={hypothesis}
+                        onChange={e => setHypothesis(e.target.value.slice(0, 3000))}
+                        placeholder="We believe that ... will result in ... because ..."
+                        rows={4}
+                        className="w-full border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af] resize-none"
+                      />
+                      <span className="absolute bottom-2 right-3 text-[11px] text-[#9ca3af]">{hypothesis.length} / 3000</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[13px] font-semibold text-[#1a1a1a]">Feature flag key</label>
+                      <span className="text-[12px] text-[#646462]">
+                        Do you have a feature flag already?{' '}
+                        <span className="text-[#e8572a] cursor-pointer hover:underline font-medium">Select existing flag</span>
+                      </span>
+                    </div>
+                    <input
+                      value={flagKey}
+                      onChange={e => setFlagKey(e.target.value)}
+                      placeholder="e.g., new-checkout-flow-test"
+                      className="w-full border border-[#e9eae6] rounded-lg px-3 py-2.5 text-[13px] focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 2: Variant rollout ── */}
+              {newExpStep === 2 && (
+                <div className="bg-white border border-[#e9eae6] rounded-xl p-8 flex flex-col gap-6">
+                  <h2 className="text-[18px] font-bold text-[#1a1a1a]">Who sees which variant?</h2>
+
+                  {/* Rollout */}
+                  <div className="border border-[#e9eae6] rounded-xl p-5 flex flex-col gap-4">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Rollout</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-[13px] text-[#646462]">Rollout percent</span>
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                      </div>
+                      <input
+                        type="number"
+                        value={rolloutPct}
+                        onChange={e => setRolloutPct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                        className="w-16 border border-[#e9eae6] rounded-lg px-2 py-1.5 text-[13px] text-right focus:outline-none focus:border-[#3b59f6]"
+                      />
+                      <span className="text-[13px] text-[#646462]">%</span>
+                    </div>
+                    {/* Slider */}
+                    <div className="relative h-3 flex items-center">
+                      <div className="w-full h-1.5 bg-[#e9eae6] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#e8572a] rounded-full" style={{ width: `${rolloutPct}%` }}/>
+                      </div>
+                      <input
+                        type="range" min={0} max={100} value={rolloutPct}
+                        onChange={e => setRolloutPct(Number(e.target.value))}
+                        className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
+                      />
+                      <div
+                        className="absolute w-4 h-4 bg-[#e8572a] rounded-full shadow border-2 border-white"
+                        style={{ left: `calc(${rolloutPct}% - 8px)` }}
+                      />
+                    </div>
+
+                    {/* Traffic preview */}
+                    <div>
+                      <p className="text-[12px] font-semibold text-[#646462] mb-2">Traffic preview</p>
+                      <div className="flex w-full rounded-lg overflow-hidden h-8">
+                        <div className="flex-1 bg-[#3b59f6] flex items-center justify-center">
+                          <span className="text-[12px] font-bold text-white">A</span>
+                        </div>
+                        <div className="flex-1 bg-[#7c3aed] flex items-center justify-center">
+                          <span className="text-[12px] font-bold text-white">B</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[11px] text-[#9ca3af]">50%</span>
+                        <span className="text-[11px] text-[#9ca3af]">50%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Variants */}
+                  <div className="border border-[#e9eae6] rounded-xl p-5 flex flex-col gap-3">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">Variants</p>
+                    <div className="border border-[#e9eae6] rounded-lg overflow-hidden">
+                      <div className="flex items-center px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf8]">
+                        <span className="text-[11px] font-semibold text-[#9ca3af] flex-1">Variant key</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-[#9ca3af]">Split</span>
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 9l3.5-3.5L7 8l4-5" stroke="#9ca3af" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                      </div>
+                      {[
+                        { letter: 'A', color: '#3b59f6', value: 'control' },
+                        { letter: 'B', color: '#7c3aed', value: 'test' },
+                      ].map(v => (
+                        <div key={v.letter} className="flex items-center gap-3 px-4 py-3 border-b border-[#e9eae6] last:border-0">
+                          <div className="w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0" style={{ background: v.color }}>
+                            {v.letter}
+                          </div>
+                          <input
+                            defaultValue={v.value}
+                            className="flex-1 border border-[#e9eae6] rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#3b59f6]"
+                          />
+                          <span className="text-[13px] text-[#646462] w-10 text-right">50%</span>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="flex items-center gap-2 px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f9f9f7] w-fit transition-colors">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                      Add variant
+                    </button>
+
+                    {/* Persist flag checkbox */}
+                    <div className="flex flex-col gap-1.5 mt-1">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={persistFlag} onChange={e => setPersistFlag(e.target.checked)} className="w-4 h-4 rounded border-[#d1d5db] accent-[#e8572a]"/>
+                        <span className="text-[13px] text-[#1a1a1a]">Persist flag across authentication steps</span>
+                      </label>
+                      <p className="text-[12px] text-[#e8572a] leading-relaxed pl-6">
+                        This is only relevant if your feature flag is shown to both logged out AND logged in users. Note that this feature is not compatible with all setups,{' '}
+                        <span className="underline cursor-pointer">learn more ↗</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 3: Analytics ── */}
+              {newExpStep === 3 && (
+                <div className="bg-white border border-[#e9eae6] rounded-xl p-8 flex flex-col gap-6">
+                  <h2 className="text-[18px] font-bold text-[#1a1a1a]">Who is included in the analysis?</h2>
+
+                  <div className="flex flex-col gap-3">
+                    {/* Include people when */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] text-[#e8572a] cursor-pointer hover:underline font-medium">Include people when</span>
+                      <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                        Feature flag is called
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                      </button>
+                    </div>
+                    {/* Multiple variant handling */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] text-[#e8572a] cursor-pointer hover:underline font-medium">Multiple variant handling</span>
+                      <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                        Exclude multivariate users
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                      </button>
+                    </div>
+                    {/* Filter internal */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[13px] text-[#1a1a1a]">Filter out internal and test users</span>
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#9ca3af" strokeWidth="1.1"/><path d="M6.5 6v3.5M6.5 4v.5" stroke="#9ca3af" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                      </div>
+                      <button
+                        onClick={() => setFilterInternal(!filterInternal)}
+                        className={`w-9 h-5 rounded-full relative transition-colors ${filterInternal ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
+                      >
+                        <div className="w-3.5 h-3.5 bg-white rounded-full absolute shadow-sm transition-all" style={{ top: '3px', left: filterInternal ? '18px' : '3px' }}/>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* How to measure impact */}
+                  <div className="flex flex-col gap-3">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">How to measure impact?</p>
+                    <div className="border border-[#e9eae6] rounded-xl p-4 flex flex-col gap-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { title: 'Add primary metric', sub: 'Tracks your main hypothesis' },
+                          { title: 'Add secondary metric', sub: 'Provide additional context and detect side effects' },
+                        ].map(m => (
+                          <button key={m.title} className="border border-dashed border-[#d1d5db] rounded-xl p-4 flex items-start gap-3 text-left hover:bg-[#f9f9f7] transition-colors">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5"><path d="M7 1v12M1 7h12" stroke="#646462" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                            <div>
+                              <p className="text-[13px] font-semibold text-[#1a1a1a]">{m.title}</p>
+                              <p className="text-[12px] text-[#9ca3af] mt-0.5">{m.sub}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[12px] text-[#9ca3af] text-center">
+                        Add{' '}
+                        <span className="text-[#e8572a] cursor-pointer hover:underline">metrics</span>
+                        {' '}to measure your experiment's impact. You can add them before or after launching.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Info note */}
+                  <div className="flex items-start gap-3 border border-[#e9eae6] rounded-xl px-4 py-3">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5"><circle cx="7" cy="7" r="6" stroke="#9ca3af" strokeWidth="1.2"/><path d="M7 6v4M7 4.5v.5" stroke="#9ca3af" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    <p className="text-[13px] text-[#1a1a1a]">
+                      You can always refine your{' '}
+                      <span className="text-[#e8572a] cursor-pointer hover:underline">analytics configuration</span>
+                      {' '}and{' '}
+                      <span className="text-[#e8572a] cursor-pointer hover:underline">metrics</span>
+                      {' '}after saving.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Nav buttons */}
+              <div className="flex items-center justify-between mt-5">
+                {newExpStep > 1 ? (
+                  <button
+                    onClick={() => setNewExpStep(s => s - 1)}
+                    className="px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-medium text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] transition-colors"
+                  >
+                    Back
+                  </button>
+                ) : <div/>}
+                {newExpStep < 3 ? (
+                  <button
+                    onClick={() => setNewExpStep(s => s + 1)}
+                    className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] transition-colors"
+                  >
+                    Continue
+                  </button>
+                ) : (
+                  <button className="px-5 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] transition-colors">
+                    Save as draft
+                  </button>
+                )}
+              </div>
+
+              {/* Footer link */}
+              <p className="text-[12px] text-[#9ca3af] text-center mt-3">
+                Looking for no-code? They are created using the toolbar,{' '}
+                <span className="text-[#e8572a] cursor-pointer hover:underline">see no-code docs ↗</span>
+              </p>
+            </div>
+
+            {/* Guide panel */}
+            {guideOpen && (
+              <div className="w-64 flex-shrink-0 bg-white border border-[#e9eae6] rounded-xl p-5 flex flex-col gap-3 self-start sticky top-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#646462" strokeWidth="1.2"/><path d="M7 6v4M7 4.5v.5" stroke="#646462" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                    <span className="text-[13px] font-semibold text-[#1a1a1a]">Guide</span>
+                  </div>
+                  <button onClick={() => setGuideOpen(false)} className="text-[#9ca3af] hover:text-[#646462]">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+                <p className="text-[12px] font-bold text-[#1a1a1a]">{guide.title}</p>
+                <ul className="flex flex-col gap-3">
+                  {guide.bullets.map((b, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <div className="w-1 h-1 rounded-full bg-[#646462] flex-shrink-0 mt-1.5"/>
+                      <span className="text-[12px] text-[#646462] leading-relaxed">{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main view ──────────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-6 pt-5 pb-0 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          {/* flask icon */}
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-[#7c3aed]">
+            <path d="M6 2v6L2 15a1 1 0 00.9 1.5h12.2A1 1 0 0016 15l-4-7V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M6 2h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            <circle cx="7" cy="13" r="1" fill="currentColor" opacity="0.5"/>
+            <circle cx="10.5" cy="11.5" r="0.7" fill="currentColor" opacity="0.4"/>
+          </svg>
+          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Experiments</h1>
+        </div>
+
+        {/* Top-right */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Quick start
+            <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">0</span>
+          </button>
+          {tab === 'experiments' && (
+            <button
+              onClick={() => { setShowNewExp(true); setNewExpStep(1); }}
+              className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors"
+            >
+              New experiment
+            </button>
+          )}
+          <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7] relative">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M6 1v2M6 11v2M1 6h2M11 6h2M2.9 2.9l1.4 1.4M9.7 9.7l1.4 1.4M2.9 9.1l1.4-1.4M9.7 4.3l1.4-1.4" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#e8572a] text-white text-[8px] font-bold flex items-center justify-center leading-none">+</span>
+          </button>
+          <button className="w-7 h-7 flex items-center justify-center text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center px-6 mt-3 border-b border-[#e9eae6] flex-shrink-0">
+        {(['experiments','sharedMetrics','holdoutGroups','history','settings'] as ExpTab[]).map(t => {
+          const labels: Record<ExpTab,string> = { experiments:'Experiments', sharedMetrics:'Shared metrics', holdoutGroups:'Holdout groups', history:'History', settings:'Settings' };
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+                tab === t ? 'border-[#e8572a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+              }`}
+            >
+              {labels[t]}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Experiments tab ── */}
+      {tab === 'experiments' && (
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+          {/* Empty state card */}
+          <div className="border-2 border-dashed border-[#e9eae6] rounded-xl flex items-center gap-8 px-12 py-8">
+            {/* Hedgehog scientist */}
+            <div className="flex-shrink-0 w-36 h-36 flex items-center justify-center">
+              <svg width="130" height="130" viewBox="0 0 130 130" fill="none">
+                {/* star burst */}
+                <path d="M85 25l4 8 8-2-5 7 5 7-8-3-4 8-3-8-8 2 5-7-5-7 8 3z" fill="#f59e0b"/>
+                {/* lab coat body */}
+                <rect x="38" y="70" width="44" height="40" rx="6" fill="white" stroke="#d1d5db" strokeWidth="1.5"/>
+                {/* coat lapels */}
+                <path d="M60 72v20M60 72l-8-4M60 72l8-4" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round"/>
+                {/* body under coat */}
+                <ellipse cx="60" cy="80" rx="18" ry="16" fill="#92400e"/>
+                {/* head */}
+                <ellipse cx="60" cy="56" rx="16" ry="14" fill="#d97706"/>
+                {/* snout */}
+                <ellipse cx="60" cy="62" rx="8" ry="5" fill="#fde68a"/>
+                {/* eyes */}
+                <circle cx="54" cy="53" r="2.5" fill="#1a1a1a"/>
+                <circle cx="66" cy="53" r="2.5" fill="#1a1a1a"/>
+                <circle cx="54.8" cy="52.2" r="0.8" fill="white"/>
+                <circle cx="66.8" cy="52.2" r="0.8" fill="white"/>
+                {/* nose */}
+                <ellipse cx="60" cy="60" rx="2" ry="1.3" fill="#92400e"/>
+                {/* spines */}
+                <path d="M46 52c-4-6-5-12-2-18M50 46c-3-7-2-13 2-18M55 43c0-7 3-13 7-16M65 44c3-7 6-12 10-15M69 50c6-6 10-10 13-16" stroke="#78350f" strokeWidth="2" strokeLinecap="round"/>
+                {/* flask in right hand */}
+                <path d="M78 75l4 8-6 6h8l-6-6 4-8" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M78 75h4" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round"/>
+                <ellipse cx="80" cy="89" rx="5" ry="3" fill="#7c3aed" opacity="0.4"/>
+                {/* clipboard in left hand */}
+                <rect x="35" y="75" width="14" height="18" rx="2" fill="white" stroke="#d1d5db" strokeWidth="1.2"/>
+                <path d="M38 80h8M38 83h8M38 86h5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/>
+              </svg>
+            </div>
+            {/* Text */}
+            <div className="flex flex-col gap-3">
+              <h2 className="text-[20px] font-bold text-[#1a1a1a]">Create your first experiment</h2>
+              <p className="text-[13px] text-[#646462] leading-relaxed max-w-[420px]">
+                Experiments help you test changes to your product to see which changes will lead to optimal results. Automatic statistical calculations let you see if the results are valid or due to chance.
+              </p>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => { setShowNewExp(true); setNewExpStep(1); }}
+                  className="flex items-center gap-2 px-4 py-2 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  Create experiment
+                </button>
+                <button className="flex items-center gap-1.5 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] transition-colors">
+                  Learn more
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 8.5L9 4M9 4H5.5M9 4v3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter row */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="relative w-56">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
+                <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
+                <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search experiments" className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none placeholder-[#9ca3af]"/>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[12px] text-[#646462]">Status</span>
+              <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                All
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[12px] text-[#646462]">Created by</span>
+              <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                Any user
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[12px] text-[#646462]">Archived</span>
+              <button className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
+                Active
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="border border-[#e9eae6] rounded-xl overflow-hidden flex-shrink-0">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6] bg-[#fafaf8]">
+                  {[
+                    {l:'NAME', s:false},
+                    {l:'CREATED BY', s:true},
+                    {l:'CREATED', s:true, desc:true},
+                    {l:'STARTED', s:true},
+                    {l:'DURATION', s:true},
+                    {l:'REMAINING', s:false},
+                    {l:'STATUS', s:true},
+                    {l:'RESULT', s:true},
+                  ].map(col=>(
+                    <th key={col.l} className="px-4 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">
+                      <span className="flex items-center gap-1">
+                        {col.l}
+                        {col.s && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 2v6M2.5 4.5L5 2l2.5 2.5" stroke={col.desc ? '#e8572a' : '#d1d5db'} strokeWidth="1" strokeLinecap="round"/><path d="M2.5 5.5L5 8l2.5-2.5" stroke={col.desc ? '#d1d5db' : '#d1d5db'} strokeWidth="1" strokeLinecap="round"/></svg>}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={8} className="px-4 py-4 text-[13px] text-[#646462]">
+                    No results for this filter,{' '}
+                    <span className="text-[#e8572a] cursor-pointer hover:underline">change filter</span>
+                    {' '}or{' '}
+                    <span className="text-[#e8572a] cursor-pointer hover:underline" onClick={() => { setShowNewExp(true); setNewExpStep(1); }}>create a new experiment</span>.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Shared metrics tab ── */}
+      {tab === 'sharedMetrics' && (
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+          {/* Info banner */}
+          <div className="flex items-start gap-3 border border-[#e9eae6] rounded-xl px-4 py-3 bg-white">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5"><circle cx="7" cy="7" r="6" stroke="#9ca3af" strokeWidth="1.2"/><path d="M7 6v4M7 4.5v.5" stroke="#9ca3af" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            <p className="text-[12px] text-[#646462] leading-relaxed">
+              Shared metrics let you create reusable metrics that you can quickly add to any experiment. They are ideal for tracking key metrics like conversion rates or revenue across different experiments without having to set them up each time.
+            </p>
+          </div>
+
+          {/* Search + New button */}
+          <div className="flex items-center gap-3">
+            <div className="relative w-64">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
+                <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
+                <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+              <input value={smSearch} onChange={e=>setSmSearch(e.target.value)} placeholder="Search shared metrics..." className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none placeholder-[#9ca3af]"/>
+            </div>
+            <div className="flex-1"/>
+            <button className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f9f9f7] transition-colors">
+              New shared metric
+            </button>
+          </div>
+
+          {/* Table */}
+          <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6] bg-[#fafaf8]">
+                  {[
+                    {l:'NAME', s:true},
+                    {l:'DESCRIPTION', s:false},
+                    {l:'TAGS', s:false},
+                    {l:'TYPE', s:false},
+                    {l:'CREATED BY', s:true},
+                    {l:'CREATED', s:true},
+                  ].map(col=>(
+                    <th key={col.l} className="px-4 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">
+                      <span className="flex items-center gap-1">
+                        {col.l}
+                        {col.s && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 2v6M2.5 4.5L5 2l2.5 2.5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/><path d="M2.5 5.5L5 8l2.5-2.5" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/></svg>}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={6} className="px-4 py-4 text-[13px] text-[#646462]">
+                    You haven't created any{' '}
+                    <span className="text-[#e8572a] cursor-pointer hover:underline">shared metrics</span>
+                    {' '}yet.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Other tabs placeholder ── */}
+      {(tab === 'holdoutGroups' || tab === 'history' || tab === 'settings') && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+          <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-1">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+              <path d="M6 4h14a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="#9ca3af" strokeWidth="1.4"/>
+              <path d="M9 10h8M9 13h8M9 16h5" stroke="#9ca3af" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <h2 className="text-[15px] font-semibold text-[#1a1a1a]">{tab === 'holdoutGroups' ? 'Holdout groups' : tab === 'history' ? 'History' : 'Settings'}</h2>
+          <p className="text-[13px] text-[#9ca3af] max-w-[340px] leading-relaxed">No content yet.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
 // ── WADataSidebar — identical pattern to ReportsSidebar / KnowledgeSidebar ──
 function WADataSidebar({ sub, onSelect }: { sub: WADataSubView; onSelect: (s: WADataSubView) => void }) {
   const [open, setOpen] = useState<Record<string, boolean>>({
@@ -38590,7 +39261,8 @@ function WebAnalyticsApp({ onBackToHub }: { onBackToHub: () => void }) {
            appsSub === 'appLogs'            ? <WAAppLogsView /> :
            appsSub === 'appSessionReplay'   ? <WAAppSessionReplayView /> :
            appsSub === 'appSupport'         ? <WAAppSupportView /> :
-           appsSub === 'appSurveys'         ? <WAAppSurveysView /> : (
+           appsSub === 'appSurveys'         ? <WAAppSurveysView /> :
+           appsSub === 'appExperiments'     ? <WAAppExperimentsView /> : (
             <>
               <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
                 <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">{appsSub.replace(/^app/, '').replace(/([A-Z])/g, ' $1').trim()}</h1>
