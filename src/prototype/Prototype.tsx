@@ -51268,18 +51268,149 @@ function WASettingsView() {
         </div>
 
         {/* New notification modal */}
-        {showNewModal && (
-          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center px-4" onClick={() => setShowNewModal(false)}>
-            <div onClick={e => e.stopPropagation()} className="bg-white border border-[#e9eae6] rounded-[12px] shadow-2xl w-full max-w-md p-5">
-              <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">Nueva notificación</h3>
-              <p className="text-[13px] text-[#646462] mb-4">Las notificaciones se crean desde el recurso (insight, dashboard, etc.) que quieres seguir, no desde esta pantalla.</p>
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setShowNewModal(false)} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cerrar</button>
-                <button onClick={() => window.open('https://posthog.com/docs/notifications/subscriptions', '_blank', 'noopener,noreferrer')} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Ver docs ↗</button>
+        {showNewModal && <DiscussionsNewNotifModal onClose={() => setShowNewModal(false)} onCreated={async () => {
+          setShowNewModal(false);
+          try {
+            const ph = await import('../api/posthog');
+            const subs: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/subscriptions/`);
+            setSubscriptions(subs?.results ?? []);
+          } catch {}
+        }}/>}
+      </div>
+    );
+  }
+
+  // ── DiscussionsNewNotifModal ───────────────────────────────────────────────
+  function DiscussionsNewNotifModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+    const [targetType, setTargetType] = React.useState<'email' | 'slack' | 'webhook'>('email');
+    const [title, setTitle] = React.useState('');
+    const [targetValue, setTargetValue] = React.useState('');
+    const [frequency, setFrequency] = React.useState<'daily_email' | 'weekly_email' | 'monthly_email'>('weekly_email');
+    const [byweekday, setByweekday] = React.useState('monday');
+    const [bysetpos, setBysetpos] = React.useState('1');
+    const [hourOfDay, setHourOfDay] = React.useState('9');
+    const [inviteMessage, setInviteMessage] = React.useState('');
+    const [resourceType, setResourceType] = React.useState<'insight' | 'dashboard'>('insight');
+    const [resourceId, setResourceId] = React.useState('');
+    const [creating, setCreating] = React.useState(false);
+    const [resources, setResources] = React.useState<any[]>([]);
+    React.useEffect(() => {
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const tid = ph.getTeamId();
+          const url = resourceType === 'dashboard' ? `/api/projects/${tid}/dashboards/?limit=50` : `/api/projects/${tid}/insights/?limit=50`;
+          const res: any = await ph.phGet(url);
+          setResources(res?.results ?? []);
+        } catch { setResources([]); }
+      })();
+    }, [resourceType]);
+    async function create() {
+      if (!title.trim() || !targetValue.trim() || !resourceId) return;
+      setCreating(true);
+      try {
+        const ph = await import('../api/posthog');
+        const payload: any = {
+          title: title.trim(),
+          target_type: targetType,
+          target_value: targetValue.trim(),
+          frequency,
+          start_date: new Date().toISOString(),
+          interval: 1,
+          byweekday: frequency === 'weekly_email' ? [byweekday] : undefined,
+          bysetpos: frequency === 'monthly_email' ? Number(bysetpos) : undefined,
+          invite_message: inviteMessage.trim() || undefined,
+        };
+        if (resourceType === 'insight') payload.insight = Number(resourceId);
+        else payload.dashboard = Number(resourceId);
+        await ph.phPost(`/api/projects/${ph.getTeamId()}/subscriptions/`, payload);
+        onCreated();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      setCreating(false);
+    }
+    return (
+      <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center px-4" onClick={onClose}>
+        <div onClick={e => e.stopPropagation()} className="bg-white border border-[#e9eae6] rounded-[12px] shadow-2xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
+          <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-4">Nueva notificación</h3>
+
+          <div className="space-y-3">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Título</p>
+              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Reporte semanal de conversión" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Recurso a seguir</p>
+              <div className="flex gap-2">
+                <select value={resourceType} onChange={e => setResourceType(e.target.value as any)} className="h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+                  <option value="insight">Insight</option>
+                  <option value="dashboard">Dashboard</option>
+                </select>
+                <select value={resourceId} onChange={e => setResourceId(e.target.value)} className="flex-1 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+                  <option value="">— Selecciona —</option>
+                  {resources.map((r: any) => <option key={r.id} value={r.id}>{r.name ?? r.derived_name ?? `#${r.id}`}</option>)}
+                </select>
               </div>
             </div>
+
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Canal de entrega</p>
+              <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden w-fit">
+                {(['email','slack','webhook'] as const).map((t, i) => (
+                  <button key={t} onClick={() => setTargetType(t)} className={`h-8 px-3 text-[12px] font-semibold ${targetType === t ? 'bg-[#fff5f2] text-[#e8572a]' : 'bg-white text-[#646462] hover:bg-[#f3f3f1]'} ${i > 0 ? 'border-l border-[#e9eae6]' : ''}`}>{t === 'email' ? 'Email' : t === 'slack' ? 'Slack' : 'Webhook'}</button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">{targetType === 'email' ? 'Destinatarios (separados por coma)' : targetType === 'slack' ? 'Canal Slack' : 'URL del webhook'}</p>
+              <input value={targetValue} onChange={e => setTargetValue(e.target.value)} placeholder={targetType === 'email' ? 'a@empresa.com, b@empresa.com' : targetType === 'slack' ? '#analytics' : 'https://hooks.slack.com/…'} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Frecuencia</p>
+              <select value={frequency} onChange={e => setFrequency(e.target.value as any)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+                <option value="daily_email">Diaria</option>
+                <option value="weekly_email">Semanal</option>
+                <option value="monthly_email">Mensual</option>
+              </select>
+            </div>
+
+            {frequency === 'weekly_email' && (
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1">Día de la semana</p>
+                <select value={byweekday} onChange={e => setByweekday(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+                  {['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
+                </select>
+              </div>
+            )}
+            {frequency === 'monthly_email' && (
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1">Día del mes</p>
+                <select value={bysetpos} onChange={e => setBysetpos(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+                  {[1,15,-1].map(d => <option key={d} value={d}>{d === -1 ? 'Último día' : `Día ${d}`}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Hora (formato 24h)</p>
+              <select value={hourOfDay} onChange={e => setHourOfDay(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white">
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2,'0')}:00</option>)}
+              </select>
+            </div>
+
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Mensaje opcional</p>
+              <textarea value={inviteMessage} onChange={e => setInviteMessage(e.target.value)} rows={2} placeholder="Resumen para el equipo" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] resize-none"/>
+            </div>
           </div>
-        )}
+
+          <div className="flex justify-end gap-2 mt-5 pt-3 border-t border-[#e9eae6]">
+            <button onClick={onClose} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+            <button onClick={create} disabled={creating || !title.trim() || !targetValue.trim() || !resourceId} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{creating ? 'Creando…' : 'Crear notificación'}</button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -51460,8 +51591,7 @@ function WASettingsView() {
     const [invites, setInvites] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [showInviteModal, setShowInviteModal] = React.useState(false);
-    const [inviteEmail, setInviteEmail] = React.useState('');
-    const [inviteLevel, setInviteLevel] = React.useState<number>(1);
+    const [inviteRows, setInviteRows] = React.useState<{email: string; level: number; message: string}[]>([{ email: '', level: 1, message: '' }]);
     const [inviting, setInviting] = React.useState(false);
     const [me, setMe] = React.useState<any>(null);
 
@@ -51481,16 +51611,44 @@ function WASettingsView() {
     }
     React.useEffect(() => { refresh(); }, []);
 
-    async function sendInvite() {
-      if (!inviteEmail.trim()) return;
+    async function sendInvites() {
+      const valid = inviteRows.filter(r => r.email.trim());
+      if (valid.length === 0) return;
       setInviting(true);
       try {
         const ph = await import('../api/posthog');
-        await (ph.posthog as any).organization.invite({ target_email: inviteEmail.trim(), level: inviteLevel });
-        setShowInviteModal(false); setInviteEmail(''); setInviteLevel(1);
+        await Promise.all(valid.map(r =>
+          (ph.posthog as any).organization.invite({ target_email: r.email.trim(), level: r.level, message: r.message.trim() || undefined })
+        ));
+        setShowInviteModal(false); setInviteRows([{ email: '', level: 1, message: '' }]);
         await refresh();
       } catch (e: any) { alert('No se pudo invitar: ' + (e?.message ?? '')); }
       finally { setInviting(false); }
+    }
+    async function changeMemberLevel(memberId: string, newLevel: number) {
+      try {
+        const ph = await import('../api/posthog');
+        await (ph.posthog as any).organization.updateMember(memberId, { level: newLevel });
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function removeMember(member: any) {
+      const u = member.user || member;
+      if (!confirm(`¿Eliminar a ${u.email} de la organización?\n\nSi tienen claves API personales, dejarán de funcionar inmediatamente.`)) return;
+      try {
+        const ph = await import('../api/posthog');
+        await (ph.posthog as any).organization.deleteMember(u.uuid ?? u.id);
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function leaveOrg() {
+      if (!me) return;
+      if (!confirm('¿Salir de esta organización? Perderás acceso inmediatamente.')) return;
+      try {
+        const ph = await import('../api/posthog');
+        await (ph.posthog as any).organization.deleteMember(me.uuid);
+        window.location.href = '/';
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
     }
     async function deleteInvite(id: string) {
       if (!confirm('¿Eliminar invitación?')) return;
@@ -51617,24 +51775,26 @@ function WASettingsView() {
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
-                    {['Nombre','Email','Nivel','2FA','Incorporación','Último acceso'].map((col, i) => (
+                    {['Nombre','Email','Nivel','2FA','Incorporación','Último acceso','Acciones'].map((col, i) => (
                       <th key={i} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
-                        <span className="flex items-center gap-1">{col} <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg></span>
+                        <span className="flex items-center gap-1">{col} {col !== 'Acciones' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>}</span>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e9eae6]">
                   {loading ? (
-                    <tr><td colSpan={6} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando miembros…</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando miembros…</td></tr>
                   ) : filteredMembers.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-4 text-[12px] text-[#646462]">Sin miembros.</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-4 text-[12px] text-[#646462]">Sin miembros.</td></tr>
                   ) : (
                     filteredMembers.map((m: any) => {
                       const u = m.user || m;
                       const level = m.level ?? 1;
-                      const roleText = level >= 15 ? 'Propietario' : level >= 8 ? 'Admin' : 'Miembro';
                       const isMe = me && (u.uuid === me.uuid || u.email === me.email);
+                      const myLevel = members.find((mm: any) => (mm.user?.uuid ?? mm.uuid) === me?.uuid)?.level ?? 1;
+                      const canEditLevel = myLevel >= 8 && !isMe && level < myLevel;
+                      const canRemove = myLevel >= 8 && !isMe && level < myLevel;
                       const initials = ((u.first_name || u.email || '?').charAt(0)).toUpperCase();
                       const has2fa = !!u.is_2fa_enabled;
                       return (
@@ -51645,13 +51805,30 @@ function WASettingsView() {
                               <span className="text-[13px] text-[#1a1a1a] font-medium">{u.first_name || u.email}{isMe && <span className="text-[#646462] font-normal"> (tú)</span>}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-[#646462]">{u.email}</td>
-                          <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded text-[12px] font-semibold ${level >= 15 ? 'bg-[#fff5f2] text-[#e8572a]' : level >= 8 ? 'bg-[#f0f4ff] text-[#3b59f6]' : 'bg-[#f3f3f1] text-[#1a1a1a]'}`}>{roleText}</span></td>
+                          <td className="px-4 py-3 text-[#646462]">{u.email}{u.pending_email && <span className="ml-1 text-[10px] text-[#92400e]">(pendiente: {u.pending_email})</span>}</td>
+                          <td className="px-4 py-3">
+                            {canEditLevel ? (
+                              <select value={level} onChange={e => changeMemberLevel(u.uuid ?? u.id, Number(e.target.value))} className="h-7 px-2 border border-[#e9eae6] rounded text-[12px] bg-white cursor-pointer">
+                                <option value={1}>Miembro</option>
+                                <option value={8}>Admin</option>
+                                {myLevel >= 15 && <option value={15}>Propietario</option>}
+                              </select>
+                            ) : (
+                              <span className={`px-2 py-0.5 rounded text-[12px] font-semibold ${level >= 15 ? 'bg-[#fff5f2] text-[#e8572a]' : level >= 8 ? 'bg-[#f0f4ff] text-[#3b59f6]' : 'bg-[#f3f3f1] text-[#1a1a1a]'}`}>{level >= 15 ? 'Propietario' : level >= 8 ? 'Admin' : 'Miembro'}</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3">{has2fa
                             ? <span className="px-2 py-0.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded text-[11px] font-semibold text-[#16a34a]">2FA activo</span>
                             : <span className="px-2 py-0.5 bg-[#fef3c7] border border-[#fde68a] rounded text-[11px] font-semibold text-[#92400e]">2FA no activado</span>}</td>
-                          <td className="px-4 py-3 text-[#646462]">{m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}</td>
-                          <td className="px-4 py-3 text-[#646462]">{u.last_login ? new Date(u.last_login).toLocaleDateString() : '—'}</td>
+                          <td className="px-4 py-3 text-[#646462] text-[11px]" title={m.joined_at}>{m.joined_at ? humanFriendlyTime(new Date(m.joined_at)) : '—'}</td>
+                          <td className="px-4 py-3 text-[#646462] text-[11px]" title={u.last_login}>{u.last_login ? humanFriendlyTime(new Date(u.last_login)) : '—'}</td>
+                          <td className="px-4 py-3 text-right">
+                            {isMe ? (
+                              <button onClick={leaveOrg} className="text-[#dc2626] text-[12px] hover:underline">Salir org</button>
+                            ) : canRemove ? (
+                              <button onClick={() => removeMember(m)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                            ) : null}
+                          </td>
                         </tr>
                       );
                     })
@@ -51680,30 +51857,58 @@ function WASettingsView() {
           </div>
         </div>
 
-        {/* Invite modal */}
+        {/* Invite modal — multi-row */}
         {showInviteModal && (
           <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center px-4" onClick={() => setShowInviteModal(false)}>
-            <div onClick={e => e.stopPropagation()} className="bg-white border border-[#e9eae6] rounded-[12px] shadow-2xl w-full max-w-md p-5">
-              <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">Invitar miembro del equipo</h3>
-              <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Email</label>
-              <input
-                autoFocus
-                type="email"
-                value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') sendInvite(); }}
-                placeholder="persona@ejemplo.com"
-                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] mb-3"
+            <div onClick={e => e.stopPropagation()} className="bg-white border border-[#e9eae6] rounded-[12px] shadow-2xl w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-1">Invitar miembros del equipo</h3>
+              <p className="text-[12px] text-[#646462] mb-4">Las invitaciones expiran después de 3 días.</p>
+
+              <div className="space-y-2 mb-4">
+                {inviteRows.map((row, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      autoFocus={i === 0}
+                      type="email"
+                      value={row.email}
+                      onChange={e => setInviteRows(rows => rows.map((r, j) => j === i ? { ...r, email: e.target.value } : r))}
+                      placeholder="persona@ejemplo.com"
+                      className="flex-1 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+                    />
+                    <select
+                      value={row.level}
+                      onChange={e => setInviteRows(rows => rows.map((r, j) => j === i ? { ...r, level: Number(e.target.value) } : r))}
+                      className="h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] cursor-pointer"
+                    >
+                      <option value={1}>Miembro</option>
+                      <option value={8}>Admin</option>
+                      <option value={15}>Propietario</option>
+                    </select>
+                    {inviteRows.length > 1 && (
+                      <button onClick={() => setInviteRows(rows => rows.filter((_, j) => j !== i))} className="text-[#dc2626] text-[12px] hover:underline px-1">×</button>
+                    )}
+                  </div>
+                ))}
+                {inviteRows.length < 20 && (
+                  <button
+                    onClick={() => setInviteRows(rows => [...rows, { email: '', level: 1, message: '' }])}
+                    className="text-[12px] text-[#e8572a] hover:underline"
+                  >+ Añadir otra fila</button>
+                )}
+              </div>
+
+              <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Mensaje opcional (se incluirá en el email a todos)</label>
+              <textarea
+                value={inviteRows[0]?.message ?? ''}
+                onChange={e => setInviteRows(rows => rows.map(r => ({ ...r, message: e.target.value })))}
+                rows={2}
+                placeholder="¡Bienvenido al equipo!"
+                className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] mb-4 resize-none"
               />
-              <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Nivel</label>
-              <select value={inviteLevel} onChange={e => setInviteLevel(Number(e.target.value))} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] mb-4 cursor-pointer">
-                <option value={1}>Miembro</option>
-                <option value={8}>Admin</option>
-                <option value={15}>Propietario</option>
-              </select>
-              <div className="flex justify-end gap-2">
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#e9eae6]">
                 <button onClick={() => setShowInviteModal(false)} className="h-8 px-4 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
-                <button onClick={sendInvite} disabled={inviting || !inviteEmail.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{inviting ? 'Enviando…' : 'Enviar invitación'}</button>
+                <button onClick={sendInvites} disabled={inviting || !inviteRows.some(r => r.email.trim())} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{inviting ? 'Enviando…' : `Enviar ${inviteRows.filter(r => r.email.trim()).length} invitación(es)`}</button>
               </div>
             </div>
           </div>
@@ -51750,6 +51955,7 @@ function WASettingsView() {
       await patchOrganization({ default_role: v === 'none' ? null : v });
       setSavingDefault(false);
     }
+    const [editingRole, setEditingRole] = React.useState<any | null>(null);
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-8">
@@ -51766,18 +51972,22 @@ function WASettingsView() {
                   <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Rol</th>
                     <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Miembros</th>
+                    <th className="px-4 py-2.5"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e9eae6]">
                   {loading ? (
-                    <tr><td colSpan={2} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando…</td></tr>
+                    <tr><td colSpan={3} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando…</td></tr>
                   ) : roles.length === 0 ? (
-                    <tr><td colSpan={2} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td></tr>
+                    <tr><td colSpan={3} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td></tr>
                   ) : (
                     roles.map((r: any) => (
                       <tr key={r.id} className="hover:bg-[#fafaf9]">
                         <td className="px-4 py-2.5 text-[13px] text-[#1a1a1a]">{r.name}</td>
                         <td className="px-4 py-2.5 text-[12px] text-[#646462]">{r.members_count ?? r.members?.length ?? 0}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button onClick={() => setEditingRole(r)} className="text-[#e8572a] text-[12px] hover:underline">Editar</button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -51832,6 +52042,161 @@ function WASettingsView() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* Role detail drawer */}
+        {editingRole && <RoleDetailDrawer role={editingRole} onClose={() => setEditingRole(null)} onUpdated={async () => { await refresh(); setEditingRole(null); }}/>}
+      </div>
+    );
+  }
+
+  // ── RoleDetailDrawer ──────────────────────────────────────────────────────
+  function RoleDetailDrawer({ role, onClose, onUpdated }: { role: any; onClose: () => void; onUpdated: () => void }) {
+    const [name, setName] = React.useState<string>(role.name);
+    const [permissions, setPermissions] = React.useState<Record<string, string>>(role.feature_flags_access_level ? { feature_flag: role.feature_flags_access_level } : {});
+    const [members, setMembers] = React.useState<any[]>([]);
+    const [allMembers, setAllMembers] = React.useState<any[]>([]);
+    const [showAddMember, setShowAddMember] = React.useState(false);
+    const [memberToAdd, setMemberToAdd] = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+    const resources = ['feature_flag', 'experiment', 'insight', 'dashboard', 'notebook'];
+    React.useEffect(() => {
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const [m, om] = await Promise.all([
+            ph.phGet(`/api/organizations/@current/roles/${role.id}/role_memberships/`).catch(() => ({ results: [] })),
+            (ph.posthog as any).organization.members(),
+          ]);
+          setMembers((m as any)?.results ?? []);
+          setAllMembers((om as any)?.results ?? []);
+        } catch {}
+      })();
+    }, [role.id]);
+    async function save() {
+      setSaving(true);
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPatch(`/api/organizations/@current/roles/${role.id}/`, {
+          name: name.trim(),
+          feature_flags_access_level: permissions.feature_flag ?? null,
+        });
+        onUpdated();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+      setSaving(false);
+    }
+    async function deleteRole() {
+      if (!confirm('¿Eliminar este rol? Los miembros perderán los permisos asociados.')) return;
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phDelete(`/api/organizations/@current/roles/${role.id}/`);
+        onUpdated();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function addMember() {
+      if (!memberToAdd) return;
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPost(`/api/organizations/@current/roles/${role.id}/role_memberships/`, { user_uuid: memberToAdd });
+        const m = await ph.phGet(`/api/organizations/@current/roles/${role.id}/role_memberships/`);
+        setMembers((m as any)?.results ?? []);
+        setMemberToAdd(''); setShowAddMember(false);
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    async function removeMember(membershipId: string) {
+      if (!confirm('¿Quitar miembro de este rol?')) return;
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phDelete(`/api/organizations/@current/roles/${role.id}/role_memberships/${membershipId}/`);
+        const m = await ph.phGet(`/api/organizations/@current/roles/${role.id}/role_memberships/`);
+        setMembers((m as any)?.results ?? []);
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    const memberIds = new Set(members.map((m: any) => m.user?.uuid ?? m.uuid));
+    const availableToAdd = allMembers.filter((m: any) => {
+      const u = m.user || m;
+      return !memberIds.has(u.uuid);
+    });
+    return (
+      <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-end" onClick={onClose}>
+        <div onClick={e => e.stopPropagation()} className="bg-white border-l border-[#e9eae6] shadow-2xl w-full max-w-lg h-full overflow-y-auto">
+          <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between sticky top-0 bg-white">
+            <h3 className="text-[15px] font-bold text-[#1a1a1a]">Rol: {role.name}</h3>
+            <button onClick={onClose} className="text-[#646462] hover:text-[#1a1a1a]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+          <div className="p-5 space-y-5">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Nombre</p>
+              <input value={name} onChange={e => setName(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-2">Permisos por tipo de recurso</p>
+              <div className="border border-[#e9eae6] rounded-lg divide-y divide-[#e9eae6]">
+                {resources.map(r => (
+                  <div key={r} className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[12px] text-[#1a1a1a] capitalize">{r.replace('_', ' ')}</span>
+                    <select
+                      value={permissions[r] ?? ''}
+                      onChange={e => setPermissions(p => ({ ...p, [r]: e.target.value }))}
+                      className="h-7 px-2 border border-[#e9eae6] rounded text-[11px] bg-white"
+                    >
+                      <option value="">Heredar</option>
+                      <option value="none">Sin acceso</option>
+                      <option value="view">Ver</option>
+                      <option value="edit">Editar</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[12px] font-semibold text-[#646462]">Miembros ({members.length})</p>
+                <button onClick={() => setShowAddMember(true)} className="text-[12px] text-[#e8572a] hover:underline">+ Añadir miembro</button>
+              </div>
+              {showAddMember && (
+                <div className="flex items-center gap-2 mb-2 p-2 bg-[#fafaf9] border border-[#e9eae6] rounded-lg">
+                  <select value={memberToAdd} onChange={e => setMemberToAdd(e.target.value)} className="flex-1 h-8 px-2 border border-[#e9eae6] rounded text-[12px] bg-white">
+                    <option value="">— Selecciona miembro —</option>
+                    {availableToAdd.map((m: any) => {
+                      const u = m.user || m;
+                      return <option key={u.uuid} value={u.uuid}>{u.first_name || u.email}</option>;
+                    })}
+                  </select>
+                  <button onClick={addMember} disabled={!memberToAdd} className="h-8 px-3 border border-[#e8572a] text-[#e8572a] text-[11px] font-semibold rounded hover:bg-[#fff5f2] disabled:opacity-50">Añadir</button>
+                  <button onClick={() => setShowAddMember(false)} className="h-8 px-2 text-[#646462] text-[11px]">×</button>
+                </div>
+              )}
+              <div className="border border-[#e9eae6] rounded-lg divide-y divide-[#e9eae6] max-h-64 overflow-y-auto">
+                {members.length === 0 ? (
+                  <p className="text-[12px] text-[#646462] p-3 text-center">Sin miembros asignados.</p>
+                ) : (
+                  members.map((m: any) => {
+                    const u = m.user || m;
+                    return (
+                      <div key={m.id ?? u.uuid} className="flex items-center gap-2 px-3 py-2">
+                        <div className="w-6 h-6 rounded-full bg-[#fff5f2] flex items-center justify-center text-[10px] font-semibold text-[#e8572a]">{(u.first_name || u.email || '?').charAt(0).toUpperCase()}</div>
+                        <span className="text-[12px] text-[#1a1a1a] flex-1 truncate">{u.first_name || u.email}</span>
+                        <button onClick={() => removeMember(m.id)} className="text-[#dc2626] text-[11px] hover:underline">Quitar</button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#e9eae6] flex justify-between">
+              <button onClick={deleteRole} className="h-8 px-3 border border-[#dc2626] text-[#dc2626] text-[12px] font-semibold rounded-lg hover:bg-[#fef2f2]">Eliminar rol</button>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+                <button onClick={save} disabled={saving || !name.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
+              </div>
             </div>
           </div>
         </div>
