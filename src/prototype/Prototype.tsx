@@ -45786,13 +45786,20 @@ function WASettingsView() {
   // State for General
   const [copiedToken, setCopiedToken] = useState(false);
   const [sdkTab, setSdkTab] = useState<'html'|'js'>('html');
-  const [sdkPlatform, setSdkPlatform] = useState('Web');
+  const [sdkPlatform, setSdkPlatform] = useState<'Web'|'React'|'Next.js'|'iOS'|'Android'|'Python'|'Node.js'|'Go'|'Ruby'|'PHP'|'Java'>('Web');
+  const [showPlatformDrop, setShowPlatformDrop] = useState(false);
+  const platformDropRef = useClickOutside<HTMLDivElement>(() => setShowPlatformDrop(false));
+  const [copiedTokenMsg, setCopiedTokenMsg] = useState('');
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
+  const [resettingToken, setResettingToken] = useState(false);
 
   // State for Customization
   const [displayName, setDisplayName] = useState('Proyecto por defecto');
-  const [timezone, setTimezone] = useState('UTC (UTC+0:00)');
-  const [weekStart, setWeekStart] = useState('Domingo');
-  const [businessModel, setBusinessModel] = useState('No especificado');
+  const [timezone, setTimezone] = useState('UTC');
+  const [weekStart, setWeekStart] = useState(0); // 0 sun / 1 mon / 6 sat
+  const [businessModel, setBusinessModel] = useState('');
+  const [baseCurrency, setBaseCurrency] = useState('USD');
+  const [savingCustomization, setSavingCustomization] = useState(false);
 
   // State for Autocapture
   const [autocaptureWeb, setAutocaptureWeb] = useState(true);
@@ -45802,6 +45809,73 @@ function WASettingsView() {
   const [captureLCP, setCaptureLCP] = useState(true);
   const [captureINP, setCaptureINP] = useState(true);
   const [deadClicks, setDeadClicks] = useState(false);
+  const [savingAutocapture, setSavingAutocapture] = useState(false);
+
+  // ── Backend state ────────────────────────────────────────────────────────
+  const [team, setTeam] = React.useState<any | null>(null);
+  const [teamLoading, setTeamLoading] = React.useState(true);
+  const [teamError, setTeamError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const t: any = await ph.posthog.team.get();
+        if (cancelled) return;
+        setTeam(t);
+        setDisplayName(t.name ?? 'Proyecto por defecto');
+        setTimezone(t.timezone ?? 'UTC');
+        setWeekStart(t.week_start_day ?? 0);
+        setBusinessModel((t.extra_settings?.business_model) ?? '');
+        setBaseCurrency(t.base_currency ?? 'USD');
+        setAutocaptureWeb(t.autocapture_opt_out !== true);
+        setWebVitals(!!t.autocapture_web_vitals_opt_in);
+        const allowed = t.autocapture_web_vitals_allowed_metrics ?? ['CLS','FCP','LCP','INP'];
+        setCaptureCLS(allowed.includes('CLS'));
+        setCaptureFCP(allowed.includes('FCP'));
+        setCaptureLCP(allowed.includes('LCP'));
+        setCaptureINP(allowed.includes('INP'));
+        setDeadClicks(!!t.capture_dead_clicks);
+      } catch (e: any) {
+        if (!cancelled) setTeamError(e?.message ?? 'Error al cargar configuración del proyecto');
+      } finally { if (!cancelled) setTeamLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function patchTeam(patch: any): Promise<boolean> {
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.posthog.team.update(patch);
+      setTeam(updated);
+      return true;
+    } catch (e: any) {
+      alert('Error al guardar: ' + (e?.message ?? ''));
+      return false;
+    }
+  }
+
+  async function resetProjectToken() {
+    if (!confirm('¿Regenerar el token del proyecto?\n\nEl token actual quedará inválido inmediatamente. Tendrás que actualizar todas tus SDKs.')) return;
+    setResettingToken(true);
+    try {
+      const ph = await import('../api/posthog');
+      const res: any = await ph.phPost(`/api/environments/${ph.getTeamId()}/reset_token/`, {});
+      setTeam((t: any) => ({ ...t, api_token: res.api_token ?? res.token ?? t?.api_token }));
+      alert('Token regenerado. Actualiza tus SDKs.');
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    finally { setResettingToken(false); }
+  }
+
+  async function copyToClipboard(text: string, kind: 'token' | 'project-id' | 'snippet') {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (kind === 'snippet') { setCopiedSnippet(true); setTimeout(() => setCopiedSnippet(false), 2000); }
+      else { setCopiedTokenMsg(kind); setTimeout(() => setCopiedTokenMsg(''), 2000); }
+    } catch {}
+  }
 
   function Toggle({ val, set }: { val: boolean; set: (v: boolean) => void }) {
     return (
@@ -45892,18 +45966,41 @@ function WASettingsView() {
 
   // ── Content pages ────────────────────────────────────────────────────────────
   function GeneralPage() {
-    const token = 'cln_CSSyj2b29HPLUQNUinX5Ezc3QPpkCmQ2gvywjT2wJ5pF';
-    const codeHtml = `<script>
-  !function(t,e){var o,n,p,r;e.__SV||(window.clain=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a=u._i.push([i,[],a]),u.toString=function(t){var e="clain.";return void 0!==a&&(e+=a+"."),e},u.toString(1),o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.clain=window.clain||{});
-  clain.init('${token}', {
-    api_host: 'https://app.clainanalytics.com',
-    defaults: '2026-01-30',
-    person_profiles: 'identified_only', // o 'always' para crear perfiles de usuarios anónimos
-  })
-</script>`;
+    const token = team?.api_token ?? 'cargando…';
+    const projectId = team?.id ?? team?.project_id ?? '—';
+    const apiHost = team?.api_host || (typeof window !== 'undefined' ? window.location.origin : 'https://app.example.com');
+
+    // Snippets por plataforma
+    const PLATFORM_SNIPPETS: Record<string, { html?: string; package?: string; code?: string; tabs?: string[] }> = {
+      'Web':     { html: `<script>\n  !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){...})}(document,window.posthog=window.posthog||{});\n  posthog.init('${token}', {\n    api_host: '${apiHost}',\n    defaults: '2026-01-30',\n    person_profiles: 'identified_only',\n  })\n</script>`, package: `npm install posthog-js`, code: `import posthog from 'posthog-js';\n\nposthog.init('${token}', {\n  api_host: '${apiHost}',\n  defaults: '2026-01-30',\n  person_profiles: 'identified_only',\n});` },
+      'React':   { package: `npm install posthog-js`, code: `// main.tsx\nimport posthog from 'posthog-js';\nimport { PostHogProvider } from 'posthog-js/react';\n\nposthog.init('${token}', {\n  api_host: '${apiHost}',\n  defaults: '2026-01-30',\n});\n\n<PostHogProvider client={posthog}>\n  <App />\n</PostHogProvider>` },
+      'Next.js': { package: `npm install posthog-js posthog-node`, code: `// app/providers.tsx\n'use client';\nimport posthog from 'posthog-js';\nimport { PostHogProvider } from 'posthog-js/react';\n\nif (typeof window !== 'undefined') {\n  posthog.init('${token}', {\n    api_host: '${apiHost}',\n  });\n}\n\nexport function PHProvider({ children }) {\n  return <PostHogProvider client={posthog}>{children}</PostHogProvider>;\n}` },
+      'iOS':     { package: `pod 'PostHog'   # CocoaPods\n// SPM: https://github.com/PostHog/posthog-ios`, code: `import PostHog\n\nlet config = PostHogConfig(\n  apiKey: "${token}",\n  host: "${apiHost}"\n)\nPostHogSDK.shared.setup(config)` },
+      'Android': { package: `implementation 'com.posthog:posthog-android:3.+'`, code: `// MyApp.kt\nclass MyApp : Application() {\n  override fun onCreate() {\n    super.onCreate()\n    val config = PostHogAndroidConfig(\n      apiKey = "${token}",\n      host = "${apiHost}"\n    )\n    PostHogAndroid.setup(this, config)\n  }\n}` },
+      'Python':  { package: `pip install posthog`, code: `from posthog import Posthog\n\nposthog = Posthog(\n  '${token}',\n  host='${apiHost}'\n)\nposthog.capture('user_signed_up', distinct_id='user_123')` },
+      'Node.js': { package: `npm install posthog-node`, code: `import { PostHog } from 'posthog-node';\n\nconst client = new PostHog(\n  '${token}',\n  { host: '${apiHost}' }\n);\nclient.capture({ distinctId: 'user_123', event: 'user_signed_up' });` },
+      'Go':      { package: `go get github.com/posthog/posthog-go`, code: `import posthog "github.com/posthog/posthog-go"\n\nclient, _ := posthog.NewWithConfig(\n  "${token}",\n  posthog.Config{Endpoint: "${apiHost}"},\n)\ndefer client.Close()\nclient.Enqueue(posthog.Capture{\n  DistinctId: "user_123",\n  Event:      "user_signed_up",\n})` },
+      'Ruby':    { package: `gem 'posthog-ruby'`, code: `require 'posthog'\n\nposthog = PostHog::Client.new(\n  api_key: '${token}',\n  host:    '${apiHost}'\n)\nposthog.capture(distinct_id: 'user_123', event: 'user_signed_up')` },
+      'PHP':     { package: `composer require posthog/posthog-php`, code: `use PostHog\\PostHog;\n\nPostHog::init('${token}', ['host' => '${apiHost}']);\nPostHog::capture(['distinctId' => 'user_123', 'event' => 'user_signed_up']);` },
+      'Java':    { package: `<dependency>\n  <groupId>com.posthog.java</groupId>\n  <artifactId>posthog</artifactId>\n  <version>1.+</version>\n</dependency>`, code: `import com.posthog.java.PostHog;\n\nPostHog posthog = new PostHog.Builder("${token}")\n  .host("${apiHost}")\n  .build();\nposthog.capture("user_123", "user_signed_up");` },
+    };
+
+    const snippet = PLATFORM_SNIPPETS[sdkPlatform];
+    const showHtmlTab = sdkPlatform === 'Web';
+    const currentCode = sdkTab === 'html' && snippet.html ? snippet.html : (snippet.code ?? '');
+
     return (
       <div className="flex-1 overflow-y-auto">
         <InfoBanner />
+        {teamLoading && (
+          <div className="px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf9] text-xs text-[#646462] flex items-center gap-2">
+            <div className="w-3 h-3 border-2 border-[#e8572a] border-t-transparent rounded-full animate-spin" />
+            Cargando configuración del proyecto…
+          </div>
+        )}
+        {teamError && (
+          <div className="px-4 py-2 border-b border-[#fecaca] bg-[#fef2f2] text-xs text-[#991b1b]">{teamError}</div>
+        )}
         <div className="p-6 max-w-2xl space-y-8">
           {/* Project token & ID */}
           <div>
@@ -45915,34 +46012,36 @@ function WASettingsView() {
 
             {/* Token card */}
             <div className="border border-[#e9eae6] rounded-xl mb-3 overflow-hidden">
-              <div className="px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <div className="px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf9] flex items-center justify-between">
                 <p className="text-[12px] font-semibold text-[#646462]">Token del proyecto</p>
+                {copiedTokenMsg === 'token' && <span className="text-[10px] text-[#16a34a] font-semibold">✓ Copiado</span>}
               </div>
               <div className="flex items-center gap-2 px-4 py-2.5">
                 <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] truncate">{token}</code>
-                <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                <button onClick={() => copyToClipboard(String(token), 'token')} title="Copiar token" className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
                 </button>
-                <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M3 8l5 5 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <button onClick={resetProjectToken} disabled={resettingToken} title="Regenerar token" className="p-1 rounded hover:bg-[#fee2e2] text-[#dc2626] disabled:opacity-50">
+                  <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-none stroke-current ${resettingToken ? 'animate-spin' : ''}`} strokeWidth="1.5"><path d="M13 8A5 5 0 112 8" strokeLinecap="round"/><path d="M13 4v4h-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
               </div>
             </div>
-            <p className="text-[12px] text-[#646462] mb-4">Clave de solo escritura para uso en <span className="text-[#e8572a] cursor-pointer hover:underline">librerías de cliente</span>. Segura para usar en apps públicas.</p>
+            <p className="text-[12px] text-[#646462] mb-4">Clave de solo escritura para uso en <a href="https://posthog.com/docs/libraries" target="_blank" rel="noreferrer" className="text-[#e8572a] hover:underline">librerías de cliente</a>. Segura para usar en apps públicas.</p>
 
             {/* Project ID card */}
             <div className="border border-[#e9eae6] rounded-xl mb-3 overflow-hidden">
-              <div className="px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <div className="px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf9] flex items-center justify-between">
                 <p className="text-[12px] font-semibold text-[#646462]">ID del proyecto</p>
+                {copiedTokenMsg === 'project-id' && <span className="text-[10px] text-[#16a34a] font-semibold">✓ Copiado</span>}
               </div>
               <div className="flex items-center gap-2 px-4 py-2.5">
-                <code className="flex-1 text-[12px] font-mono text-[#1a1a1a]">1</code>
-                <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                <code className="flex-1 text-[12px] font-mono text-[#1a1a1a]">{projectId}</code>
+                <button onClick={() => copyToClipboard(String(projectId), 'project-id')} title="Copiar ID" className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
                 </button>
               </div>
             </div>
-            <p className="text-[12px] text-[#646462]">Usa este ID en la <span className="text-[#e8572a] cursor-pointer hover:underline">API de Clain</span>.</p>
+            <p className="text-[12px] text-[#646462]">Usa este ID en la <a href="https://posthog.com/docs/api" target="_blank" rel="noreferrer" className="text-[#e8572a] hover:underline">API de Clain</a>.</p>
           </div>
 
           {/* SDK setup */}
@@ -45953,68 +46052,63 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462] mb-3">
               Instala Clain en tu app usando uno de nuestros SDKs. Selecciona tu plataforma para ver las instrucciones de configuración.{' '}
-              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+              <a href="https://posthog.com/docs/libraries" target="_blank" rel="noreferrer" className="text-[#e8572a] hover:underline">Docs ↗</a>
             </p>
-            <button className="flex items-center gap-1 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] mb-3">
-              {sdkPlatform}
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
-            </button>
-            <p className="text-[13px] text-[#646462] mb-3">
-              Puedes añadir el snippet JavaScript directamente a tu HTML o instalar el SDK de JavaScript a través de tu gestor de paquetes.
-            </p>
-            {/* Tabs */}
-            <div className="flex border-b border-[#e9eae6] mb-0">
-              <button onClick={() => setSdkTab('html')} className={`px-4 pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${sdkTab === 'html' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>HTML snippet</button>
-              <button onClick={() => setSdkTab('js')} className={`px-4 pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${sdkTab === 'js' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>JavaScript SDK</button>
+
+            {/* Platform dropdown */}
+            <div className="relative inline-block mb-3" ref={platformDropRef}>
+              <button onClick={() => setShowPlatformDrop(d => !d)} className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+                {sdkPlatform}
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current text-[#646462] transition-transform ${showPlatformDrop ? 'rotate-180' : ''}`}><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+              {showPlatformDrop && (
+                <div className="absolute left-0 top-full mt-1 z-40 w-44 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 max-h-72 overflow-y-auto">
+                  {(['Web','React','Next.js','iOS','Android','Python','Node.js','Go','Ruby','PHP','Java'] as const).map(p => (
+                    <button key={p} onClick={() => { setSdkPlatform(p); setShowPlatformDrop(false); setSdkTab(p === 'Web' ? 'html' : 'js'); }} className={`w-full text-left px-3 py-1.5 text-xs hover:bg-[#f9f9f7] ${sdkPlatform === p ? 'text-[#e8572a] bg-[#fff7ed] font-medium' : 'text-[#1a1a1a]'}`}>{p}</button>
+                  ))}
+                </div>
+              )}
             </div>
-            {sdkTab === 'html' && (
-              <div>
-                <p className="text-[12px] text-[#646462] my-3">
-                  Añade este snippet a tu web dentro de la etiqueta <code className="bg-[#f3f3f1] px-1 rounded text-[11px]">&lt;head&gt;</code>. También se puede usar en servicios como Google Tag Manager:
+
+            {showHtmlTab && (
+              <>
+                <p className="text-[13px] text-[#646462] mb-3">
+                  Puedes añadir el snippet JavaScript directamente a tu HTML o instalar el SDK de JavaScript a través de tu gestor de paquetes.
                 </p>
-                <div className="relative bg-[#1e1e2e] rounded-xl overflow-hidden">
-                  <button className="absolute top-3 right-3 p-1.5 rounded bg-[#2a2a3a] hover:bg-[#3a3a4a] text-[#9ca3af]">
+                <div className="flex border-b border-[#e9eae6] mb-0">
+                  <button onClick={() => setSdkTab('html')} className={`px-4 pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${sdkTab === 'html' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>HTML snippet</button>
+                  <button onClick={() => setSdkTab('js')} className={`px-4 pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${sdkTab === 'js' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>JavaScript SDK</button>
+                </div>
+              </>
+            )}
+
+            <div className="mt-4">
+              {sdkTab === 'js' && snippet.package && (
+                <>
+                  <p className="text-[12px] text-[#646462] mb-2">Instala el paquete:</p>
+                  <div className="relative bg-[#1e1e2e] rounded-xl overflow-hidden mb-3">
+                    <pre className="p-4 text-[11px] font-mono text-[#cdd6f4] whitespace-pre-wrap">{snippet.package}</pre>
+                  </div>
+                </>
+              )}
+              <p className="text-[12px] text-[#646462] mb-2">
+                {sdkTab === 'html' ? <>Añade este snippet a tu web dentro de la etiqueta <code className="bg-[#f3f3f1] px-1 rounded text-[11px]">&lt;head&gt;</code>.</> : 'Inicializa el SDK en tu código:'}
+              </p>
+              <div className="relative bg-[#1e1e2e] rounded-xl overflow-hidden">
+                <button onClick={() => copyToClipboard(currentCode, 'snippet')} className="absolute top-3 right-3 p-1.5 rounded bg-[#2a2a3a] hover:bg-[#3a3a4a] text-[#9ca3af] z-10">
+                  {copiedSnippet ? (
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#16a34a]"><path d="M13 4L6 11 3 8" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  ) : (
                     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
-                  </button>
-                  <pre className="p-4 text-[11px] font-mono overflow-x-auto text-[#cdd6f4] leading-[18px]">
-                    <span className="text-[#89b4fa]">{'<script>'}</span>{'\n'}
-                    {'  '}
-                    <span className="text-[#6c7086]">{'// Clain Analytics SDK'}</span>{'\n'}
-                    {'  clain.init(\''}
-                    <span className="text-[#a6e3a1]">{token}</span>
-                    {'\', {\n    api_host: \''}
-                    <span className="text-[#a6e3a1]">https://app.clainanalytics.com</span>
-                    {'\',\n    defaults: \''}
-                    <span className="text-[#a6e3a1]">2026-01-30</span>
-                    {'\',\n    person_profiles: \''}
-                    <span className="text-[#a6e3a1]">identified_only</span>
-                    {'\',\n  });'}
-                    {'\n'}
-                    <span className="text-[#89b4fa]">{'</script>'}</span>
-                  </pre>
-                </div>
+                  )}
+                </button>
+                <pre className="p-4 text-[11px] font-mono overflow-x-auto text-[#cdd6f4] leading-[18px] whitespace-pre-wrap">{currentCode}</pre>
               </div>
-            )}
-            {sdkTab === 'js' && (
-              <div>
-                <p className="text-[12px] text-[#646462] my-3">Instala el paquete npm:</p>
-                <div className="relative bg-[#1e1e2e] rounded-xl overflow-hidden">
-                  <pre className="p-4 text-[11px] font-mono text-[#cdd6f4]">
-                    <span className="text-[#cba6f7]">npm</span>
-                    {' install clain-js\n\n'}
-                    <span className="text-[#89b4fa]">import</span>
-                    {' Clain '}
-                    <span className="text-[#89b4fa]">from</span>
-                    {' \'clain-js\';\nClain.init(\''}
-                    <span className="text-[#a6e3a1]">{token}</span>
-                    {'\');'}
-                  </pre>
-                </div>
-              </div>
-            )}
+            </div>
+
             <div className="flex items-center gap-3 mt-4">
-              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">Ver instrucciones completas de configuración</button>
-              <button className="text-[12px] text-[#e8572a] font-medium hover:underline">Web docs</button>
+              <a href={`https://posthog.com/docs/libraries/${sdkPlatform.toLowerCase().replace('.js','-js').replace(' ','-')}`} target="_blank" rel="noreferrer" className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] flex items-center">Ver instrucciones completas de configuración</a>
+              <a href="https://posthog.com/docs" target="_blank" rel="noreferrer" className="text-[12px] text-[#e8572a] font-medium hover:underline">Docs ↗</a>
             </div>
           </div>
         </div>
@@ -59591,6 +59685,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
