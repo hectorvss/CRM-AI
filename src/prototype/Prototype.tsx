@@ -45993,13 +45993,15 @@ function WASettingsView() {
     return labelKeywords.includes(q);
   }
 
-  function Toggle({ val, set }: { val: boolean; set: (v: boolean) => void }) {
+  function Toggle(props: { val?: boolean; set?: (v: boolean) => void; checked?: boolean; onChange?: (v: boolean) => void; label?: string }) {
+    const active = props.val ?? props.checked ?? false;
+    const handler = props.set ?? props.onChange ?? (() => {});
     return (
       <button
-        onClick={() => set(!val)}
-        className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${val ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
+        onClick={() => handler(!active)}
+        className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${active ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
       >
-        <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm ${val ? 'translate-x-5' : 'translate-x-0.5'}`}/>
+        <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm ${active ? 'translate-x-5' : 'translate-x-0.5'}`}/>
       </button>
     );
   }
@@ -49258,7 +49260,7 @@ function WASettingsView() {
             <div className="relative w-72">
               <button onClick={() => setShowPrivacyDropdown(d => !d)}
                 className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]">
-                <span>Normal (enmascarar inputs pero no texto/imágenes)</span>
+                <span>{privacyMode === 'Enmascarar todo (texto e imágenes)' || privacyMode === 'mask-all' ? 'Enmascarar todo (texto e imágenes)' : privacyMode === 'Sin enmascaramiento' || privacyMode === 'no-mask' ? 'Sin enmascaramiento' : 'Normal (enmascarar inputs pero no texto/imágenes)'}</span>
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0 ml-2"><path d="M3 5l5 5 5-5"/></svg>
               </button>
               {showPrivacyDropdown && (
@@ -49734,17 +49736,73 @@ function WASettingsView() {
       { id: 'noir',     label: 'Noir',     sub: 'Pure black & white',   bg: '#000000', accent: '#ffffff' },
     ];
 
-    const ColorField = ({ label, value, circle }: { label: string; value: string; circle?: string }) => (
-      <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">{label}</label>
-        <div className="flex items-center gap-2 h-9 px-3 border border-[#e9eae6] rounded-lg bg-white">
-          {circle !== undefined && (
-            <div className="w-5 h-5 rounded-full border border-[#e9eae6] flex-shrink-0" style={{ background: circle || '#eeeded' }}/>
-          )}
-          <span className="text-[13px] text-[#1a1a1a]">{value}</span>
+    const ColorField = ({ label, field, fallback }: { label: string; field: string; fallback: string }) => {
+      const cfg = team?.surveys_opt_in_config || team?.survey_config || {};
+      const value = (cfg.appearance ?? cfg)?.[field] ?? fallback;
+      const [local, setLocal] = React.useState<string>(value);
+      const [saving, setSaving] = React.useState(false);
+      React.useEffect(() => { setLocal(value); }, [value]);
+      async function save() {
+        if (local === value) return;
+        setSaving(true);
+        const c = team?.surveys_opt_in_config || team?.survey_config || {};
+        const appearance = { ...(c.appearance || {}), [field]: local };
+        const next = { ...c, appearance };
+        await patchTeam({ surveys_opt_in_config: next });
+        setSaving(false);
+      }
+      return (
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">{label} {saving && <span className="text-[10px] font-normal text-[#646462]">…</span>}</label>
+          <div className="flex items-center gap-2 h-9 px-3 border border-[#e9eae6] rounded-lg bg-white">
+            <input
+              type="color"
+              value={local.match(/^#[0-9a-fA-F]{6}$/) ? local : '#ffffff'}
+              onChange={e => setLocal(e.target.value)}
+              onBlur={save}
+              className="w-5 h-5 rounded-full border border-[#e9eae6] flex-shrink-0 cursor-pointer p-0"
+            />
+            <input
+              type="text"
+              value={local}
+              onChange={e => setLocal(e.target.value)}
+              onBlur={save}
+              onKeyDown={e => { if (e.key === 'Enter') save(); }}
+              className="flex-1 text-[13px] text-[#1a1a1a] outline-none bg-transparent font-mono"
+            />
+          </div>
         </div>
-      </div>
-    );
+      );
+    };
+    const LayoutField = ({ label, field, fallback, info }: { label: string; field: string; fallback: string; info?: boolean }) => {
+      const cfg = team?.surveys_opt_in_config || team?.survey_config || {};
+      const value = (cfg.appearance ?? cfg)?.[field] ?? fallback;
+      const [local, setLocal] = React.useState<string>(String(value));
+      const [saving, setSaving] = React.useState(false);
+      React.useEffect(() => { setLocal(String(value)); }, [value]);
+      async function save() {
+        if (local === String(value)) return;
+        setSaving(true);
+        const c = team?.surveys_opt_in_config || team?.survey_config || {};
+        const appearance = { ...(c.appearance || {}), [field]: local };
+        const next = { ...c, appearance };
+        await patchTeam({ surveys_opt_in_config: next });
+        setSaving(false);
+      }
+      return (
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">{label} {info && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>} {saving && <span className="text-[10px] font-normal text-[#646462]">…</span>}</label>
+          <input
+            type="text"
+            value={local}
+            onChange={e => setLocal(e.target.value)}
+            onBlur={save}
+            onKeyDown={e => { if (e.key === 'Enter') save(); }}
+            className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+          />
+        </div>
+      );
+    };
 
     return (
       <div className="flex-1 overflow-y-auto">
@@ -49817,18 +49875,15 @@ function WASettingsView() {
             <div className="space-y-3">
               <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Colores</h3>
               <div className="grid grid-cols-3 gap-4">
-                <ColorField label="Fondo de encuesta" value="#eeeded" circle="#eeeded"/>
-                <ColorField label="Texto de pregunta" value="#000000 o var(--color)" circle=""/>
-                <ColorField label="Borde" value="#c9c6c6" circle="#c9c6c6"/>
-                <ColorField label="Fondo de input" value="white" circle="#ffffff"/>
-                <ColorField label="Texto de input" value="#000000 o var(--color)" circle=""/>
-                <ColorField label="Rating seleccionado" value="black" circle="#1a1a1a"/>
-                <ColorField label="Fondo del botón" value="black" circle="#1a1a1a"/>
-                <ColorField label="Texto del botón" value="white" circle="#ffffff"/>
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Texto de placeholder</label>
-                  <input type="text" placeholder="Empieza a escribir..." className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
-                </div>
+                <ColorField label="Fondo de encuesta" field="backgroundColor" fallback="#eeeded"/>
+                <ColorField label="Texto de pregunta" field="questionTextColor" fallback="#000000"/>
+                <ColorField label="Borde" field="borderColor" fallback="#c9c6c6"/>
+                <ColorField label="Fondo de input" field="inputBackground" fallback="#ffffff"/>
+                <ColorField label="Texto de input" field="inputTextColor" fallback="#000000"/>
+                <ColorField label="Rating seleccionado" field="ratingButtonActiveColor" fallback="#1a1a1a"/>
+                <ColorField label="Fondo del botón" field="submitButtonColor" fallback="#1a1a1a"/>
+                <ColorField label="Texto del botón" field="submitButtonTextColor" fallback="#ffffff"/>
+                <LayoutField label="Texto de placeholder" field="placeholder" fallback="Empieza a escribir..."/>
               </div>
             </div>
 
@@ -49837,22 +49892,10 @@ function WASettingsView() {
               <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Diseño</h3>
               <p className="text-[13px] text-[#646462]">Contenedor, posicionamiento y tipografía. Solo se aplica en encuestas web, no en apps móviles nativas.</p>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Ancho de encuesta <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></label>
-                  <input type="text" defaultValue="300px" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Padding de caja</label>
-                  <input type="text" defaultValue="20px 24px" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Radio de borde</label>
-                  <input type="text" defaultValue="10px" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Sombra de caja</label>
-                  <input type="text" defaultValue="0 4px 12px rgba(0, 0, 0, 0.15)" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
-                </div>
+                <LayoutField label="Ancho de encuesta" field="maxWidth" fallback="300px" info/>
+                <LayoutField label="Padding de caja" field="boxPadding" fallback="20px 24px"/>
+                <LayoutField label="Radio de borde" field="borderRadius" fallback="10px"/>
+                <LayoutField label="Sombra de caja" field="boxShadow" fallback="0 4px 12px rgba(0, 0, 0, 0.15)"/>
                 <div className="space-y-1.5 relative">
                   <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Familia de fuente <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></label>
                   <button onClick={() => setFontDropdown(d => !d)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6]">
@@ -49870,10 +49913,7 @@ function WASettingsView() {
                     </>
                   )}
                 </div>
-                <div className="space-y-1.5">
-                  <label className="flex items-center gap-1 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">z-index <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></label>
-                  <input type="text" defaultValue="2147482647" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"/>
-                </div>
+                <LayoutField label="z-index" field="zIndex" fallback="2147482647" info/>
               </div>
             </div>
 
@@ -49881,13 +49921,23 @@ function WASettingsView() {
             <div className="space-y-3">
               <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Posición</h3>
               <div className="flex items-end gap-6">
-                {/* Position picker */}
+                {/* Position picker — dot positioned based on selected position */}
                 <div className="w-24 h-20 border-2 border-[#e9eae6] rounded-[8px] relative bg-[#fafaf9]">
-                  <div className="absolute bottom-2 right-2 w-4 h-4 rounded-full bg-[#e8572a]"/>
+                  <div className={`absolute w-4 h-4 rounded-full bg-[#e8572a] ${
+                    position === 'top-left' ? 'top-2 left-2' :
+                    position === 'top-right' ? 'top-2 right-2' :
+                    position === 'bottom-left' ? 'bottom-2 left-2' :
+                    position === 'center' ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' :
+                    'bottom-2 right-2'
+                  }`}/>
                 </div>
                 <div className="relative">
                   <button onClick={() => setPositionDropdown(d => !d)} className="h-8 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center gap-2 hover:border-[#3b59f6]">
-                    Abajo a la derecha
+                    {position === 'top-left' ? 'Arriba a la izquierda'
+                      : position === 'top-right' ? 'Arriba a la derecha'
+                      : position === 'bottom-left' ? 'Abajo a la izquierda'
+                      : position === 'center' ? 'Centro'
+                      : 'Abajo a la derecha'}
                     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
                   </button>
                   {positionDropdown && (
@@ -49964,7 +50014,7 @@ function WASettingsView() {
   function WebAnalyticsSettingsPage() {
     const initialAllowed: string[] = team?.autocapture_web_vitals_allowed_metrics ?? ['CLS','FCP','LCP','INP'];
     const [cookieless, setCookieless] = useState<string>(team?.cookieless_server_hash_mode === 1 || team?.cookieless_server_hash_mode === 'stateful' ? 'enabled' : 'disabled');
-    const [bounceRate, setBounceRate] = useState<string>(String(team?.web_analytics_pre_aggregated_tables_enabled_bounce_seconds ?? team?.session_recording_minimum_duration_milliseconds ?? '10'));
+    const [bounceRate, setBounceRate] = useState<string>(String(team?.web_analytics_pre_aggregated_tables_enabled_bounce_seconds ?? '10'));
     const [webVitals, setWebVitalsLocal] = useState<boolean>(!!team?.autocapture_web_vitals_opt_in);
     const [cls, setCls] = useState<boolean>(initialAllowed.includes('CLS'));
     const [fcp, setFcp] = useState<boolean>(initialAllowed.includes('FCP'));
@@ -51417,10 +51467,10 @@ function WASettingsView() {
 
   // ── OrgGeneralPage ────────────────────────────────────────────────────────
   function OrgGeneralPage() {
-    const [orgName, setOrgName] = useState<string>(organization?.name ?? 'Hector prueba');
+    const [orgName, setOrgName] = useState<string>(organization?.name ?? '');
     const [aiAnalysis, setAiAnalysis] = useState<boolean>(!!organization?.is_ai_data_processing_approved);
     const [discardIPDefault, setDiscardIPDefault] = useState<boolean>(!!organization?.default_discard_client_ip_data);
-    const [billingEmail, setBillingEmail] = useState<string>(organization?.customer_id ?? organization?.billing_email ?? '');
+    const [billingEmail, setBillingEmail] = useState<string>(organization?.billing_email ?? '');
     const [savingBilling, setSavingBilling] = React.useState(false);
     const [billingSaved, setBillingSaved] = React.useState(false);
     const [savingName, setSavingName] = React.useState(false);
@@ -51430,7 +51480,7 @@ function WASettingsView() {
     const [uploadingLogo, setUploadingLogo] = React.useState(false);
     const logoFileRef = React.useRef<HTMLInputElement>(null);
     React.useEffect(() => {
-      setOrgName(organization?.name ?? 'Hector prueba');
+      setOrgName(organization?.name ?? '');
       setAiAnalysis(!!organization?.is_ai_data_processing_approved);
       setDiscardIPDefault(!!organization?.default_discard_client_ip_data ?? false);
       setBillingEmail(organization?.billing_email ?? '');
@@ -52061,7 +52111,7 @@ function WASettingsView() {
     const [showAddMember, setShowAddMember] = React.useState(false);
     const [memberToAdd, setMemberToAdd] = React.useState('');
     const [saving, setSaving] = React.useState(false);
-    const resources = ['feature_flag', 'experiment', 'insight', 'dashboard', 'notebook'];
+    const resources = ['feature_flag'];
     React.useEffect(() => {
       (async () => {
         try {
@@ -52136,6 +52186,7 @@ function WASettingsView() {
 
             <div>
               <p className="text-[12px] font-semibold text-[#646462] mb-2">Permisos por tipo de recurso</p>
+              <p className="text-[11px] text-[#646462] mb-2">Los permisos a nivel de rol solo se aplican a feature flags. Para otros recursos, usa los permisos por recurso individual desde su pantalla de detalle.</p>
               <div className="border border-[#e9eae6] rounded-lg divide-y divide-[#e9eae6]">
                 {resources.map(r => (
                   <div key={r} className="flex items-center justify-between px-3 py-2">
@@ -52936,7 +52987,8 @@ function WASettingsView() {
     const [deleting, setDeleting] = React.useState(false);
     const orgName = organization?.name ?? '';
     async function deleteOrg() {
-      if (confirmName !== orgName) { alert('El nombre no coincide.'); return; }
+      if (!orgName.trim()) { alert('Organización todavía no cargada. Espera a que termine de cargarse.'); return; }
+      if (confirmName.trim() !== orgName.trim()) { alert('El nombre no coincide.'); return; }
       if (!confirm(`¿Eliminar la organización "${orgName}"? Esta acción es IRREVERSIBLE.`)) return;
       setDeleting(true);
       try {
@@ -52969,7 +53021,7 @@ function WASettingsView() {
               />
               <button
                 onClick={deleteOrg}
-                disabled={deleting || confirmName !== orgName}
+                disabled={deleting || !orgName.trim() || confirmName.trim() !== orgName.trim()}
                 className="h-9 px-4 bg-[#dc2626] text-white text-[13px] font-semibold rounded-lg hover:bg-[#b91c1c] disabled:opacity-50 disabled:cursor-not-allowed"
               >{deleting ? 'Eliminando…' : 'Eliminar organización definitivamente'}</button>
             </div>
@@ -53700,27 +53752,41 @@ function WASettingsView() {
       setScopedOrgs(k.scoped_organizations ?? []);
       setScopedTeams(k.scoped_teams ?? []);
       const parsed: Record<string, 'none' | 'read' | 'write'> = {};
+      const unmatched: string[] = [];
       (k.scopes ?? []).forEach((sc: string) => {
-        if (sc === '*') return;
+        if (sc === '*') {
+          allScopes.forEach(s => { parsed[s.name] = s.noWrite ? 'read' : 'write'; });
+          return;
+        }
         const [n, lvl] = sc.split(':');
-        const scope = allScopes.find(s => s.name.toLowerCase().replace(/ /g, '_') === n);
+        const scope = allScopes.find(s => s.name.toLowerCase().replace(/[^a-z0-9]/g, '_') === n.replace(/[^a-z0-9]/g, '_'));
         if (scope) parsed[scope.name] = (lvl as any) ?? 'read';
+        else unmatched.push(sc);
       });
+      if (unmatched.length) console.warn('[ApiKeys] scopes no reconocidos (se conservarán en payload):', unmatched);
+      (k as any)._unmatchedScopes = unmatched;
       setScopes(parsed);
       setShowModal(true);
     }
     async function saveKey() {
       if (!label.trim()) return;
+      const scopesArr: string[] = [];
+      Object.entries(scopes).forEach(([n, v]) => {
+        if (v !== 'none') scopesArr.push(`${n.toLowerCase().replace(/ /g, '_')}:${v}`);
+      });
+      // Preserve scopes that openEdit could not map back to allScopes (avoids silent data loss)
+      const preserved: string[] = (editingKey as any)?._unmatchedScopes ?? [];
+      preserved.forEach(p => { if (!scopesArr.includes(p)) scopesArr.push(p); });
+      if (scopesArr.length === 0) {
+        alert('Selecciona al menos un alcance, o usa el preset "Todo el acceso" para conceder permisos completos.');
+        return;
+      }
       setCreating(true);
       try {
         const ph = await import('../api/posthog');
-        const scopesArr: string[] = [];
-        Object.entries(scopes).forEach(([n, v]) => {
-          if (v !== 'none') scopesArr.push(`${n.toLowerCase().replace(/ /g, '_')}:${v}`);
-        });
         const payload: any = {
           label: label.trim(),
-          scopes: scopesArr.length ? scopesArr : ['*'],
+          scopes: scopesArr,
           scoped_organizations: orgAccess === 'orgs' ? scopedOrgs : [],
           scoped_teams: orgAccess === 'projects' ? scopedTeams : [],
         };
