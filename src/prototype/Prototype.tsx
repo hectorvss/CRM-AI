@@ -48755,133 +48755,273 @@ function WASettingsView() {
           </div>
 
           {/* Revenue goals */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Objetivos de ingresos</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-            </div>
-            <p className="text-[13px] text-[#646462]">Establece objetivos de ingresos para hacer seguimiento del rendimiento frente a tus metas de negocio.</p>
-            <div className="space-y-2">
-              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Objetivos</h3>
-              <p className="text-[13px] text-[#646462] leading-relaxed">
-                Establece objetivos de ingresos para fechas concretas y haz seguimiento de tu progreso. Puedes hacer seguimiento de objetivos basándote en tus metas mensuales/trimestrales/anuales. ¡Estos se pueden mostrar en los gráficos de MRR/ARR o ingresos brutos del panel de revenue analytics!
-              </p>
-              <div className="flex justify-end">
-                <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-                  Añadir objetivo
-                </button>
-              </div>
-              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre del objetivo</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
-                        <span className="flex items-center gap-1">Fecha límite <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
-                      </th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
-                        <span className="flex items-center gap-1">Importe objetivo (USD) <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
-                      </th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
-                        <span className="flex items-center gap-1">MRR o ingresos brutos <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">No hay objetivos configurados aún.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <RevenueGoalsSection currency={currency}/>
 
           {/* Revenue events */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Eventos de ingresos</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-              <a href="#" className="text-[12px] text-[#e8572a] hover:underline">Docs ↗</a>
-            </div>
-            <p className="text-[13px] text-[#646462]">Configura qué eventos representan acciones de generación de ingresos.</p>
-            {/* Event Configuration */}
-            <div className="space-y-2">
-              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Configuración de eventos</h3>
-              <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
-                Clain puede mostrar datos de ingresos en el producto Revenue Analytics desde cualquier evento. Puedes configurar tantos eventos como quieras y especificar la propiedad de ingresos y la moneda para cada evento individualmente.
-              </p>
-              <div className="flex justify-end">
-                <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-                  Añadir evento de ingresos
-                </button>
-              </div>
-              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre del evento</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Propiedad de ingresos</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Moneda</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Propiedades adicionales</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">No hay fuentes de eventos configuradas aún.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <RevenueEventsSection/>
 
           {/* External data sources */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Fuentes de datos externas</h2>
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          <RevenueDWHSourcesSection/>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RevenueGoalsSection ────────────────────────────────────────────────────
+  function RevenueGoalsSection({ currency }: { currency: string }) {
+    const goals = (team?.revenue_analytics_config?.goals ?? []) as any[];
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [name, setName] = React.useState('');
+    const [dueDate, setDueDate] = React.useState('');
+    const [amount, setAmount] = React.useState('');
+    const [goalType, setGoalType] = React.useState<'mrr' | 'gross'>('mrr');
+    const [saving, setSaving] = React.useState(false);
+    async function persist(next: any[]) {
+      setSaving(true);
+      const cfg = { ...(team?.revenue_analytics_config || {}), goals: next };
+      await patchTeam({ revenue_analytics_config: cfg });
+      setSaving(false);
+    }
+    async function add() {
+      if (!name.trim() || !dueDate || !amount) return;
+      const next = [...goals, { id: `goal_${Date.now()}`, name: name.trim(), due_date: dueDate, goal: Number(amount), mrr_or_gross_revenue: goalType }];
+      await persist(next);
+      setName(''); setDueDate(''); setAmount(''); setShowAdd(false);
+    }
+    async function remove(id: string) {
+      if (!confirm('¿Eliminar objetivo?')) return;
+      await persist(goals.filter(g => g.id !== id));
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Objetivos de ingresos</h2>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Objetivos para mostrar en los gráficos de MRR/ARR"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          {saving && <span className="text-[11px] text-[#646462]">guardando…</span>}
+        </div>
+        <p className="text-[13px] text-[#646462]">Define objetivos para fechas concretas y haz seguimiento del progreso en los gráficos de MRR/ARR o ingresos brutos.</p>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nombre</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fecha límite</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Importe ({currency})</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tipo</th>
+                <th className="px-4 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e9eae6]">
+              {goals.length === 0 ? (
+                <tr><td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462]">No hay objetivos configurados aún.</td></tr>
+              ) : (
+                goals.map((g: any) => (
+                  <tr key={g.id} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px] font-medium text-[#1a1a1a]">{g.name}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#646462]">{g.due_date}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#1a1a1a] font-mono">{Number(g.goal).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-[12px]"><span className="px-2 py-0.5 bg-[#f3f3f1] rounded text-[11px] font-semibold">{g.mrr_or_gross_revenue === 'mrr' ? 'MRR' : 'Bruto'}</span></td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => remove(g.id)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 grid grid-cols-2 gap-3 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Nombre</p>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Q3 MRR target" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
             </div>
-            <p className="text-[13px] text-[#646462]">Conecta fuentes de datos externas como Stripe para el seguimiento de ingresos.</p>
-            <div className="space-y-2">
-              <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Configuración de fuentes de data warehouse</h3>
-              <p className="text-[13px] text-[#646462] leading-relaxed max-w-2xl">
-                Clain puede mostrar datos de ingresos en el producto Revenue Analytics desde las siguientes fuentes de data warehouse. Puedes activar/desactivar cada fuente para evitar que se use para datos de ingresos. También puedes configurar cómo unimos tus datos de ingresos con la tabla de personas de Clain — cuando esto está configurado, podremos mostrar correctamente los ingresos de una persona mediante los campos virtuales persons.$virt_revenue y persons.$virt_mrr.
-              </p>
-              <div className="flex justify-end">
-                <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-                  Añadir nueva fuente
-                </button>
-              </div>
-              <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fuente</th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
-                        <span className="flex items-center gap-1">Unión de personas <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
-                      </th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
-                        <span className="flex items-center gap-1">Unión de grupos <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
-                      </th>
-                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
-                        <span className="flex items-center gap-1">Incluir cargos sin factura <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">No hay fuentes de ingresos DWH configuradas aún.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Fecha límite</p>
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Importe</p>
+              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="100000" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Tipo</p>
+              <select value={goalType} onChange={e => setGoalType(e.target.value as any)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none">
+                <option value="mrr">MRR</option>
+                <option value="gross">Ingresos brutos</option>
+              </select>
+            </div>
+            <div className="col-span-2 flex justify-end gap-2">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={add} disabled={!name.trim() || !dueDate || !amount} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">Crear objetivo</button>
             </div>
           </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir objetivo</button>
+        )}
+      </div>
+    );
+  }
+
+  // ── RevenueEventsSection ───────────────────────────────────────────────────
+  function RevenueEventsSection() {
+    const events = (team?.revenue_analytics_config?.events ?? []) as any[];
+    const [eventDefs, setEventDefs] = React.useState<any[]>([]);
+    const [showAdd, setShowAdd] = React.useState(false);
+    const [eventName, setEventName] = React.useState('');
+    const [revenueProp, setRevenueProp] = React.useState('');
+    const [currencyProp, setCurrencyProp] = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => {
+      (async () => {
+        try {
+          const ph = await import('../api/posthog');
+          const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/event_definitions/?limit=50`);
+          setEventDefs(res?.results ?? []);
+        } catch {}
+      })();
+    }, []);
+    async function persist(next: any[]) {
+      setSaving(true);
+      const cfg = { ...(team?.revenue_analytics_config || {}), events: next };
+      await patchTeam({ revenue_analytics_config: cfg });
+      setSaving(false);
+    }
+    async function add() {
+      if (!eventName.trim() || !revenueProp.trim()) return;
+      const next = [...events, { eventName: eventName.trim(), revenueProperty: revenueProp.trim(), currencyProperty: currencyProp.trim() || null }];
+      await persist(next);
+      setEventName(''); setRevenueProp(''); setCurrencyProp(''); setShowAdd(false);
+    }
+    async function remove(eventName: string) {
+      if (!confirm('¿Eliminar evento?')) return;
+      await persist(events.filter(e => e.eventName !== eventName));
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Eventos de ingresos</h2>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Eventos que representan ingresos"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+          {saving && <span className="text-[11px] text-[#646462]">guardando…</span>}
         </div>
+        <p className="text-[13px] text-[#646462]">Configura qué eventos representan ingresos y qué propiedades contienen el importe.</p>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Evento</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Propiedad ingresos</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Propiedad moneda</th>
+                <th className="px-4 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e9eae6]">
+              {events.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">No hay eventos configurados.</td></tr>
+              ) : (
+                events.map((e: any) => (
+                  <tr key={e.eventName} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono">{e.eventName}</code></td>
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono text-[#646462]">{e.revenueProperty}</code></td>
+                    <td className="px-4 py-2.5 text-[12px]"><code className="font-mono text-[#646462]">{e.currencyProperty ?? '—'}</code></td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => remove(e.eventName)} className="text-[#dc2626] text-[12px] hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {showAdd ? (
+          <div className="border border-[#e9eae6] rounded-[10px] p-3 space-y-2 bg-[#fafaf9]">
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Nombre del evento</p>
+              <input list="revenue-event-list" value={eventName} onChange={e => setEventName(e.target.value)} placeholder="purchase_completed" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+              <datalist id="revenue-event-list">
+                {eventDefs.map((d: any) => <option key={d.id} value={d.name}/>)}
+              </datalist>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Propiedad de ingresos (numérica)</p>
+              <input value={revenueProp} onChange={e => setRevenueProp(e.target.value)} placeholder="amount" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-1">Propiedad de moneda (opcional, ej. 'currency')</p>
+              <input value={currencyProp} onChange={e => setCurrencyProp(e.target.value)} placeholder="currency" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] font-mono"/>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-3 border border-[#e9eae6] text-[#646462] text-[12px] rounded-lg hover:bg-[#f3f3f1]">Cancelar</button>
+              <button onClick={add} disabled={!eventName.trim() || !revenueProp.trim()} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2] disabled:opacity-50">Añadir evento</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">+ Añadir evento de ingresos</button>
+        )}
+      </div>
+    );
+  }
+
+  // ── RevenueDWHSourcesSection ───────────────────────────────────────────────
+  function RevenueDWHSourcesSection() {
+    const [sources, setSources] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    async function refresh() {
+      try {
+        const ph = await import('../api/posthog');
+        const res: any = await ph.phGet(`/api/projects/${ph.getTeamId()}/external_data_sources/`);
+        setSources(res?.results ?? res ?? []);
+      } catch { setSources([]); }
+      finally { setLoading(false); }
+    }
+    React.useEffect(() => { refresh(); }, []);
+    async function toggleEnabled(id: string, enabled: boolean) {
+      try {
+        const ph = await import('../api/posthog');
+        await ph.phPatch(`/api/projects/${ph.getTeamId()}/external_data_sources/${id}/`, { revenue_analytics_enabled: !enabled });
+        await refresh();
+      } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Fuentes de datos externas</h2>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-help" title="Stripe, etc. para tracking de ingresos"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+        </div>
+        <p className="text-[13px] text-[#646462]">Activa/desactiva cada fuente DWH para Revenue Analytics. Configura las uniones con personas/grupos para mostrar ingresos en perfiles.</p>
+        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fuente</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tipo</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Revenue Analytics</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e9eae6]">
+              {loading ? (
+                <tr><td colSpan={4} className="px-4 py-4 text-center text-[12px] text-[#646462]">Cargando fuentes…</td></tr>
+              ) : sources.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-4 text-[13px] text-[#646462]">No hay fuentes DWH conectadas. Crea una desde Data warehouse → Fuentes.</td></tr>
+              ) : (
+                sources.map((s: any) => (
+                  <tr key={s.id} className="hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2.5 text-[12px] font-medium text-[#1a1a1a]">{s.prefix ?? s.source_type}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-[#646462]"><span className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[11px] font-semibold">{s.source_type}</span></td>
+                    <td className="px-4 py-2.5">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${s.status === 'Completed' || s.status === 'Running' ? 'bg-[#f0fdf4] text-[#16a34a]' : 'bg-[#fef3c7] text-[#92400e]'}`}>{s.status ?? '—'}</span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Toggle checked={!!s.revenue_analytics_enabled} onChange={() => toggleEnabled(s.id, !!s.revenue_analytics_enabled)}/>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[12px] text-[#646462]">💡 Las fuentes se crean desde el módulo Data Warehouse. Aquí solo controlas si se incluyen en Revenue Analytics.</p>
       </div>
     );
   }
