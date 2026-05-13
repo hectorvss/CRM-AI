@@ -29490,6 +29490,7 @@ function WAAppSessionReplayView() {
   const [createdBy, setCreatedBy] = useState('Any user');
   const [showCollTypeDrop, setShowCollTypeDrop] = useState(false);
   const [showCreatedDrop, setShowCreatedDrop]   = useState(false);
+  const [selectedCollection, setSelectedCollection] = useState<string|null>(null);
 
   const COLLECTIONS = [
     { name:'Watch history',           desc:'Recordings you have watched' },
@@ -29500,6 +29501,66 @@ function WAAppSessionReplayView() {
     { name:'Frustration signals',     desc:'Sessions with rage clicks or errors in the last 7 days' },
     { name:'Summarised sessions',     desc:'Sessions with AI-generated summaries. Ask Clain AI to summarize sessions for you.' },
   ];
+
+  // Collection drilldown view
+  const selColl = COLLECTIONS.find(c => c.name === selectedCollection);
+  if (selColl) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0">
+          <button onClick={() => setSelectedCollection(null)} className="text-[#646462] hover:text-[#1a1a1a]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="#e8572a" strokeWidth="1.4"/><path d="M7 6l5 3-5 3V6z" fill="#e8572a"/></svg>
+          <h1 className="text-[15px] font-bold text-[#1a1a1a] flex-1">{selColl.name}</h1>
+          <button onClick={() => setSelectedCollection(null)} className="text-[#9ca3af] hover:text-[#646462]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </button>
+          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">0</span>
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
+          </button>
+          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+          </button>
+        </div>
+        <p className="text-[13px] text-[#646462] px-5 py-2 border-b border-[#e9eae6] flex-shrink-0">{selColl.desc}</p>
+        {/* Two-pane layout */}
+        <div className="flex-1 flex min-h-0">
+          {/* Left panel */}
+          <div className="w-[440px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col min-h-0">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#e9eae6] flex-shrink-0">
+              <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded text-[#646462] hover:bg-[#f9f9f7]">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="1" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="1" y="7" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/><rect x="7" y="7" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.1"/></svg>
+              </button>
+              <input type="checkbox" className="rounded border-[#e9eae6]" />
+              <span className="text-[12px] text-[#646462]">Sort by:</span>
+              <button className="flex items-center gap-1 text-[12px] text-[#1a1a1a] font-medium">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4l3-3 3 3M6 1v7M3 8l3 3 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Latest <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+              </button>
+              <div className="flex-1" />
+              <button className="text-[#9ca3af]"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="12" r="1.2" fill="currentColor"/></svg></button>
+            </div>
+            <div className="flex-1 p-4">
+              <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">No recordings yet</p>
+              <p className="text-[12px] text-[#9ca3af]">{selColl.desc}</p>
+            </div>
+          </div>
+          {/* Right pane */}
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+            <p className="text-[15px] font-semibold text-[#1a1a1a]">No recording selected</p>
+            <p className="text-[13px] text-[#9ca3af]">Please select a recording from the list on the left</p>
+            <button className="mt-1 px-4 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">Learn more about recordings</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden" onClick={() => { setShowRecordingDrop(false); setShowRelativeDrop(false); setShowCollTypeDrop(false); setShowCreatedDrop(false); }}>
@@ -29702,7 +29763,7 @@ function WAAppSessionReplayView() {
             </thead>
             <tbody>
               {COLLECTIONS.map((coll, i) => (
-                <tr key={i} className="border-b border-[#e9eae6] hover:bg-[#f9f9f7] cursor-pointer group">
+                <tr key={i} onClick={() => setSelectedCollection(coll.name)} className="border-b border-[#e9eae6] hover:bg-[#f9f9f7] cursor-pointer group">
                   <td className="px-5 py-4">
                     <div className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center">
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 7a2 2 0 114 0 2 2 0 01-4 0z" fill="white"/><path d="M5 7a2 2 0 114 0 2 2 0 01-4 0z" stroke="white"/></svg>
@@ -29723,17 +29784,135 @@ function WAAppSessionReplayView() {
 
       {/* ── WHAT TO WATCH TAB ── */}
       {srTab === 'whattowatch' && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-1">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="11" stroke="#9ca3af" strokeWidth="1.5"/><path d="M10 8l10 6-10 6V8z" fill="#9ca3af"/></svg>
+        <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6">
+          <p className="text-[13px] text-[#646462]">To get the most out of session replay, you just need to know where to start.</p>
+
+          {/* Top 2 cards */}
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { label:'LAST 7 DAYS MOST ACTIVE USERS' },
+              { label:'LAST 7 DAYS MOST ACTIVE PAGES' },
+            ].map(c => (
+              <div key={c.label} className="border border-[#e9eae6] rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="text-[#646462]"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 4.5v3M6.5 9.5v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                  <span className="text-[10px] font-bold text-[#646462] uppercase tracking-wide">{c.label}</span>
+                </div>
+                <p className="text-[12px] text-[#9ca3af]">No entries</p>
+              </div>
+            ))}
           </div>
-          <h2 className="text-[15px] font-semibold text-[#1a1a1a]">No recommendations yet</h2>
-          <p className="text-[13px] text-[#9ca3af] max-w-[360px] leading-relaxed">Clain AI will suggest recordings worth watching once you have more session data.</p>
+
+          {/* Activity heatmap */}
+          <div>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-1">When are your users most active?</h2>
+            <p className="text-[13px] text-[#646462] mb-4">This heatmap shows you the busiest times of day for your recordings over the last 7 days.</p>
+            <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 w-32" />
+                    {['Thu 7','Fri 8','Sat 9','Sun 10','Mon 11','Tue 12','Today'].map(d => (
+                      <th key={d} className="px-4 py-3 text-[12px] font-semibold text-[#1a1a1a] text-center">{d}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {['00:00 - 04:00','04:00 - 08:00','08:00 - 12:00','12:00 - 16:00','16:00 - 20:00','20:00 - 00:00'].map(slot => (
+                    <tr key={slot}>
+                      <td className="px-4 py-2 text-[12px] text-[#646462] font-medium">{slot}</td>
+                      {[0,0,0,0,0,0,0].map((v, i) => (
+                        <td key={i} className="px-2 py-1 text-center">
+                          <div className="bg-[#dde4fd] rounded text-[12px] text-[#3b59f6] font-medium py-1.5 min-w-[48px]">0</div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Filter templates */}
+          <div>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-1">Filter templates</h2>
+            <p className="text-[13px] text-[#646462] mb-5">Use our templates to find a focus area, then watch the filtered replays to see where users struggle, what could be made more clear, and other ways to improve.</p>
+
+            {/* B2B */}
+            <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">B2B</h3>
+            <div className="grid grid-cols-4 gap-3 mb-3">
+              {[
+                { icon:'⊙', name:'Signup flow',               desc:'Watch how users sign up for your website. Look for any areas or steps that cause friction.' },
+                { icon:'⊕', name:'Pricing page',              desc:'Watch how users navigate your pricing page. Look for any areas or steps that cause friction.' },
+                { icon:'↑', name:'Upgrade / subscribe flow',  desc:'Watch how users upgrade to the paid plan on your website. Look for any areas or steps that cause friction.' },
+                { icon:'▣', name:'Onboarding flow',           desc:'Watch how users onboard to your website. Look for any areas or steps that cause friction.' },
+              ].map(t => (
+                <div key={t.name} className="border border-[#e9eae6] rounded-xl p-4 hover:border-[#c8c9c4] cursor-pointer transition-colors">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[#e8572a] text-[14px]">{t.icon}</span>
+                    <span className="text-[13px] font-semibold text-[#e8572a]">{t.name}</span>
+                  </div>
+                  <p className="text-[12px] text-[#646462] leading-relaxed">{t.desc}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-4 gap-3 mb-6">
+              <div className="border border-[#e9eae6] rounded-xl p-4 hover:border-[#c8c9c4] cursor-pointer transition-colors">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[#e8572a] text-[14px]">✦</span>
+                  <span className="text-[13px] font-semibold text-[#e8572a]">Feature usage</span>
+                </div>
+                <p className="text-[12px] text-[#646462] leading-relaxed">Think of a feature you want to improve. Watch how users interact with it, and see where they get stuck.</p>
+              </div>
+            </div>
+
+            {/* B2C */}
+            <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">B2C</h3>
+            <div className="grid grid-cols-4 gap-3 mb-6">
+              {[
+                { icon:'✦', name:'Feature usage',   desc:'Think of a feature you want to improve. Watch how users interact with it, and see where they get stuck.' },
+                { icon:'⊕', name:'Purchase flow',   desc:'Watch how users purchase from your website. Look for any areas or steps that cause friction.' },
+                { icon:'⊙', name:'Product search',  desc:'Watch how users search for products on your website. Look for any areas or steps that cause friction.' },
+              ].map(t => (
+                <div key={t.name} className="border border-[#e9eae6] rounded-xl p-4 hover:border-[#c8c9c4] cursor-pointer transition-colors">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[#e8572a] text-[14px]">{t.icon}</span>
+                    <span className="text-[13px] font-semibold text-[#e8572a]">{t.name}</span>
+                  </div>
+                  <p className="text-[12px] text-[#646462] leading-relaxed">{t.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* More */}
+            <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">More</h3>
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { icon:'⚑', name:'A/B test results',  desc:"Watch how users interact with your A/B test. Look for any areas or steps that cause friction." },
+                { icon:'⊘', name:'Rageclicks',         desc:"See where users are \"rageclicking\" on your website to find things that don't work as expected." },
+                { icon:'▣', name:'Scattershot',        desc:'Watch all recent replays, and see where users are getting stuck.' },
+                { icon:'⊙', name:'Person property',   desc:'Watch all replays for users with a specific property, like a specific email address.' },
+                { icon:'☐', name:'Mobile devices',     desc:'Watch replays from mobile device web browsers to look for problems with your responsive design.' },
+                { icon:'✦', name:'Most active users',  desc:'Watch recordings of the most active sessions. Lots of valuable insights, guaranteed!' },
+              ].map(t => (
+                <div key={t.name} className="border border-[#e9eae6] rounded-xl p-4 hover:border-[#c8c9c4] cursor-pointer transition-colors">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[#e8572a] text-[14px]">{t.icon}</span>
+                    <span className="text-[13px] font-semibold text-[#e8572a]">{t.name}</span>
+                  </div>
+                  <p className="text-[12px] text-[#646462] leading-relaxed">{t.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
+
+// ── WAAppSessionReplayCollectionView (drilldown) embedded via selectedCollection state ──
+// Note: rendered inside WAAppSessionReplayView when selectedCollection !== null
 
 
 // ── WADataSidebar — identical pattern to ReportsSidebar / KnowledgeSidebar ──
