@@ -30804,211 +30804,343 @@ function WAAppHeatmapsView() {
   );
 }
 
-function WAAppLogsView() {
-  const [showSetupBanner, setShowSetupBanner] = useState(true);
-  const [volumeCollapsed, setVolumeCollapsed] = useState(false);
-  const [logLevel, setLogLevel]     = useState('All levels');
-  const [service, setService]       = useState('All services');
-  const [timeRange, setTimeRange]   = useState('Last 1 hour');
-  const [timezone, setTimezone]     = useState('UTC');
-  const [wrapMessage, setWrapMessage] = useState(true);
-  const [sortOrder, setSortOrder]   = useState<'earliest'|'latest'>('latest');
-  const [liveTail, setLiveTail]     = useState(false);
-  const [showLevelDrop, setShowLevelDrop]   = useState(false);
-  const [showServiceDrop, setShowServiceDrop] = useState(false);
-  const [showTimeDrop, setShowTimeDrop]     = useState(false);
-  const [showTzDrop, setShowTzDrop]         = useState(false);
+// â”€â”€ WAAppLogsView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog Logs viewer â€” query application logs sent as PostHog events.
+// Data source convention:
+//   event = '$log' (preferred) or '$exception' (auto-treated as error level)
+//   properties.level    = 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+//   properties.message  = string
+//   properties.service  = string (service name)
+//   properties.source   = string (e.g. 'backend', 'frontend', 'worker')
+// Backend: POST /api/environments/{teamId}/query/ (HogQLQuery)
 
+type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+
+interface LogEntry {
+  uuid:        string;
+  ts:          string;
+  level:       LogLevel;
+  message:     string;
+  service:     string;
+  source:      string;
+  distinct_id: string;
+  properties:  Record<string, any>;
+  is_exception: boolean;
+}
+
+const LOG_RANGES: { label: string; clickhouse: string }[] = [
+  { label: 'Ãšltimos 15 min',   clickhouse: '15 MINUTE' },
+  { label: 'Ãšltima hora',      clickhouse: '1 HOUR' },
+  { label: 'Ãšltimas 24 horas', clickhouse: '24 HOUR' },
+  { label: 'Ãšltimos 7 dÃ­as',   clickhouse: '7 DAY' },
+  { label: 'Ãšltimos 30 dÃ­as',  clickhouse: '30 DAY' },
+];
+
+const LEVEL_META: Record<LogLevel, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
+  debug: { label: 'DEBUG', color: '#9ca3af', bg: '#f3f3f1',  icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><circle cx="8" cy="8" r="2" fill="currentColor"/></svg> },
+  info:  { label: 'INFO',  color: '#3b59f6', bg: '#eff2ff',  icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M8 7v4M8 5h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> },
+  warn:  { label: 'WARN',  color: '#f59e0b', bg: '#fef3c7',  icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M8 1L1 14h14z M8 6v3M8 11v.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round" strokeLinecap="round"/></svg> },
+  error: { label: 'ERROR', color: '#dc2626', bg: '#fee2e2',  icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> },
+  fatal: { label: 'FATAL', color: '#7c2d12', bg: '#fde68a',  icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><circle cx="8" cy="8" r="6" fill="currentColor"/></svg> },
+};
+
+const LEVEL_RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3, fatal: 4 };
+
+function normalizeLevel(raw: any, isException = false): LogLevel {
+  if (isException) return 'error';
+  const v = String(raw ?? '').toLowerCase();
+  if (v.startsWith('fat') || v.startsWith('crit')) return 'fatal';
+  if (v.startsWith('err'))   return 'error';
+  if (v.startsWith('warn'))  return 'warn';
+  if (v.startsWith('debu') || v.startsWith('trace')) return 'debug';
+  return 'info';
+}
+
+// â”€â”€ Detail drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function LogDetailDrawer({ entry, onClose }: { entry: LogEntry | null; onClose: () => void }) {
+  if (!entry) return null;
+  const meta = LEVEL_META[entry.level];
+  const props = entry.properties || {};
+  const keys = Object.keys(props).filter(k => !k.startsWith('$') || k === '$current_url' || k === '$browser').sort();
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden" onClick={() => { setShowLevelDrop(false); setShowServiceDrop(false); setShowTimeDrop(false); setShowTzDrop(false); }}>
-      {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex items-center gap-2 flex-1">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <circle cx="9" cy="9" r="7" stroke="#e8572a" strokeWidth="1.4" strokeDasharray="3 2"/>
-            <circle cx="9" cy="9" r="3.5" stroke="#e8572a" strokeWidth="1.4"/>
-            <circle cx="9" cy="9" r="1" fill="#e8572a"/>
-          </svg>
-          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Logs</h1>
-        </div>
-        <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-          Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">2</span>
-        </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 1.5v1M6.5 10.5v1M1.5 6.5h1M10.5 6.5h1M3.2 3.2l.7.7M9.8 9.8l.7.7M9.8 3.2l-.7.7M3.9 9.8l-.7.7" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-          Settings
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
-        </button>
-      </div>
-
-      {/* Subtitle */}
-      <p className="text-[13px] text-[#646462] px-5 py-3 flex-shrink-0">Monitor and analyze your logs to understand and fix issues.</p>
-
-      {/* Setup banner */}
-      {showSetupBanner && (
-        <div className="mx-5 mb-3 flex items-center gap-3 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white flex-shrink-0">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-          <span className="text-[12.5px] text-[#646462] flex-1">Unable to verify logs setup. If you haven't configured logging yet, check out our setup guide.</span>
-          <button className="flex items-center gap-1 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium flex-shrink-0">
-            Setup guide <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <button onClick={() => setShowSetupBanner(false)} className="text-[#9ca3af] hover:text-[#646462]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </button>
-        </div>
-      )}
-
-      {/* Volume over time */}
-      <div className="mx-5 mb-3 border border-[#e9eae6] rounded-xl overflow-hidden flex-shrink-0">
-        <button onClick={() => setVolumeCollapsed(!volumeCollapsed)} className="w-full flex items-center gap-2 px-4 py-2.5 text-[12.5px] font-medium text-[#646462] hover:bg-[#f9f9f7] text-left">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: volumeCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          Volume over time
-        </button>
-        {!volumeCollapsed && (
-          <div className="flex items-center justify-center py-10 border-t border-[#e9eae6] bg-white">
-            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" className="animate-spin">
-              <circle cx="18" cy="18" r="15" stroke="#f3e8e8" strokeWidth="3"/>
-              <path d="M18 3a15 15 0 0115 15" stroke="#e8572a" strokeWidth="3" strokeLinecap="round"/>
-            </svg>
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[640px] max-w-[92vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: meta.color, backgroundColor: meta.bg }}>{meta.label}</span>
+              {entry.service && <span className="text-[10px] bg-[#1a1a18] text-white px-1.5 py-0.5 rounded font-mono">{entry.service}</span>}
+              {entry.is_exception && <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded">exception</span>}
+            </div>
+            <h2 className="text-sm font-mono text-[#1a1a18] break-words pr-4">{entry.message || '(sin mensaje)'}</h2>
+            <p className="text-[10px] text-[#9ca3af] mt-1">{formatTime(entry.ts)} Â· {entry.distinct_id}</p>
           </div>
-        )}
-      </div>
-
-      {/* Filter toolbar */}
-      <div className="flex items-center gap-2 px-5 pb-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
-        {/* Level */}
-        <div className="relative">
-          <button onClick={() => { setShowLevelDrop(!showLevelDrop); setShowServiceDrop(false); }} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-            {logLevel} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18] flex-shrink-0">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
-          {showLevelDrop && (
-            <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
-              {['All levels','Debug','Info','Warning','Error'].map(l => (
-                <button key={l} onClick={() => { setLogLevel(l); setShowLevelDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${logLevel===l?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{l}</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {props.stack || props.$exception_stack_trace_raw ? (
+            <section>
+              <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Stack trace</h3>
+              <pre className="bg-[#1a1a18] text-[#fbbf24] rounded-lg p-3 text-[11px] font-mono whitespace-pre-wrap break-words max-h-64 overflow-auto">{String(props.stack || props.$exception_stack_trace_raw || '')}</pre>
+            </section>
+          ) : null}
+          <section>
+            <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Propiedades estructuradas</h3>
+            <div className="space-y-1">
+              {keys.length === 0 ? (
+                <p className="text-xs text-[#9ca3af] italic">Sin propiedades adicionales.</p>
+              ) : keys.map(k => (
+                <div key={k} className="flex items-start gap-2 py-1 border-b border-[#f3f3f1] text-xs">
+                  <span className="font-mono text-[#3b59f6] flex-shrink-0 w-1/3 truncate" title={k}>{k}</span>
+                  <span className="text-[#1a1a18] flex-1 break-all">{typeof props[k] === 'object' ? JSON.stringify(props[k]).slice(0, 300) : String(props[k]).slice(0, 300)}</span>
+                </div>
               ))}
             </div>
-          )}
+          </section>
+          <section>
+            <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">JSON crudo</h3>
+            <pre className="bg-[#f9f9f7] rounded p-3 text-[10px] font-mono whitespace-pre-wrap break-words max-h-64 overflow-auto">{JSON.stringify(props, null, 2)}</pre>
+          </section>
         </div>
-        {/* Service */}
-        <div className="relative">
-          <button onClick={() => { setShowServiceDrop(!showServiceDrop); setShowLevelDrop(false); }} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-            {service} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-          </button>
-          {showServiceDrop && (
-            <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-40 py-1">
-              {['All services','Frontend','Backend','API','Worker'].map(s => (
-                <button key={s} onClick={() => { setService(s); setShowServiceDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${service===s?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{s}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        {/* Search */}
-        <div className="flex-1 relative">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.1"/><path d="M9 9l2 2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-          <input type="text" placeholder="Search recent, pinned, logs, resources or attri..." className="w-full pl-8 pr-4 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
-        </div>
-        {/* Right actions */}
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
-        </button>
-        <div className="relative">
-          <button onClick={() => setShowTimeDrop(!showTimeDrop)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="#646462" strokeWidth="1.1"/><path d="M4 1v2M8 1v2M1 5h10" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-            {timeRange} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-          </button>
-          {showTimeDrop && (
-            <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-40 py-1">
-              {['Last 1 hour','Last 6 hours','Last 24 hours','Last 7 days'].map(t => (
-                <button key={t} onClick={() => { setTimeRange(t); setShowTimeDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${timeRange===t?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{t}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7a5 5 0 015-5 5 5 0 014.3 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M12 7a5 5 0 01-5 5 5 5 0 01-4.3-2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M11.5 2.5v2.5H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-        <button onClick={() => setLiveTail(!liveTail)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${liveTail?'bg-[#e8572a] text-white':'border border-[#e9eae6] text-[#646462] bg-white hover:bg-[#f9f9f7]'}`}>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><circle cx="6" cy="6" r="2" fill="currentColor"/></svg>
-          Live tail
-        </button>
-      </div>
-
-      {/* Second toolbar */}
-      <div className="flex items-center gap-2 px-5 pb-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center gap-0 border border-[#e9eae6] rounded-lg overflow-hidden">
-          {(['earliest','latest'] as const).map(o => (
-            <button key={o} onClick={() => setSortOrder(o)} className={`px-3 py-1.5 text-[12px] font-medium capitalize transition-colors ${sortOrder===o?'border border-[#e8572a] text-[#1a1a1a] rounded-lg':'text-[#646462] hover:text-[#1a1a1a]'}`}>{o.charAt(0).toUpperCase()+o.slice(1)}</button>
-          ))}
-        </div>
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${wrapMessage?'bg-[#e8572a] border-[#e8572a]':'border-[#d1d5db]'}`} onClick={() => setWrapMessage(!wrapMessage)}>
-            {wrapMessage && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-          </div>
-          <span className="text-[12px] text-[#1a1a1a]">Wrap message</span>
-        </label>
-        <div className="relative">
-          <button onClick={() => setShowTzDrop(!showTzDrop)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="#646462" strokeWidth="1.1"/><path d="M6 1.5v1M6 9.5v1M1.5 6h1M9.5 6h1" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-            {timezone} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-          </button>
-          {showTzDrop && (
-            <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-40 py-1">
-              {['UTC','Local time','Europe/Madrid','America/New_York'].map(tz => (
-                <button key={tz} onClick={() => { setTimezone(tz); setShowTzDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${timezone===tz?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{tz}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1.5v8M3.5 7.5L6.5 10l3-2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M1.5 11h10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 1h4v4H1V1zM8 1h4v4H8V1zM1 8h4v4H1V8zM8 8h4v4H8V8z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-        </button>
-        <div className="flex-1" />
-        <div className="flex items-center gap-1 text-[11px] text-[#9ca3af]">
-          {[['↑↓','or'],['J',''],['K','navigate'],['·',''],['↵','expand'],['·',''],['P','prettify'],['·',''],['R','refresh']].map(([k,label],i) => (
-            <span key={i} className="flex items-center gap-0.5">
-              {k.length === 1 && k !== '·' ? <kbd className="px-1 py-0.5 border border-[#e9eae6] rounded text-[10px] bg-[#f9f9f7] text-[#646462]">{k}</kbd> : <span>{k}</span>}
-              {label && <span className="text-[#9ca3af]"> {label}</span>}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Log table */}
-      <div className="flex-1 overflow-y-auto px-5 pb-5">
-        <table className="w-full border border-[#e9eae6] rounded-xl overflow-hidden">
-          <thead>
-            <tr className="bg-white border-b border-[#e9eae6]">
-              <th className="w-8 px-3 py-3"><input type="checkbox" className="rounded border-[#e9eae6]" /></th>
-              <th className="text-left px-4 py-3 text-[12px] font-semibold text-[#1a1a1a]">
-                <span className="flex items-center gap-1">Timestamp <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M6 10l-3-3M6 10l3-3" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
-              </th>
-              <th className="text-left px-4 py-3 text-[12px] font-semibold text-[#1a1a1a]">Message</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colSpan={3} className="px-4 py-16 text-center text-[12px] text-[#9ca3af]">No logs found in the selected time range.</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
     </div>
   );
 }
 
-// ── WAAppSessionReplayView ────────────────────────────────────────────────────
+function WAAppLogsView() {
+  const [range, setRange] = React.useState(LOG_RANGES[2]);
+  const [showRange, setShowRange] = React.useState(false);
+  const rangeRef = useClickOutside<HTMLDivElement>(() => setShowRange(false));
+  const [levels,   setLevels]   = React.useState<Record<LogLevel, boolean>>({ debug: false, info: true, warn: true, error: true, fatal: true });
+  const [services, setServices] = React.useState<string[]>([]);
+  const [serviceFilter, setServiceFilter] = React.useState<string | null>(null);
+  const [search,   setSearch]   = React.useState('');
+  const [tail,     setTail]     = React.useState(false);
+  const [logs,     setLogs]     = React.useState<LogEntry[]>([]);
+  const [loading,  setLoading]  = React.useState(false);
+  const [error,    setError]    = React.useState<string | null>(null);
+  const [selected, setSelected] = React.useState<LogEntry | null>(null);
+  const tailIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const cursorRef = React.useRef<string>('');
+
+  const rangeClause = `timestamp >= now() - INTERVAL ${range.clickhouse}`;
+  const enabledLevels = Object.keys(levels).filter(k => levels[k as LogLevel]) as LogLevel[];
+
+  const load = React.useCallback(async (append = false) => {
+    if (!append) setLoading(true);
+    setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const cursor = append && cursorRef.current ? `AND timestamp > '${cursorRef.current}'` : '';
+      const serviceClause = serviceFilter ? `AND coalesce(toString(properties.service), toString(properties.$lib)) = '${serviceFilter.replace(/'/g, "''")}'` : '';
+      const searchClause = search.trim() ? `AND positionCaseInsensitive(toString(coalesce(properties.message, properties.$exception_message)), '${search.replace(/'/g, "''")}') > 0` : '';
+
+      const hql = `
+        SELECT
+          uuid,
+          timestamp,
+          event,
+          distinct_id,
+          coalesce(toString(properties.level), toString(properties.severity), '') AS level,
+          coalesce(toString(properties.message), toString(properties.$exception_message), '') AS message,
+          coalesce(toString(properties.service), toString(properties.$lib), '') AS service,
+          coalesce(toString(properties.source), toString(properties.$lib), '') AS source,
+          properties
+        FROM events
+        WHERE event IN ('$log', '$exception') AND ${rangeClause} ${cursor} ${serviceClause} ${searchClause}
+        ORDER BY timestamp DESC
+        LIMIT 200
+      `;
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+      const cols = res.columns ?? [];
+      const idx = (n: string) => cols.indexOf(n);
+      const rows: LogEntry[] = (res.results ?? []).map((r: any[]) => {
+        const isExc = r[idx('event')] === '$exception';
+        return {
+          uuid:        String(r[idx('uuid')] ?? ''),
+          ts:          String(r[idx('timestamp')] ?? ''),
+          level:       normalizeLevel(r[idx('level')], isExc),
+          message:     String(r[idx('message')] ?? ''),
+          service:     String(r[idx('service')] ?? ''),
+          source:      String(r[idx('source')] ?? ''),
+          distinct_id: String(r[idx('distinct_id')] ?? ''),
+          properties:  r[idx('properties')] ?? {},
+          is_exception: isExc,
+        };
+      }).filter((e: LogEntry) => enabledLevels.includes(e.level));
+
+      if (append) {
+        setLogs(prev => [...rows, ...prev].slice(0, 1000));
+      } else {
+        setLogs(rows);
+      }
+      if (rows.length > 0) cursorRef.current = rows[0].ts;
+
+      // Build service list from results if empty
+      if (services.length === 0) {
+        const srvs = Array.from(new Set(rows.map((r: LogEntry) => r.service).filter(Boolean))).sort();
+        setServices(srvs as string[]);
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar logs');
+    } finally {
+      if (!append) setLoading(false);
+    }
+  }, [rangeClause, serviceFilter, search, services.length, enabledLevels]);
+
+  React.useEffect(() => { load(false); }, [load]);
+
+  // Tail mode
+  React.useEffect(() => {
+    if (!tail) {
+      if (tailIntervalRef.current) clearInterval(tailIntervalRef.current);
+      tailIntervalRef.current = null;
+      return;
+    }
+    tailIntervalRef.current = setInterval(() => load(true), 3000);
+    return () => { if (tailIntervalRef.current) clearInterval(tailIntervalRef.current); };
+  }, [tail, load]);
+
+  function toggleLevel(lvl: LogLevel) {
+    setLevels(prev => ({ ...prev, [lvl]: !prev[lvl] }));
+  }
+
+  function exportLogs() {
+    if (!logs.length) return;
+    const lines = logs.map(l => `${l.ts}\t${l.level.toUpperCase()}\t${l.service || '-'}\t${l.message}`);
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `logs-${Date.now()}.log`;
+    a.click();
+  }
+
+  const counts = logs.reduce((acc, l) => { acc[l.level] = (acc[l.level] ?? 0) + 1; return acc; }, {} as Record<LogLevel, number>);
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#1a1a18] min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="bg-white px-6 pt-4 pb-3 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#3b59f6]"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <h1 className="text-lg font-bold text-[#1a1a18]">Logs</h1>
+              <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-2 py-0.5 rounded font-semibold">BETA</span>
+            </div>
+            <p className="text-xs text-[#646462]">Visor de logs estructurados de tu aplicaciÃ³n, en tiempo real si lo activas.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => setTail(t => !t)} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs ${tail ? 'bg-[#dcfce7] border-[#86efac] text-[#16a34a]' : 'bg-white border-[#e9eae6] text-[#1a1a18] hover:bg-[#f9f9f7]'}`}>
+              {tail ? <><span className="w-1.5 h-1.5 bg-[#16a34a] rounded-full animate-pulse" /> Tail en vivo</> : 'â–¶ Tail'}
+            </button>
+            <button onClick={exportLogs} disabled={!logs.length} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7] disabled:opacity-50">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 inline mr-1"><path d="M8 2v8M5 7l3 3 3-3M2 13h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Exportar
+            </button>
+            <div className="relative" ref={rangeRef}>
+              <button onClick={() => setShowRange(s => !s)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                {range.label}
+                <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>
+              </button>
+              {showRange && (
+                <div className="absolute right-0 top-full mt-1 w-56 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1">
+                  {LOG_RANGES.map(r => (
+                    <button key={r.label} onClick={() => { setRange(r); setShowRange(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f9f9f7] ${range.label === r.label ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a18]'}`}>{r.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Filter bar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-[#9ca3af]">Niveles:</span>
+          {(['debug','info','warn','error','fatal'] as LogLevel[]).map(lvl => {
+            const m = LEVEL_META[lvl];
+            return (
+              <button
+                key={lvl}
+                onClick={() => toggleLevel(lvl)}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono border transition-colors ${levels[lvl] ? 'border-current' : 'border-[#e9eae6] opacity-40'}`}
+                style={levels[lvl] ? { color: m.color, backgroundColor: m.bg, borderColor: `${m.color}40` } : {}}
+              >
+                <span className="w-2.5 h-2.5">{m.icon}</span>
+                {m.label}
+                {counts[lvl] != null && <span className="text-[9px] opacity-70 ml-0.5">{counts[lvl]}</span>}
+              </button>
+            );
+          })}
+          {services.length > 0 && (
+            <>
+              <span className="text-xs text-[#9ca3af] ml-2">Servicio:</span>
+              <select value={serviceFilter ?? ''} onChange={e => setServiceFilter(e.target.value || null)} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]">
+                <option value="">Todos</option>
+                {services.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </>
+          )}
+          <div className="relative flex-1 max-w-sm ml-auto">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') load(false); }} placeholder="grep en el mensajeâ€¦" className="w-full pl-10 pr-3 py-1.5 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" />
+          </div>
+        </div>
+      </div>
+
+      {/* Logs body â€” terminal-style */}
+      <div className="flex-1 overflow-auto font-mono text-[12px] leading-[1.55]">
+        {error && <div className="m-4 bg-[#fee2e2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b] font-sans">{error}</div>}
+        {loading && logs.length === 0 ? (
+          <div className="p-4 space-y-1">{Array.from({ length: 18 }).map((_, i) => <div key={i} className="h-3.5 bg-[#2a2a28] rounded animate-pulse" style={{ width: `${50 + (i * 7) % 45}%` }} />)}</div>
+        ) : logs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center px-6 py-16">
+            <div className="w-14 h-14 rounded-full bg-[#2a2a28] flex items-center justify-center mb-3">
+              <svg viewBox="0 0 24 24" className="w-7 h-7 text-[#9ca3af]"><path d="M3 5h18M3 10h18M3 15h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none"/></svg>
+            </div>
+            <p className="text-sm font-semibold text-white mb-1">No hay logs en este rango</p>
+            <p className="text-xs text-[#9ca3af] font-sans max-w-md">EnvÃ­a logs con <code className="bg-[#2a2a28] text-[#3b59f6] px-1 rounded">posthog.capture('$log', {`{ level, message, service }`})</code> o relÃ¡jalos del rango / filtros.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#2a2a28]">
+            {logs.map((l, i) => {
+              const m = LEVEL_META[l.level];
+              return (
+                <div
+                  key={l.uuid || i}
+                  onClick={() => setSelected(l)}
+                  className="px-4 py-1.5 hover:bg-[#2a2a28] cursor-pointer flex items-baseline gap-3 text-white"
+                >
+                  <span className="text-[#9ca3af] flex-shrink-0 w-[150px] text-[11px]" title={l.ts}>{l.ts.slice(0, 19).replace('T', ' ')}</span>
+                  <span className="font-bold flex-shrink-0 w-12 text-[10px]" style={{ color: m.color }}>{m.label}</span>
+                  {l.service && <span className="text-[#a78bfa] flex-shrink-0 text-[11px] max-w-[120px] truncate">[{l.service}]</span>}
+                  <span className="text-white truncate flex-1 min-w-0">{l.message || <span className="text-[#9ca3af] italic">(sin mensaje)</span>}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Status bar */}
+      <div className="bg-[#0f0f0e] border-t border-[#2a2a28] px-4 py-1.5 text-[10px] text-[#9ca3af] font-mono flex items-center gap-3 flex-shrink-0">
+        <span><strong className="text-white">{logs.length}</strong> entradas</span>
+        <span>Â·</span>
+        {Object.entries(counts).filter(([, n]) => n > 0).map(([lvl, n]) => (
+          <span key={lvl} style={{ color: LEVEL_META[lvl as LogLevel].color }}>{LEVEL_META[lvl as LogLevel].label}: <strong>{n}</strong></span>
+        ))}
+        <span className="ml-auto">{tail ? <span className="text-[#16a34a]">â— TAIL</span> : 'estÃ¡tico'}</span>
+      </div>
+
+      <LogDetailDrawer entry={selected} onClose={() => setSelected(null)} />
+    </div>
+  );
+}
+
 function WAAppSessionReplayView() {
   type SRTab = 'recordings' | 'collections' | 'whattowatch';
   const [srTab, setSrTab] = useState<SRTab>('recordings');
@@ -54724,6 +54856,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
