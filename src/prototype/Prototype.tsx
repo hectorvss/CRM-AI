@@ -47726,18 +47726,71 @@ function WASettingsView() {
 
   // ── SessionReplayPage ─────────────────────────────────────────────────────
   function SessionReplayPage() {
-    const [recordSessions, setRecordSessions] = useState(true);
-    const [captureLogs, setCaptureLogs] = useState(true);
-    const [captureCanvas, setCaptureCanvas] = useState(false);
-    const [captureNetwork, setCaptureNetwork] = useState(true);
-    const [captureHeaders, setCaptureHeaders] = useState(false);
-    const [captureBody, setCaptureBody] = useState(false);
-    const [retention, setRetention] = useState('5y');
+    const cfg = team?.session_recording_network_payload_capture_config || {};
+    const retentionRaw = team?.session_recording_retention_period_days;
+    const initialRetention = (() => {
+      if (!retentionRaw && retentionRaw !== 0) return '5y';
+      if (retentionRaw <= 30) return '30d';
+      if (retentionRaw <= 90) return '90d';
+      if (retentionRaw <= 365) return '1y';
+      return '5y';
+    })();
+    const [recordSessions, setRecordSessions] = useState<boolean>(!!team?.session_recording_opt_in);
+    const [captureLogs, setCaptureLogs] = useState<boolean>(!!team?.capture_console_log_opt_in);
+    const [captureCanvas, setCaptureCanvas] = useState<boolean>(!!team?.session_replay_config?.record_canvas);
+    const [captureNetwork, setCaptureNetwork] = useState<boolean>(!!team?.capture_performance_opt_in);
+    const [captureHeaders, setCaptureHeaders] = useState<boolean>(!!cfg.recordHeaders);
+    const [captureBody, setCaptureBody] = useState<boolean>(!!cfg.recordBody);
+    const [retention, setRetention] = useState<string>(initialRetention);
     const [recordingTab, setRecordingTab] = useState<'web'|'mobile'>('web');
-    const [triggerMatch, setTriggerMatch] = useState('all');
-    const [privacyMode, setPrivacyMode] = useState('normal');
+    const [triggerMatch, setTriggerMatch] = useState<string>(team?.session_recording_trigger_match_type ?? 'all');
+    const [privacyMode, setPrivacyMode] = useState<string>(team?.session_recording_masking_config?.maskAllInputs === 'all' ? 'mask-all' : team?.session_recording_masking_config?.maskTextSelector === '' ? 'no-mask' : 'normal');
     const [showPrivacyDropdown, setShowPrivacyDropdown] = useState(false);
     const [showTriggerDropdown, setShowTriggerDropdown] = useState(false);
+    const [savingKey, setSavingKey] = React.useState('');
+    React.useEffect(() => {
+      const c = team?.session_recording_network_payload_capture_config || {};
+      setRecordSessions(!!team?.session_recording_opt_in);
+      setCaptureLogs(!!team?.capture_console_log_opt_in);
+      setCaptureCanvas(!!team?.session_replay_config?.record_canvas);
+      setCaptureNetwork(!!team?.capture_performance_opt_in);
+      setCaptureHeaders(!!c.recordHeaders);
+      setCaptureBody(!!c.recordBody);
+      const rd = team?.session_recording_retention_period_days;
+      setRetention(!rd ? '5y' : rd <= 30 ? '30d' : rd <= 90 ? '90d' : rd <= 365 ? '1y' : '5y');
+      setTriggerMatch(team?.session_recording_trigger_match_type ?? 'all');
+    }, [team?.id]);
+    async function toggleField(field: string, value: any, key: string, setter: (v: any) => void) {
+      setter(value); setSavingKey(key);
+      await patchTeam({ [field]: value }); setSavingKey('');
+    }
+    async function toggleNested(parent: string, field: string, value: any, key: string, setter: (v: any) => void) {
+      setter(value); setSavingKey(key);
+      const next = { ...((team as any)?.[parent] || {}), [field]: value };
+      await patchTeam({ [parent]: next }); setSavingKey('');
+    }
+    async function pickRetention(v: string) {
+      setRetention(v); setSavingKey('retention');
+      const days = { '30d': 30, '90d': 90, '1y': 365, '5y': 1825 }[v] ?? 1825;
+      await patchTeam({ session_recording_retention_period_days: days });
+      setSavingKey('');
+    }
+    async function pickPrivacy(v: string) {
+      setPrivacyMode(v); setShowPrivacyDropdown(false); setSavingKey('privacy');
+      const m = v.toLowerCase();
+      const config = m.startsWith('enmascarar todo') || m.includes('mask-all')
+        ? { maskAllInputs: 'all', maskTextSelector: '*' }
+        : m.startsWith('sin') || m.includes('no-mask')
+          ? { maskAllInputs: 'none', maskTextSelector: '' }
+          : { maskAllInputs: 'password', maskTextSelector: '' };
+      await patchTeam({ session_recording_masking_config: config });
+      setSavingKey('');
+    }
+    async function pickTriggerMatch(v: string) {
+      setTriggerMatch(v); setShowTriggerDropdown(false); setSavingKey('trigger-match');
+      await patchTeam({ session_recording_trigger_match_type: v });
+      setSavingKey('');
+    }
 
     const PlatformBadge = ({ name, supported }: { name: string; supported?: boolean }) => (
       <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${supported ? 'bg-[#f0fdf4] border-[#bbf7d0] text-[#16a34a]' : 'bg-[#f3f3f1] border-[#e9eae6] text-[#646462]'}`}>
@@ -47776,8 +47829,8 @@ function WASettingsView() {
             <SectionHeader title="Replay de sesión"/>
             <p className="text-[13px] text-[#646462]">Observa grabaciones de cómo interactúan los usuarios con tu aplicación web para diagnosticar problemas y entender el comportamiento de los usuarios.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Grabar sesiones de usuario</span>
-              <Toggle checked={recordSessions} onChange={setRecordSessions}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Grabar sesiones de usuario {savingKey === 'record' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={recordSessions} onChange={(v: boolean) => toggleField('session_recording_opt_in', v, 'record', setRecordSessions)}/>
             </div>
           </div>
 
@@ -47786,8 +47839,8 @@ function WASettingsView() {
             <SectionHeader title="Captura de logs" platforms={[{name:'Android'},{name:'iOS'},{name:'Web',supported:true},{name:'React Native'}]}/>
             <p className="text-[13px] text-[#646462]">Captura los logs de la consola del navegador junto con las grabaciones de sesión para ayudar a depurar problemas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar logs de consola</span>
-              <Toggle checked={captureLogs} onChange={setCaptureLogs}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar logs de consola {savingKey === 'logs' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={captureLogs} onChange={(v: boolean) => toggleField('capture_console_log_opt_in', v, 'logs', setCaptureLogs)}/>
             </div>
           </div>
 
@@ -47796,8 +47849,8 @@ function WASettingsView() {
             <SectionHeader title="Captura de canvas" platforms={[{name:'Flutter'},{name:'Web',supported:true}]}/>
             <p className="text-[13px] text-[#646462]">Captura elementos HTML canvas en las grabaciones de sesión. Útil para aplicaciones que renderizan gráficos, juegos u otro contenido basado en canvas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar elementos canvas</span>
-              <Toggle checked={captureCanvas} onChange={setCaptureCanvas}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar elementos canvas {savingKey === 'canvas' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={captureCanvas} onChange={(v: boolean) => toggleNested('session_replay_config', 'record_canvas', v, 'canvas', setCaptureCanvas)}/>
             </div>
           </div>
 
@@ -47854,7 +47907,7 @@ function WASettingsView() {
                     <div className="fixed inset-0 z-40" onClick={() => setShowTriggerDropdown(false)}/>
                     <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden w-24">
                       {['all','any'].map(v => (
-                        <button key={v} onClick={() => { setTriggerMatch(v); setShowTriggerDropdown(false); }}
+                        <button key={v} onClick={() => pickTriggerMatch(v)}
                           className={`w-full px-3 py-1.5 text-left text-[13px] hover:bg-[#fafaf9] ${v === triggerMatch ? 'font-medium' : ''}`}>{v}</button>
                       ))}
                     </div>
@@ -47923,7 +47976,7 @@ function WASettingsView() {
                   <div className="fixed inset-0 z-40" onClick={() => setShowPrivacyDropdown(false)}/>
                   <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
                     {['Normal (enmascarar inputs pero no texto/imágenes)','Enmascarar todo (texto e imágenes)','Sin enmascaramiento'].map(v => (
-                      <button key={v} onClick={() => { setPrivacyMode(v); setShowPrivacyDropdown(false); }}
+                      <button key={v} onClick={() => pickPrivacy(v)}
                         className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${v === privacyMode ? 'bg-[#f3f3f1] font-medium' : ''}`}>{v}</button>
                     ))}
                   </div>
@@ -47937,8 +47990,8 @@ function WASettingsView() {
             <SectionHeader title="Captura de red" platforms={[{name:'Android'},{name:'iOS'},{name:'Web',supported:true},{name:'React Native'}]}/>
             <p className="text-[13px] text-[#646462]">Captura los tiempos de solicitudes de red junto con las grabaciones de sesión para identificar llamadas API lentas o fallidas.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar solicitudes de red</span>
-              <Toggle checked={captureNetwork} onChange={setCaptureNetwork}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar solicitudes de red {savingKey === 'network' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={captureNetwork} onChange={(v: boolean) => toggleField('capture_performance_opt_in', v, 'network', setCaptureNetwork)}/>
             </div>
           </div>
 
@@ -47948,12 +48001,12 @@ function WASettingsView() {
             <p className="text-[13px] text-[#646462]">Captura las cabeceras de solicitud y respuesta y el contenido del cuerpo junto con los tiempos de red. Los datos sensibles se eliminan automáticamente.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="flex items-center gap-6 py-2.5 border-t border-[#e9eae6]">
               <div className="flex items-center gap-3">
-                <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar cabeceras</span>
-                <Toggle checked={captureHeaders} onChange={setCaptureHeaders}/>
+                <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar cabeceras {savingKey === 'headers' && <span className="text-[11px] text-[#646462] font-normal">…</span>}</span>
+                <Toggle checked={captureHeaders} onChange={(v: boolean) => toggleNested('session_recording_network_payload_capture_config', 'recordHeaders', v, 'headers', setCaptureHeaders)}/>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar cuerpo</span>
-                <Toggle checked={captureBody} onChange={setCaptureBody}/>
+                <span className="text-[13px] font-medium text-[#1a1a1a]">Capturar cuerpo {savingKey === 'body' && <span className="text-[11px] text-[#646462] font-normal">…</span>}</span>
+                <Toggle checked={captureBody} onChange={(v: boolean) => toggleNested('session_recording_network_payload_capture_config', 'recordBody', v, 'body', setCaptureBody)}/>
               </div>
             </div>
           </div>
@@ -47972,7 +48025,7 @@ function WASettingsView() {
                 { v: '1y',  icon: '📅', label: '1 año (365 días)' },
                 { v: '5y',  icon: '∞',  label: '5 años (1825 días)' },
               ].map(opt => (
-                <button key={opt.v} onClick={() => setRetention(opt.v)}
+                <button key={opt.v} onClick={() => pickRetention(opt.v)}
                   className={`flex items-center gap-1.5 h-8 px-3 border rounded-lg text-[13px] font-medium transition-colors ${retention === opt.v ? 'border-[#e8572a] text-[#e8572a] bg-[#fff8f6]' : 'border-[#e9eae6] text-[#646462] hover:border-[#1a1a1a] hover:text-[#1a1a1a]'}`}>
                   <span>{opt.icon}</span>
                   <span>{opt.label}</span>
@@ -47991,14 +48044,14 @@ function WASettingsView() {
             <p className="text-[13px] text-[#646462]">Configura integraciones para crear y vincular incidencias desde los replays de sesión.</p>
             <div className="space-y-4">
               {[
-                { name: 'Linear', btn: 'Conectar workspace' },
-                { name: 'GitHub', btn: 'Conectar organización' },
-                { name: 'GitLab', btn: 'Conectar proyecto' },
-                { name: 'Jira',   btn: 'Conectar sitio' },
+                { name: 'Linear', btn: 'Conectar workspace', url: 'https://posthog.com/docs/session-replay/integrations/linear' },
+                { name: 'GitHub', btn: 'Conectar organización', url: 'https://posthog.com/docs/session-replay/integrations/github' },
+                { name: 'GitLab', btn: 'Conectar proyecto', url: 'https://posthog.com/docs/session-replay/integrations/gitlab' },
+                { name: 'Jira',   btn: 'Conectar sitio', url: 'https://posthog.com/docs/session-replay/integrations/jira' },
               ].map(int => (
                 <div key={int.name} className="space-y-1.5">
                   <h3 className="text-[13px] font-semibold text-[#1a1a1a]">{int.name}</h3>
-                  <button className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">{int.btn}</button>
+                  <button onClick={() => window.open(int.url, '_blank', 'noopener,noreferrer')} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] inline-flex items-center gap-1.5">{int.btn} <span className="text-[#646462]">↗</span></button>
                 </div>
               ))}
             </div>
@@ -48010,7 +48063,15 @@ function WASettingsView() {
 
   // ── SupportPage ───────────────────────────────────────────────────────────
   function SupportPage() {
-    const [supportEnabled, setSupportEnabled] = useState(false);
+    const xs = team?.extra_settings || {};
+    const [supportEnabled, setSupportEnabled] = useState<boolean>(!!xs.support_enabled);
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => { setSupportEnabled(!!(team?.extra_settings?.support_enabled)); }, [team?.id]);
+    async function toggleSupport(v: boolean) {
+      setSupportEnabled(v); setSaving(true);
+      const next = { ...(team?.extra_settings || {}), support_enabled: v };
+      await patchTeam({ extra_settings: next }); setSaving(false);
+    }
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-8 py-6 space-y-8">
@@ -48058,10 +48119,10 @@ function WASettingsView() {
               </div>
               <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#e9eae6]">
                 <div>
-                  <p className="text-[13px] font-medium text-[#1a1a1a]">Activar para empezar a aceptar tickets.</p>
+                  <p className="text-[13px] font-medium text-[#1a1a1a]">Activar para empezar a aceptar tickets. {saving && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</p>
                   <p className="text-[12px] text-[#646462]">Configura canales y notificaciones después de activar.</p>
                 </div>
-                <Toggle checked={supportEnabled} onChange={setSupportEnabled}/>
+                <Toggle checked={supportEnabled} onChange={toggleSupport}/>
               </div>
             </div>
           </div>
@@ -48072,21 +48133,47 @@ function WASettingsView() {
 
   // ── SurveysPage ───────────────────────────────────────────────────────────
   function SurveysPage() {
-    const [surveysEnabled, setSurveysEnabled] = useState(false);
-    const [selectedTheme, setSelectedTheme] = useState('clean');
-    const [cookielessMode, setCookielessMode] = useState('disabled');
-    const [hideClainBranding, setHideClainBranding] = useState(false);
-    const [shuffleQuestions, setShuffleQuestions] = useState(false);
-    const [delayEnabled, setDelayEnabled] = useState(false);
-    const [delaySeconds, setDelaySeconds] = useState('');
+    const sc = team?.surveys_opt_in_config || team?.survey_config || {};
+    const xs = team?.extra_settings || {};
+    const [surveysEnabled, setSurveysEnabled] = useState<boolean>(!!team?.surveys_opt_in);
+    const [selectedTheme, setSelectedTheme] = useState<string>(sc.theme ?? 'clean');
+    const [cookielessMode, setCookielessMode] = useState<string>(xs.surveys_cookieless_mode ?? 'disabled');
+    const [hideClainBranding, setHideClainBranding] = useState<boolean>(!!sc.whitelabel);
+    const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(!!sc.shuffle_questions);
+    const [delayEnabled, setDelayEnabled] = useState<boolean>(!!sc.delay_seconds);
+    const [delaySeconds, setDelaySeconds] = useState<string>(sc.delay_seconds ? String(sc.delay_seconds) : '');
     const [positionDropdown, setPositionDropdown] = useState(false);
-    const [position, setPosition] = useState('bottom-right');
+    const [position, setPosition] = useState<string>(sc.position ?? 'bottom-right');
     const [fontDropdown, setFontDropdown] = useState(false);
-    const [fontFamily, setFontFamily] = useState('inherit');
-    const [captureCLS, setCaptureCLS] = useState(true);
-    const [captureFCP, setCaptureFCP] = useState(true);
-    const [captureLCP, setCaptureLCP] = useState(true);
-    const [captureINP, setCaptureINP] = useState(true);
+    const [fontFamily, setFontFamily] = useState<string>(sc.font_family ?? 'inherit');
+    const [savingKey, setSavingKey] = React.useState('');
+    React.useEffect(() => {
+      const c = team?.surveys_opt_in_config || team?.survey_config || {};
+      const s = team?.extra_settings || {};
+      setSurveysEnabled(!!team?.surveys_opt_in);
+      setSelectedTheme(c.theme ?? 'clean');
+      setCookielessMode(s.surveys_cookieless_mode ?? 'disabled');
+      setHideClainBranding(!!c.whitelabel);
+      setShuffleQuestions(!!c.shuffle_questions);
+      setDelayEnabled(!!c.delay_seconds);
+      setDelaySeconds(c.delay_seconds ? String(c.delay_seconds) : '');
+      setPosition(c.position ?? 'bottom-right');
+      setFontFamily(c.font_family ?? 'inherit');
+    }, [team?.id]);
+    async function toggleEnabled(v: boolean) {
+      setSurveysEnabled(v); setSavingKey('enabled');
+      await patchTeam({ surveys_opt_in: v }); setSavingKey('');
+    }
+    async function saveConfig(field: string, value: any, key: string, setter: (v: any) => void) {
+      setter(value); setSavingKey(key);
+      const next = { ...(team?.surveys_opt_in_config || team?.survey_config || {}), [field]: value };
+      await patchTeam({ surveys_opt_in_config: next }); setSavingKey('');
+    }
+    async function saveExtra(field: string, value: any, key: string, setter: (v: any) => void) {
+      setter(value); setSavingKey(key);
+      const next = { ...(team?.extra_settings || {}), [field]: value };
+      await patchTeam({ extra_settings: next }); setSavingKey('');
+    }
 
     const themes = [
       { id: 'clean',    label: 'Clean',    sub: 'Light & professional', bg: '#ffffff', accent: '#1a1a1a' },
@@ -48133,8 +48220,8 @@ function WASettingsView() {
             </div>
             <p className="text-[13px] text-[#646462]">Activa o desactiva las encuestas en tu aplicación web. Cuando están desactivadas, las encuestas no se renderizarán automáticamente.{' '}<a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a></p>
             <div className="flex items-center justify-between py-2.5 border-t border-[#e9eae6]">
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar encuestas</span>
-              <Toggle checked={surveysEnabled} onChange={setSurveysEnabled}/>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Activar encuestas {savingKey === 'enabled' && <span className="text-[11px] text-[#646462] font-normal">guardando…</span>}</span>
+              <Toggle checked={surveysEnabled} onChange={toggleEnabled}/>
             </div>
           </div>
 
@@ -48161,7 +48248,7 @@ function WASettingsView() {
               <p className="text-[13px] text-[#646462]">Empieza con un preset y ajusta los colores individuales a continuación.</p>
               <div className="grid grid-cols-6 gap-3">
                 {themes.map(t => (
-                  <button key={t.id} onClick={() => setSelectedTheme(t.id)}
+                  <button key={t.id} onClick={() => saveConfig('theme', t.id, 'theme', setSelectedTheme)}
                     className={`flex flex-col items-center gap-1.5 p-2 rounded-[8px] border-2 transition-colors ${selectedTheme === t.id ? 'border-[#e8572a]' : 'border-[#e9eae6] hover:border-[#1a1a1a]'}`}>
                     {/* Mini preview */}
                     <div className="w-full h-10 rounded-[4px] flex flex-col gap-0.5 p-1.5 overflow-hidden" style={{ background: t.bg }}>
@@ -48227,7 +48314,7 @@ function WASettingsView() {
                       <div className="fixed inset-0 z-40" onClick={() => setFontDropdown(false)}/>
                       <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
                         {['inherit (fuente de tu web)','sans-serif','serif','monospace'].map(f => (
-                          <button key={f} onClick={() => { setFontFamily(f); setFontDropdown(false); }} className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${f === fontFamily ? 'font-medium bg-[#f3f3f1]' : ''}`}>{f}</button>
+                          <button key={f} onClick={() => { saveConfig('font_family', f, 'font', setFontFamily); setFontDropdown(false); }} className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${f === fontFamily ? 'font-medium bg-[#f3f3f1]' : ''}`}>{f}</button>
                         ))}
                       </div>
                     </>
@@ -48257,8 +48344,14 @@ function WASettingsView() {
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setPositionDropdown(false)}/>
                       <div className="absolute left-0 top-full mt-1 w-44 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
-                        {['Arriba a la izquierda','Arriba a la derecha','Abajo a la izquierda','Abajo a la derecha','Centro'].map(p => (
-                          <button key={p} className="w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9]">{p}</button>
+                        {[
+                          { label: 'Arriba a la izquierda', v: 'top-left' },
+                          { label: 'Arriba a la derecha',   v: 'top-right' },
+                          { label: 'Abajo a la izquierda',  v: 'bottom-left' },
+                          { label: 'Abajo a la derecha',    v: 'bottom-right' },
+                          { label: 'Centro',                v: 'center' },
+                        ].map(p => (
+                          <button key={p.v} onClick={() => { saveConfig('position', p.v, 'position', setPosition); setPositionDropdown(false); }} className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${p.v === position ? 'font-medium bg-[#f3f3f1]' : ''}`}>{p.label}</button>
                         ))}
                       </div>
                     </>
@@ -48278,19 +48371,35 @@ function WASettingsView() {
               <h3 className="text-[13px] font-semibold text-[#1a1a1a]">Comportamiento</h3>
               <div className="space-y-2.5">
                 <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input type="checkbox" checked={hideClainBranding} onChange={e => setHideClainBranding(e.target.checked)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
-                  <span className="text-[13px] text-[#1a1a1a]">Ocultar branding de Clain</span>
+                  <input type="checkbox" checked={hideClainBranding} onChange={e => saveConfig('whitelabel', e.target.checked, 'whitelabel', setHideClainBranding)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
+                  <span className="text-[13px] text-[#1a1a1a]">Ocultar branding de Clain {savingKey === 'whitelabel' && <span className="text-[11px] text-[#646462]">guardando…</span>}</span>
                 </label>
                 <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input type="checkbox" checked={shuffleQuestions} onChange={e => setShuffleQuestions(e.target.checked)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
-                  <span className="text-[13px] text-[#1a1a1a]">Mezclar preguntas</span>
+                  <input type="checkbox" checked={shuffleQuestions} onChange={e => saveConfig('shuffle_questions', e.target.checked, 'shuffle', setShuffleQuestions)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
+                  <span className="text-[13px] text-[#1a1a1a]">Mezclar preguntas {savingKey === 'shuffle' && <span className="text-[11px] text-[#646462]">guardando…</span>}</span>
                 </label>
                 <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input type="checkbox" checked={delayEnabled} onChange={e => setDelayEnabled(e.target.checked)} className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"/>
+                  <input
+                    type="checkbox"
+                    checked={delayEnabled}
+                    onChange={e => {
+                      setDelayEnabled(e.target.checked);
+                      if (!e.target.checked) { saveConfig('delay_seconds', 0, 'delay', () => setDelaySeconds('')); }
+                    }}
+                    className="w-4 h-4 rounded border-[#e9eae6] accent-[#e8572a]"
+                  />
                   <span className="text-[13px] text-[#1a1a1a] flex items-center gap-1.5">
                     Retrasar el popup de la encuesta al menos
-                    <input type="text" value={delaySeconds} onChange={e => setDelaySeconds(e.target.value)} className="w-12 h-6 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6] text-center"/>
+                    <input
+                      type="number"
+                      min="0"
+                      value={delaySeconds}
+                      onChange={e => setDelaySeconds(e.target.value)}
+                      onBlur={() => { if (delayEnabled) saveConfig('delay_seconds', Number(delaySeconds) || 0, 'delay', setDelaySeconds); }}
+                      className="w-14 h-6 px-2 border border-[#e9eae6] rounded text-[12px] outline-none focus:border-[#3b59f6] text-center"
+                    />
                     segundos una vez que se cumplen las condiciones de visualización.
+                    {savingKey === 'delay' && <span className="text-[11px] text-[#646462]">…</span>}
                   </span>
                 </label>
               </div>
