@@ -1,0 +1,169 @@
+// ── WAAppClustersView ─────────────────────────────────────────────────────────
+function WAAppClustersView() {
+  type ClustersTab = 'traces' | 'generations';
+  const [tab, setTab] = useState<ClustersTab>('traces');
+  const [showJobsDrop, setShowJobsDrop] = useState(false);
+
+  const jobs = [
+    { id: 'job_001', name: 'Traces clustering run', status: 'running', started: 'Hace 3 min', progress: 62 },
+    { id: 'job_002', name: 'Generations clustering', status: 'queued', started: 'En cola', progress: 0 },
+    { id: 'job_003', name: 'Traces clustering run', status: 'completed', started: 'Hace 1 h', progress: 100 },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+      {/* Top bar */}
+      <div className="flex items-start justify-between px-6 pt-5 pb-0 flex-shrink-0">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            {/* clusters icon */}
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-[#646462]">
+              <circle cx="4" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+              <circle cx="14" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+              <circle cx="14" cy="13" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M6.3 8.1L11.7 5.9M6.3 9.9L11.7 12.1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+            </svg>
+            <h1 className="text-[16px] font-bold text-[#1a1a1a]">Clusters</h1>
+          </div>
+          <p className="text-[13px] text-[#646462]">Discover patterns and clusters in your LLM usage.</p>
+        </div>
+
+        {/* Top-right actions */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Quick start
+            <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">0</span>
+          </button>
+
+          <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </button>
+
+          <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs row + Jobs button */}
+      <div className="flex items-center justify-between px-6 mt-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-0">
+          {(['traces', 'generations'] as ClustersTab[]).map(t => {
+            const labels: Record<ClustersTab, string> = { traces: 'Traces', generations: 'Generations' };
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+                  tab === t
+                    ? 'border-[#e8572a] text-[#1a1a1a]'
+                    : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}
+              >
+                {labels[t]}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Jobs button */}
+        <div className="relative mb-[-1px]">
+          <button
+            onClick={() => setShowJobsDrop(!showJobsDrop)}
+            className="flex items-center gap-2 px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium mb-1"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <ellipse cx="7" cy="4" rx="5" ry="2" stroke="#646462" strokeWidth="1.2"/>
+              <path d="M2 4v3c0 1.1 2.24 2 5 2s5-.9 5-2V4" stroke="#646462" strokeWidth="1.2"/>
+              <path d="M2 7v3c0 1.1 2.24 2 5 2s5-.9 5-2V7" stroke="#646462" strokeWidth="1.2"/>
+            </svg>
+            Jobs ({jobs.length})
+          </button>
+
+          {showJobsDrop && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-xl shadow-xl z-50 w-80 overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">Clustering jobs</span>
+                <button onClick={() => setShowJobsDrop(false)} className="text-[#9ca3af] hover:text-[#646462]">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+              <div className="flex flex-col divide-y divide-[#e9eae6]">
+                {jobs.map(job => (
+                  <div key={job.id} className="px-4 py-3 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] font-medium text-[#1a1a1a]">{job.name}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        job.status === 'running' ? 'bg-blue-100 text-blue-600' :
+                        job.status === 'queued' ? 'bg-[#fef3c7] text-[#92400e]' :
+                        'bg-green-100 text-green-600'
+                      }`}>
+                        {job.status === 'running' ? 'Ejecutando' : job.status === 'queued' ? 'En cola' : 'Completado'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {job.status !== 'queued' && (
+                        <div className="flex-1 h-1.5 bg-[#f3f4f6] rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${job.status === 'completed' ? 'bg-green-500' : 'bg-[#3b59f6]'}`}
+                            style={{ width: `${job.progress}%` }}
+                          />
+                        </div>
+                      )}
+                      <span className="text-[11px] text-[#9ca3af]">{job.started}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Content — empty state */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+        {tab === 'traces' ? (
+          <>
+            {/* Icon */}
+            <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-1">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <circle cx="7" cy="14" r="4" stroke="#9ca3af" strokeWidth="1.6"/>
+                <circle cx="21" cy="8"  r="4" stroke="#9ca3af" strokeWidth="1.6"/>
+                <circle cx="21" cy="20" r="4" stroke="#9ca3af" strokeWidth="1.6"/>
+                <path d="M10.8 12.5L17.2 9.5M10.8 15.5L17.2 18.5" stroke="#9ca3af" strokeWidth="1.4" strokeLinecap="round" strokeDasharray="2 2"/>
+              </svg>
+            </div>
+            <h2 className="text-[15px] font-semibold text-[#1a1a1a]">No trace clustering runs found</h2>
+            <p className="text-[13px] text-[#9ca3af] max-w-[400px] leading-relaxed">
+              Try switching to "Generations" or "Evaluations" to see other clusters, or check back later once more data has been collected.
+            </p>
+            <button className="mt-2 flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#2d2d2d] transition-colors">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              Nuevo clustering run
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-1">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <rect x="4" y="8" width="20" height="3" rx="1.5" fill="#d1d5db"/>
+                <rect x="4" y="13" width="14" height="3" rx="1.5" fill="#d1d5db"/>
+                <rect x="4" y="18" width="17" height="3" rx="1.5" fill="#d1d5db"/>
+              </svg>
+            </div>
+            <h2 className="text-[15px] font-semibold text-[#1a1a1a]">No generation clustering runs found</h2>
+            <p className="text-[13px] text-[#9ca3af] max-w-[400px] leading-relaxed">
+              Run a clustering job on your LLM generations to automatically discover patterns and topics in your data.
+            </p>
+            <button className="mt-2 flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#2d2d2d] transition-colors">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              Nuevo clustering run
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
