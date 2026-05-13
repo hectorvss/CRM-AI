@@ -29029,13 +29029,47 @@ function WAAppErrorTrackingView() {
               {/* ── Releases ── */}
               {configSub === 'releases' && (
                 <div className="p-5 flex flex-col gap-4">
-                  <p className="text-[12.5px] text-[#646462]">Track which releases are associated with errors and when new issues are introduced.</p>
-                  <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
-                    <div className="w-12 h-12 rounded-xl bg-[#f3f4f6] flex items-center justify-center mb-1">
-                      <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="8.5" stroke="#9ca3af" strokeWidth="1.4"/><path d="M11 7v4.5l3 2" stroke="#9ca3af" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[12.5px] text-[#646462]">
+                      Track releases to see which version introduced errors and monitor deployment health.{' '}
+                      <span className="text-[#e8572a] cursor-pointer hover:underline inline-flex items-center gap-0.5">
+                        Docs <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </span>
+                    </p>
+                    <p className="text-[12.5px] text-[#646462]">Releases are versions of your application that have been deployed. They are automatically created when you upload sourcemaps to Clain.</p>
+                    <p className="text-[12.5px] text-[#646462]">Each release can include git metadata such as the commit SHA, branch, and repository URL, which helps you track down the source of errors.</p>
+                  </div>
+                  {/* Releases table */}
+                  <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-white">
+                          {['VERSION','PROJECT','COMMIT','BRANCH','REPOSITORY','CREATED AT'].map(h => (
+                            <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                    </table>
+                    {/* Empty state */}
+                    <div className="flex flex-col items-center justify-center py-10 gap-1.5 text-center px-8">
+                      <span className="text-[13px] font-semibold text-[#1a1a1a]">No releases found</span>
+                      <span className="text-[12px] text-[#9ca3af] max-w-[480px] leading-relaxed">
+                        Releases are automatically created when Clain detects version information in your error tracking data. Learn more in the{' '}
+                        <span className="text-[#e8572a] cursor-pointer hover:underline inline-flex items-center gap-0.5">
+                          docs <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </span>.
+                      </span>
                     </div>
-                    <span className="text-[13px] font-semibold text-[#1a1a1a]">No releases found</span>
-                    <span className="text-[12px] text-[#9ca3af] max-w-[280px]">Releases will appear here once you start sending release data via the Clain SDK.</span>
+                    {/* Pagination */}
+                    <div className="flex items-center justify-end px-4 py-2.5 border-t border-[#e9eae6] gap-2">
+                      <span className="text-[12px] text-[#9ca3af]">No entries</span>
+                      <button className="w-6 h-6 flex items-center justify-center rounded border border-[#e9eae6] text-[#9ca3af] hover:border-[#c8c9c4] hover:text-[#646462]">
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 2L3 5l4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                      <button className="w-6 h-6 flex items-center justify-center rounded border border-[#e9eae6] text-[#9ca3af] hover:border-[#c8c9c4] hover:text-[#646462]">
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
