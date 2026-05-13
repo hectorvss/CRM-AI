@@ -26220,6 +26220,15 @@ function DashboardDetailView({ id, onBack }: { id: number; onBack: () => void })
   const [error,   setError]   = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState(false);
   const [editName, setEditName] = React.useState('');
+  const [showAddInsight, setShowAddInsight] = React.useState(false);
+
+  async function reload() {
+    try {
+      const ph = await import('../api/posthog');
+      const res: any = await ph.posthog.dashboards.get(id);
+      setData(res);
+    } catch {}
+  }
 
   React.useEffect(() => {
     let cancelled = false;
@@ -26279,13 +26288,13 @@ function DashboardDetailView({ id, onBack }: { id: number; onBack: () => void })
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M5 1h6M8 1v6M3 9h10l-2 6H5z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
             {data?.pinned ? 'Fijado' : 'Fijar'}
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+          <button onClick={reload} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
             Actualizar
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a18] text-white text-xs rounded-lg hover:bg-[#333]">
+          <button onClick={() => setShowAddInsight(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a18] text-white text-xs rounded-lg hover:bg-[#333]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            AÃ±adir insight
+            Añadir insight
           </button>
         </div>
       </div>
@@ -26311,8 +26320,8 @@ function DashboardDetailView({ id, onBack }: { id: number; onBack: () => void })
               <svg viewBox="0 0 24 24" className="w-8 h-8 text-[#c4c4be]"><rect x="3" y="3" width="8" height="8" rx="1" fill="currentColor" opacity=".5"/><rect x="13" y="3" width="8" height="8" rx="1" fill="currentColor" opacity=".3"/><rect x="3" y="13" width="8" height="8" rx="1" fill="currentColor" opacity=".4"/></svg>
             </div>
             <h3 className="text-base font-semibold text-[#1a1a18] mb-1">Este dashboard estÃ¡ vacÃ­o</h3>
-            <p className="text-sm text-[#646462] mb-4">AÃ±ade insights para empezar a visualizar tus datos.</p>
-            <button className="px-4 py-2 bg-[#1a1a18] text-white text-sm rounded-lg hover:bg-[#333]">+ AÃ±adir insight</button>
+            <p className="text-sm text-[#646462] mb-4">Añade insights para empezar a visualizar tus datos.</p>
+            <button onClick={() => setShowAddInsight(true)} className="px-4 py-2 bg-[#1a1a18] text-white text-sm rounded-lg hover:bg-[#333]">+ Añadir insight</button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4">
@@ -26334,6 +26343,77 @@ function DashboardDetailView({ id, onBack }: { id: number; onBack: () => void })
             ))}
           </div>
         )}
+      </div>
+      {showAddInsight && (
+        <PickInsightForDashboardModal
+          dashboardId={id}
+          existingIds={tiles.map((t: any) => t.insight?.id).filter(Boolean)}
+          onClose={() => setShowAddInsight(false)}
+          onAdded={() => { setShowAddInsight(false); reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Pick insight for dashboard modal ────────────────────────────────────────
+function PickInsightForDashboardModal({ dashboardId, existingIds, onClose, onAdded }: { dashboardId: number; existingIds: number[]; onClose: () => void; onAdded: () => void }) {
+  const [insights, setInsights] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [search, setSearch] = React.useState('');
+  const [adding, setAdding] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.insights.list({ limit: 100, saved: true });
+        setInsights(res.results ?? []);
+      } catch {}
+      finally { setLoading(false); }
+    })();
+  }, []);
+  const filtered = insights.filter(i => {
+    if (existingIds.includes(i.id)) return false;
+    if (search && !`${i.name ?? i.derived_name ?? ''}`.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+  async function addInsight(insightId: number) {
+    setAdding(insightId);
+    try {
+      const ph = await import('../api/posthog');
+      const current = insights.find(x => x.id === insightId);
+      const newDashboards = Array.from(new Set([...(current?.dashboards ?? []), dashboardId]));
+      await ph.phPatch(`/api/environments/${ph.getTeamId()}/insights/${insightId}/`, { dashboards: newDashboards });
+      onAdded();
+    } catch (e: any) { alert('Error: ' + (e?.message ?? '')); }
+    finally { setAdding(null); }
+  }
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-[60] flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[620px] max-w-[92vw] max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <h2 className="text-base font-bold text-[#1a1a18]">Añadir insight al dashboard</h2>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+        </div>
+        <div className="p-3 border-b border-[#e9eae6]">
+          <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar insights guardados…" className="w-full px-3 py-1.5 bg-[#fafaf9] border border-[#e9eae6] rounded text-sm focus:outline-none focus:border-[#3b59f6]" />
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="p-4 space-y-2">{[0,1,2,3].map(i => <div key={i} className="h-10 bg-[#f3f3f1] rounded animate-pulse" />)}</div>
+          ) : filtered.length === 0 ? (
+            <p className="p-8 text-sm text-[#9ca3af] text-center">{insights.length === 0 ? 'Sin insights creados todavía' : 'Todos los insights ya están en este dashboard'}</p>
+          ) : filtered.map(i => (
+            <button key={i.id} onClick={() => addInsight(i.id)} disabled={adding === i.id} className="w-full text-left px-4 py-2.5 hover:bg-[#fafaf9] border-b border-[#f3f3f1] disabled:opacity-50 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[#1a1a18] truncate">{i.name ?? i.derived_name ?? `Insight ${i.short_id}`}</p>
+                {i.description && <p className="text-[10px] text-[#9ca3af] truncate">{i.description}</p>}
+              </div>
+              <span className="text-xs text-[#3b59f6] hover:underline flex-shrink-0">{adding === i.id ? 'Añadiendo…' : '+ Añadir'}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -27700,8 +27780,8 @@ function WaMetricCard({ metric, loading, accent }: { metric: WaMetric; loading: 
   );
 }
 
-function WaTopList({ title, icon, rows, loading, valueLabel, keyLabel, maxRows = 8, accent = '#3b59f6' }: {
-  title: string; icon: React.ReactNode; rows: WaTopRow[]; loading: boolean; valueLabel: string; keyLabel: string; maxRows?: number; accent?: string;
+function WaTopList({ title, icon, rows, loading, valueLabel, keyLabel, maxRows = 8, accent = '#3b59f6', onRowClick }: {
+  title: string; icon: React.ReactNode; rows: WaTopRow[]; loading: boolean; valueLabel: string; keyLabel: string; maxRows?: number; accent?: string; onRowClick?: (row: WaTopRow) => void;
 }) {
   const max = Math.max(...rows.map(r => r.value), 1);
   return (
@@ -27725,10 +27805,10 @@ function WaTopList({ title, icon, rows, loading, valueLabel, keyLabel, maxRows =
             </thead>
             <tbody>
               {rows.slice(0, maxRows).map((r, i) => (
-                <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                <tr key={i} onClick={() => onRowClick?.(r)} className={`border-b border-[#f3f3f1] hover:bg-[#fafaf9] ${onRowClick ? 'cursor-pointer' : ''}`}>
                   <td className="px-4 py-2 relative">
                     <div className="absolute inset-y-0 left-0 opacity-[.08]" style={{ backgroundColor: accent, width: `${(r.value / max) * 100}%` }} />
-                    <span className="relative text-xs text-[#1a1a18] truncate block max-w-xs" title={r.key}>{r.key || '(sin valor)'}</span>
+                    <span className={`relative text-xs truncate block max-w-xs ${onRowClick ? 'text-[#3b59f6] hover:underline' : 'text-[#1a1a18]'}`} title={r.key}>{r.key || '(sin valor)'}</span>
                   </td>
                   <td className="px-4 py-2 text-xs text-[#646462] text-right font-mono">{r.value.toLocaleString('es-ES')}</td>
                 </tr>
@@ -28010,14 +28090,24 @@ function WAAppWebAnalyticsView() {
             ))}
           </div>
           <div className="p-4">
-            <WaTopList title={`Top ${activeBreakdown.label.toLowerCase()}`} icon={activeBreakdown.icon} rows={activeBreakdown.rows} loading={loadingTops} keyLabel={activeBreakdown.keyLabel} valueLabel={activeBreakdown.valueLabel} maxRows={15} accent={activeBreakdown.accent} />
+            <WaTopList
+              title={`Top ${activeBreakdown.label.toLowerCase()}`}
+              icon={activeBreakdown.icon}
+              rows={activeBreakdown.rows}
+              loading={loadingTops}
+              keyLabel={activeBreakdown.keyLabel}
+              valueLabel={activeBreakdown.valueLabel}
+              maxRows={15}
+              accent={activeBreakdown.accent}
+              onRowClick={breakdownTab === 'pages' ? (r) => navigateWA('appHeatmaps', { kind: 'heatmap-url', id: r.key }) : undefined}
+            />
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <WaTopList title="Top pÃ¡ginas" icon={BREAKDOWN_TABS[0].icon} rows={topPages.slice(0, 5)}     loading={loadingTops} keyLabel="URL"     valueLabel="Vistas"     accent="#3b59f6" />
+          <WaTopList title="Top páginas" icon={BREAKDOWN_TABS[0].icon} rows={topPages.slice(0, 5)}     loading={loadingTops} keyLabel="URL"     valueLabel="Vistas"     accent="#3b59f6" onRowClick={(r) => navigateWA('appHeatmaps', { kind: 'heatmap-url', id: r.key })} />
           <WaTopList title="Top fuentes" icon={BREAKDOWN_TABS[1].icon} rows={topSources.slice(0, 5)}   loading={loadingTops} keyLabel="Dominio" valueLabel="Vistas"     accent="#e8572a" />
-          <WaTopList title="Top paÃ­ses"  icon={BREAKDOWN_TABS[3].icon} rows={topCountries.slice(0, 5)} loading={loadingTops} keyLabel="PaÃ­s"    valueLabel="Visitantes" accent="#16a34a" />
+          <WaTopList title="Top países"  icon={BREAKDOWN_TABS[3].icon} rows={topCountries.slice(0, 5)} loading={loadingTops} keyLabel="País"    valueLabel="Visitantes" accent="#16a34a" />
         </div>
       </div>
     </div>
@@ -30669,6 +30759,12 @@ function HeatmapCanvas({ points, mode, width, height }: { points: HmClickPoint[]
 function WAAppHeatmapsView() {
   const [urlInput, setUrlInput] = React.useState('');
   const [currentUrl, setCurrentUrl] = React.useState<string | null>(null);
+
+  // Consume nav intent (e.g. Web Analytics clicked a top URL)
+  React.useEffect(() => {
+    const intent = consumeNavIntent<string>('heatmap-url');
+    if (intent?.id) { setCurrentUrl(String(intent.id)); setUrlInput(String(intent.id)); }
+  }, []);
   const [range, setRange] = React.useState(HM_RANGES[1]);
   const [showRange, setShowRange] = React.useState(false);
   const rangeRef = useClickOutside<HTMLDivElement>(() => setShowRange(false));
