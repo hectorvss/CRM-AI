@@ -25941,247 +25941,716 @@ function WAAppsSidebar({ sub, onSelect }: { sub: WAAppsSubView; onSelect: (s: WA
   );
 }
 
-// ── WAAppDashboardsView ────────────────────────────────────────────────────────
-function WAAppDashboardsView() {
-  type DashTab = 'all' | 'mine' | 'pinned' | 'templates';
-  const [tab, setTab] = useState<DashTab>('all');
-  const [detail, setDetail] = useState<string | null>(null);
+// â”€â”€ WAAppDashboardsView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog Dashboards screen.
+// Backend:
+//   - List:   GET    /api/projects/{id}/dashboards/?search=&pinned=&...
+//   - Detail: GET    /api/projects/{id}/dashboards/{id}/
+//   - Create: POST   /api/projects/{id}/dashboards/
+//   - Update: PATCH  /api/projects/{id}/dashboards/{id}/   (rename, pin, tags)
+//   - Delete: DELETE /api/projects/{id}/dashboards/{id}/
 
-  const tabs: { key: DashTab; label: string }[] = [
-    { key: 'all', label: 'Todos los dashboards' },
-    { key: 'mine', label: 'Mis dashboards' },
-    { key: 'pinned', label: 'Fijados' },
-    { key: 'templates', label: 'Plantillas' },
-  ];
+interface DashboardRow {
+  id:             number;
+  name:           string;
+  description?:   string;
+  pinned:         boolean;
+  tags?:          string[];
+  created_by?:    { id: number; first_name?: string; email?: string } | null;
+  created_at:     string;
+  last_accessed_at?: string | null;
+  is_shared?:     boolean;
+  effective_privilege_level?: number;
+  tiles?:         any[];
+}
 
-  // ── Detail view ────────────────────────────────────────────────────────────
-  if (detail) {
-    type InsightCard = {
-      period: string; periodColor?: string; title: string; info?: string; desc: string;
-      leftColor: string; type: 'empty' | 'retention';
-    };
-    const cards: InsightCard[] = [
-      { period: 'Últimos 30 días', title: 'Usuarios activos diarios (DAUs)', desc: 'Muestra el número de usuarios únicos que ven una página o pantalla en tu app cada día.', leftColor: '#3b59f6', type: 'empty' },
-      { period: 'Últimos 90 días', title: 'Usuarios activos semanales (WAUs)', desc: 'Muestra el número de usuarios únicos que ven una página o pantalla en tu app cada semana.', leftColor: '#22c55e', type: 'empty' },
-      { period: 'Últimos 30 días', title: 'Contabilidad de crecimiento', desc: 'Cuántos de tus usuarios son nuevos, recurrentes, resucitados o inactivos cada semana según las páginas vistas.', leftColor: '#9966cc', type: 'empty' },
-      { period: '', title: 'Retención', desc: 'Retención semanal de tus usuarios basada en páginas vistas.', leftColor: '#3b59f6', type: 'retention' },
-      { period: 'Últimos 14 días', title: 'Dominio de referencia (últimos 14 días)', desc: 'Muestra los dominios de referencia más comunes de tus usuarios en los últimos 14 días. Solo páginas vistas.', leftColor: '#e8572a', type: 'empty' },
-      { period: 'Últimos 7 días', title: 'Embudo de páginas vistas, por navegador', desc: 'Este embudo de ejemplo muestra cuántos usuarios completaron 3 páginas vistas, desglosado por navegador. Solo páginas vistas.', leftColor: '#22c55e', type: 'empty' },
-    ];
+const DASHBOARD_TEMPLATES: { key: string; name: string; description: string; icon: string; gradient: string }[] = [
+  { key: 'blank',         name: 'En blanco',                description: 'Empezar con un dashboard vacÃ­o.',              icon: 'ðŸ“‹', gradient: 'from-[#646462] to-[#9ca3af]' },
+  { key: 'website',       name: 'AnÃ¡lisis de sitio web',    description: 'PÃ¡ginas vistas, fuentes, conversiones.',       icon: 'ðŸŒ', gradient: 'from-[#3b59f6] to-[#6366f1]' },
+  { key: 'product',       name: 'MÃ©tricas de producto',     description: 'DAU/WAU/MAU, retenciÃ³n, funnels clave.',       icon: 'ðŸ“Š', gradient: 'from-[#e8572a] to-[#f97316]' },
+  { key: 'b2b',           name: 'SaaS B2B',                 description: 'ActivaciÃ³n, expansiÃ³n y churn.',                icon: 'ðŸ’¼', gradient: 'from-[#16a34a] to-[#22c55e]' },
+  { key: 'feature_flag',  name: 'Rollout de feature flag',  description: 'Impacto de una feature en mÃ©tricas clave.',     icon: 'ðŸš€', gradient: 'from-[#f59e0b] to-[#fbbf24]' },
+  { key: 'a_b',           name: 'Experimento A/B',           description: 'Resultados de variantes con significancia.',    icon: 'ðŸ§ª', gradient: 'from-[#a855f7] to-[#c084fc]' },
+];
 
-    const EmptyCard = ({ card }: { card: InsightCard }) => (
-      <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden flex flex-col min-h-[280px]">
-        <div className="flex-shrink-0 flex items-start gap-0">
-          <div className="w-1 self-stretch rounded-l-[10px] flex-shrink-0" style={{ backgroundColor: card.leftColor }}/>
-          <div className="flex-1 px-4 pt-3 pb-2">
-            {card.period && (
-              <div className="flex items-center gap-1 mb-1">
-                <span className="text-[11px] font-bold text-[#646462] uppercase tracking-wide">{card.period}</span>
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[14px] font-bold text-[#1a1a1a]">{card.title}</span>
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
-              </div>
-              <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
-              </button>
-            </div>
-            <p className="text-[12px] text-[#646462] mt-0.5 leading-relaxed">{card.desc}</p>
-          </div>
+function formatDashboardDate(iso?: string | null): string {
+  if (!iso) return 'â€”';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const sec = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (sec < 60)    return 'justo ahora';
+    if (sec < 3600)  return `hace ${Math.floor(sec / 60)} min`;
+    if (sec < 86400) return `hace ${Math.floor(sec / 3600)} horas`;
+    if (sec < 86400 * 7) return `hace ${Math.floor(sec / 86400)} dÃ­as`;
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch { return iso; }
+}
+
+function dashboardCreatorName(c?: { first_name?: string; email?: string } | null): string {
+  if (!c) return 'â€”';
+  return c.first_name || c.email?.split('@')[0] || 'â€”';
+}
+
+// â”€â”€ Row action menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function DashboardRowMenu({ row, onAction }: { row: DashboardRow; onAction: (action: string) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="3" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="13" cy="8" r="1.3" fill="currentColor"/></svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 w-44 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1">
+          <button onClick={e => { e.stopPropagation(); onAction(row.pinned ? 'unpin' : 'pin'); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] flex items-center gap-2 text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><path d="M5 1h6M8 1v6M3 9h10l-2 6H5z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            {row.pinned ? 'Desfijar' : 'Fijar'}
+          </button>
+          <button onClick={e => { e.stopPropagation(); onAction('duplicate'); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] flex items-center gap-2 text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><rect x="3" y="3" width="9" height="9" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M6 6h7v7" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>
+            Duplicar
+          </button>
+          <button onClick={e => { e.stopPropagation(); onAction('share'); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] flex items-center gap-2 text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><circle cx="4" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="3.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="12.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 7l5-2.5M5.5 9l5 2.5" stroke="currentColor" strokeWidth="1.3"/></svg>
+            Compartir
+          </button>
+          <button onClick={e => { e.stopPropagation(); onAction('rename'); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] flex items-center gap-2 text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><path d="M11 2l3 3-8 8H3v-3z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+            Renombrar
+          </button>
+          <div className="border-t border-[#e9eae6] my-1" />
+          <button onClick={e => { e.stopPropagation(); onAction('delete'); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#fee2e2] flex items-center gap-2 text-[#dc2626]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M4 5h8l-1 9H5zM6 5V3h4v2M2 5h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Eliminar
+          </button>
         </div>
-        {card.type === 'empty' ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 py-6">
-            <svg viewBox="0 0 40 40" className="w-10 h-10 fill-none stroke-[#d1d5db]" strokeWidth="1.5"><rect x="4" y="8" width="32" height="24" rx="2"/><path d="M14 32l-4 6M26 32l4 6M10 38h20" strokeLinecap="round"/><path d="M12 20h16M12 25h10" strokeLinecap="round"/></svg>
-            <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay eventos coincidentes para esta consulta</p>
-            <p className="text-[12px] text-[#646462]">Prueba a cambiar el rango de fechas o elige otra acción, evento o desglose.</p>
+      )}
+    </div>
+  );
+}
+
+// â”€â”€ Filter dropdown (single-select / multi-select with chips) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function DashboardFilterDropdown({ label, icon, value, onChange, options, multi = false }: {
+  label: string;
+  icon: React.ReactNode;
+  value: string | string[] | null;
+  onChange: (v: any) => void;
+  options: { key: string; label: string }[];
+  multi?: boolean;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+
+  const isActive = multi ? Array.isArray(value) && value.length > 0 : !!value;
+  const display  = multi
+    ? (Array.isArray(value) && value.length > 0 ? `${label} (${value.length})` : label)
+    : (typeof value === 'string' && value ? `${label}: ${options.find(o => o.key === value)?.label ?? value}` : label);
+
+  function toggle(k: string) {
+    if (multi) {
+      const arr = Array.isArray(value) ? value : [];
+      onChange(arr.includes(k) ? arr.filter(v => v !== k) : [...arr, k]);
+    } else {
+      onChange(value === k ? null : k);
+      setOpen(false);
+    }
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-sm transition-colors ${isActive ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'bg-white border-[#e9eae6] text-[#1a1a18] hover:bg-[#f9f9f7]'}`}
+      >
+        <span className="w-3.5 h-3.5">{icon}</span>
+        <span>{display}</span>
+        {isActive && (
+          <button onClick={e => { e.stopPropagation(); onChange(multi ? [] : null); }} className="text-[#9ca3af] hover:text-[#dc2626] -mr-1">
+            <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        )}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-30 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 max-h-80 overflow-y-auto">
+          {options.length === 0 ? (
+            <div className="px-3 py-3 text-xs text-[#9ca3af] text-center">Sin opciones</div>
+          ) : options.map(o => {
+            const sel = multi ? (Array.isArray(value) && value.includes(o.key)) : value === o.key;
+            return (
+              <button
+                key={o.key}
+                onClick={() => toggle(o.key)}
+                className={`w-full px-3 py-1.5 text-left text-sm hover:bg-[#f9f9f7] flex items-center gap-2 ${sel ? 'text-[#3b59f6]' : 'text-[#1a1a18]'}`}
+              >
+                {multi && <input type="checkbox" checked={sel} readOnly className="accent-[#3b59f6]" />}
+                {!multi && sel && <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                <span className={multi ? '' : (sel ? '' : 'ml-5')}>{o.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// â”€â”€ Create dashboard modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function NewDashboardModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (d: DashboardRow) => void }) {
+  const [step,   setStep]     = React.useState<'pick' | 'name'>('pick');
+  const [tpl,    setTpl]      = React.useState<string>('blank');
+  const [name,   setName]     = React.useState('');
+  const [desc,   setDesc]     = React.useState('');
+  const [saving, setSaving]   = React.useState(false);
+  const [error,  setError]    = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (open) { setStep('pick'); setTpl('blank'); setName(''); setDesc(''); setError(null); }
+  }, [open]);
+
+  if (!open) return null;
+
+  async function create() {
+    if (!name.trim()) { setError('El nombre es obligatorio.'); return; }
+    setSaving(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getProjectId()) await ph.bootstrapPostHog();
+      const created: any = await ph.posthog.dashboards.create({
+        name:        name.trim(),
+        description: desc.trim() || undefined,
+        use_template: tpl === 'blank' ? undefined : tpl,
+      });
+      onCreated(created);
+      onClose();
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al crear el dashboard');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[720px] max-w-[92vw] max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-[#e9eae6] flex items-center justify-between flex-shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-[#1a1a18]">Nuevo dashboard</h2>
+            <p className="text-xs text-[#646462] mt-0.5">{step === 'pick' ? 'Elige una plantilla para empezar.' : 'Ponle un nombre y descripciÃ³n.'}</p>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5">
+          {step === 'pick' ? (
+            <div className="grid grid-cols-3 gap-3">
+              {DASHBOARD_TEMPLATES.map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => { setTpl(t.key); setName(t.name === 'En blanco' ? '' : t.name); }}
+                  className={`text-left p-4 border-2 rounded-xl transition-all ${tpl === t.key ? 'border-[#3b59f6] bg-[#eff2ff]' : 'border-[#e9eae6] hover:border-[#9ca3af]'}`}
+                >
+                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${t.gradient} flex items-center justify-center text-xl mb-2`}>{t.icon}</div>
+                  <h3 className="text-sm font-semibold text-[#1a1a18] mb-0.5">{t.name}</h3>
+                  <p className="text-xs text-[#646462]">{t.description}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#1a1a18] mb-1">Nombre <span className="text-[#dc2626]">*</span></label>
+                <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Mi dashboard" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#1a1a18] mb-1">DescripciÃ³n (opcional)</label>
+                <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="Â¿Para quÃ© es este dashboard?" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6] resize-none" />
+              </div>
+              {error && <p className="text-xs text-[#dc2626]">{error}</p>}
+            </div>
+          )}
+        </div>
+        <div className="px-6 py-3 border-t border-[#e9eae6] flex justify-between flex-shrink-0">
+          {step === 'pick' ? (
+            <>
+              <button onClick={onClose} className="px-3 py-1.5 text-sm text-[#646462] hover:text-[#1a1a18]">Cancelar</button>
+              <button onClick={() => setStep('name')} className="px-4 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg hover:bg-[#333]">Continuar â†’</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setStep('pick')} className="px-3 py-1.5 text-sm text-[#646462] hover:text-[#1a1a18]">â† AtrÃ¡s</button>
+              <button onClick={create} disabled={saving || !name.trim()} className="px-4 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg hover:bg-[#333] disabled:opacity-50">
+                {saving ? 'Creandoâ€¦' : 'Crear dashboard'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// â”€â”€ Confirm delete modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ConfirmDeleteModal({ open, name, onConfirm, onCancel, busy }: { open: boolean; name: string; onConfirm: () => void; onCancel: () => void; busy: boolean }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={onCancel}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] overflow-hidden">
+        <div className="px-5 py-4">
+          <div className="w-10 h-10 rounded-full bg-[#fee2e2] flex items-center justify-center mb-3">
+            <svg viewBox="0 0 16 16" className="w-5 h-5 text-[#dc2626]"><path d="M8 4v5M8 11v.5M8 1L1 14h14z" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          <h2 className="text-base font-bold text-[#1a1a18] mb-1">Â¿Eliminar dashboard?</h2>
+          <p className="text-sm text-[#646462]">Se eliminarÃ¡ permanentemente <strong>{name}</strong>. Esta acciÃ³n no se puede deshacer.</p>
+        </div>
+        <div className="px-5 py-3 bg-[#f9f9f7] border-t border-[#e9eae6] flex justify-end gap-2">
+          <button onClick={onCancel} className="px-3 py-1.5 text-sm text-[#1a1a18] hover:bg-white rounded">Cancelar</button>
+          <button onClick={onConfirm} disabled={busy} className="px-3 py-1.5 bg-[#dc2626] text-white text-sm rounded hover:bg-[#b91c1c] disabled:opacity-50">{busy ? 'Eliminandoâ€¦' : 'Eliminar'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// â”€â”€ Dashboard detail view (full dashboard with tiles) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function DashboardDetailView({ id, onBack }: { id: number; onBack: () => void }) {
+  const [data,    setData]    = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error,   setError]   = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState(false);
+  const [editName, setEditName] = React.useState('');
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError(null);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getProjectId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.dashboards.get(id);
+        if (!cancelled) { setData(res); setEditName(res.name); }
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? 'Error al cargar el dashboard');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  async function togglePin() {
+    if (!data) return;
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.posthog.dashboards.update(id, { pinned: !data.pinned });
+      setData(updated);
+    } catch {}
+  }
+  async function saveName() {
+    if (!editName.trim() || editName === data?.name) { setEditing(false); return; }
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.posthog.dashboards.update(id, { name: editName.trim() });
+      setData(updated); setEditing(false);
+    } catch { setEditing(false); }
+  }
+
+  const tiles = data?.tiles ?? [];
+
+  return (
+    <div className="flex-1 flex flex-col bg-white min-h-0">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-[#e9eae6] flex items-center gap-3 flex-shrink-0">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-[#646462] hover:text-[#1a1a18]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Dashboards
+        </button>
+        <span className="text-[#e9eae6]">/</span>
+        {loading ? (
+          <div className="h-6 w-48 bg-[#f3f3f1] rounded animate-pulse" />
+        ) : editing ? (
+          <input autoFocus value={editName} onChange={e => setEditName(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditing(false); }} className="text-base font-bold border border-[#3b59f6] rounded px-2 py-0.5 focus:outline-none" />
+        ) : (
+          <h1 onClick={() => setEditing(true)} className="text-base font-bold text-[#1a1a18] cursor-pointer hover:text-[#3b59f6]">{data?.name ?? 'â€”'}</h1>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={togglePin} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs ${data?.pinned ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'bg-white border-[#e9eae6] text-[#1a1a18] hover:bg-[#f9f9f7]'}`}>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M5 1h6M8 1v6M3 9h10l-2 6H5z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            {data?.pinned ? 'Fijado' : 'Fijar'}
+          </button>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+            Actualizar
+          </button>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a18] text-white text-xs rounded-lg hover:bg-[#333]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            AÃ±adir insight
+          </button>
+        </div>
+      </div>
+
+      {/* Description */}
+      {data?.description && (
+        <div className="px-6 py-2 border-b border-[#e9eae6] text-xs text-[#646462] flex-shrink-0">{data.description}</div>
+      )}
+
+      {/* Tiles area */}
+      <div className="flex-1 overflow-auto p-6 bg-[#f9f9f7]">
+        {loading ? (
+          <div className="grid grid-cols-2 gap-4">
+            {[0,1,2,3].map(i => <div key={i} className="h-56 bg-white border border-[#e9eae6] rounded-xl animate-pulse" />)}
+          </div>
+        ) : error ? (
+          <div className="text-center py-16">
+            <p className="text-sm text-[#dc2626]">{error}</p>
+          </div>
+        ) : tiles.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-16 h-16 rounded-full bg-white border border-[#e9eae6] flex items-center justify-center mx-auto mb-4">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 text-[#c4c4be]"><rect x="3" y="3" width="8" height="8" rx="1" fill="currentColor" opacity=".5"/><rect x="13" y="3" width="8" height="8" rx="1" fill="currentColor" opacity=".3"/><rect x="3" y="13" width="8" height="8" rx="1" fill="currentColor" opacity=".4"/></svg>
+            </div>
+            <h3 className="text-base font-semibold text-[#1a1a18] mb-1">Este dashboard estÃ¡ vacÃ­o</h3>
+            <p className="text-sm text-[#646462] mb-4">AÃ±ade insights para empezar a visualizar tus datos.</p>
+            <button className="px-4 py-2 bg-[#1a1a18] text-white text-sm rounded-lg hover:bg-[#333]">+ AÃ±adir insight</button>
           </div>
         ) : (
-          <div className="flex-1 px-4 py-3 overflow-auto">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="border-b border-[#e9eae6]">
-                  <th className="text-left pb-2 text-[#646462] font-semibold">Cohorte</th>
-                  <th className="text-right pb-2 text-[#646462] font-semibold">Tamaño</th>
-                  <th className="text-right pb-2 text-[#646462] font-semibold">Semana 0</th>
-                  <th className="text-right pb-2 text-[#646462] font-semibold">Semana 1</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-[#e9eae6]">
-                  <td className="py-1.5 flex items-center gap-1"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg> Media</td>
-                  <td className="text-right py-1.5 text-[#646462]">0</td>
-                  <td className="text-right py-1.5"><span className="bg-[#e8eeff] text-[#3b59f6] px-2 py-0.5 rounded text-[11px] font-semibold">0,0%</span></td>
-                  <td className="text-right py-1.5"><span className="bg-[#e8eeff] text-[#3b59f6] px-2 py-0.5 rounded text-[11px] font-semibold">0,0%</span></td>
-                </tr>
-                {[['3–9 may', '0', '0,0%', '0,0%'], ['10–16 may', '0', '0,0%', '']].map(([cohort, size, w0, w1]) => (
-                  <tr key={cohort} className="border-b border-[#e9eae6]">
-                    <td className="py-1.5 pl-4 text-[#646462]">{cohort}</td>
-                    <td className="text-right py-1.5 text-[#646462]">{size}</td>
-                    <td className="text-right py-1.5"><span className="bg-[#e8eeff]/50 text-[#3b59f6] px-2 py-0.5 rounded text-[11px]">{w0}</span></td>
-                    <td className="text-right py-1.5">{w1 ? <span className="text-[#646462] text-[11px]">{w1}</span> : null}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-2 gap-4">
+            {tiles.map((tile: any, i: number) => (
+              <div key={tile.id ?? i} className="bg-white border border-[#e9eae6] rounded-xl p-4 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-[#1a1a18]">{tile.insight?.name || tile.text?.body || `Tile ${i + 1}`}</h4>
+                    {tile.insight?.description && <p className="text-xs text-[#646462] mt-0.5">{tile.insight.description}</p>}
+                  </div>
+                  <button className="p-1 hover:bg-[#f3f3f1] rounded text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="3" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="13" cy="8" r="1.3" fill="currentColor"/></svg>
+                  </button>
+                </div>
+                <div className="h-32 bg-[#f9f9f7] rounded flex items-center justify-center">
+                  <span className="text-xs text-[#9ca3af]">Vista previa del insight</span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
-    );
+    </div>
+  );
+}
 
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â”€â”€ Main: WAAppDashboardsView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function WAAppDashboardsView() {
+  type DashTab = 'all' | 'mine' | 'pinned' | 'templates';
+  const [tab,     setTab]     = React.useState<DashTab>('all');
+  const [detail,  setDetail]  = React.useState<number | null>(null);
+  const [search,  setSearch]  = React.useState('');
+  const [showNew, setShowNew] = React.useState(false);
+  const [toDelete, setToDelete] = React.useState<DashboardRow | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const [filterPinned,  setFilterPinned]  = React.useState<string | null>(null);    // 'pinned' | null
+  const [filterTags,    setFilterTags]    = React.useState<string[]>([]);
+  const [filterShared,  setFilterShared]  = React.useState<string | null>(null);    // 'shared' | null
+  const [filterCreator, setFilterCreator] = React.useState<string | null>(null);    // user id or null
+  const [members,       setMembers]       = React.useState<any[]>([]);
+
+  const [rows,    setRows]    = React.useState<DashboardRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error,   setError]   = React.useState<string | null>(null);
+  const [me,      setMe]      = React.useState<any>(null);
+
+  const tabs: { key: DashTab; label: string }[] = [
+    { key: 'all',       label: 'Todos los dashboards' },
+    { key: 'mine',      label: 'Mis dashboards' },
+    { key: 'pinned',    label: 'Fijados' },
+    { key: 'templates', label: 'Plantillas' },
+  ];
+
+  // â”€â”€ Load org members for creator filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getCurrentUser()) await ph.bootstrapPostHog();
+        setMe(ph.getCurrentUser());
+        const res: any = await ph.posthog.organization.members();
+        setMembers(res.results ?? res ?? []);
+      } catch { /* silent */ }
+    })();
+  }, []);
+
+  // â”€â”€ Load dashboards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getProjectId()) await ph.bootstrapPostHog();
+      const params: any = { limit: 200 };
+      if (search.trim())                    params.search     = search.trim();
+      if (tab === 'pinned' || filterPinned) params.pinned     = true;
+      if (tab === 'mine')                   params.created_by = ph.getCurrentUser()?.uuid;
+      else if (filterCreator)               params.created_by = filterCreator;
+      const res: any = await ph.posthog.dashboards.list(params);
+      let results: DashboardRow[] = res.results ?? [];
+      if (filterShared === 'shared') results = results.filter(r => r.is_shared);
+      if (filterTags.length > 0)     results = results.filter(r => (r.tags ?? []).some(t => filterTags.includes(t)));
+      setRows(results);
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar dashboards');
+    } finally {
+      setLoading(false);
+    }
+  }, [tab, search, filterPinned, filterCreator, filterShared, filterTags]);
+
+  React.useEffect(() => {
+    if (tab !== 'templates') load();
+  }, [load, tab]);
+
+  // â”€â”€ Row actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  async function handleRowAction(row: DashboardRow, action: string) {
+    const ph = await import('../api/posthog');
+    try {
+      switch (action) {
+        case 'pin':
+        case 'unpin': {
+          const updated: any = await ph.posthog.dashboards.update(row.id, { pinned: action === 'pin' });
+          setRows(prev => prev.map(r => r.id === row.id ? { ...r, pinned: updated.pinned } : r));
+          break;
+        }
+        case 'duplicate': {
+          const created: any = await ph.posthog.dashboards.create({
+            name:        `${row.name} (copia)`,
+            description: row.description,
+            tags:        row.tags,
+          });
+          setRows(prev => [created, ...prev]);
+          break;
+        }
+        case 'delete': {
+          setToDelete(row);
+          break;
+        }
+        case 'rename': {
+          const newName = window.prompt('Nuevo nombre', row.name);
+          if (newName && newName.trim() && newName !== row.name) {
+            const updated: any = await ph.posthog.dashboards.update(row.id, { name: newName.trim() });
+            setRows(prev => prev.map(r => r.id === row.id ? { ...r, name: updated.name } : r));
+          }
+          break;
+        }
+        case 'share': {
+          // TODO: open share modal (out of scope this iteration)
+          alert('Compartir: prÃ³ximamente.');
+          break;
+        }
+      }
+    } catch (e: any) {
+      alert(e?.message ?? 'Error en la acciÃ³n');
+    }
+  }
+
+  async function confirmDelete() {
+    if (!toDelete) return;
+    setDeleting(true);
+    try {
+      const ph = await import('../api/posthog');
+      await ph.posthog.dashboards.delete(toDelete.id);
+      setRows(prev => prev.filter(r => r.id !== toDelete.id));
+      setToDelete(null);
+    } catch (e: any) {
+      alert(e?.message ?? 'No se pudo eliminar');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // â”€â”€ Collect available tags from loaded rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const allTags = React.useMemo(() => {
+    const s = new Set<string>();
+    rows.forEach(r => (r.tags ?? []).forEach(t => s.add(t)));
+    return Array.from(s).sort();
+  }, [rows]);
+
+  // â”€â”€â”€ DETAIL VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  if (detail != null) {
+    return <DashboardDetailView id={detail} onBack={() => setDetail(null)} />;
+  }
+
+  // â”€â”€â”€ TEMPLATES TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  if (tab === 'templates') {
     return (
-      <div className="flex-1 flex flex-col min-h-0 bg-[#f3f3f1]">
-        {/* Header */}
-        <div className="flex-shrink-0 flex items-center gap-3 px-6 py-3 bg-white border-b border-[#e9eae6]">
-          <button onClick={() => setDetail(null)} className="p-1 rounded hover:bg-[#f3f3f1]">
-            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round"><path d="M10 3L5 8l5 5"/></svg>
-          </button>
-          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><circle cx="8" cy="8" r="7" fill="none" stroke="#e8572a" strokeWidth="1.5"/><path d="M6 5.5l5 2.5-5 2.5V5.5z" fill="#e8572a"/></svg>
-          <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">{detail}</span>
-          <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M11 2h2a1 1 0 011 1v2M1 11v2a1 1 0 001 1h2M15 5V3M5 15H3" strokeLinecap="round"/></svg></button>
-          <div className="flex items-center gap-1.5 ml-2">
-            <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M11 8a3 3 0 110-6 3 3 0 010 6zM5.5 13.5a3 3 0 110-6 3 3 0 010 6zM8.7 5.5L6.8 10.5" strokeLinecap="round"/></svg>
-              Compartir
-            </button>
-            <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
-              Editar layout
-            </button>
-            <button className="flex items-center gap-1.5 h-8 px-3 border border-[#f59e0b] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
-              + Añadir
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-            </button>
+      <div className="flex-1 flex flex-col bg-white min-h-0">
+        <DashboardsHeader tabs={tabs} tab={tab} setTab={setTab} onNew={() => setShowNew(true)} />
+        <div className="flex-1 overflow-auto p-6">
+          <div className="grid grid-cols-3 gap-4 max-w-5xl">
+            {DASHBOARD_TEMPLATES.map(t => (
+              <div key={t.key} className="border border-[#e9eae6] rounded-xl p-5 hover:shadow-md hover:border-[#3b59f6] transition-all cursor-pointer" onClick={() => setShowNew(true)}>
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${t.gradient} flex items-center justify-center text-2xl mb-3`}>{t.icon}</div>
+                <h3 className="text-sm font-semibold text-[#1a1a18] mb-1">{t.name}</h3>
+                <p className="text-xs text-[#646462]">{t.description}</p>
+              </div>
+            ))}
           </div>
         </div>
-        {/* Description */}
-        <div className="flex-shrink-0 px-6 py-2 bg-white border-b border-[#e9eae6]">
-          <button className="flex items-center gap-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a]">
-            Introducir descripción (opcional)
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>
-          </button>
-        </div>
-        {/* Toolbar */}
-        <div className="flex-shrink-0 flex items-center gap-2 px-6 py-2.5 bg-white border-b border-[#e9eae6]">
-          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><rect x="1.5" y="3" width="13" height="2" rx="1"/><rect x="1.5" y="7" width="10" height="2" rx="1"/><rect x="1.5" y="11" width="7" height="2" rx="1"/></svg>
-            Sin override de rango de fechas
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-          </button>
-          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">+ Filtro</button>
-          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">+ Desglose</button>
-          <div className="flex-1"/>
-          <span className="text-[12px] text-[#646462]">Última actualización hace 4 horas</span>
-          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5" strokeLinecap="round"><path d="M2 8a6 6 0 106-6"/><path d="M2 4v4h4"/></svg>
-            Actualizar
-          </button>
-        </div>
-        {/* Cards grid */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid grid-cols-2 gap-3">
-            {cards.map((card) => <EmptyCard key={card.title} card={card} />)}
-          </div>
-        </div>
+        <NewDashboardModal open={showNew} onClose={() => setShowNew(false)} onCreated={(d) => { setDetail(d.id); }} />
       </div>
     );
   }
 
-  // ── List view ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ LIST VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white">
-      {/* Header */}
-      <div className="flex-shrink-0 px-6 pt-5 pb-0">
-        <div className="flex items-center gap-2 mb-1">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="8" width="3" height="7" rx="0.5" fill="#e8572a"/><rect x="6" y="5" width="3" height="10" rx="0.5" fill="#e8572a"/><rect x="11" y="2" width="3" height="13" rx="0.5" fill="#e8572a"/></svg>
-          <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">Dashboards</h1>
-          <button className="h-8 px-4 border border-[#1a1a1a] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">Nuevo dashboard</button>
+    <div className="flex-1 flex flex-col bg-white min-h-0">
+      <DashboardsHeader tabs={tabs} tab={tab} setTab={setTab} onNew={() => setShowNew(true)} />
+
+      {/* Search + filters */}
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex flex-wrap items-center gap-3 flex-shrink-0">
+        <div className="relative flex-1 max-w-sm">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar dashboardsâ€¦" className="w-full pl-10 pr-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" />
         </div>
-        <p className="text-[13px] text-[#646462] mb-3">Crea y gestiona tus dashboards.</p>
-        {/* Tabs */}
-        <div className="flex gap-0 border-b border-[#e9eae6]">
-          {tabs.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-4 py-2 text-[13px] font-semibold transition-colors border-b-2 -mb-px ${tab === t.key ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <span className="text-xs text-[#9ca3af]">Filtrar por:</span>
+          <DashboardFilterDropdown
+            label="Fijados"
+            icon={<svg viewBox="0 0 16 16"><path d="M5 1h6M8 1v6M3 9h10l-2 6H5z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            value={filterPinned}
+            onChange={setFilterPinned}
+            options={[{ key: 'pinned', label: 'Solo fijados' }]}
+          />
+          <DashboardFilterDropdown
+            label="Etiquetas"
+            icon={<svg viewBox="0 0 16 16"><path d="M1 7l6-6h6v6l-6 6z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round"/><circle cx="10" cy="6" r="1" fill="currentColor"/></svg>}
+            value={filterTags}
+            onChange={setFilterTags}
+            options={allTags.map(t => ({ key: t, label: t }))}
+            multi
+          />
+          <DashboardFilterDropdown
+            label="Compartido"
+            icon={<svg viewBox="0 0 16 16"><circle cx="4" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="3.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="12.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 7l5-2.5M5.5 9l5 2.5" stroke="currentColor" strokeWidth="1.3"/></svg>}
+            value={filterShared}
+            onChange={setFilterShared}
+            options={[{ key: 'shared', label: 'Compartidos' }]}
+          />
+          <DashboardFilterDropdown
+            label="Creado por"
+            icon={<svg viewBox="0 0 16 16"><circle cx="8" cy="5" r="3" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 14c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>}
+            value={filterCreator}
+            onChange={setFilterCreator}
+            options={members.map((m: any) => ({ key: m.user?.uuid ?? m.user?.id ?? m.uuid, label: m.user?.first_name || m.user?.email || m.first_name || m.email || 'Usuario' }))}
+          />
         </div>
       </div>
-      {/* Filter bar */}
-      <div className="flex-shrink-0 flex items-center gap-2 px-6 py-3 border-b border-[#e9eae6]">
-        <div className="relative">
-          <svg viewBox="0 0 16 16" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
-          <input placeholder="Buscar dashboards..." className="h-8 w-52 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] bg-white"/>
-        </div>
-        <div className="flex-1"/>
-        <span className="text-[12px] text-[#646462] font-semibold">Filtrar por:</span>
-        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1l1 2.5 2.5.5-1.8 1.8.4 2.7L8 7l-2.1 1.5.4-2.7L4.5 4l2.5-.5L8 1z"/></svg>
-          Fijados
-        </button>
-        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-          Etiquetas
-        </button>
-        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M11 8a3 3 0 110-6 3 3 0 010 6zM5.5 13.5a3 3 0 110-6 3 3 0 010 6zM8.7 5.5L6.8 10.5" strokeLinecap="round"/></svg>
-          Compartido
-        </button>
-        <span className="text-[12px] text-[#646462] font-semibold">Creado por:</span>
-        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-          Cualquier usuario
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-        </button>
-      </div>
+
       {/* Table */}
-      <div className="flex-1 overflow-y-auto">
-        <table className="w-full text-[13px]">
-          <thead className="sticky top-0 bg-white border-b border-[#e9eae6] z-10">
-            <tr>
-              <th className="w-8 px-4 py-2.5"><input type="checkbox" className="w-3.5 h-3.5 rounded"/></th>
-              <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">
-                <button className="flex items-center gap-1 hover:text-[#1a1a1a]">
-                  Nombre
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3v10M5 6l3-3 3 3M5 10l3 3 3-3"/></svg>
-                </button>
+      <div className="flex-1 overflow-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-[#f9f9f7] sticky top-0 z-10">
+              <th className="text-left px-6 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-8">
+                <input type="checkbox" className="accent-[#3b59f6]" />
               </th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Etiquetas</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Creado por</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Creado</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Último acceso</th>
-              <th className="w-8"/>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">
+                <div className="flex items-center gap-1 cursor-pointer hover:text-[#646462]">Nombre <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M5 6l3-3 3 3M5 10l3 3 3-3" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg></div>
+              </th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Etiquetas</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Creado por</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Creado</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Ãšltimo acceso</th>
+              <th className="w-8"></th>
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b border-[#e9eae6] hover:bg-[#fafaf9] group">
-              <td className="w-8 px-4 py-3"><input type="checkbox" className="w-3.5 h-3.5 rounded"/></td>
-              <td className="px-2 py-3">
-                <button onClick={() => setDetail('Mi App Dashboard')} className="flex items-center gap-2 text-left hover:underline">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a] flex-shrink-0"><path d="M8 1.5L10 6h4.5l-3.5 2.5 1.3 4.5L8 10.5l-4.3 2.5 1.3-4.5L1.5 6H6L8 1.5z"/></svg>
-                  <span className="font-semibold text-[#1a1a1a]">Mi App Dashboard</span>
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M8 3a5 5 0 100 10A5 5 0 008 3zM6 8l1.5-1.5L9 8l-1.5 1.5L6 8z"/></svg>
-                </button>
-              </td>
-              <td className="px-4 py-3 text-[#646462]">—</td>
-              <td className="px-4 py-3 text-[#646462]"></td>
-              <td className="px-4 py-3 text-[#646462]">hace 4 días</td>
-              <td className="px-4 py-3 text-[#646462]">hace 4 horas</td>
-              <td className="px-4 py-3">
-                <button className="p-1 rounded hover:bg-[#f3f3f1] opacity-0 group-hover:opacity-100">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
-                </button>
-              </td>
-            </tr>
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="border-b border-[#f3f3f1]">
+                  {[1,2,3,4,5,6,7].map(c => <td key={c} className="px-3 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i * 7 + c) % 40}%` }} /></td>)}
+                </tr>
+              ))
+            ) : error ? (
+              <tr><td colSpan={7} className="py-16 text-center">
+                <p className="text-sm font-semibold text-[#dc2626] mb-1">Error al cargar dashboards</p>
+                <p className="text-xs text-[#646462] mb-3 max-w-md mx-auto break-words">{error}</p>
+                <button onClick={load} className="px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg">Reintentar</button>
+              </td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={7} className="py-16 text-center">
+                <p className="text-sm font-semibold text-[#1a1a18] mb-1">Sin dashboards</p>
+                <p className="text-xs text-[#646462] mb-3">Crea uno o ajusta los filtros para verlos aquÃ­.</p>
+                <button onClick={() => setShowNew(true)} className="px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg">+ Nuevo dashboard</button>
+              </td></tr>
+            ) : rows.map(r => (
+              <tr key={r.id} onClick={() => setDetail(r.id)} className="border-b border-[#f3f3f1] hover:bg-[#f9f9f7] cursor-pointer group">
+                <td className="px-6 py-2.5" onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" className="accent-[#3b59f6]" />
+                </td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <button onClick={e => { e.stopPropagation(); handleRowAction(r, r.pinned ? 'unpin' : 'pin'); }} className={`flex-shrink-0 ${r.pinned ? 'text-[#f59e0b]' : 'text-[#c4c4be] hover:text-[#646462]'}`}>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 1l1.5 4H14l-3.5 2.6 1.3 4L8 9.8l-3.8 2.3 1.3-4L2 5h4.5z" fill={r.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                    </button>
+                    <span className="text-sm font-medium text-[#1a1a18] truncate">{r.name}</span>
+                    {r.is_shared && <span className="text-[#3b59f6]" title="Compartido"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="4" cy="8" r="1.5" fill="currentColor"/><circle cx="12" cy="4" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><path d="M5 7.5l6-3M5 8.5l6 3" stroke="currentColor" strokeWidth="1"/></svg></span>}
+                  </div>
+                </td>
+                <td className="px-3 py-2.5">
+                  {r.tags && r.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {r.tags.slice(0, 3).map(t => <span key={t} className="text-[10px] bg-[#f3f3f1] text-[#646462] px-1.5 py-0.5 rounded">{t}</span>)}
+                      {r.tags.length > 3 && <span className="text-[10px] text-[#9ca3af]">+{r.tags.length - 3}</span>}
+                    </div>
+                  ) : <span className="text-xs text-[#c4c4be]">â€”</span>}
+                </td>
+                <td className="px-3 py-2.5 text-xs text-[#646462]">{dashboardCreatorName(r.created_by)}</td>
+                <td className="px-3 py-2.5 text-xs text-[#3b59f6] hover:underline" title={r.created_at}>{formatDashboardDate(r.created_at)}</td>
+                <td className="px-3 py-2.5 text-xs text-[#3b59f6] hover:underline" title={r.last_accessed_at ?? ''}>{formatDashboardDate(r.last_accessed_at)}</td>
+                <td className="px-3 py-2.5">
+                  <DashboardRowMenu row={r} onAction={(action) => handleRowAction(r, action)} />
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+
+      <NewDashboardModal open={showNew} onClose={() => setShowNew(false)} onCreated={(d) => { setDetail(d.id); load(); }} />
+      <ConfirmDeleteModal open={!!toDelete} name={toDelete?.name ?? ''} busy={deleting} onConfirm={confirmDelete} onCancel={() => setToDelete(null)} />
     </div>
+  );
+}
+
+// â”€â”€ Shared header (tabs + title + new button) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function DashboardsHeader({ tabs, tab, setTab, onNew }: { tabs: any[]; tab: string; setTab: (t: any) => void; onNew: () => void }) {
+  return (
+    <>
+      <div className="px-6 pt-4 pb-2 flex items-start justify-between border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#e8572a]"><rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".8"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".6"/><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".3"/></svg>
+            <h1 className="text-lg font-bold text-[#1a1a18]">Dashboards</h1>
+          </div>
+          <p className="text-xs text-[#646462]">Crea y gestiona tus dashboards.</p>
+          <div className="flex gap-4 mt-3 -mb-2">
+            {tabs.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`pb-2 text-sm font-medium border-b-2 transition-colors ${tab === t.key ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button onClick={onNew} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7] flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          Nuevo dashboard
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -53192,6 +53661,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
