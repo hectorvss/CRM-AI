@@ -26654,461 +26654,776 @@ function DashboardsHeader({ tabs, tab, setTab, onNew }: { tabs: any[]; tab: stri
   );
 }
 
-// ── WAAppProductAnalyticsView ──────────────────────────────────────────────────
-function WAAppProductAnalyticsView() {
-  type PATab = 'all' | 'mine' | 'alerts' | 'history';
-  const [tab, setTab] = useState<PATab>('all');
-  const [selectedInsight, setSelectedInsight] = useState<string | null>(null);
+// â”€â”€ WAAppProductAnalyticsView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog Insights (Product Analytics) view.
+// Backend:
+//   - List:   GET    /api/environments/{teamId}/insights/?saved=true&search=&insight=
+//   - Detail: GET    /api/environments/{teamId}/insights/{id}/
+//   - Create: POST   /api/environments/{teamId}/insights/
+//   - Update: PATCH  /api/environments/{teamId}/insights/{id}/
+//   - Delete: DELETE /api/environments/{teamId}/insights/{id}/
+//   - Run:    POST   /api/environments/{teamId}/query/  (executes the query)
 
-  // Toolbar dropdown states (shared for detail view)
-  const [dateRange, setDateRange] = useState('Últimos 7 días');
-  const [groupBy, setGroupBy] = useState('día');
-  const [comparison, setComparison] = useState('Sin comparación entre períodos');
-  const [chartType, setChartType] = useState('Línea');
-  const [showDateDrop, setShowDateDrop] = useState(false);
-  const [showGroupDrop, setShowGroupDrop] = useState(false);
-  const [showCompDrop, setShowCompDrop] = useState(false);
-  const [showChartDrop, setShowChartDrop] = useState(false);
+interface InsightRow {
+  id:                number;
+  short_id:          string;
+  name?:             string;
+  derived_name?:     string;
+  description?:      string;
+  filters?:          any;
+  query?:            any;
+  created_by?:       { id: number; first_name?: string; email?: string } | null;
+  created_at:        string;
+  last_modified_at?: string;
+  last_viewed_at?:   string | null;
+  favorited?:        boolean;
+  saved:             boolean;
+  tags?:             string[];
+  effective_privilege_level?: number;
+  dashboards?:       number[];
+}
 
-  const tabs: { key: PATab; label: string }[] = [
-    { key: 'all', label: 'Todos los insights' },
-    { key: 'mine', label: 'Mis insights' },
-    { key: 'alerts', label: 'Alertas' },
-    { key: 'history', label: 'Historial' },
-  ];
+type InsightType = 'TRENDS' | 'FUNNELS' | 'RETENTION' | 'PATHS' | 'STICKINESS' | 'LIFECYCLE' | 'SQL' | 'HOG';
 
-  type InsightConfig = {
-    name: string; desc?: string; tags: string; createdBy?: boolean;
-    created: string; modified: string; viewed: string;
-    iconType: 'trend' | 'funnel' | 'retention' | 'bar';
-    detailDateRange: string;
-    detailGroupBy?: string;
-    detailChartType: 'trend' | 'bar' | 'funnel' | 'retention';
-    resultsType: 'series-daily' | 'ai-model' | 'series-daily-ai' | 'no-table' | 'series-formula' | 'series-weekly' | 'funnel-table' | 'bar-growth' | 'retention-grid';
-    aiDesc: string;
-  };
+interface InsightTypeMeta {
+  key:       InsightType;
+  label:     string;
+  desc:      string;
+  icon:      React.ReactNode;
+  color:     string;
+  gradient:  string;
+}
 
-  const insights: InsightConfig[] = [
-    { name: 'Generaciones por estado HTTP', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace unos segundos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Analiza el estado HTTP de las generaciones de IA a lo largo del tiempo.' },
-    { name: 'Latencia de generación por modelo (mediana)', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'ai-model', aiDesc: 'Muestra la latencia mediana de generación por modelo de IA.' },
-    { name: 'Errores de IA', desc: 'Llamadas de generación de IA fallidas', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily-ai', aiDesc: 'Detecta patrones en los errores de generación de IA.' },
-    { name: 'Llamadas de generación', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Rastrea el volumen de llamadas de generación de IA en el tiempo.' },
-    { name: 'Coste por modelo (USD)', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'bar', detailDateRange: 'Últimos 7 días', detailChartType: 'bar', resultsType: 'no-table', aiDesc: 'Compara el coste en USD de cada modelo de IA utilizado.' },
-    { name: 'Coste por usuario (USD)', desc: 'Coste medio por cada usuario de IA generativa activo en el período del punto de datos.', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-formula', aiDesc: 'Calcula el coste medio por usuario activo de IA generativa.' },
-    { name: 'Coste total (USD)', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Muestra el coste total acumulado de todas las llamadas de IA.' },
-    { name: 'Usuarios de IA generativa', desc: 'Para contar usuarios, establece distinct_id en el seguimiento LLM.', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Cuenta los usuarios únicos que interactúan con funciones de IA generativa.' },
-    { name: 'Trazas', tags: '—', createdBy: true, created: 'hace 3 días', modified: 'hace 3 días', viewed: 'hace 3 minutos', iconType: 'trend', detailDateRange: 'Últimos 7 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Visualiza el número de trazas de IA registradas en el tiempo.' },
-    { name: 'Embudo de páginas vistas, por navegador', desc: 'Este embudo muestra cuántos usuarios completaron 3 páginas vistas, desglosado por navegador. Solo páginas vistas.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'funnel', detailDateRange: 'Últimos 7 días', detailChartType: 'funnel', resultsType: 'funnel-table', aiDesc: 'Analiza la conversión del embudo de páginas vistas por tipo de navegador.' },
-    { name: 'Dominio de referencia (últimos 14 días)', desc: 'Muestra los dominios de referencia más comunes en los últimos 14 días. Solo páginas vistas.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'trend', detailDateRange: 'Últimos 14 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Identifica los dominios de referencia que generan más tráfico.' },
-    { name: 'Contabilidad de crecimiento', desc: 'Cuántos usuarios son nuevos, recurrentes, resucitados o inactivos cada semana según páginas vistas.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'bar', detailDateRange: 'Últimos 30 días', detailChartType: 'bar', resultsType: 'bar-growth', aiDesc: 'Clasifica usuarios en nuevos, recurrentes, resucitados e inactivos por semana.' },
-    { name: 'Retención', desc: 'Retención semanal de tus usuarios basada en páginas vistas.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'retention', detailDateRange: 'Últimos 90 días', detailChartType: 'retention', resultsType: 'retention-grid', aiDesc: 'Mide qué porcentaje de usuarios vuelven semana tras semana.' },
-    { name: 'Usuarios activos semanales (WAUs)', desc: 'Muestra el número de usuarios únicos que ven una página o pantalla cada semana. Esta métrica utiliza Pageview y Screen View.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'trend', detailDateRange: 'Últimos 90 días', detailGroupBy: 'semana', detailChartType: 'trend', resultsType: 'series-weekly', aiDesc: 'Rastrea usuarios activos semanales basándose en páginas vistas y vistas de pantalla.' },
-    { name: 'Usuarios activos diarios (DAUs)', desc: 'Muestra el número de usuarios únicos que ven una página o pantalla cada día.', tags: '—', createdBy: false, created: 'hace 4 días', modified: 'hace 4 días', viewed: 'hace un minuto', iconType: 'trend', detailDateRange: 'Últimos 30 días', detailGroupBy: 'día', detailChartType: 'trend', resultsType: 'series-daily', aiDesc: 'Rastrea usuarios activos diarios basándose en páginas y pantallas vistas.' },
-  ];
+const INSIGHT_TYPES: InsightTypeMeta[] = [
+  { key: 'TRENDS',     label: 'Tendencias',  desc: 'Visualiza eventos a lo largo del tiempo.',           color: '#3b59f6', gradient: 'from-[#3b59f6] to-[#6366f1]', icon: <svg viewBox="0 0 16 16" className="w-5 h-5"><path d="M1 13l3-4 3 2 3-5 3 3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+  { key: 'FUNNELS',    label: 'Embudos',     desc: 'Sigue conversiones a travÃ©s de pasos.',              color: '#e8572a', gradient: 'from-[#e8572a] to-[#f97316]', icon: <svg viewBox="0 0 16 16" className="w-5 h-5"><path d="M2 3h12l-3 5v5l-2 1V8z" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinejoin="round"/></svg> },
+  { key: 'RETENTION',  label: 'RetenciÃ³n',   desc: 'Mide cuÃ¡nto vuelven tus usuarios.',                   color: '#16a34a', gradient: 'from-[#16a34a] to-[#22c55e]', icon: <svg viewBox="0 0 16 16" className="w-5 h-5"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M8 3v5l3.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg> },
+  { key: 'PATHS',      label: 'Rutas',       desc: 'Descubre el flujo de tus usuarios.',                  color: '#a855f7', gradient: 'from-[#a855f7] to-[#c084fc]', icon: <svg viewBox="0 0 16 16" className="w-5 h-5"><circle cx="3" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.5"/><circle cx="13" cy="4" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.5"/><circle cx="13" cy="12" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M5 7l6.5-2.5M5 9l6.5 2.5" stroke="currentColor" strokeWidth="1.3"/></svg> },
+  { key: 'STICKINESS', label: 'Adherencia',  desc: 'Â¿Con quÃ© frecuencia vuelven en X dÃ­as?',              color: '#f59e0b', gradient: 'from-[#f59e0b] to-[#fbbf24]', icon: <svg viewBox="0 0 16 16" className="w-5 h-5"><rect x="2" y="6" width="2" height="8" fill="currentColor"/><rect x="5" y="4" width="2" height="10" fill="currentColor"/><rect x="8" y="2" width="2" height="12" fill="currentColor"/><rect x="11" y="5" width="2" height="9" fill="currentColor"/></svg> },
+  { key: 'LIFECYCLE',  label: 'Ciclo de vida', desc: 'Nuevos / recurrentes / dormidos / resurgidos.',     color: '#06b6d4', gradient: 'from-[#06b6d4] to-[#22d3ee]', icon: <svg viewBox="0 0 16 16" className="w-5 h-5"><path d="M2 8a6 6 0 1112 0 6 6 0 01-12 0z" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M2 8h6v6" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg> },
+  { key: 'SQL',        label: 'SQL',         desc: 'Escribe consultas HogQL directamente.',               color: '#646462', gradient: 'from-[#646462] to-[#9ca3af]', icon: <svg viewBox="0 0 16 16" className="w-5 h-5"><ellipse cx="8" cy="3.5" rx="5" ry="2" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M3 3.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9M3 7.5c0 1.1 2.2 2 5 2s5-.9 5-2" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg> },
+];
 
-  const InsightIcon = ({ type, color }: { type: InsightConfig['iconType']; color?: string }) => {
-    const c = color || '#1a1a1a';
-    if (type === 'trend') return <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none" style={{stroke: c}} strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg>;
-    if (type === 'funnel') return <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0" style={{fill: c}}><path d="M2 2h12v2L9 9v5l-2-1V9L2 4V2z"/></svg>;
-    if (type === 'retention') return <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="1" width="4" height="4" rx="0.5" style={{fill: c}}/><rect x="7" y="1" width="4" height="4" rx="0.5" style={{fill: c}} opacity="0.6"/><rect x="1" y="7" width="4" height="4" rx="0.5" style={{fill: c}} opacity="0.4"/><rect x="7" y="7" width="4" height="4" rx="0.5" style={{fill: c}} opacity="0.2"/></svg>;
-    return <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0"><rect x="1" y="8" width="3" height="7" rx="0.5" style={{fill: c}}/><rect x="6" y="5" width="3" height="10" rx="0.5" style={{fill: c}} opacity="0.7"/><rect x="11" y="2" width="3" height="13" rx="0.5" style={{fill: c}} opacity="0.4"/></svg>;
-  };
+function insightTypeOf(row: InsightRow): InsightType {
+  const k = row.query?.kind ?? row.filters?.insight ?? 'TRENDS';
+  if (k === 'TrendsQuery'    || k === 'TRENDS')    return 'TRENDS';
+  if (k === 'FunnelsQuery'   || k === 'FUNNELS')   return 'FUNNELS';
+  if (k === 'RetentionQuery' || k === 'RETENTION') return 'RETENTION';
+  if (k === 'PathsQuery'     || k === 'PATHS')     return 'PATHS';
+  if (k === 'StickinessQuery'|| k === 'STICKINESS')return 'STICKINESS';
+  if (k === 'LifecycleQuery' || k === 'LIFECYCLE') return 'LIFECYCLE';
+  if (k === 'HogQLQuery'     || k === 'SQL')       return 'SQL';
+  return 'TRENDS';
+}
 
-  // Daily date columns used in results tables
-  const dailyCols = ['6 may', '7 may', '8 may', '9 may', '10 may', '11 may', '12 may'];
-  const weeklyCols = ['28 abr', '5 may', '12 may'];
+function insightDisplayName(row: InsightRow): string {
+  return row.name || row.derived_name || `Insight ${row.short_id}`;
+}
 
-  function DetailResultsTable({ ins }: { ins: InsightConfig }) {
-    if (ins.resultsType === 'ai-model') {
-      return (
-        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Modelo de IA (LLM)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td className="px-4 py-6 text-center text-[13px] text-[#646462]">Sin resultados de insight</td></tr>
-            </tbody>
-          </table>
+function formatInsightDate(iso?: string | null): string {
+  if (!iso) return 'â€”';
+  try {
+    const d = new Date(iso); const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (sec < 60)    return 'justo ahora';
+    if (sec < 3600)  return `hace ${Math.floor(sec / 60)} min`;
+    if (sec < 86400) return `hace ${Math.floor(sec / 3600)} h`;
+    if (sec < 86400 * 7) return `hace ${Math.floor(sec / 86400)} d`;
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch { return iso; }
+}
+
+// â”€â”€ Type badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function InsightTypeBadge({ type }: { type: InsightType }) {
+  const meta = INSIGHT_TYPES.find(t => t.key === type) ?? INSIGHT_TYPES[0];
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-md" style={{ background: `${meta.color}15`, color: meta.color }}>
+      <span className="w-3 h-3">{meta.icon}</span>
+      {meta.label}
+    </span>
+  );
+}
+
+// â”€â”€ SVG chart renderers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function LineChart({ series, labels, height = 220 }: { series: { name: string; values: number[]; color: string }[]; labels: string[]; height?: number }) {
+  if (!series.length || !series[0].values.length) return <div className="text-xs text-[#9ca3af] py-8 text-center">Sin datos</div>;
+  const all = series.flatMap(s => s.values);
+  const max = Math.max(...all, 1);
+  const min = Math.min(...all, 0);
+  const W   = 600;
+  const H   = height;
+  const PAD = { l: 40, r: 16, t: 12, b: 28 };
+  const innerW = W - PAD.l - PAD.r;
+  const innerH = H - PAD.t - PAD.b;
+  const xAt = (i: number) => PAD.l + (labels.length > 1 ? (i * innerW) / (labels.length - 1) : innerW / 2);
+  const yAt = (v: number) => PAD.t + innerH - ((v - min) / Math.max(max - min, 1)) * innerH;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }}>
+      {/* Y-axis grid */}
+      {[0, 0.25, 0.5, 0.75, 1].map(f => {
+        const y = PAD.t + innerH * (1 - f);
+        const v = Math.round(min + (max - min) * f);
+        return (
+          <g key={f}>
+            <line x1={PAD.l} x2={W - PAD.r} y1={y} y2={y} stroke="#f3f3f1" strokeWidth="1" />
+            <text x={PAD.l - 6} y={y + 3} textAnchor="end" fontSize="10" fill="#9ca3af">{v}</text>
+          </g>
+        );
+      })}
+      {/* X-axis labels */}
+      {labels.map((l, i) => i % Math.ceil(labels.length / 7) === 0 && (
+        <text key={i} x={xAt(i)} y={H - 10} textAnchor="middle" fontSize="10" fill="#9ca3af">{String(l).slice(0, 10)}</text>
+      ))}
+      {/* Series */}
+      {series.map((s, si) => {
+        const d = s.values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i)} ${yAt(v)}`).join(' ');
+        const fillD = `${d} L ${xAt(s.values.length - 1)} ${PAD.t + innerH} L ${xAt(0)} ${PAD.t + innerH} Z`;
+        return (
+          <g key={si}>
+            <path d={fillD} fill={s.color} opacity="0.08" />
+            <path d={d}     fill="none" stroke={s.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            {s.values.map((v, i) => <circle key={i} cx={xAt(i)} cy={yAt(v)} r="3" fill="white" stroke={s.color} strokeWidth="1.5" />)}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function BarChart({ values, labels, color = '#3b59f6', height = 220 }: { values: number[]; labels: string[]; color?: string; height?: number }) {
+  if (!values.length) return <div className="text-xs text-[#9ca3af] py-8 text-center">Sin datos</div>;
+  const max = Math.max(...values, 1);
+  const W   = 600;
+  const H   = height;
+  const PAD = { l: 40, r: 16, t: 12, b: 32 };
+  const innerW = W - PAD.l - PAD.r;
+  const innerH = H - PAD.t - PAD.b;
+  const bw = innerW / values.length * 0.7;
+  const gap = innerW / values.length * 0.3;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }}>
+      {[0, 0.25, 0.5, 0.75, 1].map(f => {
+        const y = PAD.t + innerH * (1 - f);
+        return <line key={f} x1={PAD.l} x2={W - PAD.r} y1={y} y2={y} stroke="#f3f3f1" strokeWidth="1" />;
+      })}
+      {values.map((v, i) => {
+        const x = PAD.l + i * (bw + gap) + gap / 2;
+        const h = (v / max) * innerH;
+        const y = PAD.t + innerH - h;
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={bw} height={h} fill={color} rx="2" />
+            <text x={x + bw / 2} y={y - 4} textAnchor="middle" fontSize="10" fill="#646462" fontWeight="600">{v}</text>
+            <text x={x + bw / 2} y={H - 8}  textAnchor="middle" fontSize="10" fill="#9ca3af">{String(labels[i] ?? '').slice(0, 12)}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function FunnelChart({ steps }: { steps: { name: string; count: number; rate: number }[] }) {
+  if (!steps.length) return <div className="text-xs text-[#9ca3af] py-8 text-center">Sin datos</div>;
+  const max = Math.max(...steps.map(s => s.count), 1);
+  return (
+    <div className="space-y-3 py-2">
+      {steps.map((s, i) => {
+        const width = (s.count / max) * 100;
+        return (
+          <div key={i}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-[#1a1a18]">{i + 1}. {s.name}</span>
+              <span className="text-xs text-[#646462]"><span className="font-semibold text-[#1a1a18]">{s.count.toLocaleString()}</span> Â· {s.rate.toFixed(1)}%</span>
+            </div>
+            <div className="relative h-8 bg-[#f3f3f1] rounded overflow-hidden">
+              <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#e8572a] to-[#f97316] rounded transition-all duration-500" style={{ width: `${width}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function NumberCard({ value, label, color = '#3b59f6' }: { value: number | string; label: string; color?: string }) {
+  return (
+    <div className="text-center py-8">
+      <div className="text-5xl font-bold mb-2" style={{ color }}>{typeof value === 'number' ? value.toLocaleString('es-ES') : value}</div>
+      <div className="text-xs text-[#646462] uppercase tracking-widest">{label}</div>
+    </div>
+  );
+}
+
+function ResultTable({ columns, rows }: { columns: string[]; rows: any[][] }) {
+  return (
+    <div className="overflow-x-auto border border-[#e9eae6] rounded-lg">
+      <table className="w-full text-xs">
+        <thead className="bg-[#f9f9f7]">
+          <tr>{columns.map(c => <th key={c} className="text-left px-3 py-2 font-bold text-[#9ca3af] uppercase text-[10px] tracking-widest">{c}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={columns.length} className="px-3 py-6 text-center text-[#9ca3af]">Sin filas</td></tr>
+          ) : rows.slice(0, 50).map((r, i) => (
+            <tr key={i} className="border-t border-[#f3f3f1]">{r.map((c, j) => <td key={j} className="px-3 py-2 text-[#1a1a18]">{typeof c === 'object' ? JSON.stringify(c) : String(c ?? 'â€”')}</td>)}</tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length > 50 && <div className="px-3 py-2 text-xs text-[#9ca3af] bg-[#f9f9f7] border-t border-[#e9eae6]">Mostrando 50 de {rows.length} filas</div>}
+    </div>
+  );
+}
+
+// â”€â”€ Insight row action menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function InsightRowMenu({ row, onAction }: { row: InsightRow; onAction: (action: string) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="3" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="13" cy="8" r="1.3" fill="currentColor"/></svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 w-44 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1">
+          <button onClick={e => { e.stopPropagation(); onAction(row.favorited ? 'unfavorite' : 'favorite'); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] flex items-center gap-2 text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 1l1.5 4H14l-3.5 2.6 1.3 4L8 9.8l-3.8 2.3 1.3-4L2 5h4.5z" fill={row.favorited ? '#f59e0b' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+            {row.favorited ? 'Quitar de favoritos' : 'Favorito'}
+          </button>
+          <button onClick={e => { e.stopPropagation(); onAction('duplicate'); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] text-[#1a1a18]">Duplicar</button>
+          <button onClick={e => { e.stopPropagation(); onAction('rename'); setOpen(false); }}    className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] text-[#1a1a18]">Renombrar</button>
+          <button onClick={e => { e.stopPropagation(); onAction('add_to_dashboard'); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] text-[#1a1a18]">AÃ±adir a dashboard</button>
+          <div className="border-t border-[#e9eae6] my-1" />
+          <button onClick={e => { e.stopPropagation(); onAction('delete'); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-[#fee2e2] text-[#dc2626]">Eliminar</button>
         </div>
-      );
+      )}
+    </div>
+  );
+}
+
+// â”€â”€ New insight modal (type picker) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function NewInsightModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (id: number) => void }) {
+  const [type,    setType]    = React.useState<InsightType>('TRENDS');
+  const [name,    setName]    = React.useState('');
+  const [step,    setStep]    = React.useState<'pick' | 'name'>('pick');
+  const [saving,  setSaving]  = React.useState(false);
+  const [error,   setError]   = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (open) { setType('TRENDS'); setName(''); setStep('pick'); setError(null); }
+  }, [open]);
+
+  if (!open) return null;
+
+  async function create() {
+    setSaving(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const payload: any = { name: name.trim() || `Nuevo ${INSIGHT_TYPES.find(t => t.key === type)?.label}`, saved: true };
+      // Provide minimal query stub by type
+      if (type === 'TRENDS') {
+        payload.query = { kind: 'TrendsQuery', dateRange: { date_from: '-7d' }, series: [{ kind: 'EventsNode', event: '$pageview', name: '$pageview', math: 'total' }], interval: 'day' };
+      } else if (type === 'FUNNELS') {
+        payload.query = { kind: 'FunnelsQuery', dateRange: { date_from: '-14d' }, series: [{ kind: 'EventsNode', event: '$pageview' }, { kind: 'EventsNode', event: '$identify' }] };
+      } else if (type === 'RETENTION') {
+        payload.query = { kind: 'RetentionQuery', dateRange: { date_from: '-30d' }, retentionFilter: { period: 'Day', target_entity: { type: 'events', id: '$pageview' }, returning_entity: { type: 'events', id: '$pageview' } } };
+      } else if (type === 'PATHS') {
+        payload.query = { kind: 'PathsQuery', dateRange: { date_from: '-7d' } };
+      } else if (type === 'STICKINESS') {
+        payload.query = { kind: 'StickinessQuery', dateRange: { date_from: '-30d' }, series: [{ kind: 'EventsNode', event: '$pageview' }] };
+      } else if (type === 'LIFECYCLE') {
+        payload.query = { kind: 'LifecycleQuery', dateRange: { date_from: '-30d' }, series: [{ kind: 'EventsNode', event: '$pageview' }] };
+      } else if (type === 'SQL') {
+        payload.query = { kind: 'DataTableNode', source: { kind: 'HogQLQuery', query: 'SELECT event, count() FROM events GROUP BY event ORDER BY count() DESC LIMIT 20' } };
+      }
+      const created: any = await ph.posthog.insights.list ? null : null;
+      const res: any = await (await import('../api/posthog')).phPost(`/api/environments/${(await import('../api/posthog')).getTeamId()}/insights/`, payload);
+      onCreated(res.id);
+      onClose();
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al crear el insight');
+    } finally {
+      setSaving(false);
     }
-    if (ins.resultsType === 'no-table') return null;
-    if (ins.resultsType === 'funnel-table') {
-      return (
-        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Paso</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Usuarios</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Tasa de conversión</th>
-              </tr>
-            </thead>
-            <tbody>
-              {['Pageview 1', 'Pageview 2', 'Pageview 3'].map((step, i) => (
-                <tr key={step} className="border-b border-[#e9eae6] last:border-0">
-                  <td className="px-4 py-2.5 text-[#1a1a1a] font-semibold">{step}</td>
-                  <td className="px-4 py-2.5 text-[#646462]">0</td>
-                  <td className="px-4 py-2.5 text-[#646462]">{i === 0 ? '100%' : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-    }
-    if (ins.resultsType === 'retention-grid') {
-      const weeks = ['Semana 0', 'Semana 1', 'Semana 2', 'Semana 3'];
-      return (
-        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Cohorte</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Usuarios</th>
-                {weeks.map(w => <th key={w} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{w}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-[13px] text-[#646462]">Sin datos de retención</td></tr>
-            </tbody>
-          </table>
-        </div>
-      );
-    }
-    if (ins.resultsType === 'bar-growth') {
-      return (
-        <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Serie</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Nuevo</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Recurrente</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Resucitado</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Inactivo</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-[13px] text-[#646462]">Sin datos de crecimiento</td></tr>
-            </tbody>
-          </table>
-        </div>
-      );
-    }
-    // series-daily, series-daily-ai, series-formula, series-weekly
-    const cols = ins.resultsType === 'series-weekly' ? weeklyCols : dailyCols;
-    const isFormula = ins.resultsType === 'series-formula';
-    const isAI = ins.resultsType === 'series-daily-ai';
-    const seriesLabel = isAI ? 'AI generation (LLM)' : ins.name;
-    return (
-      <div className="border border-[#e9eae6] rounded-[10px] overflow-x-auto">
-        <table className="w-full text-[12px] whitespace-nowrap">
-          <thead>
-            <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
-              <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide sticky left-0 bg-[#fafaf9]">Serie</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide sticky left-[120px] bg-[#fafaf9]">Color</th>
-              {isFormula && <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fórmula</th>}
-              {cols.map(c => <th key={c} className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{c}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-[#e9eae6] last:border-0 hover:bg-[#fafaf9]">
-              <td className="px-4 py-2.5 sticky left-0 bg-white font-semibold text-[#1a1a1a] max-w-[120px] truncate">
-                {isAI ? <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#eff2ff] text-[#3b59f6] rounded-full text-[11px] font-semibold">AI generation (LLM)</span> : seriesLabel}
-              </td>
-              <td className="px-4 py-2.5 sticky left-[120px] bg-white">
-                <div className="w-3 h-3 rounded-full bg-[#3b59f6]"/>
-              </td>
-              {isFormula && <td className="px-4 py-2.5 text-[#646462]">A/B</td>}
-              {cols.map(c => (
-                <td key={c} className="px-4 py-2.5 text-[#646462]">
-                  {isFormula ? '$0' : '0'}
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
-  function InsightDetailView({ ins }: { ins: InsightConfig }) {
-    return (
-      <div className="flex-1 flex flex-col min-h-0 bg-white" onClick={() => { setShowDateDrop(false); setShowGroupDrop(false); setShowCompDrop(false); setShowChartDrop(false); }}>
-        {/* Top bar */}
-        <div className="flex-shrink-0 px-6 pt-4 pb-3 border-b border-[#e9eae6]">
-          <div className="flex items-center gap-2 mb-2">
-            {/* Back */}
-            <button onClick={() => setSelectedInsight(null)} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><path d="M10 3L5 8l5 5"/></svg>
-            </button>
-            <InsightIcon type={ins.iconType} color="#e8572a" />
-            <h1 className="text-[16px] font-bold text-[#1a1a1a] flex-1 truncate">{ins.name}</h1>
-            {/* Edit pencil */}
-            <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/></svg>
-            </button>
-            <button onClick={() => setSelectedInsight(null)} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-            </button>
-          </div>
-          {/* Description */}
-          <div className="flex items-center gap-1.5 mb-3">
-            {ins.desc
-              ? <span className="text-[13px] text-[#646462]">{ins.desc}</span>
-              : <span className="text-[13px] text-[#b0b0ae] italic">Escribe una descripción (opcional)</span>
-            }
-            <button className="p-0.5 rounded hover:bg-[#f3f3f1] text-[#b0b0ae] flex-shrink-0">
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/></svg>
-            </button>
-          </div>
-          {/* Toolbar */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Date range */}
-            <div className="relative">
-              <button onClick={e => { e.stopPropagation(); setShowDateDrop(v => !v); setShowGroupDrop(false); setShowCompDrop(false); setShowChartDrop(false); }}
-                className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="#646462" strokeWidth="1.3"/><path d="M5 1.5v3M11 1.5v3M2 7h12" stroke="#646462" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                {ins.detailDateRange}
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-              </button>
-              {showDateDrop && (
-                <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
-                  {['Hoy', 'Ayer', 'Últimos 7 días', 'Últimos 14 días', 'Últimos 30 días', 'Últimos 90 días', 'Este mes', 'Este año'].map(opt => (
-                    <button key={opt} onClick={() => { setDateRange(opt); setShowDateDrop(false); }}
-                      className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f3f3f1] ${dateRange === opt ? 'font-semibold text-[#e8572a]' : 'text-[#1a1a1a]'}`}>{opt}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Grouped by (only for trend/line charts) */}
-            {ins.detailGroupBy && (
-              <div className="relative">
-                <button onClick={e => { e.stopPropagation(); setShowGroupDrop(v => !v); setShowDateDrop(false); setShowCompDrop(false); setShowChartDrop(false); }}
-                  className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-                  agrupado por {ins.detailGroupBy}
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-                </button>
-                {showGroupDrop && (
-                  <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
-                    {['hora', 'día', 'semana', 'mes'].map(opt => (
-                      <button key={opt} onClick={() => { setGroupBy(opt); setShowGroupDrop(false); }}
-                        className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f3f3f1] ${groupBy === opt ? 'font-semibold text-[#e8572a]' : 'text-[#1a1a1a]'}`}>{opt}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Comparison */}
-            <div className="relative">
-              <button onClick={e => { e.stopPropagation(); setShowCompDrop(v => !v); setShowDateDrop(false); setShowGroupDrop(false); setShowChartDrop(false); }}
-                className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-                Sin comparación entre períodos
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-              </button>
-              {showCompDrop && (
-                <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
-                  {['Sin comparación entre períodos', 'Período anterior', 'Mismo período del año anterior'].map(opt => (
-                    <button key={opt} onClick={() => { setComparison(opt); setShowCompDrop(false); }}
-                      className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f3f3f1] ${comparison === opt ? 'font-semibold text-[#e8572a]' : 'text-[#1a1a1a]'}`}>{opt}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="w-px h-4 bg-[#e9eae6] mx-0.5"/>
-
-            {/* Options */}
-            <button className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-              Opciones
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-            </button>
-
-            {/* Chart type */}
-            <div className="relative">
-              <button onClick={e => { e.stopPropagation(); setShowChartDrop(v => !v); setShowDateDrop(false); setShowGroupDrop(false); setShowCompDrop(false); }}
-                className="flex items-center gap-1 h-7 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-                {ins.detailChartType === 'trend' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#1a1a1a]" strokeWidth="1.5" strokeLinecap="round"><path d="M1 12l4-5 3 2 4-6"/></svg>}
-                {ins.detailChartType === 'bar' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><rect x="1" y="8" width="3" height="7" rx="0.5"/><rect x="6" y="5" width="3" height="10" rx="0.5" opacity="0.7"/><rect x="11" y="2" width="3" height="13" rx="0.5" opacity="0.4"/></svg>}
-                {ins.detailChartType === 'funnel' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M2 2h12v2L9 9v5l-2-1V9L2 4V2z"/></svg>}
-                {ins.detailChartType === 'retention' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><rect x="1" y="1" width="4" height="4" rx="0.5"/><rect x="7" y="1" width="4" height="4" rx="0.5" opacity="0.6"/><rect x="1" y="7" width="4" height="4" rx="0.5" opacity="0.4"/><rect x="7" y="7" width="4" height="4" rx="0.5" opacity="0.2"/></svg>}
-                {ins.detailChartType === 'trend' ? 'Línea' : ins.detailChartType === 'bar' ? 'Barras' : ins.detailChartType === 'funnel' ? 'Embudo' : 'Retención'}
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-              </button>
-              {showChartDrop && (
-                <div className="absolute top-full right-0 mt-1 w-36 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
-                  {[{k:'trend',l:'Línea'},{k:'bar',l:'Barras'},{k:'funnel',l:'Embudo'},{k:'retention',l:'Retención'}].map(opt => (
-                    <button key={opt.k} onClick={() => { setChartType(opt.l); setShowChartDrop(false); }}
-                      className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f3f3f1] ${chartType === opt.l ? 'font-semibold text-[#e8572a]' : 'text-[#1a1a1a]'}`}>{opt.l}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Content area */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Computed timestamp */}
-          <div className="flex items-center gap-1.5 px-6 py-2 border-b border-[#e9eae6]">
-            <span className="text-[12px] text-[#646462]">Calculado hace 3 minutos</span>
-            <span className="text-[#e9eae6]">•</span>
-            <button className="text-[12px] text-[#3b59f6] hover:underline">Actualizar</button>
-          </div>
-
-          <div className="px-6 py-4 space-y-6">
-            {/* Chart empty state */}
-            <div className="flex flex-col items-center justify-center h-64 border border-[#e9eae6] rounded-[10px] bg-[#fafaf9] gap-3">
-              <svg viewBox="0 0 64 64" className="w-16 h-16 opacity-20">
-                <rect x="4" y="10" width="56" height="38" rx="4" fill="none" stroke="#1a1a1a" strokeWidth="2.5"/>
-                <path d="M14 48v6M50 48v6M10 54h44" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round"/>
-                <path d="M16 36l8-10 8 6 10-14 6 8" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 2"/>
-                <circle cx="44" cy="26" r="3" fill="none" stroke="#e8572a" strokeWidth="2"/>
-                <path d="M42 28l-4 4" stroke="#e8572a" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-              <p className="text-[13px] text-[#646462]">No hay eventos coincidentes para esta consulta</p>
-            </div>
-
-            {/* AI Analysis */}
-            <div className="border border-[#e9eae6] rounded-[10px] p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] font-bold text-[#1a1a1a]">Análisis de IA</span>
-                <span className="px-1.5 py-0.5 rounded-full bg-[#f0fdf4] border border-[#86efac] text-[10px] font-bold text-[#16a34a] uppercase tracking-wide">Beta</span>
-              </div>
-              <p className="text-[13px] text-[#646462] leading-relaxed">{ins.aiDesc}</p>
-              <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#e8572a]" strokeWidth="1.3" strokeLinecap="round"><path d="M8 2l1.5 4H14l-3.5 2.5 1.5 4L8 10l-4 2.5 1.5-4L2 6h4.5L8 2z"/></svg>
-                Explicar este insight
-              </button>
-            </div>
-
-            {/* Detailed results */}
-            <div className="space-y-2">
-              <h3 className="text-[13px] font-bold text-[#1a1a1a]">Resultados detallados</h3>
-              <DetailResultsTable ins={ins} />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const activeInsight = insights.find(i => i.name === selectedInsight);
-
-  if (activeInsight) {
-    return <InsightDetailView ins={activeInsight} />;
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white">
-      {/* Header */}
-      <div className="flex-shrink-0 px-6 pt-5 pb-0">
-        <div className="flex items-center gap-2 mb-1">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0 fill-none stroke-[#3b59f6]" strokeWidth="1.5" strokeLinecap="round"><path d="M2 12l3.5-4 3 2.5L12 4"/></svg>
-          <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">Product analytics</h1>
-          <button className="flex items-center gap-1.5 h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
-            + Nuevo
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[780px] max-w-[92vw] max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-[#e9eae6] flex items-center justify-between flex-shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-[#1a1a18]">Nuevo insight</h2>
+            <p className="text-xs text-[#646462] mt-0.5">{step === 'pick' ? 'Elige el tipo de anÃ¡lisis.' : 'Dale un nombre opcional.'}</p>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
         </div>
-        <p className="text-[13px] text-[#646462] mb-3">Rastrea, analiza y experimenta con el comportamiento del usuario.</p>
-        {/* Tabs */}
-        <div className="flex gap-0 border-b border-[#e9eae6]">
-          {tabs.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`px-4 py-2 text-[13px] font-semibold transition-colors border-b-2 -mb-px ${tab === t.key ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
-              {t.label}
-            </button>
-          ))}
+        <div className="flex-1 overflow-y-auto p-5">
+          {step === 'pick' ? (
+            <div className="grid grid-cols-3 gap-3">
+              {INSIGHT_TYPES.map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setType(t.key)}
+                  className={`text-left p-4 border-2 rounded-xl transition-all ${type === t.key ? 'border-[#3b59f6] bg-[#eff2ff]' : 'border-[#e9eae6] hover:border-[#9ca3af]'}`}
+                >
+                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${t.gradient} text-white flex items-center justify-center mb-2`}>{t.icon}</div>
+                  <h3 className="text-sm font-semibold text-[#1a1a18] mb-0.5">{t.label}</h3>
+                  <p className="text-xs text-[#646462]">{t.desc}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3 max-w-md">
+              <div>
+                <label className="block text-xs font-medium text-[#1a1a18] mb-1">Nombre (opcional)</label>
+                <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Mi insight de tendencias" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" />
+                <p className="text-xs text-[#9ca3af] mt-1">Si no le pones nombre, PostHog generarÃ¡ uno automÃ¡ticamente.</p>
+              </div>
+              {error && <p className="text-xs text-[#dc2626]">{error}</p>}
+            </div>
+          )}
         </div>
-      </div>
-
-      {/* Filter bar */}
-      <div className="flex-shrink-0 flex items-center gap-2 px-6 py-3 border-b border-[#e9eae6] flex-wrap">
-        <div className="relative">
-          <svg viewBox="0 0 16 16" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
-          <input placeholder="Buscar insights..." className="h-8 w-52 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] bg-white"/>
+        <div className="px-6 py-3 border-t border-[#e9eae6] flex justify-between flex-shrink-0">
+          {step === 'pick' ? (
+            <>
+              <button onClick={onClose} className="px-3 py-1.5 text-sm text-[#646462] hover:text-[#1a1a18]">Cancelar</button>
+              <button onClick={() => setStep('name')} className="px-4 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg hover:bg-[#333]">Continuar â†’</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setStep('pick')} className="px-3 py-1.5 text-sm text-[#646462] hover:text-[#1a1a18]">â† AtrÃ¡s</button>
+              <button onClick={create} disabled={saving} className="px-4 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg hover:bg-[#333] disabled:opacity-50">{saving ? 'Creandoâ€¦' : 'Crear insight'}</button>
+            </>
+          )}
         </div>
-        {['Todos los tipos', 'Etiquetas', 'Creado por'].map(f => (
-          <button key={f} className="flex items-center gap-1 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-            {f} <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-          </button>
-        ))}
-        <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 2l1 2.5 2.5.5-1.8 1.8.4 2.7L8 8l-2.1 1.5.4-2.7L4.5 5 7 4.5 8 2z"/></svg>
-          Favoritos
-        </button>
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-[12px] text-[#646462]">Ocultar insights de feature flags:</span>
-          <div className="w-8 h-4 rounded-full bg-[#d1d5db] relative cursor-pointer"><div className="absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow"/></div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="flex-1 overflow-y-auto">
-        <table className="w-full text-[13px]">
-          <thead className="sticky top-0 bg-white border-b border-[#e9eae6] z-10">
-            <tr>
-              <th className="w-8 px-4 py-2.5"><input type="checkbox" className="w-3.5 h-3.5 rounded"/></th>
-              <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Nombre</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Etiquetas</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Creado por</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Creado</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">
-                <button className="flex items-center gap-1">Últ. modificación <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M8 12V4M5 9l3 3 3-3"/></svg></button>
-              </th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-bold text-[#646462] uppercase tracking-wide">Última vista</th>
-              <th className="w-8"/>
-            </tr>
-          </thead>
-          <tbody>
-            {insights.map((ins) => (
-              <tr key={ins.name} className="border-b border-[#e9eae6] hover:bg-[#fafaf9] group cursor-pointer" onClick={() => setSelectedInsight(ins.name)}>
-                <td className="w-8 px-4 py-2.5" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-3.5 h-3.5 rounded"/></td>
-                <td className="px-2 py-2.5">
-                  <div className="flex items-start gap-2">
-                    <div className="mt-0.5"><InsightIcon type={ins.iconType} /></div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-[#1a1a1a] hover:underline cursor-pointer">{ins.name}</span>
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#d1d5db] hover:stroke-[#f59e0b] cursor-pointer" strokeWidth="1.3" onClick={e => e.stopPropagation()}><path d="M8 2l1 2.5 2.5.5-1.8 1.8.4 2.7L8 8l-2.1 1.5.4-2.7L4.5 5 7 4.5 8 2z"/></svg>
-                      </div>
-                      {ins.desc && <p className="text-[12px] text-[#646462] mt-0.5 leading-snug">{ins.desc}</p>}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-2.5 text-[#646462]">{ins.tags}</td>
-                <td className="px-4 py-2.5">
-                  {ins.createdBy && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 rounded-full bg-[#9966cc] flex items-center justify-center text-white text-[9px] font-bold">H</div>
-                      <span className="text-[#646462]">tú</span>
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-[#646462] whitespace-nowrap">{ins.created}</td>
-                <td className="px-4 py-2.5 text-[#646462] whitespace-nowrap">{ins.modified}</td>
-                <td className="px-4 py-2.5 text-[#646462] whitespace-nowrap">{ins.viewed}</td>
-                <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                  <button className="p-1 rounded hover:bg-[#f3f3f1] opacity-0 group-hover:opacity-100">
-                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );
 }
 
+// â”€â”€ Insight detail / editor view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function InsightDetailView({ id, onBack, onDeleted }: { id: number; onBack: () => void; onDeleted: () => void }) {
+  const [data,    setData]    = React.useState<InsightRow | null>(null);
+  const [result,  setResult]  = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [running, setRunning] = React.useState(false);
+  const [error,   setError]   = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState(false);
+  const [editName, setEditName] = React.useState('');
+  const [display, setDisplay]   = React.useState<'line' | 'bar' | 'table' | 'number'>('line');
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError(null);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const res: any = await ph.phGet(`/api/environments/${ph.getTeamId()}/insights/${id}/`);
+        if (cancelled) return;
+        setData(res); setEditName(insightDisplayName(res));
+        // Run the query
+        if (res.query) await runQuery(res.query, cancelled);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? 'Error al cargar el insight');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  async function runQuery(query: any, cancelled = false) {
+    setRunning(true);
+    try {
+      const ph = await import('../api/posthog');
+      const res: any = await ph.posthog.events.query({ query });
+      if (!cancelled) setResult(res);
+    } catch (e: any) {
+      if (!cancelled) setError(e?.message ?? 'Error al ejecutar la consulta');
+    } finally {
+      if (!cancelled) setRunning(false);
+    }
+  }
+
+  async function saveName() {
+    if (!data || !editName.trim() || editName === insightDisplayName(data)) { setEditing(false); return; }
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.phPatch(`/api/environments/${ph.getTeamId()}/insights/${id}/`, { name: editName.trim() });
+      setData(updated); setEditing(false);
+    } catch { setEditing(false); }
+  }
+
+  async function toggleFavorite() {
+    if (!data) return;
+    try {
+      const ph = await import('../api/posthog');
+      const updated: any = await ph.phPatch(`/api/environments/${ph.getTeamId()}/insights/${id}/`, { favorited: !data.favorited });
+      setData(updated);
+    } catch {}
+  }
+
+  async function deleteInsight() {
+    if (!confirm('Â¿Eliminar este insight?')) return;
+    try {
+      const ph = await import('../api/posthog');
+      await ph.phDelete(`/api/environments/${ph.getTeamId()}/insights/${id}/`);
+      onDeleted();
+    } catch (e: any) { alert(e?.message); }
+  }
+
+  // â”€â”€ Render results based on query kind â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function renderResult() {
+    if (!result) return <div className="text-center py-16 text-xs text-[#9ca3af]">Sin resultados todavÃ­a</div>;
+    const kind = data?.query?.kind;
+
+    // Trends / Stickiness / Lifecycle â€” series with values over time
+    if (kind === 'TrendsQuery' || kind === 'StickinessQuery' || kind === 'LifecycleQuery') {
+      const series = (result.results ?? []).map((s: any, i: number) => ({
+        name:  s.label || s.action?.name || `Serie ${i + 1}`,
+        values: s.data ?? [],
+        color: ['#3b59f6', '#e8572a', '#16a34a', '#a855f7', '#f59e0b', '#06b6d4'][i % 6],
+      }));
+      const labels = result.results?.[0]?.labels ?? result.results?.[0]?.days ?? [];
+      if (display === 'bar' && series.length === 1)    return <BarChart  values={series[0].values} labels={labels} color={series[0].color} />;
+      if (display === 'number' && series.length === 1) return <NumberCard value={series[0].values.reduce((a: number, b: number) => a + b, 0)} label={series[0].name} color={series[0].color} />;
+      if (display === 'table') {
+        const cols = ['Fecha', ...series.map((s: any) => s.name)];
+        const rows = labels.map((l: string, i: number) => [l, ...series.map((s: any) => s.values[i] ?? 0)]);
+        return <ResultTable columns={cols} rows={rows} />;
+      }
+      return <LineChart series={series} labels={labels} />;
+    }
+
+    // Funnel â€” steps with conversion rates
+    if (kind === 'FunnelsQuery') {
+      const steps = (result.results ?? []).map((s: any) => ({
+        name:  s.name || s.action?.name || 'Paso',
+        count: s.count ?? 0,
+        rate:  s.average_conversion_time != null ? (s.count / (result.results[0]?.count || 1)) * 100 : 100,
+      }));
+      return <FunnelChart steps={steps} />;
+    }
+
+    // Retention â€” table of cohort retention
+    if (kind === 'RetentionQuery') {
+      const cohorts: any[] = result.results ?? [];
+      const cols = ['Cohorte', ...Array.from({ length: cohorts[0]?.values?.length ?? 0 }, (_, i) => `DÃ­a ${i}`)];
+      const rows = cohorts.slice(0, 30).map((c: any) => [c.label ?? c.date, ...(c.values ?? []).map((v: any) => `${((v.count / (c.values[0]?.count || 1)) * 100).toFixed(0)}%`)]);
+      return <ResultTable columns={cols} rows={rows} />;
+    }
+
+    // Paths â€” list of paths with counts
+    if (kind === 'PathsQuery') {
+      const rows = (result.results ?? []).slice(0, 30).map((p: any) => [p.source, p.target, p.value]);
+      return <ResultTable columns={['Desde', 'Hasta', 'Usuarios']} rows={rows} />;
+    }
+
+    // HogQL / DataTable â€” raw query results
+    if (result.columns) {
+      return <ResultTable columns={result.columns} rows={result.results ?? []} />;
+    }
+
+    return <pre className="text-xs bg-[#f9f9f7] p-3 rounded max-h-96 overflow-auto">{JSON.stringify(result, null, 2)}</pre>;
+  }
+
+  const type = data ? insightTypeOf(data) : 'TRENDS';
+
+  return (
+    <div className="flex-1 flex flex-col bg-white min-h-0">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-[#e9eae6] flex items-center gap-3 flex-shrink-0">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-[#646462] hover:text-[#1a1a18]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Insights
+        </button>
+        <span className="text-[#e9eae6]">/</span>
+        {loading ? (
+          <div className="h-6 w-64 bg-[#f3f3f1] rounded animate-pulse" />
+        ) : editing ? (
+          <input autoFocus value={editName} onChange={e => setEditName(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditing(false); }} className="text-base font-bold border border-[#3b59f6] rounded px-2 py-0.5 focus:outline-none flex-1 max-w-md" />
+        ) : (
+          <h1 onClick={() => setEditing(true)} className="text-base font-bold text-[#1a1a18] cursor-pointer hover:text-[#3b59f6]">{insightDisplayName(data!)}</h1>
+        )}
+        {!loading && <InsightTypeBadge type={type} />}
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={toggleFavorite} className={`p-1.5 rounded ${data?.favorited ? 'text-[#f59e0b]' : 'text-[#c4c4be] hover:text-[#646462]'}`}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M8 1l1.5 4H14l-3.5 2.6 1.3 4L8 9.8l-3.8 2.3 1.3-4L2 5h4.5z" fill={data?.favorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+          </button>
+          <button onClick={() => data?.query && runQuery(data.query)} disabled={running} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7] disabled:opacity-50">
+            <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${running ? 'animate-spin' : ''}`}><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+            {running ? 'Calculandoâ€¦' : 'Actualizar'}
+          </button>
+          <button onClick={deleteInsight} className="p-1.5 rounded text-[#646462] hover:bg-[#fee2e2] hover:text-[#dc2626]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 5h8l-1 9H5zM6 5V3h4v2M2 5h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Display switcher (only for trends-like) */}
+      {!loading && (type === 'TRENDS' || type === 'STICKINESS' || type === 'LIFECYCLE') && (
+        <div className="px-6 py-2 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs text-[#9ca3af]">VisualizaciÃ³n:</span>
+          {[
+            { k: 'line',   l: 'LÃ­nea',  i: <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M1 13l3-4 3 2 3-5 3 3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+            { k: 'bar',    l: 'Barras', i: <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="2" y="6" width="2" height="8" fill="currentColor"/><rect x="5" y="4" width="2" height="10" fill="currentColor"/><rect x="8" y="2" width="2" height="12" fill="currentColor"/><rect x="11" y="5" width="2" height="9" fill="currentColor"/></svg> },
+            { k: 'number', l: 'NÃºmero', i: <svg viewBox="0 0 16 16" className="w-3 h-3"><text x="8" y="12" textAnchor="middle" fontSize="12" fontWeight="bold" fill="currentColor">42</text></svg> },
+            { k: 'table',  l: 'Tabla',  i: <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="1" y="3" width="14" height="10" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M1 7h14M6 3v10" stroke="currentColor" strokeWidth="1.3"/></svg> },
+          ].map(v => (
+            <button key={v.k} onClick={() => setDisplay(v.k as any)} className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${display === v.k ? 'bg-[#eff2ff] text-[#3b59f6]' : 'text-[#646462] hover:bg-[#f9f9f7]'}`}>
+              {v.i}{v.l}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Body */}
+      <div className="flex-1 overflow-auto">
+        {loading ? (
+          <div className="p-6"><div className="h-64 bg-[#f3f3f1] rounded animate-pulse" /></div>
+        ) : error ? (
+          <div className="text-center py-16 px-6">
+            <p className="text-sm text-[#dc2626]">{error}</p>
+          </div>
+        ) : (
+          <>
+            {/* Chart area */}
+            <div className="p-6 border-b border-[#e9eae6]">
+              {running ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="flex items-center gap-3 text-[#646462]">
+                    <div className="w-5 h-5 border-2 border-[#3b59f6] border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm">Calculando resultadosâ€¦</span>
+                  </div>
+                </div>
+              ) : renderResult()}
+            </div>
+
+            {/* Query inspector */}
+            <details className="px-6 py-3">
+              <summary className="text-xs font-semibold text-[#646462] cursor-pointer hover:text-[#1a1a18]">Inspeccionar consulta</summary>
+              <pre className="text-[10px] bg-[#f9f9f7] p-3 rounded mt-2 overflow-auto max-h-64 font-mono">{JSON.stringify(data?.query, null, 2)}</pre>
+            </details>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â”€â”€ Main: WAAppProductAnalyticsView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function WAAppProductAnalyticsView() {
+  type PATab = 'all' | 'mine' | 'alerts' | 'history';
+  const [tab,    setTab]    = React.useState<PATab>('all');
+  const [search, setSearch] = React.useState('');
+  const [typeFilter, setTypeFilter] = React.useState<InsightType | null>(null);
+  const [favOnly, setFavOnly] = React.useState(false);
+  const [detail, setDetail] = React.useState<number | null>(null);
+  const [showNew, setShowNew] = React.useState(false);
+
+  const [rows,    setRows]    = React.useState<InsightRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error,   setError]   = React.useState<string | null>(null);
+
+  const TABS: { key: PATab; label: string }[] = [
+    { key: 'all',     label: 'Todos los insights' },
+    { key: 'mine',    label: 'Mis insights' },
+    { key: 'alerts',  label: 'Alertas' },
+    { key: 'history', label: 'Historial' },
+  ];
+
+  const load = React.useCallback(async () => {
+    if (tab === 'alerts') { setRows([]); return; }
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      const params: any = { limit: 200, saved: tab !== 'history' };
+      if (search.trim())     params.search    = search.trim();
+      if (tab === 'mine')    params.created_by = ph.getCurrentUser()?.uuid;
+      if (tab === 'history') params.order      = '-last_viewed_at';
+      if (favOnly)           params.favorited  = true;
+      const res: any = await ph.posthog.insights.list(params);
+      let results: InsightRow[] = res.results ?? [];
+      if (typeFilter) results = results.filter(r => insightTypeOf(r) === typeFilter);
+      setRows(results);
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar insights');
+    } finally {
+      setLoading(false);
+    }
+  }, [tab, search, typeFilter, favOnly]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  async function handleRowAction(row: InsightRow, action: string) {
+    const ph = await import('../api/posthog');
+    try {
+      switch (action) {
+        case 'favorite':
+        case 'unfavorite': {
+          const updated: any = await ph.phPatch(`/api/environments/${ph.getTeamId()}/insights/${row.id}/`, { favorited: action === 'favorite' });
+          setRows(prev => prev.map(r => r.id === row.id ? { ...r, favorited: updated.favorited } : r));
+          break;
+        }
+        case 'rename': {
+          const n = window.prompt('Nuevo nombre', insightDisplayName(row));
+          if (n && n.trim()) {
+            const updated: any = await ph.phPatch(`/api/environments/${ph.getTeamId()}/insights/${row.id}/`, { name: n.trim() });
+            setRows(prev => prev.map(r => r.id === row.id ? { ...r, name: updated.name } : r));
+          }
+          break;
+        }
+        case 'duplicate': {
+          const created: any = await ph.phPost(`/api/environments/${ph.getTeamId()}/insights/`, { ...row, id: undefined, short_id: undefined, name: `${insightDisplayName(row)} (copia)`, saved: true });
+          setRows(prev => [created, ...prev]);
+          break;
+        }
+        case 'delete': {
+          if (!confirm(`Â¿Eliminar "${insightDisplayName(row)}"?`)) return;
+          await ph.phDelete(`/api/environments/${ph.getTeamId()}/insights/${row.id}/`);
+          setRows(prev => prev.filter(r => r.id !== row.id));
+          break;
+        }
+        case 'add_to_dashboard': {
+          alert('AÃ±adir a dashboard: prÃ³ximamente.');
+          break;
+        }
+      }
+    } catch (e: any) { alert(e?.message); }
+  }
+
+  if (detail != null) return <InsightDetailView id={detail} onBack={() => setDetail(null)} onDeleted={() => { setDetail(null); load(); }} />;
+
+  return (
+    <div className="flex-1 flex flex-col bg-white min-h-0">
+      {/* Header */}
+      <div className="px-6 pt-4 pb-2 flex items-start justify-between border-b border-[#e9eae6] flex-shrink-0">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#3b59f6]"><path d="M1 13l3-4 3 2 3-5 3 3" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <h1 className="text-lg font-bold text-[#1a1a18]">Product analytics</h1>
+          </div>
+          <p className="text-xs text-[#646462]">Crea, gestiona y comparte insights de producto.</p>
+          <div className="flex gap-4 mt-3 -mb-2">
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)} className={`pb-2 text-sm font-medium border-b-2 transition-colors ${tab === t.key ? 'border-[#3b59f6] text-[#3b59f6]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg hover:bg-[#333] flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          Nuevo insight
+        </button>
+      </div>
+
+      {/* Filters */}
+      {tab !== 'alerts' && (
+        <div className="px-6 py-3 border-b border-[#e9eae6] flex flex-wrap items-center gap-2 flex-shrink-0">
+          <div className="relative flex-1 max-w-sm">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar insightsâ€¦" className="w-full pl-10 pr-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs text-[#9ca3af]">Tipo:</span>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setTypeFilter(null)} className={`px-2 py-1 rounded text-xs ${!typeFilter ? 'bg-[#1a1a18] text-white' : 'text-[#646462] hover:bg-[#f9f9f7]'}`}>Todos</button>
+              {INSIGHT_TYPES.slice(0, 6).map(t => (
+                <button key={t.key} onClick={() => setTypeFilter(typeFilter === t.key ? null : t.key)} title={t.label} className={`p-1.5 rounded ${typeFilter === t.key ? 'bg-[#eff2ff] text-[#3b59f6]' : 'text-[#646462] hover:bg-[#f9f9f7]'}`} style={typeFilter === t.key ? { color: t.color } : {}}>
+                  <span className="w-3.5 h-3.5 block">{t.icon}</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setFavOnly(v => !v)} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs ${favOnly ? 'bg-[#fef3c7] border-[#fcd34d] text-[#92400e]' : 'bg-white border-[#e9eae6] text-[#1a1a18] hover:bg-[#f9f9f7]'}`}>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 1l1.5 4H14l-3.5 2.6 1.3 4L8 9.8l-3.8 2.3 1.3-4L2 5h4.5z" fill={favOnly ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+              Favoritos
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Body */}
+      <div className="flex-1 overflow-auto">
+        {tab === 'alerts' ? (
+          <div className="text-center py-16 px-6">
+            <div className="w-16 h-16 rounded-full bg-[#fef3c7] flex items-center justify-center mx-auto mb-4">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 text-[#f59e0b]"><path d="M12 3a7 7 0 00-7 7v3l-2 2v1h18v-1l-2-2v-3a7 7 0 00-7-7z" fill="currentColor" opacity=".3"/><path d="M12 3a7 7 0 00-7 7v3l-2 2v1h18v-1l-2-2v-3a7 7 0 00-7-7zM10 20a2 2 0 004 0" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+            </div>
+            <h3 className="text-base font-semibold text-[#1a1a18] mb-1">No tienes alertas configuradas</h3>
+            <p className="text-sm text-[#646462] mb-4 max-w-md mx-auto">Las alertas te avisan cuando un insight cruza un umbral. Crea una alerta desde el detalle de cualquier insight.</p>
+            <button onClick={() => setTab('all')} className="text-sm text-[#3b59f6] hover:underline">Ver insights â†’</button>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[#e9eae6] bg-[#f9f9f7] sticky top-0 z-10">
+                <th className="text-left px-6 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Nombre</th>
+                <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Tipo</th>
+                <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Creado por</th>
+                <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Ãšltimo visto</th>
+                <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Ãšltima modif.</th>
+                <th className="w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i} className="border-b border-[#f3f3f1]">
+                    {[1,2,3,4,5,6].map(c => <td key={c} className="px-3 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i + c) % 40}%` }} /></td>)}
+                  </tr>
+                ))
+              ) : error ? (
+                <tr><td colSpan={6} className="py-16 text-center">
+                  <p className="text-sm font-semibold text-[#dc2626] mb-1">Error al cargar insights</p>
+                  <p className="text-xs text-[#646462] mb-3 max-w-md mx-auto break-words">{error}</p>
+                  <button onClick={load} className="px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg">Reintentar</button>
+                </td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={6} className="py-16 text-center">
+                  <p className="text-sm font-semibold text-[#1a1a18] mb-1">Sin insights</p>
+                  <p className="text-xs text-[#646462] mb-3">Crea tu primer insight para empezar a analizar.</p>
+                  <button onClick={() => setShowNew(true)} className="px-3 py-1.5 bg-[#1a1a18] text-white text-sm rounded-lg">+ Nuevo insight</button>
+                </td></tr>
+              ) : rows.map(r => {
+                const type = insightTypeOf(r);
+                return (
+                  <tr key={r.id} onClick={() => setDetail(r.id)} className="border-b border-[#f3f3f1] hover:bg-[#f9f9f7] cursor-pointer">
+                    <td className="px-6 py-2.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <button onClick={e => { e.stopPropagation(); handleRowAction(r, r.favorited ? 'unfavorite' : 'favorite'); }} className={`flex-shrink-0 ${r.favorited ? 'text-[#f59e0b]' : 'text-[#c4c4be] hover:text-[#646462]'}`}>
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 1l1.5 4H14l-3.5 2.6 1.3 4L8 9.8l-3.8 2.3 1.3-4L2 5h4.5z" fill={r.favorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                        </button>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-[#1a1a18] truncate">{insightDisplayName(r)}</div>
+                          {r.description && <div className="text-xs text-[#9ca3af] truncate">{r.description}</div>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5"><InsightTypeBadge type={type} /></td>
+                    <td className="px-3 py-2.5 text-xs text-[#646462]">{r.created_by?.first_name || r.created_by?.email?.split('@')[0] || 'â€”'}</td>
+                    <td className="px-3 py-2.5 text-xs text-[#646462]" title={r.last_viewed_at ?? ''}>{formatInsightDate(r.last_viewed_at)}</td>
+                    <td className="px-3 py-2.5 text-xs text-[#646462]" title={r.last_modified_at ?? ''}>{formatInsightDate(r.last_modified_at)}</td>
+                    <td className="px-3 py-2.5"><InsightRowMenu row={r} onAction={(action) => handleRowAction(r, action)} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <NewInsightModal open={showNew} onClose={() => setShowNew(false)} onCreated={(id) => setDetail(id)} />
+    </div>
+  );
+}
 
 function WAAppWebAnalyticsView() {
   type WATab = 'web' | 'vitals' | 'reports';
@@ -53661,6 +53976,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
