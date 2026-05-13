@@ -29793,584 +29793,533 @@ function WAAppPlaygroundView() {
   );
 }
 
-function WAAppErrorTrackingView() {
-  type ETTab = 'issues' | 'config';
-  type ConfigSub = 'autocapture'|'alerting'|'suppression'|'spike'|'autoassign'|'grouping'|'symbolsets'|'releases';
+// â”€â”€ WAAppErrorTrackingView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog Error Tracking â€” issues grouped from $exception events.
+// Backend (HogQL-first to work in any PostHog version):
+//   - List issues: HogQL GROUP BY exception_type + exception_message
+//   - Issue detail: HogQL filter by group key + fetch sample events
+//   - Status update: localStorage (PATCH /error_tracking/issue/{id}/ when available)
+//   - Frequencies sparkline: HogQL GROUP BY hour/day
 
-  const [tab, setTab] = useState<ETTab>('issues');
-  const [configSub, setConfigSub] = useState<ConfigSub>('alerting');
-  const [dateRange, setDateRange] = useState('Last 7 days');
-  const [status, setStatus] = useState('Active');
-  const [assignee, setAssignee] = useState('Any assignee');
-  const [showDateDrop, setShowDateDrop] = useState(false);
-  const [showStatusDrop, setShowStatusDrop] = useState(false);
-  const [showAssigneeDrop, setShowAssigneeDrop] = useState(false);
-  const [filterInternal, setFilterInternal] = useState(false);
-  const [sortBy, setSortBy] = useState('Last seen');
-  const [sortDir, setSortDir] = useState('Descending');
-  const [showSortDrop, setShowSortDrop] = useState(false);
-  const [showDirDrop, setShowDirDrop] = useState(false);
-  // Spike detection
-  const [snoozeDur, setSnoozeDur] = useState('10');
-  const [multiplier, setMultiplier] = useState('10');
-  const [minThreshold, setMinThreshold] = useState('500');
-  // Auto assignment
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [showAssigneeSearch, setShowAssigneeSearch] = useState(false);
-  const [selectedAssignee, setSelectedAssignee] = useState('');
-  // Symbol sets
-  const [symbolStatusFilter, setSymbolStatusFilter] = useState<'ok'|'warn'|'all'>('all');
+interface ErrorIssue {
+  id:             string;     // synthetic: hash of type+message
+  type:           string;     // e.g. TypeError
+  message:        string;
+  level:          'error' | 'warning' | 'info';
+  count:          number;
+  unique_users:   number;
+  first_seen:     string;
+  last_seen:      string;
+  sample_url:     string;
+  sample_stack:   string;
+  fingerprint:    string;
+  sparkline:      number[];
+  status:         'active' | 'resolved' | 'suppressed';
+  assignee?:      string | null;
+}
 
-  const CONFIG_NAV: {id:ConfigSub;label:string}[] = [
-    {id:'autocapture',label:'Exception autocapture'},
-    {id:'alerting',   label:'Alerting'},
-    {id:'suppression',label:'Suppression rules'},
-    {id:'spike',      label:'Spike detection'},
-    {id:'autoassign', label:'Auto assignment rules'},
-    {id:'grouping',   label:'Custom grouping rules'},
-    {id:'symbolsets', label:'Symbol sets'},
-    {id:'releases',   label:'Releases'},
-  ];
+interface ErrorEvent {
+  uuid:        string;
+  timestamp:   string;
+  distinct_id: string;
+  message:     string;
+  stack:       string;
+  url:         string;
+  browser:     string;
+  os:          string;
+  properties:  Record<string, any>;
+}
 
-  // Shared project-scope banner
-  const ProjectScopeBanner = () => (
-    <div className="flex items-center gap-2 px-5 py-3 border-b border-[#e9eae6] bg-[#f9f9f7]">
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#646462] flex-shrink-0"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-      <span className="text-[12.5px] text-[#646462]">These settings only apply to the current project (<strong className="text-[#1a1a1a]">Default project</strong>).</span>
-    </div>
+const ET_RANGES: { label: string; clickhouse: string; days: number }[] = [
+  { label: 'Ãšltimas 24 horas', clickhouse: '1 DAY',  days: 1 },
+  { label: 'Ãšltimos 7 dÃ­as',   clickhouse: '7 DAY',  days: 7 },
+  { label: 'Ãšltimos 14 dÃ­as',  clickhouse: '14 DAY', days: 14 },
+  { label: 'Ãšltimos 30 dÃ­as',  clickhouse: '30 DAY', days: 30 },
+  { label: 'Ãšltimos 90 dÃ­as',  clickhouse: '90 DAY', days: 90 },
+];
+
+// â”€â”€ Sparkline (mini chart 60x16) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ErrorSparkline({ values, color = '#dc2626' }: { values: number[]; color?: string }) {
+  if (!values.length) return <div className="w-[60px] h-4 bg-[#f3f3f1] rounded" />;
+  const max = Math.max(...values, 1);
+  const W = 60, H = 16;
+  const xAt = (i: number) => values.length > 1 ? (i / (values.length - 1)) * W : W / 2;
+  const yAt = (v: number) => H - (v / max) * H;
+  const d = values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i)} ${yAt(v)}`).join(' ');
+  const fillD = `${d} L ${xAt(values.length - 1)} ${H} L 0 ${H} Z`;
+  return (
+    <svg width={W} height={H} className="overflow-visible">
+      <path d={fillD} fill={color} opacity="0.15" />
+      <path d={d}     fill="none" stroke={color} strokeWidth="1.2" />
+    </svg>
   );
+}
+
+// â”€â”€ Stack trace renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function StackTraceViewer({ stack }: { stack: string }) {
+  if (!stack) return <p className="text-xs text-[#9ca3af] italic">Sin stack trace disponible.</p>;
+  // Try to parse JSON-formatted stack first
+  let frames: { function?: string; filename?: string; lineno?: number; colno?: number; in_app?: boolean }[] = [];
+  try {
+    const parsed = typeof stack === 'string' ? JSON.parse(stack) : stack;
+    if (Array.isArray(parsed)) {
+      frames = parsed.map((f: any) => ({ function: f.function ?? f.fn, filename: f.filename ?? f.file, lineno: f.lineno ?? f.line, colno: f.colno ?? f.col, in_app: f.in_app }));
+    }
+  } catch {
+    // Fall back to parsing string format
+    const lines = String(stack).split('\n').filter(l => l.trim());
+    frames = lines.map(line => {
+      const m = line.match(/at\s+(.+?)\s+\((.+?):(\d+):(\d+)\)/) || line.match(/(.+?)@(.+?):(\d+):(\d+)/);
+      if (m) return { function: m[1], filename: m[2], lineno: Number(m[3]), colno: Number(m[4]) };
+      return { function: line, filename: '', lineno: 0, colno: 0 };
+    });
+  }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden" onClick={() => { setShowDateDrop(false); setShowStatusDrop(false); setShowAssigneeDrop(false); setShowSortDrop(false); setShowDirDrop(false); }}>
-
-      {/* Modal backdrop */}
-      {showAssignModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => { setShowAssignModal(false); setShowAssigneeSearch(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[520px] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-[#e9eae6] flex items-start justify-between">
-              <div>
-                <h2 className="text-[15px] font-bold text-[#1a1a1a]">New assignment rule</h2>
-                <p className="text-[12.5px] text-[#646462] mt-0.5">Matching exceptions will be automatically assigned to the chosen user or role.</p>
-              </div>
-              <button onClick={() => setShowAssignModal(false)} className="text-[#9ca3af] hover:text-[#646462] mt-0.5">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-            <div className="px-6 py-5 flex flex-col gap-5">
-              {/* Filters */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[13px] font-semibold text-[#1a1a1a]">Filters</span>
-                  <div className="flex items-center gap-0 border border-[#e9eae6] rounded-lg overflow-hidden text-[12px]">
-                    <span className="px-2 py-1 text-[#646462]">Match</span>
-                    {['All','Any'].map(m => (
-                      <button key={m} className={`px-3 py-1 font-semibold ${m === 'All' ? 'bg-[#1a1a1a] text-white' : 'text-[#646462] hover:bg-[#f9f9f7]'}`}>{m}</button>
-                    ))}
-                  </div>
-                </div>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                  Add filter
-                </button>
-              </div>
-              {/* Assignee */}
-              <div className="relative">
-                <span className="text-[13px] font-semibold text-[#1a1a1a] block mb-2">Assignee</span>
-                <button onClick={() => setShowAssigneeSearch(!showAssigneeSearch)} className="w-full flex items-center justify-between px-3 py-2.5 border border-[#e9eae6] rounded-lg text-[13px] bg-white hover:bg-[#f9f9f7]">
-                  <span className={selectedAssignee ? 'text-[#1a1a1a]' : 'text-[#9ca3af]'}>{selectedAssignee || 'Choose user or role'}</span>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </button>
-                {showAssigneeSearch && (
-                  <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-xl shadow-xl z-50 w-full overflow-hidden">
-                    <div className="px-3 py-2 border-b border-[#e9eae6] flex items-center gap-2">
-                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="text-[#9ca3af]"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M9 9l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                      <input type="text" placeholder="Search" className="flex-1 text-[12px] outline-none text-[#1a1a1a] placeholder-[#9ca3af]" autoFocus />
-                    </div>
-                    <div className="py-2">
-                      <p className="px-4 py-1 text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">ROLES</p>
-                      <button onClick={() => { setSelectedAssignee('Create role'); setShowAssigneeSearch(false); }} className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-[#646462] hover:bg-[#f9f9f7]">
-                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                        Create role
-                      </button>
-                      <p className="px-4 py-1 mt-1 text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">USERS</p>
-                      <button onClick={() => { setSelectedAssignee('Hector'); setShowAssigneeSearch(false); }} className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-[#1a1a1a] hover:bg-[#f9f9f7]">
-                        <div className="w-6 h-6 rounded-full bg-[#8b5cf6] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">H</div>
-                        Hector
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-[#e9eae6] flex items-center gap-2 justify-end">
-              <button className="flex items-center gap-1.5 px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] bg-white hover:bg-[#f9f9f7]">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Test rule
-              </button>
-              <button onClick={() => setShowAssignModal(false)} className="px-4 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">Cancel</button>
-              <button className="px-4 py-2 bg-[#e8572a] text-white rounded-lg text-[12px] font-semibold hover:bg-[#d44d22]">Save</button>
+    <div className="bg-[#1a1a18] rounded-lg overflow-hidden font-mono text-[11px]">
+      {frames.slice(0, 20).map((f, i) => {
+        const isApp = f.in_app !== false;
+        return (
+          <div key={i} className={`px-3 py-1.5 border-b border-[#2a2a28] flex items-baseline gap-2 ${isApp ? '' : 'opacity-50'}`}>
+            <span className="text-[#9ca3af] flex-shrink-0 w-6 text-right">{i + 1}.</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-[#fbbf24]">{f.function || '<anonymous>'}</span>
+              {f.filename && <span className="text-[#9ca3af]"> at </span>}
+              {f.filename && <span className="text-[#60a5fa] break-all">{f.filename}</span>}
+              {f.lineno != null && f.lineno > 0 && <span className="text-[#e9eae6]">:{f.lineno}{f.colno ? `:${f.colno}` : ''}</span>}
+              {!isApp && <span className="text-[10px] bg-[#3f3f3a] text-[#9ca3af] px-1 ml-2 rounded">vendor</span>}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2L16 15H2L9 2z" stroke="#f59e0b" strokeWidth="1.4" strokeLinejoin="round"/><path d="M9 7v4M9 13v.5" stroke="#f59e0b" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          <h1 className="text-[16px] font-bold text-[#1a1a1a]">Error tracking</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#646462" strokeWidth="1.1"/><path d="M6.5 4v2.5l1.5 1.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-            Quick start <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center">0</span>
-          </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="10" height="10" rx="2" stroke="#646462" strokeWidth="1.1"/><path d="M4.5 6.5h4M6.5 4.5v4" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-            Feedback
-          </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            Documentation <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 9L9 2M5 2h4v4" stroke="#646462" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.2 3.6 3.8.3-2.9 2.5 1 3.7L7 9.5l-3.1 2.1 1-3.7-2.9-2.5 3.8-.3L7 1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
-        {(['issues','config'] as ETTab[]).map(t => {
-          const labels: Record<ETTab,string> = {issues:'Issues',config:'Configuration'};
-          return (
-            <button key={t} onClick={() => setTab(t)} className={`px-1 py-2.5 mr-6 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#e8572a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
-              {labels[t]}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── ISSUES TAB ── */}
-      {tab === 'issues' && (
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
-          {/* Warning banner */}
-          <div className="mx-4 mt-4 flex items-start gap-3 px-4 py-3 bg-[#fffbeb] border border-[#fcd34d] rounded-xl flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#d97706] flex-shrink-0 mt-0.5"><path d="M8 2L14.5 13H1.5L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 6.5v3M8 11.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            <div className="flex-1">
-              <p className="text-[13px] font-semibold text-[#1a1a1a]">No Exception events have been detected!</p>
-              <p className="text-[12px] text-[#646462] mt-0.5">To use the Error tracking product, please <span className="text-[#e8572a] cursor-pointer hover:underline">enable exception capture within the Clain SDK</span> (otherwise it'll be a little empty!)</p>
-            </div>
-          </div>
-
-          {/* Filter row */}
-          <div className="flex items-center gap-2 px-4 py-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
-            {/* Date */}
-            <div className="relative">
-              <button onClick={() => { setShowDateDrop(!showDateDrop); setShowStatusDrop(false); setShowAssigneeDrop(false); }} className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="#646462" strokeWidth="1.1"/><path d="M4 1v2M8 1v2M1 5h10" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                {dateRange} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              </button>
-              {showDateDrop && (
-                <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-44 py-1">
-                  {['Today','Last 24 hours','Last 7 days','Last 30 days','Last 90 days'].map(opt => (
-                    <button key={opt} onClick={() => { setDateRange(opt); setShowDateDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${dateRange===opt?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{opt}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-            {/* Status */}
-            <div className="relative">
-              <button onClick={() => { setShowStatusDrop(!showStatusDrop); setShowDateDrop(false); setShowAssigneeDrop(false); }} className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${status==='Active'?'bg-green-500':status==='Resolved'?'bg-[#9ca3af]':'bg-[#f59e0b]'}`} />
-                {status} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              </button>
-              {showStatusDrop && (
-                <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
-                  {['Active','Resolved','Ignored'].map(s => (
-                    <button key={s} onClick={() => { setStatus(s); setShowStatusDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] flex items-center gap-2 ${status===s?'font-semibold text-[#3b59f6]':'text-[#1a1a1a]'}`}>
-                      <span className={`w-2 h-2 rounded-full ${s==='Active'?'bg-green-500':s==='Resolved'?'bg-[#9ca3af]':'bg-[#f59e0b]'}`} />{s}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            {/* Assignee */}
-            <div className="relative">
-              <button onClick={() => { setShowAssigneeDrop(!showAssigneeDrop); setShowDateDrop(false); setShowStatusDrop(false); }} className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-                {assignee} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              </button>
-              {showAssigneeDrop && (
-                <div className="absolute left-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-40 py-1">
-                  {['Any assignee','Me','Unassigned'].map(a => (
-                    <button key={a} onClick={() => { setAssignee(a); setShowAssigneeDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${assignee===a?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{a}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a] font-medium">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M4.5 6.5h4M6.5 4.5v4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              Configure quick filters
-            </button>
-          </div>
-
-          {/* Search + toggle */}
-          <div className="flex items-center gap-3 px-4 pb-3 flex-shrink-0">
-            <input type="text" placeholder="Add a filter or search..." className="flex-1 px-3 py-2 text-[12px] border border-[#e9eae6] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6] text-[#1a1a1a]" />
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-[12px] text-[#646462]">Filter out internal and test users</span>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#9ca3af]"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.1"/><path d="M7 4v3M7 9v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              <button onClick={() => setFilterInternal(!filterInternal)} className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${filterInternal?'bg-[#3b59f6]':'bg-[#e9eae6]'}`}>
-                <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" style={{ left: filterInternal ? '18px' : '2px' }} />
-              </button>
-            </div>
-          </div>
-
-          {/* Reload + Sort */}
-          <div className="flex items-center justify-between px-4 pb-3 flex-shrink-0">
-            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5a5 5 0 015-5 5 5 0 014.3 2.5" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/><path d="M11.5 6.5a5 5 0 01-5 5A5 5 0 012.2 9" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/><path d="M11 2v3H8" stroke="#646462" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Reload
-            </button>
-            <div className="flex items-center gap-2 text-[12px] text-[#646462]" onClick={e => e.stopPropagation()}>
-              <span>Sort by:</span>
-              <div className="relative">
-                <button onClick={() => { setShowSortDrop(!showSortDrop); setShowDirDrop(false); }} className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-                  {sortBy} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                </button>
-                {showSortDrop && (
-                  <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-36 py-1">
-                    {['Last seen','First seen','Occurrences','Users'].map(s => (
-                      <button key={s} onClick={() => { setSortBy(s); setShowSortDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${sortBy===s?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{s}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="relative">
-                <button onClick={() => { setShowDirDrop(!showDirDrop); setShowSortDrop(false); }} className="flex items-center gap-1 px-2 py-1 border border-[#e9eae6] rounded text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-                  {sortDir} <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                </button>
-                {showDirDrop && (
-                  <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 w-32 py-1">
-                    {['Ascending','Descending'].map(d => (
-                      <button key={d} onClick={() => { setSortDir(d); setShowDirDrop(false); }} className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-[#f9f9f7] ${sortDir===d?'text-[#3b59f6] font-semibold':'text-[#1a1a1a]'}`}>{d}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Table */}
-          <div className="mx-4 mb-4 rounded-xl border border-[#e9eae6] overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-[#f9f9f7]">
-                  <th className="w-8 px-3 py-3"><input type="checkbox" className="rounded border-[#e9eae6]" /></th>
-                  {['ISSUE','VOLUME','OCCURRENCES','SESSIONS','USERS'].map(h => (
-                    <th key={h} className={`text-left py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6] ${h==='ISSUE'?'px-3':'px-6'}`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-            </table>
-            <div className="flex flex-col items-center justify-center py-14 gap-2">
-              <svg width="40" height="40" viewBox="0 0 40 40" fill="none" className="text-[#9ca3af]">
-                <rect x="4" y="8" width="32" height="24" rx="3" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M12 32v4M28 32v4M8 36h24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M12 20h16M12 26h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity=".4"/>
-              </svg>
-              <span className="text-[14px] font-semibold text-[#1a1a1a]">No issues found</span>
-              <span className="text-[12px] text-[#9ca3af] text-center max-w-[300px]">Try changing the date range, changing the filters or removing the assignee.</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── CONFIGURATION TAB ── */}
-      {tab === 'config' && (
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
-          {/* Info banner */}
-          <div className="mx-4 mt-4 flex items-start gap-3 px-4 py-3 bg-[#eff2ff] border border-[#c7d0fd] rounded-xl flex-shrink-0">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" className="text-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="7.5" cy="7.5" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M7.5 5v4M7.5 10.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            <p className="text-[12.5px] text-[#1a1a1a]">
-              <strong>Looking for integrations?</strong> Integrations for connecting error tracking with external services like GitHub or Linear have moved to <span className="text-[#e8572a] cursor-pointer hover:underline">Project settings → Error tracking</span>.
-            </p>
-          </div>
-
-          <div className="flex flex-1 min-h-0 mx-4 mt-4 mb-4 gap-0">
-            {/* Left nav */}
-            <div className="w-52 flex-shrink-0 flex flex-col gap-0.5 pr-4">
-              {CONFIG_NAV.map(item => (
-                <button key={item.id} onClick={() => setConfigSub(item.id)} className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${configSub===item.id?'bg-[#f3f4f6] text-[#1a1a1a]':'text-[#646462] hover:text-[#1a1a1a] hover:bg-[#f9f9f7]'}`}>
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Right panel */}
-            <div className="flex-1 border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col">
-              <ProjectScopeBanner />
-
-              {/* ── Exception autocapture ── */}
-              {configSub === 'autocapture' && (
-                <div className="p-5 flex flex-col gap-4">
-                  <div>
-                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Exception autocapture</h3>
-                    <p className="text-[12.5px] text-[#646462]">Automatically capture unhandled exceptions and promise rejections.</p>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-[#f9f9f7] rounded-xl border border-[#e9eae6]">
-                    <div>
-                      <p className="text-[13px] font-semibold text-[#1a1a1a]">Enable exception autocapture</p>
-                      <p className="text-[12px] text-[#646462] mt-0.5">Automatically capture JavaScript errors and unhandled promise rejections.</p>
-                    </div>
-                    <button className="relative w-9 h-5 rounded-full bg-[#3b59f6] flex-shrink-0">
-                      <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-white shadow" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Alerting ── */}
-              {configSub === 'alerting' && (
-                <div className="p-5 flex flex-col gap-4">
-                  <div>
-                    <p className="text-[12.5px] text-[#646462]">Configure alerts to get notified when new errors occur or error rates spike.</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-1">
-                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.1"/><path d="M9 9l2 2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                      <input type="text" placeholder="Search..." className="w-full pl-8 pr-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
-                    </div>
-                    <span className="text-[12px] text-[#646462] flex-shrink-0">Can't find what you're looking for?</span>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-[12px] text-[#646462]">Created by:</span>
-                      <select className="px-2 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white"><option>Any user</option><option>Me</option></select>
-                    </div>
-                    <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] bg-white hover:bg-[#f9f9f7]">
-                      <span className="w-4 h-4 rounded border border-[#e9eae6] flex-shrink-0" /> Show paused
-                    </button>
-                    <button className="px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium flex-shrink-0">New notification</button>
-                  </div>
-                  <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-[#f9f9f7]">
-                          {['NAME','CREATED BY','UPDATED','LAST 7 DAYS','STATUS'].map(h => (
-                            <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">
-                              <span className="flex items-center gap-1">{h} <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1v7M2 3l2.5-2.5L7 3M2 6l2.5 2.5L7 6" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg></span>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                    </table>
-                    <div className="px-4 py-6 text-[12.5px] text-[#9ca3af]">No internal destinations found</div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Suppression rules ── */}
-              {configSub === 'suppression' && (
-                <div className="p-5 flex flex-col gap-4">
-                  <p className="text-[12.5px] text-[#646462]">Filter out exceptions that match the given filters.</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] text-[#646462]"><strong className="text-[#1a1a1a]">0</strong> rules</span>
-                    <button className="px-4 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">Add rule</button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Spike detection ── */}
-              {configSub === 'spike' && (
-                <div className="p-5 flex flex-col gap-4">
-                  {/* Early stage banner */}
-                  <div className="flex items-start gap-3 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white">
-                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" className="text-[#646462] flex-shrink-0 mt-0.5"><circle cx="7.5" cy="7.5" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M7.5 5v4M7.5 10.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                    <p className="text-[12.5px] text-[#646462] flex-1">Spike detection is <strong>in early stage</strong>. We may make changes to the defaults or replace these settings as we iterate. We'd love your feedback!</p>
-                    <button className="px-3 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium flex-shrink-0">Send feedback</button>
-                  </div>
-                  {/* No alerts banner */}
-                  <div className="flex items-start gap-3 px-4 py-3 border border-[#e9eae6] rounded-xl bg-white">
-                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" className="text-[#646462] flex-shrink-0 mt-0.5"><circle cx="7.5" cy="7.5" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M7.5 5v4M7.5 10.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                    <p className="text-[12.5px] text-[#646462] flex-1">You don't have any alerts configured for spike events. Set up notifications to get alerted when issues spike.</p>
-                    <button className="px-3 py-1 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium flex-shrink-0">Configure alerts</button>
-                  </div>
-                  <p className="text-[12.5px] text-[#646462]">Configure spike detection settings for error tracking alerts. When an issue receives significantly more exceptions than its baseline, a spike alert will be triggered.</p>
-                  {/* 3 fields */}
-                  <div className="grid grid-cols-3 gap-4">
-                    {[
-                      { label:'Snooze duration (minutes)', value:snoozeDur, set:setSnoozeDur },
-                      { label:'Multiplier', value:multiplier, set:setMultiplier },
-                      { label:'Minimum threshold', value:minThreshold, set:setMinThreshold },
-                    ].map(f => (
-                      <div key={f.label} className="flex flex-col gap-1.5">
-                        <label className="text-[12px] font-medium text-[#1a1a1a] flex items-center gap-1">
-                          {f.label}
-                          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="text-[#9ca3af]"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M6.5 5v2.5M6.5 9v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                        </label>
-                        <input type="text" value={f.value} onChange={e => f.set(e.target.value)} className="px-3 py-2.5 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white focus:outline-none focus:ring-1 focus:ring-[#3b59f6]" />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-end">
-                    <button className="px-4 py-2 border border-[#e8572a] rounded-lg text-[12px] text-[#e8572a] bg-white hover:bg-[#fff5f3] font-semibold">Save</button>
-                  </div>
-                  {/* Recent spike events table */}
-                  <div>
-                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Recent spike events</h3>
-                    <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-[#f9f9f7]">
-                            {['ISSUE','DETECTED AT','BASELINE','MULTIPLIER'].map(h => (
-                              <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">
-                                <span className="flex items-center gap-1">{h} {h !== 'ISSUE' && <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1v7M2 3l2.5-2.5L7 3M2 6l2.5 2.5L7 6" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>}</span>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                      </table>
-                      <div className="px-4 py-6 text-[12.5px] text-[#9ca3af]">No spike events detected yet.</div>
-                      <div className="flex items-center justify-end px-4 py-2.5 border-t border-[#e9eae6] gap-2">
-                        <span className="text-[12px] text-[#9ca3af]">No entries</span>
-                        <button className="w-6 h-6 flex items-center justify-center rounded border border-[#e9eae6] text-[#9ca3af] hover:border-[#c8c9c4] hover:text-[#646462]"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 2L3 5l4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                        <button className="w-6 h-6 flex items-center justify-center rounded border border-[#e9eae6] text-[#9ca3af] hover:border-[#c8c9c4] hover:text-[#646462]"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Auto assignment rules ── */}
-              {configSub === 'autoassign' && (
-                <div className="p-5 flex flex-col gap-4">
-                  <p className="text-[12.5px] text-[#646462]">Automatically assign errors to team members based on rules you define.</p>
-                  <p className="text-[12.5px] text-[#646462]">Automatically assign newly created issues based on properties of the exception event the first time it was seen. The first rule that matches will be applied.</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] text-[#646462]"><strong className="text-[#1a1a1a]">0</strong> rules</span>
-                    <button onClick={() => setShowAssignModal(true)} className="px-4 py-1.5 border border-[#e8572a] rounded-lg text-[12px] text-[#e8572a] bg-white hover:bg-[#fff5f3] font-semibold">Add rule</button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Custom grouping rules ── */}
-              {configSub === 'grouping' && (
-                <div className="p-5 flex flex-col gap-4">
-                  <p className="text-[12.5px] text-[#646462]">Define rules for how errors are grouped together into issues.</p>
-                  <p className="text-[12.5px] text-[#646462]">Use the properties of an exception to decide how it should be grouped as an issue. The first rule that matches will be applied.</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] text-[#646462]"><strong className="text-[#1a1a1a]">0</strong> rules</span>
-                    <button className="px-4 py-1.5 border border-[#e8572a] rounded-lg text-[12px] text-[#e8572a] bg-white hover:bg-[#fff5f3] font-semibold">Add rule</button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Symbol sets ── */}
-              {configSub === 'symbolsets' && (
-                <div className="p-5 flex flex-col gap-4">
-                  <p className="text-[12.5px] text-[#646462]">Upload source maps to get readable stack traces from minified code. <span className="text-[#e8572a] cursor-pointer hover:underline inline-flex items-center gap-0.5">Docs <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg></span></p>
-                  <p className="text-[12.5px] text-[#646462]">Source maps are required to demangle any minified code in your exception stack traces. Clain automatically retrieves source maps where possible.</p>
-                  <p className="text-[12.5px] text-[#646462]">Cases where it was not possible are listed below. Source maps can be uploaded retroactively but changes will only apply to all future exceptions ingested.</p>
-                  {/* Status filter + table */}
-                  <div>
-                    <div className="flex justify-end mb-2">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[12px] text-[#646462] mr-2">Status:</span>
-                        {(['ok','warn','all'] as const).map(s => {
-                          const icons = { ok: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1"/><path d="M4 6.5l2 2 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>, warn: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 2L12 11H1L6.5 2z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>, all: null };
-                          return (
-                            <button key={s} onClick={() => setSymbolStatusFilter(s)} className={`px-2.5 py-1 border rounded text-[12px] transition-colors flex items-center gap-1 ${symbolStatusFilter===s?'bg-[#e8572a] text-white border-[#e8572a]':'border-[#e9eae6] text-[#646462] hover:bg-[#f9f9f7]'}`}>
-                              {icons[s]} {s === 'all' ? 'All' : ''}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-[#f9f9f7]">
-                            <th className="w-8 px-3 py-3"><input type="checkbox" className="rounded border-[#e9eae6]" /></th>
-                            {['REFERENCE','RELEASE','STATUS','LAST USED','CREATED AT'].map(h => (
-                              <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">
-                                <span className="flex items-center gap-1">{h} {['LAST USED','CREATED AT'].includes(h) && <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1v7M2 3l2.5-2.5L7 3M2 6l2.5 2.5L7 6" stroke="#9ca3af" strokeWidth="1" strokeLinecap="round"/></svg>}</span>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                      </table>
-                      <div className="flex flex-col items-center justify-center py-10 gap-1">
-                        <span className="text-[13px] font-semibold text-[#1a1a1a]">No symbol sets found</span>
-                        <span className="text-[12px] text-[#9ca3af]">Learn how to upload them from the <span className="text-[#e8572a] cursor-pointer hover:underline">docs</span></span>
-                      </div>
-                      <div className="flex items-center justify-end px-4 py-2.5 border-t border-[#e9eae6] gap-2">
-                        <span className="text-[12px] text-[#9ca3af]">No entries</span>
-                        <button className="w-6 h-6 flex items-center justify-center rounded border border-[#e9eae6] text-[#9ca3af]"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 2L3 5l4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                        <button className="w-6 h-6 flex items-center justify-center rounded border border-[#e9eae6] text-[#9ca3af]"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Releases ── */}
-              {configSub === 'releases' && (
-                <div className="p-5 flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <p className="text-[12.5px] text-[#646462]">
-                      Track releases to see which version introduced errors and monitor deployment health.{' '}
-                      <span className="text-[#e8572a] cursor-pointer hover:underline inline-flex items-center gap-0.5">
-                        Docs <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </span>
-                    </p>
-                    <p className="text-[12.5px] text-[#646462]">Releases are versions of your application that have been deployed. They are automatically created when you upload sourcemaps to Clain.</p>
-                    <p className="text-[12.5px] text-[#646462]">Each release can include git metadata such as the commit SHA, branch, and repository URL, which helps you track down the source of errors.</p>
-                  </div>
-                  {/* Releases table */}
-                  <div className="border border-[#e9eae6] rounded-xl overflow-hidden">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-white">
-                          {['VERSION','PROJECT','COMMIT','BRANCH','REPOSITORY','CREATED AT'].map(h => (
-                            <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                    </table>
-                    {/* Empty state */}
-                    <div className="flex flex-col items-center justify-center py-10 gap-1.5 text-center px-8">
-                      <span className="text-[13px] font-semibold text-[#1a1a1a]">No releases found</span>
-                      <span className="text-[12px] text-[#9ca3af] max-w-[480px] leading-relaxed">
-                        Releases are automatically created when Clain detects version information in your error tracking data. Learn more in the{' '}
-                        <span className="text-[#e8572a] cursor-pointer hover:underline inline-flex items-center gap-0.5">
-                          docs <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M5 2h3v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </span>.
-                      </span>
-                    </div>
-                    {/* Pagination */}
-                    <div className="flex items-center justify-end px-4 py-2.5 border-t border-[#e9eae6] gap-2">
-                      <span className="text-[12px] text-[#9ca3af]">No entries</span>
-                      <button className="w-6 h-6 flex items-center justify-center rounded border border-[#e9eae6] text-[#9ca3af] hover:border-[#c8c9c4] hover:text-[#646462]">
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 2L3 5l4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </button>
-                      <button className="w-6 h-6 flex items-center justify-center rounded border border-[#e9eae6] text-[#9ca3af] hover:border-[#c8c9c4] hover:text-[#646462]">
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        );
+      })}
+      {frames.length > 20 && <div className="px-3 py-1.5 text-[#9ca3af] text-center text-[10px]">+ {frames.length - 20} frames mÃ¡s</div>}
     </div>
   );
 }
 
+// â”€â”€ Issue detail drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ErrorIssueDrawer({ issue, onClose, onStatusChange, rangeClause }: {
+  issue: ErrorIssue | null;
+  onClose: () => void;
+  onStatusChange: (id: string, status: ErrorIssue['status']) => void;
+  rangeClause: string;
+}) {
+  const [events,   setEvents]   = React.useState<ErrorEvent[]>([]);
+  const [loading,  setLoading]  = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<'stack' | 'occurrences' | 'breadcrumbs'>('stack');
+  const [selectedEvent, setSelectedEvent] = React.useState<ErrorEvent | null>(null);
 
-// ── WAAppHeatmapsView ─────────────────────────────────────────────────────────
+  React.useEffect(() => {
+    if (!issue) return;
+    let cancelled = false;
+    setLoading(true);
+    setSelectedEvent(null);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const escType = issue.type.replace(/'/g, "''");
+        const escMsg  = issue.message.replace(/'/g, "''");
+        const hql = `
+          SELECT
+            uuid,
+            timestamp,
+            distinct_id,
+            toString(properties.$exception_message) AS message,
+            toString(coalesce(properties.$exception_stack_trace_raw, properties.$exception_list)) AS stack,
+            toString(properties.$current_url) AS url,
+            toString(properties.$browser) AS browser,
+            toString(properties.$os) AS os,
+            properties
+          FROM events
+          WHERE event = '$exception' AND ${rangeClause}
+            AND toString(properties.$exception_type) = '${escType}'
+            AND toString(properties.$exception_message) = '${escMsg}'
+          ORDER BY timestamp DESC
+          LIMIT 50
+        `;
+        const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+        const cols = res.columns ?? [];
+        const idx = (n: string) => cols.indexOf(n);
+        const rows: ErrorEvent[] = (res.results ?? []).map((r: any[]) => ({
+          uuid:        r[idx('uuid')],
+          timestamp:   r[idx('timestamp')],
+          distinct_id: r[idx('distinct_id')],
+          message:     r[idx('message')],
+          stack:       r[idx('stack')],
+          url:         r[idx('url')],
+          browser:     r[idx('browser')],
+          os:          r[idx('os')],
+          properties:  r[idx('properties')] ?? {},
+        }));
+        if (!cancelled) {
+          setEvents(rows);
+          setSelectedEvent(rows[0] ?? null);
+        }
+      } catch { /* silent */ }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [issue, rangeClause]);
+
+  if (!issue) return null;
+
+  const STATUS_OPTS: { key: ErrorIssue['status']; label: string; color: string }[] = [
+    { key: 'active',     label: 'Activo',     color: '#dc2626' },
+    { key: 'resolved',   label: 'Resuelto',   color: '#16a34a' },
+    { key: 'suppressed', label: 'Silenciado', color: '#9ca3af' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[800px] max-w-[95vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-2 py-0.5 rounded font-bold">{issue.type}</span>
+              <select
+                value={issue.status}
+                onChange={e => onStatusChange(issue.id, e.target.value as any)}
+                className="text-[10px] bg-white border border-[#e9eae6] rounded px-2 py-0.5 focus:outline-none"
+                style={{ color: STATUS_OPTS.find(s => s.key === issue.status)?.color }}
+              >
+                {STATUS_OPTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </div>
+            <h2 className="text-sm font-mono text-[#1a1a18] break-words pr-4">{issue.message}</h2>
+            <div className="flex items-center gap-3 mt-2 text-[10px] text-[#9ca3af]">
+              <span><strong className="text-[#1a1a18]">{issue.count.toLocaleString('es-ES')}</strong> ocurrencias</span>
+              <span>Â·</span>
+              <span><strong className="text-[#1a1a18]">{issue.unique_users}</strong> usuarios</span>
+              <span>Â·</span>
+              <span>{formatRelativeTime(issue.first_seen)} (primera)</span>
+              <span>Â·</span>
+              <span>{formatRelativeTime(issue.last_seen)} (Ãºltima)</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18] flex-shrink-0">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1 px-5 border-b border-[#e9eae6]">
+          {[
+            { k: 'stack',       l: `Stack trace` },
+            { k: 'occurrences', l: `Ocurrencias (${events.length})` },
+            { k: 'breadcrumbs', l: 'Contexto' },
+          ].map(t => (
+            <button key={t.k} onClick={() => setActiveTab(t.k as any)} className={`pb-2 pt-2.5 px-3 text-xs font-medium border-b-2 ${activeTab === t.k ? 'border-[#dc2626] text-[#dc2626]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>{t.l}</button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {loading && events.length === 0 ? (
+            <div className="space-y-2">{[0,1,2,3,4].map(i => <div key={i} className="h-4 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${85 - i * 8}%` }} />)}</div>
+          ) : activeTab === 'stack' ? (
+            <StackTraceViewer stack={selectedEvent?.stack || issue.sample_stack} />
+          ) : activeTab === 'occurrences' ? (
+            <table className="w-full text-xs">
+              <thead><tr className="text-[10px] text-[#9ca3af] uppercase tracking-widest"><th className="text-left pb-2">Cuando</th><th className="text-left pb-2">Usuario</th><th className="text-left pb-2">URL</th><th className="text-left pb-2">Navegador</th></tr></thead>
+              <tbody>
+                {events.map(e => (
+                  <tr key={e.uuid} onClick={() => { setSelectedEvent(e); setActiveTab('stack'); }} className={`border-t border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer ${selectedEvent?.uuid === e.uuid ? 'bg-[#fef2f2]' : ''}`}>
+                    <td className="py-1.5 text-[#1a1a18]">{formatRelativeTime(e.timestamp)}</td>
+                    <td className="py-1.5 font-mono text-[#646462] truncate max-w-[120px]">{e.distinct_id?.slice(0, 16)}</td>
+                    <td className="py-1.5 text-[#646462] truncate max-w-[200px]" title={e.url}>{e.url || 'â€”'}</td>
+                    <td className="py-1.5 text-[#646462]">{e.browser || 'â€”'} {e.os ? `/ ${e.os}` : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="space-y-3">
+              {selectedEvent ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">URL</p><p className="font-mono text-[#1a1a18] break-all">{selectedEvent.url || 'â€”'}</p></div>
+                    <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Usuario</p><p className="font-mono text-[#1a1a18]">{selectedEvent.distinct_id}</p></div>
+                    <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Navegador</p><p className="text-[#1a1a18]">{selectedEvent.browser || 'â€”'}</p></div>
+                    <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">OS</p><p className="text-[#1a1a18]">{selectedEvent.os || 'â€”'}</p></div>
+                  </div>
+                  <div>
+                    <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Todas las propiedades</h4>
+                    <div className="space-y-1">
+                      {Object.keys(selectedEvent.properties || {}).sort().slice(0, 50).map(k => (
+                        <div key={k} className="flex items-start gap-2 py-1 border-b border-[#f3f3f1] text-xs">
+                          <span className="font-mono text-[#3b59f6] flex-shrink-0 w-1/3 truncate">{k}</span>
+                          <span className="text-[#1a1a18] flex-1 break-all">{typeof selectedEvent.properties[k] === 'object' ? JSON.stringify(selectedEvent.properties[k]).slice(0, 200) : String(selectedEvent.properties[k]).slice(0, 200)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : <p className="text-xs text-[#9ca3af] italic">Selecciona una ocurrencia para ver su contexto.</p>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WAAppErrorTrackingView() {
+  type ETTab = 'active' | 'resolved' | 'suppressed' | 'all';
+  const [tab,    setTab]    = React.useState<ETTab>('active');
+  const [range,  setRange]  = React.useState(ET_RANGES[1]);
+  const [showRange, setShowRange] = React.useState(false);
+  const rangeRef = useClickOutside<HTMLDivElement>(() => setShowRange(false));
+  const [search, setSearch] = React.useState('');
+  const [issues, setIssues] = React.useState<ErrorIssue[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error,  setError]  = React.useState<string | null>(null);
+  const [selected, setSelected] = React.useState<ErrorIssue | null>(null);
+  const [stats,  setStats]  = React.useState({ total: 0, users: 0, new: 0 });
+
+  // localStorage status overrides (since not all PostHog versions have the API)
+  const [statusMap, setStatusMap] = React.useState<Record<string, ErrorIssue['status']>>({});
+  React.useEffect(() => {
+    try { const raw = localStorage.getItem('wa-error-status'); if (raw) setStatusMap(JSON.parse(raw)); } catch {}
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-error-status', JSON.stringify(statusMap)); } catch {}
+  }, [statusMap]);
+
+  const rangeClause = `timestamp >= now() - INTERVAL ${range.clickhouse}`;
+
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      // 1) Group by exception_type + message
+      const hql = `
+        SELECT
+          toString(properties.$exception_type)    AS type,
+          toString(properties.$exception_message) AS message,
+          count()                                 AS c,
+          uniq(distinct_id)                       AS unique_users,
+          min(timestamp)                          AS first_seen,
+          max(timestamp)                          AS last_seen,
+          any(toString(properties.$current_url))                                                           AS sample_url,
+          any(toString(coalesce(properties.$exception_stack_trace_raw, properties.$exception_list)))       AS sample_stack,
+          any(toString(properties.$exception_fingerprint))                                                  AS fingerprint
+        FROM events
+        WHERE event = '$exception' AND ${rangeClause}
+        GROUP BY type, message
+        HAVING type != '' OR message != ''
+        ORDER BY last_seen DESC
+        LIMIT 100
+      `;
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+      const cols = res.columns ?? [];
+      const idx = (n: string) => cols.indexOf(n);
+      const rows: ErrorIssue[] = (res.results ?? []).map((r: any[]) => {
+        const type    = String(r[idx('type')] ?? 'Unknown');
+        const message = String(r[idx('message')] ?? '(sin mensaje)');
+        const id      = btoa(unescape(encodeURIComponent(`${type}|${message}`))).slice(0, 32);
+        return {
+          id, type, message,
+          level:        'error',
+          count:        Number(r[idx('c')] ?? 0),
+          unique_users: Number(r[idx('unique_users')] ?? 0),
+          first_seen:   String(r[idx('first_seen')] ?? ''),
+          last_seen:    String(r[idx('last_seen')] ?? ''),
+          sample_url:   String(r[idx('sample_url')] ?? ''),
+          sample_stack: String(r[idx('sample_stack')] ?? ''),
+          fingerprint:  String(r[idx('fingerprint')] ?? id),
+          sparkline:    [],
+          status:       statusMap[id] ?? 'active',
+        };
+      });
+
+      // 2) Sparkline per issue (buckets of last 24 chunks)
+      const sparkHql = `
+        SELECT
+          toString(properties.$exception_type) AS type,
+          toString(properties.$exception_message) AS message,
+          toStartOfHour(timestamp) AS bucket,
+          count() AS c
+        FROM events
+        WHERE event = '$exception' AND ${rangeClause}
+        GROUP BY type, message, bucket
+        ORDER BY bucket ASC
+      `;
+      try {
+        const sres: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: sparkHql } });
+        const scols = sres.columns ?? [];
+        const sidx = (n: string) => scols.indexOf(n);
+        const bucketsByKey: Record<string, number[]> = {};
+        for (const r of sres.results ?? []) {
+          const type = String(r[sidx('type')]);
+          const msg  = String(r[sidx('message')]);
+          const id   = btoa(unescape(encodeURIComponent(`${type}|${msg}`))).slice(0, 32);
+          bucketsByKey[id] = bucketsByKey[id] ?? [];
+          bucketsByKey[id].push(Number(r[sidx('c')] ?? 0));
+        }
+        for (const issue of rows) {
+          issue.sparkline = bucketsByKey[issue.id] ?? [];
+        }
+      } catch { /* silent */ }
+
+      setIssues(rows);
+      const total = rows.reduce((s, r) => s + r.count, 0);
+      const users = Math.max(...rows.map(r => r.unique_users), 0);
+      const newCount = rows.filter(r => Date.now() - new Date(r.first_seen).getTime() < 86400_000).length;
+      setStats({ total, users, new: newCount });
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar issues');
+    } finally { setLoading(false); }
+  }, [rangeClause, statusMap]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  function changeStatus(id: string, status: ErrorIssue['status']) {
+    setStatusMap(prev => ({ ...prev, [id]: status }));
+    setIssues(prev => prev.map(i => i.id === id ? { ...i, status } : i));
+    if (selected?.id === id) setSelected({ ...selected, status });
+  }
+
+  function bulkResolve() {
+    const ids = filtered.map(i => i.id);
+    const next: Record<string, ErrorIssue['status']> = { ...statusMap };
+    ids.forEach(id => next[id] = 'resolved');
+    setStatusMap(next);
+    setIssues(prev => prev.map(i => ids.includes(i.id) ? { ...i, status: 'resolved' } : i));
+  }
+
+  const TABS: { key: ETTab; label: string; count: number }[] = [
+    { key: 'active',     label: 'Activos',     count: issues.filter(i => i.status === 'active').length },
+    { key: 'resolved',   label: 'Resueltos',   count: issues.filter(i => i.status === 'resolved').length },
+    { key: 'suppressed', label: 'Silenciados', count: issues.filter(i => i.status === 'suppressed').length },
+    { key: 'all',        label: 'Todos',       count: issues.length },
+  ];
+
+  const filtered = issues.filter(i => {
+    if (tab !== 'all' && i.status !== tab) return false;
+    if (search.trim() && !`${i.type} ${i.message}`.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="bg-white px-6 pt-4 pb-2 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#dc2626]"><path d="M8 4v5M8 11v.5M8 1L1 14h14z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round" strokeLinecap="round"/></svg>
+              <h1 className="text-lg font-bold text-[#1a1a18]">Error tracking</h1>
+            </div>
+            <p className="text-xs text-[#646462]">Excepciones agrupadas con stack traces, contexto y triage.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-3 text-xs text-[#646462] mr-3">
+              <span><strong className="text-[#dc2626]">{stats.total.toLocaleString('es-ES')}</strong> errores</span>
+              <span>Â·</span>
+              <span><strong className="text-[#1a1a18]">{stats.users}</strong> usuarios</span>
+              {stats.new > 0 && <><span>Â·</span><span><strong className="text-[#f59e0b]">{stats.new}</strong> nuevos hoy</span></>}
+            </div>
+            <div className="relative" ref={rangeRef}>
+              <button onClick={() => setShowRange(s => !s)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12" stroke="currentColor" strokeWidth="1.3"/></svg>
+                {range.label}
+                <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>
+              </button>
+              {showRange && (
+                <div className="absolute right-0 top-full mt-1 w-56 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1">
+                  {ET_RANGES.map(r => (
+                    <button key={r.label} onClick={() => { setRange(r); setShowRange(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f9f9f7] ${range.label === r.label ? 'text-[#dc2626] bg-[#fef2f2]' : 'text-[#1a1a18]'}`}>{r.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={load} disabled={loading} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7] disabled:opacity-50">
+              <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`}><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 -mb-2">
+          <div className="flex gap-1">
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)} className={`flex items-center gap-1.5 pb-2 px-2 text-sm font-medium border-b-2 transition-colors ${tab === t.key ? 'border-[#dc2626] text-[#dc2626]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>
+                {t.label} <span className="text-[10px] text-[#9ca3af]">{t.count}</span>
+              </button>
+            ))}
+          </div>
+          <div className="relative ml-auto max-w-sm flex-1 pb-1">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por tipo o mensajeâ€¦" className="w-full pl-10 pr-3 py-1.5 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#dc2626]" />
+          </div>
+          {filtered.length > 0 && tab === 'active' && (
+            <button onClick={bulkResolve} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#16a34a] hover:bg-[#dcfce7] mb-1">
+              âœ“ Marcar {filtered.length} como resueltos
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-auto">
+        {error && <div className="m-4 bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b]">{error}</div>}
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-[#fafaf9] sticky top-0 z-10">
+              <th className="text-left px-6 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">Issue</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-24">Eventos</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-24">Usuarios</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-32">Frecuencia</th>
+              <th className="text-left px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest w-32">Ãšltima</th>
+              <th className="w-12"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} className="border-b border-[#f3f3f1]">{[1,2,3,4,5,6].map(c => <td key={c} className="px-3 py-3"><div className="h-3 bg-[#f3f3f1] rounded animate-pulse" style={{ width: `${40 + (i + c) % 40}%` }} /></td>)}</tr>
+              ))
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={6} className="py-16 text-center">
+                <div className="w-12 h-12 rounded-full bg-[#dcfce7] flex items-center justify-center mx-auto mb-3">
+                  <svg viewBox="0 0 24 24" className="w-6 h-6 text-[#16a34a]"><path d="M5 12l4 4 10-10" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+                <p className="text-sm font-semibold text-[#1a1a18] mb-1">{tab === 'active' ? 'Sin errores activos' : tab === 'resolved' ? 'Sin issues resueltos' : tab === 'suppressed' ? 'Sin issues silenciados' : 'Sin issues'}</p>
+                <p className="text-xs text-[#646462]">{tab === 'active' ? 'Â¡Tu app estÃ¡ limpia en este rango!' : 'Cambia los filtros o el rango para ver mÃ¡s resultados.'}</p>
+              </td></tr>
+            ) : filtered.map(i => (
+              <tr key={i.id} onClick={() => setSelected(i)} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                <td className="px-6 py-3 max-w-[460px]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded font-bold">{i.type}</span>
+                    {i.status === 'resolved'   && <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">Resuelto</span>}
+                    {i.status === 'suppressed' && <span className="text-[10px] bg-[#f3f3f1] text-[#646462] px-1.5 py-0.5 rounded">Silenciado</span>}
+                  </div>
+                  <p className="text-sm font-mono text-[#1a1a18] truncate" title={i.message}>{i.message}</p>
+                  {i.sample_url && <p className="text-[10px] text-[#9ca3af] mt-0.5 truncate">{i.sample_url}</p>}
+                </td>
+                <td className="px-3 py-3 text-sm font-mono text-[#1a1a18]">{i.count.toLocaleString('es-ES')}</td>
+                <td className="px-3 py-3 text-sm font-mono text-[#646462]">{i.unique_users}</td>
+                <td className="px-3 py-3"><ErrorSparkline values={i.sparkline} color={i.status === 'resolved' ? '#16a34a' : '#dc2626'} /></td>
+                <td className="px-3 py-3 text-xs text-[#646462]" title={i.last_seen}>{formatRelativeTime(i.last_seen)}</td>
+                <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                  <select value={i.status} onChange={e => changeStatus(i.id, e.target.value as any)} className="text-[10px] bg-white border border-[#e9eae6] rounded px-1 py-0.5 focus:outline-none">
+                    <option value="active">Activo</option>
+                    <option value="resolved">Resuelto</option>
+                    <option value="suppressed">Silenciado</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <ErrorIssueDrawer issue={selected} onClose={() => setSelected(null)} onStatusChange={changeStatus} rangeClause={rangeClause} />
+    </div>
+  );
+}
+
 function WAAppHeatmapsView() {
   const [showWarningBanner, setShowWarningBanner] = useState(true);
   const [showBetaBanner, setShowBetaBanner]       = useState(true);
@@ -34212,7 +34161,7 @@ function WAAppWebScriptsView() {
                 <ellipse cx="55" cy="57.5" rx="1.8" ry="1.2" fill="#92400e"/>
                 {/* blonde bun hair */}
                 <ellipse cx="55" cy="40" rx="13" ry="5" fill="#f59e0b"/>
-                <circle cx="55" cy="36" rx="9" cy="37" ry="7" fill="#f59e0b"/>
+                <ellipse cx="55" cy="37" rx="9" ry="7" fill="#f59e0b"/>
                 <circle cx="63" cy="37" r="4" fill="#f59e0b"/>
                 <path d="M46 40 Q55 33 64 40" stroke="#d97706" strokeWidth="1.2" fill="none"/>
                 {/* broom/tool */}
@@ -54480,6 +54429,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
