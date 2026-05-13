@@ -28729,176 +28729,507 @@ function WAAppLlmAnalyticsView() {
   );
 }
 
-function WAAppClustersView() {
-  type ClustersTab = 'traces' | 'generations';
-  const [tab, setTab] = useState<ClustersTab>('traces');
-  const [showJobsDrop, setShowJobsDrop] = useState(false);
+// â”€â”€ WAAppClustersView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PostHog LLM Clusters â€” pattern-based grouping of $ai_generation events.
+// Computes clusters via HogQL on the events table:
+//   - Generations: group by model+provider+is_error+approximate-prompt-prefix
+//   - Traces:      group by trace_id then sub-group by (model sequence)
+// Real PostHog clustering uses embeddings; here we ship a pragmatic
+// HogQL-driven equivalent that works on any PostHog instance.
 
-  const jobs = [
-    { id: 'job_001', name: 'Traces clustering run', status: 'running', started: 'Hace 3 min', progress: 62 },
-    { id: 'job_002', name: 'Generations clustering', status: 'queued', started: 'En cola', progress: 0 },
-    { id: 'job_003', name: 'Traces clustering run', status: 'completed', started: 'Hace 1 h', progress: 100 },
-  ];
+interface ClusterRow {
+  key:           string;      // synthetic cluster identifier
+  label:         string;      // human-readable theme
+  count:         number;
+  unique_users:  number;
+  avg_cost:      number;
+  total_cost:    number;
+  avg_latency:   number;
+  error_rate:    number;
+  sample_input:  string;
+  sample_output: string;
+  models:        string[];
+}
+
+interface ClusteringJob {
+  id:        string;
+  type:      'traces' | 'generations';
+  name:      string;
+  status:    'queued' | 'running' | 'completed' | 'failed';
+  started:   number;
+  progress:  number;
+  k?:        number;
+  count?:    number;
+}
+
+const CLUSTER_RANGES: { label: string; clickhouse: string; days: number }[] = [
+  { label: 'Ãšltimas 24 horas', clickhouse: '1 DAY',  days: 1 },
+  { label: 'Ãšltimos 7 dÃ­as',   clickhouse: '7 DAY',  days: 7 },
+  { label: 'Ãšltimos 30 dÃ­as',  clickhouse: '30 DAY', days: 30 },
+  { label: 'Ãšltimos 90 dÃ­as',  clickhouse: '90 DAY', days: 90 },
+];
+
+const CLUSTER_PALETTE = ['#a855f7','#3b59f6','#e8572a','#16a34a','#f59e0b','#06b6d4','#dc2626','#0ea5e9','#8b5cf6','#f43f5e','#22c55e','#eab308'];
+
+function clusterColor(i: number) { return CLUSTER_PALETTE[i % CLUSTER_PALETTE.length]; }
+
+// â”€â”€ Cluster detail drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ClusterDetailDrawer({ cluster, color, onClose, rangeClause }: { cluster: ClusterRow | null; color: string; onClose: () => void; rangeClause: string }) {
+  const [members, setMembers]   = React.useState<any[]>([]);
+  const [loading, setLoading]   = React.useState(false);
+
+  React.useEffect(() => {
+    if (!cluster) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        // The cluster key encodes model + provider + is_error + prompt prefix.
+        // We fetch the matching events back.
+        const [model, provider, errFlag, prefix] = cluster.key.split('||');
+        const hql = `
+          SELECT *, timestamp
+          FROM events
+          WHERE event = '$ai_generation' AND ${rangeClause}
+            AND toString(properties.$ai_model) = ${SQL.q(model)}
+            AND toString(properties.$ai_provider) = ${SQL.q(provider)}
+            AND toString(properties.$ai_is_error) = ${SQL.q(errFlag)}
+            AND substring(toString(properties.$ai_input), 1, 60) = ${SQL.q(prefix)}
+          ORDER BY timestamp DESC
+          LIMIT 30
+        `;
+        const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+        if (!cancelled) {
+          const cols = res.columns ?? [];
+          const all = cols.indexOf('*');
+          setMembers((res.results ?? []).map((r: any[]) => all >= 0 ? r[all] : r[0]));
+        }
+      } catch { /* silent */ }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [cluster, rangeClause]);
+
+  if (!cluster) return null;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
-      {/* Top bar */}
-      <div className="flex items-start justify-between px-6 pt-5 pb-0 flex-shrink-0">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            {/* clusters icon */}
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-[#646462]">
-              <circle cx="4" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
-              <circle cx="14" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
-              <circle cx="14" cy="13" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M6.3 8.1L11.7 5.9M6.3 9.9L11.7 12.1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
-            </svg>
-            <h1 className="text-[16px] font-bold text-[#1a1a1a]">Clusters</h1>
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[720px] max-w-[92vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${color}20` }}>
+              <span className="text-sm font-bold" style={{ color }}>C</span>
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-[#1a1a18]">{cluster.label}</h2>
+              <p className="text-[10px] text-[#9ca3af] mt-0.5">{cluster.count} generaciones Â· {cluster.unique_users} usuarios</p>
+            </div>
           </div>
-          <p className="text-[13px] text-[#646462]">Discover patterns and clusters in your LLM usage.</p>
-        </div>
-
-        {/* Top-right actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button className="flex items-center gap-2 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#646462" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Quick start
-            <span className="w-4 h-4 rounded-full bg-[#f59e0b] text-white text-[10px] font-bold flex items-center justify-center leading-none">0</span>
-          </button>
-
-          <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </button>
-
-          <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
         </div>
-      </div>
-
-      {/* Tabs row + Jobs button */}
-      <div className="flex items-center justify-between px-6 mt-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex items-center gap-0">
-          {(['traces', 'generations'] as ClustersTab[]).map(t => {
-            const labels: Record<ClustersTab, string> = { traces: 'Traces', generations: 'Generations' };
-            return (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
-                  tab === t
-                    ? 'border-[#e8572a] text-[#1a1a1a]'
-                    : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
-                }`}
-              >
-                {labels[t]}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Jobs button */}
-        <div className="relative mb-[-1px]">
-          <button
-            onClick={() => setShowJobsDrop(!showJobsDrop)}
-            className="flex items-center gap-2 px-3 py-2 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium mb-1"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <ellipse cx="7" cy="4" rx="5" ry="2" stroke="#646462" strokeWidth="1.2"/>
-              <path d="M2 4v3c0 1.1 2.24 2 5 2s5-.9 5-2V4" stroke="#646462" strokeWidth="1.2"/>
-              <path d="M2 7v3c0 1.1 2.24 2 5 2s5-.9 5-2V7" stroke="#646462" strokeWidth="1.2"/>
-            </svg>
-            Jobs ({jobs.length})
-          </button>
-
-          {showJobsDrop && (
-            <div className="absolute right-0 top-full mt-1 bg-white border border-[#e9eae6] rounded-xl shadow-xl z-50 w-80 overflow-hidden">
-              <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
-                <span className="text-[13px] font-semibold text-[#1a1a1a]">Clustering jobs</span>
-                <button onClick={() => setShowJobsDrop(false)} className="text-[#9ca3af] hover:text-[#646462]">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                </button>
-              </div>
-              <div className="flex flex-col divide-y divide-[#e9eae6]">
-                {jobs.map(job => (
-                  <div key={job.id} className="px-4 py-3 flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] font-medium text-[#1a1a1a]">{job.name}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        job.status === 'running' ? 'bg-blue-100 text-blue-600' :
-                        job.status === 'queued' ? 'bg-[#fef3c7] text-[#92400e]' :
-                        'bg-green-100 text-green-600'
-                      }`}>
-                        {job.status === 'running' ? 'Ejecutando' : job.status === 'queued' ? 'En cola' : 'Completado'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {job.status !== 'queued' && (
-                        <div className="flex-1 h-1.5 bg-[#f3f4f6] rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${job.status === 'completed' ? 'bg-green-500' : 'bg-[#3b59f6]'}`}
-                            style={{ width: `${job.progress}%` }}
-                          />
-                        </div>
-                      )}
-                      <span className="text-[11px] text-[#9ca3af]">{job.started}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <section className="grid grid-cols-4 gap-2">
+            <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Coste total</p><p className="text-sm font-bold text-[#1a1a18]">${cluster.total_cost.toFixed(2)}</p></div>
+            <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Coste medio</p><p className="text-sm font-bold text-[#1a1a18]">${cluster.avg_cost.toFixed(4)}</p></div>
+            <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Lat. media</p><p className="text-sm font-bold text-[#1a1a18]">{cluster.avg_latency.toFixed(2)}s</p></div>
+            <div className="bg-[#f9f9f7] rounded p-2"><p className="text-[10px] text-[#9ca3af] uppercase">Errores</p><p className="text-sm font-bold text-[#1a1a18]">{cluster.error_rate.toFixed(1)}%</p></div>
+          </section>
+          {cluster.sample_input && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Prompt representativo</h3>
+              <pre className="bg-[#f9f9f7] rounded p-3 text-xs whitespace-pre-wrap break-words font-mono max-h-48 overflow-auto">{cluster.sample_input}</pre>
+            </section>
           )}
+          {cluster.sample_output && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Output representativo</h3>
+              <pre className="bg-[#f9f9f7] rounded p-3 text-xs whitespace-pre-wrap break-words font-mono max-h-48 overflow-auto">{cluster.sample_output}</pre>
+            </section>
+          )}
+          <section>
+            <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Modelos en el cluster</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {cluster.models.map(m => <span key={m} className="text-[10px] font-mono bg-[#f5f3ff] text-[#a855f7] px-2 py-0.5 rounded">{m}</span>)}
+            </div>
+          </section>
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-widest">Miembros recientes ({members.length})</h3>
+              {loading && <span className="text-[10px] text-[#9ca3af]">Cargandoâ€¦</span>}
+            </div>
+            <div className="space-y-1">
+              {members.slice(0, 20).map((m, i) => {
+                const p = m?.properties || {};
+                return (
+                  <div key={m?.uuid ?? i} className="flex items-center gap-2 px-2 py-1.5 hover:bg-[#f9f9f7] rounded text-xs">
+                    <span className="font-mono text-[#a855f7] flex-shrink-0">{p.$ai_model}</span>
+                    <span className="text-[#646462] truncate flex-1">{p.$ai_input ? String(p.$ai_input).slice(0, 80) : 'â€”'}</span>
+                    <span className="text-[#9ca3af] flex-shrink-0">${Number(p.$ai_total_cost_usd ?? 0).toFixed(4)}</span>
+                  </div>
+                );
+              })}
+              {!loading && members.length === 0 && <p className="text-xs text-[#9ca3af] italic">Sin miembros recuperables</p>}
+            </div>
+          </section>
         </div>
-      </div>
-
-      {/* Content — empty state */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
-        {tab === 'traces' ? (
-          <>
-            {/* Icon */}
-            <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-1">
-              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                <circle cx="7" cy="14" r="4" stroke="#9ca3af" strokeWidth="1.6"/>
-                <circle cx="21" cy="8"  r="4" stroke="#9ca3af" strokeWidth="1.6"/>
-                <circle cx="21" cy="20" r="4" stroke="#9ca3af" strokeWidth="1.6"/>
-                <path d="M10.8 12.5L17.2 9.5M10.8 15.5L17.2 18.5" stroke="#9ca3af" strokeWidth="1.4" strokeLinecap="round" strokeDasharray="2 2"/>
-              </svg>
-            </div>
-            <h2 className="text-[15px] font-semibold text-[#1a1a1a]">No trace clustering runs found</h2>
-            <p className="text-[13px] text-[#9ca3af] max-w-[400px] leading-relaxed">
-              Try switching to "Generations" or "Evaluations" to see other clusters, or check back later once more data has been collected.
-            </p>
-            <button className="mt-2 flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#2d2d2d] transition-colors">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              Nuevo clustering run
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-1">
-              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                <rect x="4" y="8" width="20" height="3" rx="1.5" fill="#d1d5db"/>
-                <rect x="4" y="13" width="14" height="3" rx="1.5" fill="#d1d5db"/>
-                <rect x="4" y="18" width="17" height="3" rx="1.5" fill="#d1d5db"/>
-              </svg>
-            </div>
-            <h2 className="text-[15px] font-semibold text-[#1a1a1a]">No generation clustering runs found</h2>
-            <p className="text-[13px] text-[#9ca3af] max-w-[400px] leading-relaxed">
-              Run a clustering job on your LLM generations to automatically discover patterns and topics in your data.
-            </p>
-            <button className="mt-2 flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#2d2d2d] transition-colors">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              Nuevo clustering run
-            </button>
-          </>
-        )}
       </div>
     </div>
   );
 }
 
+// Tiny SQL helpers for safe interpolation
+const SQL = {
+  q(v: string | number | null | undefined): string {
+    if (v == null) return 'NULL';
+    return `'${String(v).replace(/'/g, "''")}'`;
+  },
+};
 
-// ── WAAppPlaygroundView ───────────────────────────────────────────────────────
+function WAAppClustersView() {
+  type ClustersTab = 'generations' | 'traces';
+  const [tab,     setTab]     = React.useState<ClustersTab>('generations');
+  const [range,   setRange]   = React.useState(CLUSTER_RANGES[1]);
+  const [showRange, setShowRange] = React.useState(false);
+  const rangeRef = useClickOutside<HTMLDivElement>(() => setShowRange(false));
+  const [clusters, setClusters] = React.useState<ClusterRow[]>([]);
+  const [loading,  setLoading]  = React.useState(false);
+  const [error,    setError]    = React.useState<string | null>(null);
+  const [search,   setSearch]   = React.useState('');
+  const [selected, setSelected] = React.useState<ClusterRow | null>(null);
+  const [selectedColor, setSelectedColor] = React.useState('#a855f7');
+  const [jobs, setJobs] = React.useState<ClusteringJob[]>([]);
+  const [showJobs, setShowJobs] = React.useState(true);
+  const [showAbout, setShowAbout] = React.useState(false);
+
+  // Persist jobs in localStorage
+  React.useEffect(() => {
+    try { const raw = localStorage.getItem('wa-clusters-jobs'); if (raw) setJobs(JSON.parse(raw)); } catch {}
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem('wa-clusters-jobs', JSON.stringify(jobs)); } catch {}
+  }, [jobs]);
+
+  // Simulate running job progress
+  React.useEffect(() => {
+    const running = jobs.find(j => j.status === 'running');
+    if (!running) return;
+    const id = setInterval(() => {
+      setJobs(prev => prev.map(j => {
+        if (j.id !== running.id) return j;
+        if (j.progress >= 100) return { ...j, status: 'completed' };
+        return { ...j, progress: Math.min(100, j.progress + 8) };
+      }));
+    }, 800);
+    return () => clearInterval(id);
+  }, [jobs]);
+
+  const rangeClause = `timestamp >= now() - INTERVAL ${range.clickhouse}`;
+
+  // â”€â”€ Compute clusters via HogQL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const computeClusters = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getTeamId()) await ph.bootstrapPostHog();
+
+      const hql = tab === 'generations' ? `
+        SELECT
+          concat(
+            toString(properties.$ai_model), '||',
+            toString(properties.$ai_provider), '||',
+            toString(properties.$ai_is_error), '||',
+            substring(toString(properties.$ai_input), 1, 60)
+          ) AS cluster_key,
+          toString(properties.$ai_model) AS model,
+          toString(properties.$ai_provider) AS provider,
+          toString(properties.$ai_is_error) AS is_error,
+          substring(toString(properties.$ai_input), 1, 60) AS prefix,
+          count() AS c,
+          uniq(distinct_id) AS unique_users,
+          avg(toFloat(properties.$ai_total_cost_usd)) AS avg_cost,
+          sum(toFloat(properties.$ai_total_cost_usd)) AS total_cost,
+          avg(toFloat(properties.$ai_latency)) AS avg_lat,
+          avgIf(1.0, toString(properties.$ai_is_error) = 'true') * 100 AS error_rate,
+          any(toString(properties.$ai_input)) AS sample_in,
+          any(toString(properties.$ai_output)) AS sample_out,
+          groupArray(toString(properties.$ai_model)) AS models_raw
+        FROM events
+        WHERE event = '$ai_generation' AND ${rangeClause}
+        GROUP BY cluster_key, model, provider, is_error, prefix
+        HAVING c >= 2
+        ORDER BY c DESC
+        LIMIT 50
+      ` : `
+        SELECT
+          toString(properties.$ai_trace_id) AS trace,
+          concat(
+            toString(any(properties.$ai_provider)), '||',
+            toString(any(properties.$ai_model)), '||',
+            'false', '||',
+            substring(toString(any(properties.$ai_input)), 1, 60)
+          ) AS cluster_key,
+          count()                                                  AS spans,
+          uniq(distinct_id)                                        AS unique_users,
+          avg(toFloat(properties.$ai_total_cost_usd))              AS avg_cost,
+          sum(toFloat(properties.$ai_total_cost_usd))              AS total_cost,
+          avg(toFloat(properties.$ai_latency))                     AS avg_lat,
+          countIf(toString(properties.$ai_is_error) = 'true') * 100.0 / count() AS error_rate,
+          any(toString(properties.$ai_input))                      AS sample_in,
+          any(toString(properties.$ai_output))                     AS sample_out,
+          groupArray(toString(properties.$ai_model))               AS models_raw
+        FROM events
+        WHERE event = '$ai_generation' AND ${rangeClause} AND toString(properties.$ai_trace_id) != ''
+        GROUP BY trace, cluster_key
+        ORDER BY spans DESC
+        LIMIT 50
+      `;
+      const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+      const cols = res.columns ?? [];
+      const idx = (n: string) => cols.indexOf(n);
+      const rows: ClusterRow[] = (res.results ?? []).map((r: any[]) => {
+        const modelsRaw = r[idx('models_raw')] ?? [];
+        const models = Array.from(new Set(Array.isArray(modelsRaw) ? modelsRaw.map((m: any) => String(m)) : []));
+        const prefix = String(r[idx('prefix')] ?? r[idx('sample_in')] ?? '').replace(/\n/g, ' ').slice(0, 50);
+        return {
+          key:           String(r[idx('cluster_key')] ?? ''),
+          label:         prefix ? `${models[0] ?? 'unknown'} Â· "${prefix}â€¦"` : (r[idx('trace')] ? `Traza ${String(r[idx('trace')]).slice(0, 12)}â€¦` : 'Cluster'),
+          count:         Number(r[idx('c')] ?? r[idx('spans')] ?? 0),
+          unique_users:  Number(r[idx('unique_users')] ?? 0),
+          avg_cost:      Number(r[idx('avg_cost')] ?? 0),
+          total_cost:    Number(r[idx('total_cost')] ?? 0),
+          avg_latency:   Number(r[idx('avg_lat')] ?? 0),
+          error_rate:    Number(r[idx('error_rate')] ?? 0),
+          sample_input:  String(r[idx('sample_in')] ?? ''),
+          sample_output: String(r[idx('sample_out')] ?? ''),
+          models,
+        };
+      });
+      setClusters(rows);
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al calcular clusters');
+    } finally { setLoading(false); }
+  }, [tab, rangeClause]);
+
+  React.useEffect(() => { computeClusters(); }, [computeClusters]);
+
+  function startJob() {
+    const id = crypto.randomUUID();
+    setJobs(prev => [{ id, type: tab, name: `${tab === 'traces' ? 'Clustering de trazas' : 'Clustering de generaciones'} (${range.label.toLowerCase()})`, status: 'running', started: Date.now(), progress: 0, count: clusters.length }, ...prev].slice(0, 10));
+    // The "job" effect is purely UX â€” clustering itself happens immediately via HogQL above.
+    setTimeout(() => computeClusters(), 200);
+  }
+
+  function deleteJob(id: string) {
+    setJobs(prev => prev.filter(j => j.id !== id));
+  }
+
+  const filtered = search.trim()
+    ? clusters.filter(c => c.label.toLowerCase().includes(search.toLowerCase()) || c.sample_input.toLowerCase().includes(search.toLowerCase()))
+    : clusters;
+
+  const totalCount = filtered.reduce((s, c) => s + c.count, 0);
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#f9f9f7] min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="bg-white px-6 pt-4 pb-3 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#a855f7]">
+                <circle cx="4" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                <circle cx="12" cy="4" r="2.5" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                <circle cx="12" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                <path d="M6 7.2L10 5M6 8.8L10 11" stroke="currentColor" strokeWidth="1.2"/>
+              </svg>
+              <h1 className="text-lg font-bold text-[#1a1a18]">Clusters</h1>
+              <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-2 py-0.5 rounded font-semibold">BETA</span>
+            </div>
+            <p className="text-xs text-[#646462]">Descubre patrones y agrupaciones en tu uso de LLM.</p>
+            <div className="flex gap-1 mt-3 -mb-2">
+              {[
+                { key: 'generations', label: 'Generaciones' },
+                { key: 'traces',      label: 'Trazas' },
+              ].map(t => (
+                <button key={t.key} onClick={() => setTab(t.key as ClustersTab)} className={`flex items-center gap-1.5 pb-2 px-2 text-sm font-medium border-b-2 transition-colors ${tab === t.key ? 'border-[#a855f7] text-[#a855f7]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => setShowAbout(true)} className="text-[#646462] hover:text-[#1a1a18] p-1.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v4M8 11v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            </button>
+            <button onClick={() => setShowJobs(j => !j)} className={`px-3 py-1.5 border rounded-lg text-xs ${showJobs ? 'bg-[#f5f3ff] border-[#ddd6fe] text-[#a855f7]' : 'bg-white border-[#e9eae6] text-[#1a1a18] hover:bg-[#f9f9f7]'}`}>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 inline mr-1"><rect x="2" y="3" width="12" height="2" fill="currentColor"/><rect x="2" y="7" width="9" height="2" fill="currentColor" opacity=".6"/><rect x="2" y="11" width="6" height="2" fill="currentColor" opacity=".4"/></svg>
+              Jobs ({jobs.filter(j => j.status === 'running').length})
+            </button>
+            <div className="relative" ref={rangeRef}>
+              <button onClick={() => setShowRange(s => !s)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-sm text-[#1a1a18] hover:bg-[#f9f9f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#646462]"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12" stroke="currentColor" strokeWidth="1.3"/></svg>
+                {range.label}
+                <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#646462]"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>
+              </button>
+              {showRange && (
+                <div className="absolute right-0 top-full mt-1 w-56 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1">
+                  {CLUSTER_RANGES.map(r => (
+                    <button key={r.label} onClick={() => { setRange(r); setShowRange(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f9f9f7] ${range.label === r.label ? 'text-[#a855f7] bg-[#f5f3ff]' : 'text-[#1a1a18]'}`}>{r.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={startJob} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#a855f7] text-white text-sm rounded-lg hover:bg-[#9333ea] disabled:opacity-50">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M4 3l9 5-9 5z"/></svg>
+              Ejecutar clustering
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="bg-white px-6 py-2 border-b border-[#e9eae6] flex items-center gap-3 flex-shrink-0">
+        <div className="relative flex-1 max-w-sm">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar clusters por modelo o promptâ€¦" className="w-full pl-10 pr-3 py-1.5 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#a855f7]" />
+        </div>
+        <div className="ml-auto flex items-center gap-3 text-xs text-[#646462]">
+          <span><strong className="text-[#1a1a18]">{filtered.length}</strong> clusters</span>
+          <span>Â·</span>
+          <span><strong className="text-[#1a1a18]">{totalCount.toLocaleString('es-ES')}</strong> generaciones</span>
+          <button onClick={computeClusters} disabled={loading} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7] disabled:opacity-50">
+            <svg viewBox="0 0 16 16" className={`w-3 h-3 inline ${loading ? 'animate-spin' : ''}`}><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 flex min-h-0">
+        {/* Clusters grid */}
+        <div className="flex-1 overflow-auto p-6">
+          {error && <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b] mb-4">{error}</div>}
+          {loading ? (
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="bg-white border border-[#e9eae6] rounded-xl p-4 animate-pulse"><div className="h-4 w-2/3 bg-[#f3f3f1] rounded mb-2" /><div className="h-3 w-full bg-[#f3f3f1] rounded mb-1" /><div className="h-3 w-1/2 bg-[#f3f3f1] rounded" /></div>)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="w-16 h-16 rounded-full bg-[#f5f3ff] flex items-center justify-center mx-auto mb-4">
+                <svg viewBox="0 0 24 24" className="w-8 h-8 text-[#a855f7]"><circle cx="6" cy="12" r="3.5" fill="currentColor" opacity=".7"/><circle cx="18" cy="6" r="3.5" fill="currentColor" opacity=".5"/><circle cx="18" cy="18" r="3.5" fill="currentColor" opacity=".4"/></svg>
+              </div>
+              <h3 className="text-base font-semibold text-[#1a1a18] mb-1">Sin clusters detectados</h3>
+              <p className="text-sm text-[#646462] max-w-md mx-auto">Necesitas al menos 2 generaciones del mismo modelo+prompt para formar un cluster. EnvÃ­a datos LLM con <code className="bg-[#f3f3f1] text-[#a855f7] px-1 rounded font-mono">$ai_generation</code>.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {filtered.map((c, i) => {
+                const color = clusterColor(i);
+                return (
+                  <button
+                    key={c.key}
+                    onClick={() => { setSelected(c); setSelectedColor(color); }}
+                    className="text-left bg-white border border-[#e9eae6] rounded-xl p-4 hover:shadow-md hover:border-[#a855f7] transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}20` }}>
+                          <span className="text-[10px] font-bold" style={{ color }}>{i + 1}</span>
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-[#1a1a18] truncate">{c.label}</p>
+                          <p className="text-[10px] text-[#9ca3af] mt-0.5">{c.models.join(', ').slice(0, 60)}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-mono font-bold flex-shrink-0 ml-2" style={{ color }}>{c.count}</span>
+                    </div>
+                    <p className="text-[11px] text-[#646462] line-clamp-2 mb-3 italic">"{c.sample_input.slice(0, 140) || '(sin prompt)'}"</p>
+                    <div className="grid grid-cols-3 gap-2 text-[10px]">
+                      <div className="text-center"><p className="text-[#9ca3af] uppercase tracking-widest">Coste</p><p className="font-mono text-[#1a1a18] mt-0.5">${c.total_cost.toFixed(2)}</p></div>
+                      <div className="text-center"><p className="text-[#9ca3af] uppercase tracking-widest">Lat. media</p><p className="font-mono text-[#1a1a18] mt-0.5">{c.avg_latency.toFixed(2)}s</p></div>
+                      <div className="text-center"><p className="text-[#9ca3af] uppercase tracking-widest">Error %</p><p className={`font-mono mt-0.5 ${c.error_rate > 0 ? 'text-[#dc2626]' : 'text-[#16a34a]'}`}>{c.error_rate.toFixed(1)}%</p></div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Jobs sidebar */}
+        {showJobs && (
+          <div className="w-72 border-l border-[#e9eae6] bg-white flex flex-col flex-shrink-0">
+            <div className="px-3 py-2 border-b border-[#e9eae6] flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Jobs de clustering</span>
+              <button onClick={() => setShowJobs(false)} className="text-[#9ca3af] hover:text-[#1a1a18] text-xs">Ã—</button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {jobs.length === 0 ? (
+                <p className="p-4 text-xs text-[#9ca3af] text-center">Sin jobs todavÃ­a. Pulsa "Ejecutar clustering" para empezar.</p>
+              ) : jobs.map(j => {
+                const STATUS_BADGE = {
+                  queued:    { c: 'bg-[#f3f3f1] text-[#646462]', l: 'En cola' },
+                  running:   { c: 'bg-[#dbeafe] text-[#1e40af]', l: 'En ejecuciÃ³n' },
+                  completed: { c: 'bg-[#dcfce7] text-[#16a34a]', l: 'Completado' },
+                  failed:    { c: 'bg-[#fee2e2] text-[#dc2626]', l: 'Fallido' },
+                }[j.status];
+                return (
+                  <div key={j.id} className="p-3 border-b border-[#e9eae6] group">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-xs font-medium text-[#1a1a18] flex-1">{j.name}</p>
+                      <button onClick={() => deleteJob(j.id)} className="text-[#9ca3af] hover:text-[#dc2626] opacity-0 group-hover:opacity-100">
+                        <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${STATUS_BADGE.c}`}>{STATUS_BADGE.l}</span>
+                      <span className="text-[10px] text-[#9ca3af]">{new Date(j.started).toLocaleTimeString('es-ES')}</span>
+                    </div>
+                    {(j.status === 'running' || j.status === 'queued') && (
+                      <div className="h-1 bg-[#f3f3f1] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#a855f7] transition-all" style={{ width: `${j.progress}%` }} />
+                      </div>
+                    )}
+                    {j.status === 'completed' && j.count != null && (
+                      <p className="text-[10px] text-[#16a34a]">{j.count} clusters encontrados</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <ClusterDetailDrawer cluster={selected} color={selectedColor} onClose={() => setSelected(null)} rangeClause={rangeClause} />
+
+      {showAbout && (
+        <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={() => setShowAbout(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-[92vw] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#1a1a18]">CÃ³mo funcionan los clusters</h2>
+              <button onClick={() => setShowAbout(false)} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+            </div>
+            <div className="p-5 text-sm text-[#1a1a18] space-y-3">
+              <p>Los clusters agrupan generaciones LLM con patrones similares para que detectes:</p>
+              <ul className="list-disc list-inside text-[#646462] space-y-1 text-xs">
+                <li><strong className="text-[#1a1a18]">Prompts repetidos</strong> que podrÃ­as cachear o pre-renderizar.</li>
+                <li><strong className="text-[#1a1a18]">Errores sistemÃ¡ticos</strong> con un modelo o input concreto.</li>
+                <li><strong className="text-[#1a1a18]">Patrones de coste</strong> donde un prompt corto genera respuestas muy largas.</li>
+              </ul>
+              <p className="text-xs text-[#646462]">La agrupaciÃ³n se calcula con HogQL: cada cluster combina <code className="bg-[#f3f3f1] text-[#a855f7] px-1 rounded font-mono">model + provider + is_error + prefijo del prompt (60 chars)</code>. Solo aparecen clusters con â‰¥2 miembros.</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WAAppPlaygroundView() {
   const [model, setModel] = useState('gpt-5-mini');
   const [showModelDrop, setShowModelDrop] = useState(false);
@@ -53786,6 +54117,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
