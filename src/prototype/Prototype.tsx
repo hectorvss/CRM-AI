@@ -32211,44 +32211,606 @@ function WAAppSessionReplayView() {
   );
 }
 
+// â”€â”€ WAAppSupportView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Mantiene el diseno existente y solo anade lo que falta:
+//   - Estado real de tickets (localStorage + carga de members PostHog)
+//   - Dropdowns funcionales para todos los filtros
+//   - TicketDetailDrawer con thread + composer + customer panel
+//   - NewTicketModal, TemplatesModal, SnoozeModal, SavedViewsMenu
+//   - Settings tab con secciones reales (channels/SLA/routing/tags/templates)
+//   - Bulk selection con bulk actions
+//   - Customer context via HogQL (eventos recientes, grabaciones del usuario)
+
+interface SupportTicket {
+  id:           string;
+  number:       number;
+  subject:      string;
+  person:       { name: string; email: string; distinct_id?: string };
+  status:       'open' | 'in_progress' | 'snoozed' | 'resolved' | 'spam';
+  priority:     'low' | 'medium' | 'high' | 'urgent';
+  channel:      'email' | 'chat' | 'in-app' | 'slack' | 'phone';
+  sla_state:    'on_track' | 'at_risk' | 'breached' | null;
+  assignee:     string | null;
+  tags:         string[];
+  messages:     SupportMessage[];
+  created_at:   string;
+  updated_at:   string;
+  snooze_until: string | null;
+}
+interface SupportMessage {
+  id: string; author: string; author_name: string; is_internal: boolean;
+  body: string; attachments?: { name: string; size: number; url?: string }[]; ts: string;
+}
+interface SupportTemplate { id: string; name: string; subject?: string; body: string; }
+interface SupportSavedView  { id: string; name: string; filters: any }
+interface SupportTag        { name: string; color: string }
+
+const TICKET_STATUS_META: Record<SupportTicket['status'], { label: string; color: string; bg: string }> = {
+  open:        { label: 'Open',        color: '#3b59f6', bg: '#eff2ff' },
+  in_progress: { label: 'In progress', color: '#f59e0b', bg: '#fef3c7' },
+  snoozed:     { label: 'Snoozed',     color: '#9ca3af', bg: '#f3f3f1' },
+  resolved:    { label: 'Resolved',    color: '#16a34a', bg: '#dcfce7' },
+  spam:        { label: 'Spam',        color: '#dc2626', bg: '#fee2e2' },
+};
+const TICKET_PRIORITY_META: Record<SupportTicket['priority'], { label: string; color: string; bg: string }> = {
+  low:    { label: 'Low',    color: '#646462', bg: '#f3f3f1' },
+  medium: { label: 'Medium', color: '#3b59f6', bg: '#eff2ff' },
+  high:   { label: 'High',   color: '#f59e0b', bg: '#fef3c7' },
+  urgent: { label: 'Urgent', color: '#dc2626', bg: '#fee2e2' },
+};
+const CHANNEL_META: Record<SupportTicket['channel'], { label: string; icon: React.ReactNode }> = {
+  email:    { label: 'Email',  icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="1" y="3" width="14" height="10" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M1 4l7 5 7-5" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg> },
+  chat:     { label: 'Chat',   icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M2 3h12v8H6l-3 3v-3H2z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg> },
+  'in-app': { label: 'In-app', icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="3" y="2" width="10" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="11.5" r="0.7" fill="currentColor"/></svg> },
+  slack:    { label: 'Slack',  icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="3" y="3" width="2.5" height="2.5" fill="currentColor"/><rect x="10.5" y="3" width="2.5" height="2.5" fill="currentColor"/><rect x="3" y="10.5" width="2.5" height="2.5" fill="currentColor"/><rect x="10.5" y="10.5" width="2.5" height="2.5" fill="currentColor"/></svg> },
+  phone:    { label: 'Phone',  icon: <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M3 2h3l1 4-2 1c1 2 3 4 5 5l1-2 4 1v3c0 0-7 1-12-4S3 2 3 2z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg> },
+};
+const TAG_PALETTE = ['#3b59f6', '#e8572a', '#16a34a', '#a855f7', '#f59e0b', '#dc2626', '#06b6d4'];
+
+function SupportFilterDropdown({ label, value, options, onChange, allLabel = 'Todos' }: {
+  label: string; value: string | null; options: { key: string; label: string; icon?: React.ReactNode }[]; onChange: (k: string | null) => void; allLabel?: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  const current = options.find(o => o.key === value);
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(o => !o)} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-[12px] whitespace-nowrap ${value ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f9f9f7]'}`}>
+        {current?.label ?? label}
+        {value && <span onClick={e => { e.stopPropagation(); onChange(null); }} className="ml-1 text-[#9ca3af] hover:text-[#dc2626] cursor-pointer"><svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></span>}
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-40 w-56 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1 max-h-80 overflow-y-auto">
+          <button onClick={() => { onChange(null); setOpen(false); }} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] ${!value ? 'text-[#3b59f6]' : 'text-[#646462]'}`}>{allLabel}</button>
+          <div className="border-t border-[#f3f3f1] my-1" />
+          {options.map(o => (
+            <button key={o.key} onClick={() => { onChange(o.key); setOpen(false); }} className={`w-full flex items-center gap-2 text-left px-3 py-1.5 text-sm hover:bg-[#f9f9f7] ${value === o.key ? 'text-[#3b59f6] bg-[#eff2ff]' : 'text-[#1a1a1a]'}`}>
+              {o.icon}<span>{o.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SupStatusPill({ status, onChange }: { status: SupportTicket['status']; onChange?: (s: SupportTicket['status']) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  const m = TICKET_STATUS_META[status];
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button onClick={e => { e.stopPropagation(); if (onChange) setOpen(o => !o); }} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ color: m.color, backgroundColor: m.bg }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: m.color }} />
+        {m.label}
+        {onChange && <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </button>
+      {open && onChange && (
+        <div className="absolute left-0 top-full mt-1 z-40 w-36 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1">
+          {(Object.keys(TICKET_STATUS_META) as SupportTicket['status'][]).map(s => {
+            const sm = TICKET_STATUS_META[s];
+            return (
+              <button key={s} onClick={e => { e.stopPropagation(); onChange(s); setOpen(false); }} className="w-full flex items-center gap-2 px-2 py-1 text-xs hover:bg-[#f9f9f7]">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sm.color }} />
+                <span style={{ color: sm.color }}>{sm.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+function SupPriorityPill({ priority, onChange }: { priority: SupportTicket['priority']; onChange?: (p: SupportTicket['priority']) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  const m = TICKET_PRIORITY_META[priority];
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button onClick={e => { e.stopPropagation(); if (onChange) setOpen(o => !o); }} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ color: m.color, backgroundColor: m.bg }}>
+        {m.label}
+        {onChange && <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </button>
+      {open && onChange && (
+        <div className="absolute left-0 top-full mt-1 z-40 w-28 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1">
+          {(Object.keys(TICKET_PRIORITY_META) as SupportTicket['priority'][]).map(p => (
+            <button key={p} onClick={e => { e.stopPropagation(); onChange(p); setOpen(false); }} className="w-full text-left px-2 py-1 text-xs hover:bg-[#f9f9f7]" style={{ color: TICKET_PRIORITY_META[p].color }}>{TICKET_PRIORITY_META[p].label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SupAssigneePicker({ assignee, members, onChange }: { assignee: string | null; members: any[]; onChange?: (uuid: string | null) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  const member = members.find(m => (m.user?.uuid ?? m.uuid) === assignee);
+  const name = member?.user?.first_name || member?.user?.email || (assignee ? 'Asignado' : null);
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button onClick={e => { e.stopPropagation(); if (onChange) setOpen(o => !o); }} className="inline-flex items-center gap-1.5 text-xs">
+        {assignee ? (
+          <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white flex items-center justify-center text-[9px] font-bold">{(name ?? '?')[0]?.toUpperCase()}</span>
+        ) : (
+          <span className="w-5 h-5 rounded-full border border-dashed border-[#c4c4be] text-[#9ca3af] flex items-center justify-center text-[9px]">?</span>
+        )}
+        <span className="text-[#646462]">{name ?? 'Sin asignar'}</span>
+      </button>
+      {open && onChange && (
+        <div className="absolute right-0 top-full mt-1 z-40 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 max-h-72 overflow-y-auto">
+          <button onClick={e => { e.stopPropagation(); onChange(null); setOpen(false); }} className="w-full text-left px-2 py-1.5 text-xs hover:bg-[#f9f9f7] text-[#646462] italic">Sin asignar</button>
+          <div className="border-t border-[#f3f3f1] my-1" />
+          {members.map(m => {
+            const uuid = m.user?.uuid ?? m.uuid;
+            const lbl = m.user?.first_name || m.user?.email || 'Usuario';
+            return (
+              <button key={uuid} onClick={e => { e.stopPropagation(); onChange(uuid); setOpen(false); }} className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-[#f9f9f7] ${assignee === uuid ? 'bg-[#eff2ff]' : ''}`}>
+                <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white flex items-center justify-center text-[9px] font-bold">{lbl[0]?.toUpperCase()}</span>
+                <span className="text-[#1a1a1a]">{lbl}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SupSnoozeModal({ open, onClose, onSnooze }: { open: boolean; onClose: () => void; onSnooze: (until: string) => void }) {
+  const [custom, setCustom] = React.useState('');
+  if (!open) return null;
+  const PRESETS: any[] = [
+    { label: '1 hora', hours: 1 },
+    { label: '4 horas', hours: 4 },
+    { label: 'Manana 9:00', tomorrow: true },
+    { label: 'Proximo lunes', nextMonday: true },
+    { label: '1 semana', hours: 24 * 7 },
+  ];
+  function apply(p: any) {
+    const d = new Date();
+    if (p.tomorrow) { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+    else if (p.nextMonday) { const days = (8 - d.getDay()) % 7 || 7; d.setDate(d.getDate() + days); d.setHours(9, 0, 0, 0); }
+    else { d.setHours(d.getHours() + p.hours); }
+    onSnooze(d.toISOString()); onClose();
+  }
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-[60] flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[420px] max-w-[92vw] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <h2 className="text-base font-bold text-[#1a1a1a]">Posponer ticket</h2>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+        </div>
+        <div className="p-4 space-y-1">
+          {PRESETS.map((p, i) => (
+            <button key={i} onClick={() => apply(p)} className="w-full text-left px-3 py-2 hover:bg-[#f9f9f7] rounded text-sm text-[#1a1a1a]">{p.label}</button>
+          ))}
+          <div className="border-t border-[#e9eae6] my-2" />
+          <label className="block px-3 text-xs text-[#646462] mb-1">Hasta una fecha concreta</label>
+          <div className="px-3 flex gap-2">
+            <input type="datetime-local" value={custom} onChange={e => setCustom(e.target.value)} className="flex-1 px-2 py-1 border border-[#e9eae6] rounded text-xs focus:outline-none focus:border-[#3b59f6]" />
+            <button disabled={!custom} onClick={() => { onSnooze(new Date(custom).toISOString()); onClose(); }} className="px-3 py-1 bg-[#1a1a1a] text-white text-xs rounded disabled:opacity-50">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SupTemplatesModal({ open, onClose, templates, onSave, onDelete, onPick }: {
+  open: boolean; onClose: () => void; templates: SupportTemplate[];
+  onSave: (t: SupportTemplate) => void; onDelete: (id: string) => void; onPick?: (t: SupportTemplate) => void;
+}) {
+  const [editing, setEditing] = React.useState<SupportTemplate | null>(null);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-[60] flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[640px] max-w-[92vw] max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <h2 className="text-base font-bold text-[#1a1a1a]">Plantillas de respuesta</h2>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setEditing({ id: crypto.randomUUID(), name: '', body: '' })} className="px-2 py-1 bg-[#1a1a1a] text-white text-xs rounded">+ Nueva</button>
+            <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+          </div>
+        </div>
+        {editing ? (
+          <div className="flex-1 overflow-y-auto p-5 space-y-3">
+            <button onClick={() => setEditing(null)} className="text-xs text-[#3b59f6] hover:underline">{'<-'} Volver</button>
+            <div>
+              <label className="block text-xs font-medium text-[#1a1a1a] mb-1">Nombre</label>
+              <input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#1a1a1a] mb-1">Asunto (opcional)</label>
+              <input value={editing.subject ?? ''} onChange={e => setEditing({ ...editing, subject: e.target.value })} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#1a1a1a] mb-1">Cuerpo</label>
+              <textarea value={editing.body} onChange={e => setEditing({ ...editing, body: e.target.value })} rows={8} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6] resize-y" />
+              <p className="text-[10px] text-[#9ca3af] mt-1">Variables: <code className="bg-[#f3f3f1] px-1 rounded text-[#3b59f6]">{`{{name}}`}</code> <code className="bg-[#f3f3f1] px-1 rounded text-[#3b59f6]">{`{{email}}`}</code> <code className="bg-[#f3f3f1] px-1 rounded text-[#3b59f6]">{`{{ticket_id}}`}</code></p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setEditing(null)} className="px-3 py-1.5 text-sm text-[#646462]">Cancelar</button>
+              <button disabled={!editing.name.trim() || !editing.body.trim()} onClick={() => { onSave(editing); setEditing(null); }} className="px-3 py-1.5 bg-[#1a1a1a] text-white text-sm rounded-lg disabled:opacity-50">Guardar</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            {templates.length === 0 ? (
+              <p className="p-8 text-sm text-[#9ca3af] text-center">Sin plantillas. Crea la primera arriba.</p>
+            ) : templates.map(t => (
+              <div key={t.id} className="px-5 py-3 border-b border-[#e9eae6] flex items-start gap-3 hover:bg-[#fafaf9] group">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#1a1a1a]">{t.name}</p>
+                  {t.subject && <p className="text-[11px] text-[#646462] truncate">{t.subject}</p>}
+                  <p className="text-xs text-[#646462] line-clamp-2 mt-0.5">{t.body}</p>
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                  {onPick && <button onClick={() => { onPick(t); onClose(); }} className="px-2 py-1 bg-[#1a1a1a] text-white text-xs rounded">Usar</button>}
+                  <button onClick={() => setEditing(t)} className="px-2 py-1 border border-[#e9eae6] text-xs rounded hover:bg-white">Editar</button>
+                  <button onClick={() => { if (confirm('Eliminar plantilla?')) onDelete(t.id); }} className="px-2 py-1 text-[#dc2626] text-xs rounded hover:bg-[#fee2e2]">x</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SupNewTicketModal({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (t: Omit<SupportTicket, 'id'|'number'|'messages'|'created_at'|'updated_at'>) => void }) {
+  const [name, setName] = React.useState(''); const [email, setEmail] = React.useState('');
+  const [subject, setSubject] = React.useState(''); const [body, setBody] = React.useState('');
+  const [channel, setChannel] = React.useState<SupportTicket['channel']>('email');
+  const [priority, setPriority] = React.useState<SupportTicket['priority']>('medium');
+  React.useEffect(() => { if (open) { setName(''); setEmail(''); setSubject(''); setBody(''); setChannel('email'); setPriority('medium'); } }, [open]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-[60] flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-[92vw] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <h2 className="text-base font-bold text-[#1a1a1a]">Nuevo ticket</h2>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="block text-xs font-medium text-[#1a1a1a] mb-1">Nombre cliente</label><input value={name} onChange={e => setName(e.target.value)} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" /></div>
+            <div><label className="block text-xs font-medium text-[#1a1a1a] mb-1">Email</label><input value={email} onChange={e => setEmail(e.target.value)} type="email" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" /></div>
+          </div>
+          <div><label className="block text-xs font-medium text-[#1a1a1a] mb-1">Asunto</label><input value={subject} onChange={e => setSubject(e.target.value)} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]" /></div>
+          <div><label className="block text-xs font-medium text-[#1a1a1a] mb-1">Mensaje</label><textarea value={body} onChange={e => setBody(e.target.value)} rows={5} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6] resize-y" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="block text-xs font-medium text-[#1a1a1a] mb-1">Canal</label><select value={channel} onChange={e => setChannel(e.target.value as any)} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]">{Object.entries(CHANNEL_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}</select></div>
+            <div><label className="block text-xs font-medium text-[#1a1a1a] mb-1">Prioridad</label><select value={priority} onChange={e => setPriority(e.target.value as any)} className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#3b59f6]">{Object.entries(TICKET_PRIORITY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}</select></div>
+          </div>
+        </div>
+        <div className="px-5 py-3 bg-[#f9f9f7] border-t border-[#e9eae6] flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-[#1a1a1a] hover:bg-white rounded">Cancelar</button>
+          <button disabled={!name.trim() || !email.trim() || !body.trim()} onClick={() => { onCreate({ subject: subject || body.slice(0, 60), person: { name, email }, status: 'open', priority, channel, sla_state: 'on_track', assignee: null, tags: [], snooze_until: null } as any); onClose(); }} className="px-3 py-1.5 bg-[#1a1a1a] text-white text-sm rounded disabled:opacity-50">Crear ticket</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SupCustomerContextPanel({ ticket }: { ticket: SupportTicket }) {
+  const [recentEvents, setRecentEvents] = React.useState<any[]>([]);
+  const [recentRecordings, setRecentRecordings] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const escEmail = ticket.person.email.replace(/'/g, "''");
+        const hql = `SELECT timestamp, event, toString(properties.$current_url) AS url FROM events WHERE (distinct_id = '${escEmail}' OR toString(properties.email) = '${escEmail}') AND timestamp >= now() - INTERVAL 7 DAY ORDER BY timestamp DESC LIMIT 15`;
+        const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+        if (!cancelled) setRecentEvents((res.results ?? []).map((r: any[]) => ({ ts: r[0], event: r[1], url: r[2] })));
+        const recs: any = await ph.posthog.recordings.list({ limit: 5, person_uuid: ticket.person.distinct_id });
+        if (!cancelled) setRecentRecordings(recs.results ?? []);
+      } catch {}
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [ticket.person.email, ticket.person.distinct_id]);
+  return (
+    <div className="space-y-4">
+      <section>
+        <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Cliente</h4>
+        <div className="bg-[#f9f9f7] rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-9 h-9 rounded-full bg-[#3b59f6] text-white flex items-center justify-center font-bold text-sm">{ticket.person.name[0]?.toUpperCase()}</div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[#1a1a1a] truncate">{ticket.person.name}</p>
+              <p className="text-[11px] text-[#646462] truncate">{ticket.person.email}</p>
+            </div>
+          </div>
+          {ticket.person.distinct_id && <p className="text-[10px] text-[#9ca3af] font-mono">id: {ticket.person.distinct_id}</p>}
+        </div>
+      </section>
+      <section>
+        <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Eventos recientes (7d)</h4>
+        {loading ? <div className="space-y-1">{[0,1,2,3].map(i => <div key={i} className="h-5 bg-[#f3f3f1] rounded animate-pulse" />)}</div>
+        : recentEvents.length === 0 ? <p className="text-xs text-[#9ca3af] italic">Sin eventos recientes</p>
+        : <div className="space-y-1">{recentEvents.map((e, i) => (
+            <div key={i} className="flex items-center gap-2 text-[11px] py-0.5">
+              <span className="font-mono text-[#3b59f6] truncate max-w-[100px]">{e.event}</span>
+              <span className="text-[#9ca3af] truncate flex-1">{e.url}</span>
+              <span className="text-[#9ca3af] flex-shrink-0">{formatRelativeTime(e.ts)}</span>
+            </div>
+          ))}</div>}
+      </section>
+      <section>
+        <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Grabaciones</h4>
+        {loading ? <div className="h-12 bg-[#f3f3f1] rounded animate-pulse" />
+        : recentRecordings.length === 0 ? <p className="text-xs text-[#9ca3af] italic">Sin grabaciones</p>
+        : <div className="space-y-1">{recentRecordings.map((r: any) => (
+            <button key={r.id} className="w-full text-left p-2 hover:bg-[#fafaf9] rounded text-xs flex items-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 text-[#e8572a]"><path d="M4 3l9 5-9 5z" fill="currentColor"/></svg>
+              <span className="text-[#1a1a1a] truncate flex-1">{r.start_url ?? `Recording ${r.id?.slice(0, 8)}`}</span>
+              <span className="text-[#9ca3af]">{Math.round((r.duration ?? 0))}s</span>
+            </button>
+          ))}</div>}
+      </section>
+    </div>
+  );
+}
+
+function SupTicketDetailDrawer({ ticket, onClose, onUpdate, onDelete, members, templates, onOpenTemplates, onOpenSnooze, tags, onAddTag, onRemoveTag }: {
+  ticket: SupportTicket; onClose: () => void; onUpdate: (p: Partial<SupportTicket>) => void; onDelete: () => void;
+  members: any[]; templates: SupportTemplate[]; onOpenTemplates: () => void; onOpenSnooze: () => void;
+  tags: SupportTag[]; onAddTag: (t: string) => void; onRemoveTag: (t: string) => void;
+}) {
+  const [reply, setReply] = React.useState('');
+  const [isInternal, setIsInternal] = React.useState(false);
+  const [showTags, setShowTags] = React.useState(false);
+  const tagsRef = useClickOutside<HTMLDivElement>(() => setShowTags(false));
+  const threadRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => { threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' }); }, [ticket.messages.length]);
+  function send() {
+    if (!reply.trim()) return;
+    const msg: SupportMessage = { id: crypto.randomUUID(), author: 'me', author_name: 'Tu', is_internal: isInternal, body: reply, ts: new Date().toISOString() };
+    onUpdate({ messages: [...ticket.messages, msg], updated_at: new Date().toISOString(), status: ticket.status === 'open' ? 'in_progress' : ticket.status });
+    setReply('');
+  }
+  function applyTemplate(t: SupportTemplate) {
+    setReply(t.body.replace(/\{\{name\}\}/g, ticket.person.name).replace(/\{\{email\}\}/g, ticket.person.email).replace(/\{\{ticket_id\}\}/g, String(ticket.number)));
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[1080px] max-w-[95vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-3 border-b border-[#e9eae6] flex items-center gap-3 flex-shrink-0">
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-[10px] text-[#9ca3af] font-mono">#{ticket.number}</span>
+              <SupStatusPill status={ticket.status} onChange={s => onUpdate({ status: s, updated_at: new Date().toISOString() })} />
+              <SupPriorityPill priority={ticket.priority} onChange={p => onUpdate({ priority: p })} />
+              <span className="text-[10px] text-[#646462] flex items-center gap-1">{CHANNEL_META[ticket.channel].icon}{CHANNEL_META[ticket.channel].label}</span>
+            </div>
+            <h2 className="text-sm font-semibold text-[#1a1a1a] truncate">{ticket.subject}</h2>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <SupAssigneePicker assignee={ticket.assignee} members={members} onChange={uuid => onUpdate({ assignee: uuid })} />
+            <button onClick={onOpenSnooze} className="text-[11px] px-2 py-1 bg-white border border-[#e9eae6] rounded hover:bg-[#f9f9f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 inline mr-0.5"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v4l3 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/></svg>
+              Posponer
+            </button>
+            <button onClick={() => onUpdate({ status: 'resolved', updated_at: new Date().toISOString() })} className="text-[11px] px-2 py-1 bg-[#16a34a] text-white rounded hover:bg-[#15803d]" disabled={ticket.status === 'resolved'}>Resolver</button>
+            <button onClick={() => { if (confirm('Eliminar ticket?')) onDelete(); }} className="text-[#646462] hover:text-[#dc2626] p-1">
+              <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 5h8l-1 9H5zM6 5V3h4v2M2 5h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div className="px-5 py-2 border-b border-[#e9eae6] flex items-center gap-1.5 flex-wrap relative" ref={tagsRef}>
+          <span className="text-[10px] text-[#9ca3af] font-semibold uppercase">Tags:</span>
+          {ticket.tags.map(t => {
+            const meta = tags.find(x => x.name === t);
+            return (
+              <span key={t} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: (meta?.color ?? '#646462') + '20', color: meta?.color ?? '#646462' }}>
+                {t}<button onClick={() => onRemoveTag(t)} className="hover:opacity-60">x</button>
+              </span>
+            );
+          })}
+          <button onClick={() => setShowTags(s => !s)} className="text-[10px] text-[#3b59f6] hover:underline">+ Anadir tag</button>
+          {showTags && (
+            <div className="absolute top-full left-12 mt-1 z-40 w-48 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto">
+              {tags.filter(t => !ticket.tags.includes(t.name)).map(t => (
+                <button key={t.name} onClick={() => { onAddTag(t.name); setShowTags(false); }} className="w-full flex items-center gap-2 px-2 py-1 text-xs hover:bg-[#f9f9f7]">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />{t.name}
+                </button>
+              ))}
+              {tags.length === 0 && <p className="px-2 py-1 text-xs text-[#9ca3af]">Crea tags en Settings</p>}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 flex min-h-0">
+          <div className="flex-1 flex flex-col min-w-0 border-r border-[#e9eae6]">
+            <div ref={threadRef} className="flex-1 overflow-y-auto p-5 space-y-3 bg-[#fafaf9]">
+              {ticket.messages.length === 0 ? (
+                <p className="text-xs text-[#9ca3af] italic text-center py-8">Sin mensajes todavia.</p>
+              ) : ticket.messages.map(m => (
+                <div key={m.id} className={`max-w-[80%] ${m.author === 'customer' ? '' : 'ml-auto'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] text-[#646462] font-semibold">{m.author_name}</span>
+                    {m.is_internal && <span className="text-[9px] bg-[#fef3c7] text-[#92400e] px-1.5 py-0.5 rounded">Nota interna</span>}
+                    <span className="text-[10px] text-[#9ca3af]">{formatRelativeTime(m.ts)}</span>
+                  </div>
+                  <div className={`rounded-lg p-3 text-sm whitespace-pre-wrap ${m.is_internal ? 'bg-[#fef9c3] border border-[#fcd34d]' : m.author === 'customer' ? 'bg-white border border-[#e9eae6]' : 'bg-[#3b59f6] text-white'}`}>{m.body}</div>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-[#e9eae6] bg-white">
+              <div className="px-3 py-2 border-b border-[#e9eae6] flex items-center gap-2">
+                <button onClick={() => setIsInternal(false)} className={`px-2 py-1 text-xs rounded ${!isInternal ? 'bg-[#3b59f6] text-white' : 'text-[#646462] hover:bg-[#f9f9f7]'}`}>Respuesta</button>
+                <button onClick={() => setIsInternal(true)} className={`px-2 py-1 text-xs rounded ${isInternal ? 'bg-[#fef3c7] text-[#92400e]' : 'text-[#646462] hover:bg-[#f9f9f7]'}`}>Nota interna</button>
+                <div className="ml-auto flex items-center gap-1">
+                  <button onClick={onOpenTemplates} className="px-2 py-1 text-xs text-[#646462] hover:bg-[#f9f9f7] rounded">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M3 1h7l3 3v11H3z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round"/><path d="M10 1v3h3M6 8h4M6 11h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  </button>
+                  {templates.length > 0 && (
+                    <select onChange={e => { const t = templates.find(x => x.id === e.target.value); if (t) applyTemplate(t); e.target.value = ''; }} className="text-xs border border-[#e9eae6] rounded px-1 py-0.5 focus:outline-none">
+                      <option value="">Insertar plantilla...</option>
+                      {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  )}
+                </div>
+              </div>
+              <textarea value={reply} onChange={e => setReply(e.target.value)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') send(); }} rows={4} placeholder={isInternal ? 'Nota visible solo para tu equipo...' : 'Escribe tu respuesta...'} className={`w-full px-3 py-2 text-sm focus:outline-none resize-y ${isInternal ? 'bg-[#fefce8]' : 'bg-white'}`} />
+              <div className="px-3 py-2 border-t border-[#e9eae6] flex items-center justify-between">
+                <span className="text-[10px] text-[#9ca3af]">Cmd+Enter para enviar</span>
+                <button onClick={send} disabled={!reply.trim()} className={`px-3 py-1 text-xs rounded ${isInternal ? 'bg-[#92400e]' : 'bg-[#3b59f6]'} text-white disabled:opacity-50`}>
+                  {isInternal ? 'Anadir nota' : 'Enviar'}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="w-[320px] flex-shrink-0 overflow-y-auto p-4 bg-white">
+            <SupCustomerContextPanel ticket={ticket} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WAAppSupportView() {
   type SupportTab = 'tickets' | 'settings';
   const [tab, setTab] = useState<SupportTab>('tickets');
   const [betaDismissed, setBetaDismissed] = useState(false);
   const [search, setSearch] = useState('');
 
+  const [tickets, setTickets] = React.useState<SupportTicket[]>([]);
+  const [members, setMembers] = React.useState<any[]>([]);
+  const [templates, setTemplates] = React.useState<SupportTemplate[]>([]);
+  const [savedViews, setSavedViews] = React.useState<SupportSavedView[]>([]);
+  const [tags, setTags] = React.useState<SupportTag[]>([
+    { name: 'bug', color: '#dc2626' },
+    { name: 'feature', color: '#3b59f6' },
+    { name: 'billing', color: '#16a34a' },
+    { name: 'onboarding', color: '#a855f7' },
+  ]);
+  const [selected, setSelected] = React.useState<SupportTicket | null>(null);
+  const [showTemplates, setShowTemplates] = React.useState(false);
+  const [showSnooze, setShowSnooze] = React.useState(false);
+  const [showNew, setShowNew] = React.useState(false);
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+  const [filterDate, setFilterDate] = React.useState<string | null>('-7d');
+  const [filterStatus, setFilterStatus] = React.useState<string | null>(null);
+  const [filterPriority, setFilterPriority] = React.useState<string | null>(null);
+  const [filterChannel, setFilterChannel] = React.useState<string | null>(null);
+  const [filterSla, setFilterSla] = React.useState<string | null>(null);
+  const [filterTag, setFilterTag] = React.useState<string | null>(null);
+  const [filterAssignee, setFilterAssignee] = React.useState<string | null>(null);
+  const [unassignedOnly, setUnassignedOnly] = React.useState(false);
+  const [showSavedViews, setShowSavedViews] = React.useState(false);
+  const savedRef = useClickOutside<HTMLDivElement>(() => setShowSavedViews(false));
+
+  React.useEffect(() => {
+    try {
+      const t = localStorage.getItem('wa-support-tickets'); if (t) setTickets(JSON.parse(t));
+      const tp = localStorage.getItem('wa-support-templates'); if (tp) setTemplates(JSON.parse(tp));
+      const sv = localStorage.getItem('wa-support-saved-views'); if (sv) setSavedViews(JSON.parse(sv));
+      const tg = localStorage.getItem('wa-support-tags'); if (tg) setTags(JSON.parse(tg));
+    } catch {}
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getCurrentUser()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.organization.members();
+        setMembers(res.results ?? res ?? []);
+      } catch {}
+    })();
+  }, []);
+  React.useEffect(() => { try { localStorage.setItem('wa-support-tickets', JSON.stringify(tickets)); } catch {} }, [tickets]);
+  React.useEffect(() => { try { localStorage.setItem('wa-support-templates', JSON.stringify(templates)); } catch {} }, [templates]);
+  React.useEffect(() => { try { localStorage.setItem('wa-support-saved-views', JSON.stringify(savedViews)); } catch {} }, [savedViews]);
+  React.useEffect(() => { try { localStorage.setItem('wa-support-tags', JSON.stringify(tags)); } catch {} }, [tags]);
+
+  function createTicket(t: any) {
+    const nt: SupportTicket = { ...t, id: crypto.randomUUID(), number: (tickets.reduce((m, x) => Math.max(m, x.number), 0) + 1) || 1001, messages: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    setTickets(prev => [nt, ...prev]); setSelected(nt);
+  }
+  function updateTicket(id: string, patch: Partial<SupportTicket>) {
+    setTickets(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
+    if (selected?.id === id) setSelected(s => s ? { ...s, ...patch } : s);
+  }
+  function deleteTicket(id: string) {
+    setTickets(prev => prev.filter(t => t.id !== id));
+    if (selected?.id === id) setSelected(null);
+  }
+  const filtered = tickets.filter(t => {
+    if (search && !`${t.number} ${t.subject} ${t.person.name} ${t.person.email}`.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterStatus && t.status !== filterStatus) return false;
+    if (filterPriority && t.priority !== filterPriority) return false;
+    if (filterChannel && t.channel !== filterChannel) return false;
+    if (filterSla && t.sla_state !== filterSla) return false;
+    if (filterTag && !t.tags.includes(filterTag)) return false;
+    if (filterAssignee && t.assignee !== filterAssignee) return false;
+    if (unassignedOnly && t.assignee) return false;
+    if (filterDate) {
+      const cutoffDays = filterDate === '-1d' ? 1 : filterDate === '-7d' ? 7 : filterDate === '-30d' ? 30 : filterDate === '-90d' ? 90 : 9999;
+      if (Date.now() - new Date(t.updated_at).getTime() > cutoffDays * 86400 * 1000) return false;
+    }
+    return true;
+  });
+  function saveCurrentView(name: string) {
+    setSavedViews(prev => [{ id: crypto.randomUUID(), name, filters: { filterDate, filterStatus, filterPriority, filterChannel, filterSla, filterTag, filterAssignee, unassignedOnly } }, ...prev]);
+  }
+  function applySaved(v: SupportSavedView) {
+    const f = v.filters;
+    setFilterDate(f.filterDate); setFilterStatus(f.filterStatus); setFilterPriority(f.filterPriority);
+    setFilterChannel(f.filterChannel); setFilterSla(f.filterSla); setFilterTag(f.filterTag);
+    setFilterAssignee(f.filterAssignee); setUnassignedOnly(f.unassignedOnly);
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
-      {/* Top bar */}
       <div className="flex items-start justify-between px-6 pt-5 pb-0 flex-shrink-0">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            {/* document icon */}
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-[#646462]">
               <rect x="3" y="2" width="12" height="14" rx="2" stroke="currentColor" strokeWidth="1.3"/>
               <path d="M6 6h6M6 9h6M6 12h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
             <h1 className="text-[16px] font-bold text-[#1a1a1a]">Support</h1>
-            {/* sparkle */}
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 1l1.2 3.8L12 7l-3.8 1.2L7 13l-1.2-3.8L2 7l3.8-1.2L7 1z" fill="#f59e0b"/>
-            </svg>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.2 3.8L12 7l-3.8 1.2L7 13l-1.2-3.8L2 7l3.8-1.2L7 1z" fill="#f59e0b"/></svg>
           </div>
           <p className="text-[13px] text-[#646462]">Manage customer conversations directly inside Clain.</p>
         </div>
-
-        {/* Top-right panel icons */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-          </button>
-          <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+          <button onClick={() => setShowNew(true)} className="px-3 py-1.5 bg-[#1a1a1a] text-white text-[12px] rounded-lg hover:bg-[#333]">+ Nuevo ticket</button>
+          <button onClick={() => setShowTemplates(true)} className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]" title="Plantillas">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 1h6l2 2v10H3z" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinejoin="round"/><path d="M9 1v3h3M5 7h4M5 9h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
           </button>
         </div>
       </div>
 
-      {/* Beta banner */}
       {!betaDismissed && (
         <div className="mx-6 mt-4 flex items-center gap-3 px-4 py-2.5 bg-[#eff2ff] border border-[#c7d0fd] rounded-lg flex-shrink-0">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#3b59f6" strokeWidth="1.3"/><path d="M7 6v4M7 4.5v.5" stroke="#3b59f6" strokeWidth="1.4" strokeLinecap="round"/></svg>
@@ -32260,219 +32822,279 @@ function WAAppSupportView() {
         </div>
       )}
 
-      {/* Tabs */}
       <div className="flex items-center px-6 mt-3 border-b border-[#e9eae6] flex-shrink-0">
         {(['tickets', 'settings'] as SupportTab[]).map(t => {
           const labels: Record<SupportTab, string> = { tickets: 'Tickets', settings: 'Settings' };
-          return (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
-                tab === t
-                  ? 'border-[#e8572a] text-[#1a1a1a]'
-                  : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
-              }`}
-            >
-              {labels[t]}
-            </button>
-          );
+          return <button key={t} onClick={() => setTab(t)} className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${tab === t ? 'border-[#e8572a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>{labels[t]}</button>;
         })}
       </div>
 
       {tab === 'tickets' ? (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Welcome to Support card */}
-          <div className="mx-6 mt-5 flex-shrink-0">
-            <div className="border border-[#e9eae6] rounded-xl p-6 flex gap-6 items-start">
-              {/* Hedgehog superhero mascot */}
-              <div className="w-20 h-20 flex-shrink-0 rounded-xl bg-[#fef3c7] flex items-center justify-center">
-                <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-                  {/* cape */}
-                  <path d="M18 28c-2 4-3 8-2 12l10-4 10 4c1-4 0-8-2-12" fill="#e8572a" opacity="0.85"/>
-                  {/* body */}
-                  <ellipse cx="26" cy="28" rx="10" ry="9" fill="#92400e"/>
-                  {/* face */}
-                  <ellipse cx="26" cy="22" rx="8" ry="7" fill="#d97706"/>
-                  {/* snout */}
-                  <ellipse cx="26" cy="25" rx="4" ry="2.5" fill="#fde68a"/>
-                  {/* eyes */}
-                  <circle cx="22.5" cy="20.5" r="1.5" fill="#1a1a1a"/>
-                  <circle cx="29.5" cy="20.5" r="1.5" fill="#1a1a1a"/>
-                  <circle cx="23" cy="20" r="0.5" fill="white"/>
-                  <circle cx="30" cy="20" r="0.5" fill="white"/>
-                  {/* nose */}
-                  <ellipse cx="26" cy="24" rx="1.2" ry="0.8" fill="#92400e"/>
-                  {/* spines */}
-                  <path d="M16 22c-3-4-4-8-2-12M19 18c-2-5-1-9 2-12M22 16c0-5 2-9 5-11M30 16c2-5 4-8 7-10M33 19c4-4 7-7 9-11" stroke="#78350f" strokeWidth="1.5" strokeLinecap="round"/>
-                  {/* star badge */}
-                  <path d="M38 14l1.2 3.6L43 19l-3.8 1.2L38 24l-1.2-3.8L33 19l3.8-1.2L38 14z" fill="#f59e0b"/>
-                </svg>
-              </div>
-
-              {/* Text content */}
-              <div className="flex-1 min-w-0">
-                <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-1.5">Welcome to Support</h2>
-                <p className="text-[13px] text-[#646462] leading-relaxed mb-3">
-                  Support lets you manage customer conversations directly inside Clain. Enable the conversations API to get started.
-                </p>
-
-                <ul className="flex flex-col gap-1.5 mb-4">
-                  {[
-                    'Centralized inbox for all customer conversations',
-                    'Ticket management with priorities and SLA tracking',
-                    'Deep product context — see what users did in your app',
-                    'Workflow automation to route and resolve tickets faster',
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-2 text-[13px] text-[#1a1a1a]">
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="mt-0.5 flex-shrink-0">
-                        <circle cx="7" cy="7" r="6.5" fill="#e8572a" opacity="0.15"/>
-                        <path d="M4.5 7l2 2 3-3" stroke="#e8572a" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="flex items-center gap-3">
-                  <button className="px-4 py-2 border border-[#f59e0b] text-[#92400e] text-[13px] font-semibold rounded-lg hover:bg-[#fef3c7] transition-colors">
-                    Enable
-                  </button>
-                  <button className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a] transition-colors">
-                    Learn more
-                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 9L9 2M9 2H4M9 2v5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
+          {tickets.length === 0 && (
+            <div className="mx-6 mt-5 flex-shrink-0">
+              <div className="border border-[#e9eae6] rounded-xl p-6 flex gap-6 items-start">
+                <div className="w-20 h-20 flex-shrink-0 rounded-xl bg-[#fef3c7] flex items-center justify-center">
+                  <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+                    <path d="M18 28c-2 4-3 8-2 12l10-4 10 4c1-4 0-8-2-12" fill="#e8572a" opacity="0.85"/>
+                    <ellipse cx="26" cy="28" rx="10" ry="9" fill="#92400e"/>
+                    <ellipse cx="26" cy="22" rx="8" ry="7" fill="#d97706"/>
+                    <ellipse cx="26" cy="25" rx="4" ry="2.5" fill="#fde68a"/>
+                    <circle cx="22.5" cy="20.5" r="1.5" fill="#1a1a1a"/>
+                    <circle cx="29.5" cy="20.5" r="1.5" fill="#1a1a1a"/>
+                    <circle cx="23" cy="20" r="0.5" fill="white"/>
+                    <circle cx="30" cy="20" r="0.5" fill="white"/>
+                    <ellipse cx="26" cy="24" rx="1.2" ry="0.8" fill="#92400e"/>
+                    <path d="M16 22c-3-4-4-8-2-12M19 18c-2-5-1-9 2-12M22 16c0-5 2-9 5-11M30 16c2-5 4-8 7-10M33 19c4-4 7-7 9-11" stroke="#78350f" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M38 14l1.2 3.6L43 19l-3.8 1.2L38 24l-1.2-3.8L33 19l3.8-1.2L38 14z" fill="#f59e0b"/>
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-1.5">Welcome to Support</h2>
+                  <p className="text-[13px] text-[#646462] leading-relaxed mb-3">Support lets you manage customer conversations directly inside Clain. Crea tu primer ticket o configura los canales.</p>
+                  <ul className="flex flex-col gap-1.5 mb-4">
+                    {['Centralized inbox for all customer conversations','Ticket management with priorities and SLA tracking','Deep product context - see what users did in your app','Workflow automation to route and resolve tickets faster'].map((item, i) => (
+                      <li key={i} className="flex items-start gap-2 text-[13px] text-[#1a1a1a]">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="mt-0.5 flex-shrink-0"><circle cx="7" cy="7" r="6.5" fill="#e8572a" opacity="0.15"/><path d="M4.5 7l2 2 3-3" stroke="#e8572a" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setShowNew(true)} className="px-4 py-2 border border-[#f59e0b] text-[#92400e] text-[13px] font-semibold rounded-lg hover:bg-[#fef3c7] transition-colors">+ Crear primer ticket</button>
+                    <button onClick={() => setTab('settings')} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a]">Configurar canales</button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Filter bar */}
           <div className="flex items-center gap-2 px-6 mt-4 flex-shrink-0 flex-wrap">
-            {/* Search */}
             <div className="relative flex-1 min-w-[180px] max-w-[260px]">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
-                <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
-                <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-              </svg>
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search by ticket #, name, email..."
-                className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af]"
-              />
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/><path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by ticket #, name, email..." className="w-full pl-7 pr-3 py-1.5 text-[12px] border border-[#e9eae6] rounded-lg focus:outline-none focus:border-[#3b59f6] placeholder-[#9ca3af]" />
             </div>
-
-            {/* Filter dropdowns */}
-            {['Last 7 days', 'All statuses', 'All priorities', 'All channels', 'All SLA states', 'All tags'].map(label => (
-              <button key={label} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] whitespace-nowrap">
-                {label}
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-            ))}
-
-            {/* Assignees */}
-            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7]">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="4" r="2.5" stroke="#646462" strokeWidth="1.1"/><path d="M1.5 10.5c0-2.2 2-4 4.5-4s4.5 1.8 4.5 4" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              All assignees
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#646462" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-
-            {/* Unassigned only toggle */}
-            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] bg-white hover:bg-[#f9f9f7]">
-              <div className="w-7 h-4 bg-[#e9eae6] rounded-full relative">
-                <div className="w-3 h-3 bg-white rounded-full absolute top-0.5 left-0.5 shadow-sm"/>
+            <SupportFilterDropdown label="Last 7 days" value={filterDate} onChange={setFilterDate} options={[
+              { key: '-1d', label: 'Last 24 hours' }, { key: '-7d', label: 'Last 7 days' },
+              { key: '-30d', label: 'Last 30 days' }, { key: '-90d', label: 'Last 90 days' },
+              { key: 'all', label: 'All time' },
+            ]} />
+            <SupportFilterDropdown label="All statuses" value={filterStatus} onChange={setFilterStatus} options={Object.entries(TICKET_STATUS_META).map(([k, m]) => ({ key: k, label: m.label }))} />
+            <SupportFilterDropdown label="All priorities" value={filterPriority} onChange={setFilterPriority} options={Object.entries(TICKET_PRIORITY_META).map(([k, m]) => ({ key: k, label: m.label }))} />
+            <SupportFilterDropdown label="All channels" value={filterChannel} onChange={setFilterChannel} options={Object.entries(CHANNEL_META).map(([k, m]) => ({ key: k, label: m.label, icon: m.icon }))} />
+            <SupportFilterDropdown label="All SLA states" value={filterSla} onChange={setFilterSla} options={[
+              { key: 'on_track', label: 'On track' }, { key: 'at_risk', label: 'At risk' }, { key: 'breached', label: 'Breached' },
+            ]} />
+            <SupportFilterDropdown label="All tags" value={filterTag} onChange={setFilterTag} options={tags.map(t => ({ key: t.name, label: t.name }))} />
+            <SupportFilterDropdown label="All assignees" value={filterAssignee} onChange={setFilterAssignee} options={members.map(m => ({ key: m.user?.uuid ?? m.uuid, label: m.user?.first_name || m.user?.email || 'Usuario' }))} />
+            <button onClick={() => setUnassignedOnly(v => !v)} className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-[12px] hover:bg-[#f9f9f7] ${unassignedOnly ? 'bg-[#eff2ff] border-[#dbe3ff] text-[#3b59f6]' : 'border-[#e9eae6] text-[#646462] bg-white'}`}>
+              <div className={`w-7 h-4 rounded-full relative ${unassignedOnly ? 'bg-[#3b59f6]' : 'bg-[#e9eae6]'}`}>
+                <div className={`w-3 h-3 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${unassignedOnly ? 'left-3.5' : 'left-0.5'}`}/>
               </div>
               Unassigned only
             </button>
-
-            {/* Spacer */}
             <div className="flex-1"/>
-
-            {/* Saved views + Refresh */}
-            <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M2 3h8M2 9h5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              Saved views
-            </button>
-            <button className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
+            <div className="relative" ref={savedRef}>
+              <button onClick={() => setShowSavedViews(s => !s)} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] bg-white hover:bg-[#f9f9f7] font-medium">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M2 3h8M2 9h5" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                Saved views
+              </button>
+              {showSavedViews && (
+                <div className="absolute right-0 top-full mt-1 z-40 w-56 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1">
+                  {savedViews.length === 0 ? <p className="px-3 py-2 text-xs text-[#9ca3af]">Sin vistas guardadas</p>
+                  : savedViews.map(v => (
+                    <div key={v.id} className="flex items-center group hover:bg-[#f9f9f7]">
+                      <button onClick={() => { applySaved(v); setShowSavedViews(false); }} className="flex-1 text-left px-3 py-1.5 text-sm">{v.name}</button>
+                      <button onClick={() => setSavedViews(prev => prev.filter(x => x.id !== v.id))} className="opacity-0 group-hover:opacity-100 px-2 text-[#9ca3af] hover:text-[#dc2626]">x</button>
+                    </div>
+                  ))}
+                  <div className="border-t border-[#f3f3f1] my-1" />
+                  <button onClick={() => { const n = prompt('Nombre de la vista'); if (n) { saveCurrentView(n); setShowSavedViews(false); } }} className="w-full text-left px-3 py-1.5 text-sm text-[#3b59f6]">+ Guardar vista actual</button>
+                </div>
+              )}
+            </div>
+            <button onClick={() => window.location.reload()} className="w-7 h-7 flex items-center justify-center border border-[#e9eae6] rounded-lg text-[#646462] hover:bg-[#f9f9f7]">
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M11 6.5A4.5 4.5 0 112 6.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11 3v3.5h-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
           </div>
 
-          {/* Table */}
+          {selectedIds.size > 0 && (
+            <div className="mx-6 mt-3 bg-[#1a1a1a] text-white rounded-lg px-3 py-2 flex items-center justify-between text-xs flex-shrink-0">
+              <span>{selectedIds.size} tickets seleccionados</span>
+              <div className="flex gap-2">
+                <button onClick={() => { selectedIds.forEach(id => updateTicket(id, { status: 'resolved', updated_at: new Date().toISOString() })); setSelectedIds(new Set()); }} className="px-2 py-1 bg-[#16a34a] rounded">Resolver</button>
+                <button onClick={() => { if (confirm(`Eliminar ${selectedIds.size}?`)) { selectedIds.forEach(deleteTicket); setSelectedIds(new Set()); } }} className="px-2 py-1 bg-[#dc2626] rounded">Eliminar</button>
+                <button onClick={() => setSelectedIds(new Set())} className="px-2 py-1 hover:bg-[#2a2a28] rounded">Cancelar</button>
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 overflow-auto mx-6 mt-3 border border-[#e9eae6] rounded-xl min-h-0">
-            {/* Table header */}
             <table className="w-full min-w-[900px] text-[12px]">
               <thead>
                 <tr className="border-b border-[#e9eae6] bg-[#fafaf8]">
-                  {[
-                    { label: 'TICKET', sortable: true },
-                    { label: 'PERSON', sortable: false },
-                    { label: 'LAST MESSAGE', sortable: false },
-                    { label: 'STATUS', sortable: false },
-                    { label: 'PRIORITY', sortable: false },
-                    { label: 'SLA', sortable: true },
-                    { label: 'ASSIGNEE', sortable: false },
-                    { label: 'CHANNEL', sortable: false },
-                    { label: 'TAGS', sortable: false },
-                    { label: 'CREATED', sortable: true, active: false },
-                    { label: 'UPDATED', sortable: true, active: true, desc: true },
-                  ].map(col => (
-                    <th key={col.label} className="px-3 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">
-                      <span className="flex items-center gap-1">
-                        {col.label}
-                        {col.sortable && (
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M5 2v6M2.5 4.5L5 2l2.5 2.5" stroke={col.active && !col.desc ? '#e8572a' : '#d1d5db'} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-                            <path d="M2.5 5.5L5 8l2.5-2.5" stroke={col.active && col.desc ? '#e8572a' : '#d1d5db'} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        )}
-                      </span>
-                    </th>
+                  <th className="w-8 px-3 py-2.5"><input type="checkbox" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={e => setSelectedIds(e.target.checked ? new Set(filtered.map(t => t.id)) : new Set())} className="accent-[#3b59f6]" /></th>
+                  {['TICKET','PERSON','LAST MESSAGE','STATUS','PRIORITY','SLA','ASSIGNEE','CHANNEL','TAGS','CREATED','UPDATED'].map(label => (
+                    <th key={label} className="px-3 py-2.5 text-left font-semibold text-[#9ca3af] text-[11px] tracking-wide whitespace-nowrap">{label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td colSpan={11} className="px-3 py-16 text-center">
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={12} className="px-3 py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                         <rect x="6" y="4" width="20" height="24" rx="3" stroke="#d1d5db" strokeWidth="1.5"/>
                         <path d="M10 10h12M10 14h12M10 18h8" stroke="#d1d5db" strokeWidth="1.3" strokeLinecap="round"/>
                       </svg>
                       <span className="text-[13px] text-[#9ca3af]">No entries</span>
+                      {tickets.length === 0 && <button onClick={() => setShowNew(true)} className="mt-2 text-[12px] text-[#3b59f6] hover:underline">+ Crear tu primer ticket</button>}
                     </div>
-                  </td>
-                </tr>
+                  </td></tr>
+                ) : filtered.map(t => (
+                  <tr key={t.id} onClick={() => setSelected(t)} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9] cursor-pointer">
+                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => setSelectedIds(prev => { const n = new Set(prev); if (n.has(t.id)) n.delete(t.id); else n.add(t.id); return n; })} className="accent-[#3b59f6]" />
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap"><span className="font-mono text-[#3b59f6]">#{t.number}</span> <span className="text-[#1a1a1a]">{t.subject}</span></td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded-full bg-[#3b59f6] text-white flex items-center justify-center text-[9px] font-bold">{t.person.name[0]?.toUpperCase()}</div>
+                        <div className="min-w-0"><div className="text-[#1a1a1a] truncate max-w-[140px]">{t.person.name}</div><div className="text-[10px] text-[#9ca3af] truncate max-w-[140px]">{t.person.email}</div></div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-[#646462] truncate max-w-[220px]">{t.messages[t.messages.length - 1]?.body?.slice(0, 60) ?? '-'}</td>
+                    <td className="px-3 py-2.5"><SupStatusPill status={t.status} /></td>
+                    <td className="px-3 py-2.5"><SupPriorityPill priority={t.priority} /></td>
+                    <td className="px-3 py-2.5">
+                      {t.sla_state === 'breached' ? <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded">Breached</span>
+                      : t.sla_state === 'at_risk' ? <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-1.5 py-0.5 rounded">At risk</span>
+                      : <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">On track</span>}
+                    </td>
+                    <td className="px-3 py-2.5"><SupAssigneePicker assignee={t.assignee} members={members} /></td>
+                    <td className="px-3 py-2.5"><div className="flex items-center gap-1 text-[#646462]">{CHANNEL_META[t.channel].icon}<span className="text-[11px]">{CHANNEL_META[t.channel].label}</span></div></td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex gap-1 flex-wrap">
+                        {t.tags.slice(0, 3).map(tag => {
+                          const m = tags.find(x => x.name === tag);
+                          return <span key={tag} className="text-[9px] px-1 py-0.5 rounded" style={{ backgroundColor: (m?.color ?? '#646462') + '20', color: m?.color ?? '#646462' }}>{tag}</span>;
+                        })}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-[11px] text-[#9ca3af]" title={t.created_at}>{formatRelativeTime(t.created_at)}</td>
+                    <td className="px-3 py-2.5 text-[11px] text-[#9ca3af]" title={t.updated_at}>{formatRelativeTime(t.updated_at)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
-          {/* Bottom padding */}
           <div className="h-4 flex-shrink-0"/>
         </div>
       ) : (
-        /* Settings tab placeholder */
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-1">
-            <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-              <circle cx="13" cy="13" r="3" stroke="#9ca3af" strokeWidth="1.5"/>
-              <path d="M13 2v3M13 21v3M2 13h3M21 13h3M4.9 4.9l2.1 2.1M19 19l2.1 2.1M4.9 21.1l2.1-2.1M19 7l2.1-2.1" stroke="#9ca3af" strokeWidth="1.3" strokeLinecap="round"/>
-            </svg>
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-4xl space-y-6">
+            <section className="border border-[#e9eae6] rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-[#1a1a1a]">Canales</h3>
+                  <p className="text-xs text-[#646462]">Conecta tus fuentes de tickets (email, chat, Slack, in-app).</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {Object.entries(CHANNEL_META).map(([k, m]) => (
+                  <div key={k} className="flex items-center justify-between p-3 bg-[#fafaf9] rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-white border border-[#e9eae6] flex items-center justify-center text-[#646462]">{m.icon}</div>
+                      <div>
+                        <p className="text-sm font-medium text-[#1a1a1a]">{m.label}</p>
+                        <p className="text-[10px] text-[#9ca3af]">Sin configurar</p>
+                      </div>
+                    </div>
+                    <button className="text-xs text-[#3b59f6] hover:underline">Configurar {'->'}</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="border border-[#e9eae6] rounded-xl p-5">
+              <h3 className="text-sm font-bold text-[#1a1a1a] mb-1">Politicas SLA</h3>
+              <p className="text-xs text-[#646462] mb-3">Define plazos de primera respuesta y resolucion por prioridad.</p>
+              <table className="w-full text-xs">
+                <thead><tr className="text-[10px] text-[#9ca3af] uppercase tracking-widest"><th className="text-left py-1.5">Prioridad</th><th className="text-left py-1.5">Primera respuesta</th><th className="text-left py-1.5">Resolucion</th><th className="text-left py-1.5">Horario</th></tr></thead>
+                <tbody>
+                  {[
+                    { p: 'urgent', r: '15 min', s: '4 horas', h: '24/7' },
+                    { p: 'high',   r: '1 hora', s: '8 horas', h: 'Laboral' },
+                    { p: 'medium', r: '4 horas', s: '2 dias', h: 'Laboral' },
+                    { p: 'low',    r: '8 horas', s: '5 dias', h: 'Laboral' },
+                  ].map(row => (
+                    <tr key={row.p} className="border-t border-[#f3f3f1]">
+                      <td className="py-2"><SupPriorityPill priority={row.p as any} /></td>
+                      <td className="py-2 text-[#1a1a1a] font-mono">{row.r}</td>
+                      <td className="py-2 text-[#1a1a1a] font-mono">{row.s}</td>
+                      <td className="py-2 text-[#646462]">{row.h}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+
+            <section className="border border-[#e9eae6] rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div><h3 className="text-sm font-bold text-[#1a1a1a]">Reglas de enrutado</h3><p className="text-xs text-[#646462]">Asigna automaticamente tickets segun condiciones.</p></div>
+                <button className="text-xs text-[#3b59f6] hover:underline">+ Nueva regla</button>
+              </div>
+              <p className="text-xs text-[#9ca3af] italic text-center py-4">Sin reglas configuradas</p>
+            </section>
+
+            <section className="border border-[#e9eae6] rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div><h3 className="text-sm font-bold text-[#1a1a1a]">Tags</h3><p className="text-xs text-[#646462]">Organiza tickets con etiquetas.</p></div>
+                <button onClick={() => { const n = prompt('Nombre del tag'); if (n) setTags(prev => [...prev, { name: n, color: TAG_PALETTE[prev.length % TAG_PALETTE.length] }]); }} className="text-xs text-[#3b59f6] hover:underline">+ Nuevo tag</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {tags.map(t => (
+                  <div key={t.name} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs group" style={{ backgroundColor: t.color + '20', color: t.color }}>
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />{t.name}
+                    <button onClick={() => setTags(prev => prev.filter(x => x.name !== t.name))} className="opacity-0 group-hover:opacity-100 ml-1 hover:opacity-60">x</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="border border-[#e9eae6] rounded-xl p-5">
+              <div className="flex items-center justify-between">
+                <div><h3 className="text-sm font-bold text-[#1a1a1a]">Plantillas de respuesta</h3><p className="text-xs text-[#646462]">{templates.length} plantillas creadas. Uselas desde el composer.</p></div>
+                <button onClick={() => setShowTemplates(true)} className="px-3 py-1.5 bg-[#1a1a1a] text-white text-xs rounded">Gestionar {'->'}</button>
+              </div>
+            </section>
           </div>
-          <h2 className="text-[15px] font-semibold text-[#1a1a1a]">Support settings</h2>
-          <p className="text-[13px] text-[#9ca3af] max-w-[360px] leading-relaxed">
-            Configure your support inbox, routing rules, SLA policies, and integrations here.
-          </p>
         </div>
       )}
+
+      {selected && (
+        <SupTicketDetailDrawer
+          ticket={selected}
+          onClose={() => setSelected(null)}
+          onUpdate={p => updateTicket(selected.id, p)}
+          onDelete={() => deleteTicket(selected.id)}
+          members={members}
+          templates={templates}
+          tags={tags}
+          onOpenTemplates={() => setShowTemplates(true)}
+          onOpenSnooze={() => setShowSnooze(true)}
+          onAddTag={tag => updateTicket(selected.id, { tags: [...selected.tags, tag] })}
+          onRemoveTag={tag => updateTicket(selected.id, { tags: selected.tags.filter(x => x !== tag) })}
+        />
+      )}
+      <SupNewTicketModal open={showNew} onClose={() => setShowNew(false)} onCreate={createTicket} />
+      <SupTemplatesModal open={showTemplates} onClose={() => setShowTemplates(false)} templates={templates} onSave={t => setTemplates(prev => { const idx = prev.findIndex(x => x.id === t.id); return idx >= 0 ? prev.map((x, i) => i === idx ? t : x) : [...prev, t]; })} onDelete={id => setTemplates(prev => prev.filter(t => t.id !== id))} />
+      <SupSnoozeModal open={showSnooze} onClose={() => setShowSnooze(false)} onSnooze={until => { if (selected) updateTicket(selected.id, { status: 'snoozed', snooze_until: until, updated_at: new Date().toISOString() }); }} />
     </div>
   );
 }
 
-
-
-// ── WAAppSurveysView ──────────────────────────────────────────────────────────
 function WAAppSurveysView() {
   type SurveysTab = 'active' | 'archived' | 'notifications' | 'history' | 'settings';
   const [tab, setTab] = useState<SurveysTab>('active');
@@ -55487,6 +56109,7 @@ function PrototypeApp() {
     </div>
   );
 }
+
 
 
 
