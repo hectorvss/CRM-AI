@@ -500,6 +500,133 @@ export const posthog = {
     update: (id: string, data: any) =>
       phPatch(`/api/environments/${_teamId}/error_tracking/${id}/`, data),
   },
+
+  // ── Web Analytics ─────────────────────────────────────────────────────────
+  // PostHog parity: every widget hits POST /query/ with a typed `kind`.
+  // Shapes mirror posthog/schema/web_analytics.py exactly.
+  webAnalytics: {
+    overview: (params: {
+      dateRange:              { date_from: string; date_to?: string | null }
+      properties?:            any[]
+      compareFilter?:         { compare?: boolean; compare_to?: string }
+      filterTestAccounts?:    boolean
+      sampling?:              { enabled?: boolean; forceSamplingRate?: { numerator: number; denominator: number } }
+      includeRevenue?:        boolean
+      conversionGoal?:        any
+    }) =>
+      phPost(`/api/environments/${_teamId}/query/`, { query: { kind: 'WebOverviewQuery', ...params } }),
+
+    statsTable: (params: {
+      breakdownBy:
+        | 'Page' | 'InitialPage' | 'ExitPage' | 'ExitClick'
+        | 'InitialChannelType' | 'InitialReferringDomain'
+        | 'InitialUTMSource' | 'InitialUTMMedium' | 'InitialUTMCampaign' | 'InitialUTMTerm' | 'InitialUTMContent'
+        | 'Browser' | 'OS' | 'DeviceType' | 'Viewport' | 'Language'
+        | 'Country' | 'Region' | 'City' | 'Timezone'
+        | 'FrustrationMetrics'
+      dateRange:              { date_from: string; date_to?: string | null }
+      properties?:            any[]
+      compareFilter?:         { compare?: boolean; compare_to?: string }
+      filterTestAccounts?:    boolean
+      includeBounceRate?:     boolean
+      includeScrollDepth?:    boolean
+      doPathCleaning?:        boolean
+      limit?:                 number
+      offset?:                number
+      orderBy?:               [string, 'ASC' | 'DESC']
+      conversionGoal?:        any
+      sampling?:              { enabled?: boolean; forceSamplingRate?: { numerator: number; denominator: number } }
+    }) =>
+      phPost(`/api/environments/${_teamId}/query/`, { query: { kind: 'WebStatsTableQuery', ...params } }),
+
+    externalClicks: (params: {
+      dateRange:           { date_from: string; date_to?: string | null }
+      properties?:         any[]
+      compareFilter?:      { compare?: boolean }
+      filterTestAccounts?: boolean
+      stripQueryParams?:   boolean
+      limit?:              number
+      sampling?:           { enabled?: boolean; forceSamplingRate?: { numerator: number; denominator: number } }
+    }) =>
+      phPost(`/api/environments/${_teamId}/query/`, { query: { kind: 'WebExternalClicksTableQuery', ...params } }),
+
+    goals: (params: {
+      dateRange:           { date_from: string; date_to?: string | null }
+      properties?:         any[]
+      compareFilter?:      { compare?: boolean }
+      filterTestAccounts?: boolean
+      limit?:              number
+      sampling?:           { enabled?: boolean; forceSamplingRate?: { numerator: number; denominator: number } }
+    }) =>
+      phPost(`/api/environments/${_teamId}/query/`, { query: { kind: 'WebGoalsQuery', ...params } }),
+
+    vitals: (params: {
+      dateRange:           { date_from: string; date_to?: string | null }
+      properties?:         any[]
+      filterTestAccounts?: boolean
+      percentile?:         'p75' | 'p90' | 'p99'
+      sampling?:           { enabled?: boolean; forceSamplingRate?: { numerator: number; denominator: number } }
+    }) =>
+      phPost(`/api/environments/${_teamId}/query/`, { query: { kind: 'WebVitalsQuery', ...params } }),
+
+    vitalsPathBreakdown: (params: {
+      dateRange:           { date_from: string; date_to?: string | null }
+      properties?:         any[]
+      filterTestAccounts?: boolean
+      metric:              'INP' | 'LCP' | 'FCP' | 'CLS'
+      percentile?:         'p75' | 'p90' | 'p99'
+      thresholds:          [number, number]
+      sampling?:           { enabled?: boolean; forceSamplingRate?: { numerator: number; denominator: number } }
+    }) =>
+      phPost(`/api/environments/${_teamId}/query/`, { query: { kind: 'WebVitalsPathBreakdownQuery', ...params } }),
+
+    pageURLSearch: (params: {
+      dateRange:           { date_from: string; date_to?: string | null }
+      properties?:         any[]
+      filterTestAccounts?: boolean
+      searchTerm?:         string
+      stripQueryParams?:   boolean
+      limit?:              number
+      sampling?:           { enabled?: boolean; forceSamplingRate?: { numerator: number; denominator: number } }
+    }) =>
+      phPost(`/api/environments/${_teamId}/query/`, { query: { kind: 'WebPageURLSearchQuery', ...params } }),
+
+    activeHoursHeatmap: (params: {
+      dateRange:           { date_from: string; date_to?: string | null }
+      properties?:         any[]
+      filterTestAccounts?: boolean
+      sampling?:           { enabled?: boolean; forceSamplingRate?: { numerator: number; denominator: number } }
+    }) =>
+      phPost(`/api/environments/${_teamId}/query/`, { query: { kind: 'WebActiveHoursHeatMapQuery', ...params } }),
+
+    trends: (params: {
+      dateRange:           { date_from: string; date_to?: string | null }
+      properties?:         any[]
+      compareFilter?:      { compare?: boolean }
+      interval?:           'hour' | 'day' | 'week' | 'month'
+      series:              Array<{ event?: string; name?: string; math?: string; kind?: string }>
+      filterTestAccounts?: boolean
+      sampling?:           { enabled?: boolean; forceSamplingRate?: { numerator: number; denominator: number } }
+    }) =>
+      phPost(`/api/environments/${_teamId}/query/`, {
+        query: {
+          kind:           'InsightVizNode',
+          source: {
+            kind:               'TrendsQuery',
+            dateRange:          params.dateRange,
+            properties:         params.properties ?? [],
+            compareFilter:      params.compareFilter ?? { compare: false },
+            interval:           params.interval ?? 'day',
+            series:             params.series.map(s => ({ kind: s.kind ?? 'EventsNode', event: s.event, name: s.name, math: s.math ?? 'total' })),
+            filterTestAccounts: params.filterTestAccounts,
+            samplingFactor:     params.sampling?.forceSamplingRate
+              ? params.sampling.forceSamplingRate.numerator / params.sampling.forceSamplingRate.denominator
+              : undefined,
+            trendsFilter:       { display: 'ActionsLineGraph' },
+          },
+        },
+      }),
+  },
 }
 
 export default posthog
