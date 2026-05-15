@@ -104,6 +104,19 @@ export async function phPatch<T = any>(path: string, data: any): Promise<T> {
   return res.json() as T
 }
 
+export async function phPut<T = any>(path: string, data: any): Promise<T> {
+  const res = await fetch(`${POSTHOG_HOST}${path}`, {
+    method:  'PUT',
+    headers: authHeaders(),
+    body:    JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw Object.assign(new Error(`PostHog ${res.status}: ${body}`), { status: res.status })
+  }
+  return res.json() as T
+}
+
 export async function phDelete(path: string): Promise<void> {
   const res = await fetch(`${POSTHOG_HOST}${path}`, {
     method:  'DELETE',
@@ -415,8 +428,8 @@ export const posthog = {
 
   // ── Cohorts ───────────────────────────────────────────────────────────────
   cohorts: {
-    list: () =>
-      phGet(`/api/projects/${_projectId}/cohorts/`),
+    list: (params?: any) =>
+      phGet(`/api/projects/${_projectId}/cohorts/`, params),
     get: (id: number) =>
       phGet(`/api/projects/${_projectId}/cohorts/${id}/`),
     create: (data: any) =>
@@ -425,8 +438,8 @@ export const posthog = {
       phPatch(`/api/projects/${_projectId}/cohorts/${id}/`, data),
     delete: (id: number) =>
       phDelete(`/api/projects/${_projectId}/cohorts/${id}/`),
-    persons: (id: number) =>
-      phGet(`/api/projects/${_projectId}/cohorts/${id}/persons/`),
+    persons: (id: number, params?: any) =>
+      phGet(`/api/projects/${_projectId}/cohorts/${id}/persons/`, params),
     duplicate: (id: number) =>
       phPost(`/api/projects/${_projectId}/cohorts/${id}/duplicate_as_static_cohort/`, {}),
   },
