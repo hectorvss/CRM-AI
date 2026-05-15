@@ -12,15 +12,15 @@
  *  - IP-only limiters use the express-rate-limit default key.
  */
 
-import rateLimit, { type Options } from 'express-rate-limit';
+import rateLimit, { type Options, ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 import { sendError } from '../http/errors.js';
 
 function userOrIpKey(req: Request): string {
   const userId = (req as any).userId as string | undefined;
   if (userId && userId !== 'system') return `u:${userId}`;
-  // ipKeyGenerator-equivalent fallback; trust proxy must be set if behind LB.
-  return `ip:${req.ip || 'unknown'}`;
+  // Use the official ipKeyGenerator helper to handle IPv6 properly.
+  return `ip:${ipKeyGenerator(req)}`;
 }
 
 const baseOptions: Partial<Options> = {

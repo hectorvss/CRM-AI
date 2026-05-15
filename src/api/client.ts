@@ -1024,3 +1024,493 @@ export const reconciliationApi = {
 export const healthApi = {
   check: () => request<any>('/health'),
 };
+
+// ── Companies (A1) ────────────────────────────────────────
+export const companiesApi = {
+  list: (params?: { q?: string; industry?: string; country?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null) as [string, string][])).toString() : '';
+    return request<any[]>(`/companies${qs}`);
+  },
+  get:    (id: string)                          => request<any>(`/companies/${id}`),
+  lookup: (domain: string)                      => request<any>(`/companies/lookup?domain=${encodeURIComponent(domain)}`),
+  create: (payload: Record<string, unknown>)    => request<any>('/companies', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/companies/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string)                          => request<any>(`/companies/${id}`, { method: 'DELETE' }),
+};
+
+// ── Custom Attributes (A3) ────────────────────────────────
+export const customAttributesApi = {
+  // Definitions
+  listDefs: (model?: 'customer' | 'case' | 'company') => {
+    const qs = model ? `?model=${model}` : '';
+    return request<any[]>(`/custom-attributes/definitions${qs}`);
+  },
+  createDef: (payload: Record<string, unknown>) =>
+    request<any>('/custom-attributes/definitions', { method: 'POST', body: JSON.stringify(payload) }),
+  updateDef: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/custom-attributes/definitions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteDef: (id: string) =>
+    request<any>(`/custom-attributes/definitions/${id}`, { method: 'DELETE' }),
+
+  // Values on entities
+  get: (model: 'customer' | 'case' | 'company', entityId: string) =>
+    request<Record<string, unknown>>(`/custom-attributes/${model}/${entityId}`),
+  patch: (model: 'customer' | 'case' | 'company', entityId: string, attrs: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/custom-attributes/${model}/${entityId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(attrs),
+    }),
+};
+
+// ── Automation Rules (B1) ─────────────────────────────────
+export const automationRulesApi = {
+  list: (params?: { event_name?: string; active?: boolean }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params)
+              .filter(([, v]) => v != null)
+              .map(([k, v]) => [k, String(v)]),
+          ),
+        ).toString()
+      : '';
+    return request<any[]>(`/automation-rules${qs}`);
+  },
+  get:    (id: string) => request<any>(`/automation-rules/${id}`),
+  create: (payload: Record<string, unknown>) =>
+    request<any>('/automation-rules', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/automation-rules/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  toggle: (id: string, active: boolean) =>
+    request<any>(`/automation-rules/${id}/toggle`, { method: 'POST', body: JSON.stringify({ active }) }),
+  delete: (id: string) => request<any>(`/automation-rules/${id}`, { method: 'DELETE' }),
+  evaluate: (event_name: string, context: Record<string, unknown>) =>
+    request<any>('/automation-rules/evaluate', { method: 'POST', body: JSON.stringify({ event_name, context }) }),
+};
+
+// ── Macros (B2) ───────────────────────────────────────────
+export const macrosApi = {
+  list: (params?: { visibility?: 'public' | 'private'; created_by?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([, v]) => v != null) as [string, string][]),
+        ).toString()
+      : '';
+    return request<any[]>(`/macros${qs}`);
+  },
+  get:     (id: string) => request<any>(`/macros/${id}`),
+  create:  (payload: Record<string, unknown>) =>
+    request<any>('/macros', { method: 'POST', body: JSON.stringify(payload) }),
+  update:  (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/macros/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete:  (id: string) => request<any>(`/macros/${id}`, { method: 'DELETE' }),
+  execute: (id: string, payload?: { entity_type?: string; entity_id?: string }) =>
+    request<any>(`/macros/${id}/execute`, { method: 'POST', body: JSON.stringify(payload ?? {}) }),
+};
+
+// ── Assignment Policies (B3) ──────────────────────────────
+export const assignmentPoliciesApi = {
+  list: (params?: { inbox_id?: string; active?: boolean }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params)
+              .filter(([, v]) => v != null)
+              .map(([k, v]) => [k, String(v)]),
+          ),
+        ).toString()
+      : '';
+    return request<any[]>(`/assignment-policies${qs}`);
+  },
+  get:    (id: string) => request<any>(`/assignment-policies/${id}`),
+  create: (payload: Record<string, unknown>) =>
+    request<any>('/assignment-policies', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/assignment-policies/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) => request<any>(`/assignment-policies/${id}`, { method: 'DELETE' }),
+  select: (id: string, candidates: Array<{ id: string; current_load: number; skills?: string[]; online?: boolean }>) =>
+    request<any>(`/assignment-policies/${id}/select`, { method: 'POST', body: JSON.stringify({ candidates }) }),
+};
+
+// ── Working Hours (B4) ────────────────────────────────────
+export const workingHoursApi = {
+  list:      ()                               => request<any[]>('/working-hours'),
+  get:       (id: string)                     => request<any>(`/working-hours/${id}`),
+  effective: (inbox_id?: string)              => {
+    const qs = inbox_id ? `?inbox_id=${encodeURIComponent(inbox_id)}` : '';
+    return request<any>(`/working-hours/effective${qs}`);
+  },
+  create: (payload: Record<string, unknown>) =>
+    request<any>('/working-hours', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/working-hours/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) => request<any>(`/working-hours/${id}`, { method: 'DELETE' }),
+};
+
+// ── Inboxes (C1 + C2) ─────────────────────────────────────
+export const inboxesApi = {
+  list: (params?: { channel_type?: string; enabled?: boolean }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any[]>(`/inboxes${qs}`);
+  },
+  get:    (id: string) => request<any>(`/inboxes/${id}`),
+  create: (payload: Record<string, unknown>) =>
+    request<any>('/inboxes', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/inboxes/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) => request<any>(`/inboxes/${id}`, { method: 'DELETE' }),
+  // C2: contact identities
+  getContactIdentities: (contactId: string) =>
+    request<any[]>(`/inboxes/contacts/${contactId}`),
+  linkContact: (inboxId: string, payload: { contact_id: string; source_id: string }) =>
+    request<any>(`/inboxes/${inboxId}/contacts`, { method: 'POST', body: JSON.stringify(payload) }),
+  lookupBySourceId: (inboxId: string, sourceId: string) =>
+    request<any>(`/inboxes/${inboxId}/lookup?source_id=${encodeURIComponent(sourceId)}`),
+};
+
+// ── Canned Responses (C3) ─────────────────────────────────
+export const cannedResponsesApi = {
+  list: (params?: { q?: string; category?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null) as [string,string][]),
+        ).toString()
+      : '';
+    return request<any[]>(`/canned-responses${qs}`);
+  },
+  search:    (prefix: string, limit = 5) =>
+    request<any[]>(`/canned-responses/search?prefix=${encodeURIComponent(prefix)}&limit=${limit}`),
+  byCode:    (shortCode: string) =>
+    request<any>(`/canned-responses/by-code/${encodeURIComponent(shortCode)}`),
+  get:       (id: string) => request<any>(`/canned-responses/${id}`),
+  create:    (payload: Record<string, unknown>) =>
+    request<any>('/canned-responses', { method: 'POST', body: JSON.stringify(payload) }),
+  update:    (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/canned-responses/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete:    (id: string) => request<any>(`/canned-responses/${id}`, { method: 'DELETE' }),
+  recordUse: (id: string) => request<any>(`/canned-responses/${id}/use`, { method: 'POST' }),
+};
+
+// ── SLA Policies (D1) ─────────────────────────────────────
+export const slaPoliciesApi = {
+  list:   ()                                  => request<any[]>('/sla-policies'),
+  get:    (id: string)                        => request<any>(`/sla-policies/${id}`),
+  create: (payload: Record<string, unknown>)  =>
+    request<any>('/sla-policies', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/sla-policies/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string)                        => request<any>(`/sla-policies/${id}`, { method: 'DELETE' }),
+  // Applied SLA operations
+  apply:  (conversationId: string, policyId: string, startAt?: string) =>
+    request<any>('/sla-policies/apply', {
+      method: 'POST',
+      body: JSON.stringify({ conversation_id: conversationId, policy_id: policyId, start_at: startAt }),
+    }),
+  getApplied: (conversationId: string) =>
+    request<any>(`/sla-policies/applied/${conversationId}`),
+  markEvent: (conversationId: string, eventType: string) =>
+    request<any>(`/sla-policies/applied/${conversationId}/event`, {
+      method: 'POST', body: JSON.stringify({ event_type: eventType }),
+    }),
+  listEvents: (params?: { conversation_id?: string; limit?: number }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any[]>(`/sla-policies/events${qs}`);
+  },
+};
+
+// ── CSAT Surveys (D2) ─────────────────────────────────────
+export const csatApi = {
+  list: (params?: { agent_id?: string; inbox_id?: string; from?: string; to?: string; limit?: number }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any[]>(`/csat${qs}`);
+  },
+  summary: (params?: { agent_id?: string; inbox_id?: string; from?: string; to?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any>(`/csat/summary${qs}`);
+  },
+  byToken: (token: string) => request<any>(`/csat/by-token/${encodeURIComponent(token)}`),
+  submit:  (payload: Record<string, unknown>) =>
+    request<any>('/csat', { method: 'POST', body: JSON.stringify(payload) }),
+};
+
+// ── Reporting (D3) ────────────────────────────────────────
+export const reportingApi = {
+  overview: (days?: number) => {
+    const qs = days ? `?days=${days}` : '';
+    return request<any>(`/reporting/overview${qs}`);
+  },
+  rollups: (params: { granularity: string; from: string; to: string; inbox_id?: string; agent_id?: string }) => {
+    const qs = '?' + new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+    ).toString();
+    return request<any[]>(`/reporting/rollups${qs}`);
+  },
+  upsertRollup: (payload: Record<string, unknown>) =>
+    request<any>('/reporting/rollups', { method: 'POST', body: JSON.stringify(payload) }),
+  events: (params?: { event_name?: string; agent_id?: string; inbox_id?: string; from?: string; to?: string; limit?: number }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any[]>(`/reporting/events${qs}`);
+  },
+  trackEvent: (payload: Record<string, unknown>) =>
+    request<any>('/reporting/events', { method: 'POST', body: JSON.stringify(payload) }),
+};
+
+// ── AI Guardrails (E1) ────────────────────────────────────
+export const aiGuardrailsApi = {
+  list:     (onlyEnabled?: boolean) => request<any[]>(`/ai-guardrails${onlyEnabled ? '?enabled=true' : ''}`),
+  get:      (id: string) => request<any>(`/ai-guardrails/${id}`),
+  create:   (payload: Record<string, unknown>) =>
+    request<any>('/ai-guardrails', { method: 'POST', body: JSON.stringify(payload) }),
+  update:   (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/ai-guardrails/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete:   (id: string) => request<any>(`/ai-guardrails/${id}`, { method: 'DELETE' }),
+  evaluate: (text: string) =>
+    request<any>('/ai-guardrails/evaluate', { method: 'POST', body: JSON.stringify({ text }) }),
+};
+
+// ── Agent Tools (E2) ──────────────────────────────────────
+export const agentToolsApi = {
+  list:    (onlyEnabled?: boolean) => request<any[]>(`/agent-tools${onlyEnabled ? '?enabled=true' : ''}`),
+  get:     (id: string) => request<any>(`/agent-tools/${id}`),
+  create:  (payload: Record<string, unknown>) =>
+    request<any>('/agent-tools', { method: 'POST', body: JSON.stringify(payload) }),
+  update:  (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/agent-tools/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete:  (id: string) => request<any>(`/agent-tools/${id}`, { method: 'DELETE' }),
+  execute: (id: string, args: Record<string, unknown>) =>
+    request<any>(`/agent-tools/${id}/execute`, { method: 'POST', body: JSON.stringify({ args }) }),
+};
+
+// ── Agent Scenarios (E3) ──────────────────────────────────
+export const agentScenariosApi = {
+  list:   (onlyEnabled?: boolean) => request<any[]>(`/agent-scenarios${onlyEnabled ? '?enabled=true' : ''}`),
+  get:    (id: string) => request<any>(`/agent-scenarios/${id}`),
+  create: (payload: Record<string, unknown>) =>
+    request<any>('/agent-scenarios', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/agent-scenarios/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) => request<any>(`/agent-scenarios/${id}`, { method: 'DELETE' }),
+  run:    (id: string) => request<any>(`/agent-scenarios/${id}/run`, { method: 'POST' }),
+  match:  (ctx: { text?: string; intent?: string; triggerType?: string }) =>
+    request<any[]>('/agent-scenarios/match', { method: 'POST', body: JSON.stringify(ctx) }),
+};
+
+// ── Knowledge Embeddings (E4) ─────────────────────────────
+export const knowledgeEmbeddingsApi = {
+  upsert: (payload: Record<string, unknown>) =>
+    request<any>('/knowledge-embeddings/upsert', { method: 'POST', body: JSON.stringify(payload) }),
+  search: (query: string, opts?: { limit?: number; threshold?: number; source_type?: string }) =>
+    request<any[]>('/knowledge-embeddings/search', {
+      method: 'POST', body: JSON.stringify({ query, ...opts }),
+    }),
+  delete: (sourceType: string, sourceId: string) =>
+    request<any>('/knowledge-embeddings', {
+      method: 'DELETE', body: JSON.stringify({ source_type: sourceType, source_id: sourceId }),
+    }),
+};
+
+// ── AI Feedback (E5) ──────────────────────────────────────
+export const aiFeedbackApi = {
+  list:    (params?: Record<string, string | number | undefined>) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any[]>(`/ai-feedback${qs}`);
+  },
+  summary: () => request<any>('/ai-feedback/summary'),
+  submit:  (payload: Record<string, unknown>) =>
+    request<any>('/ai-feedback', { method: 'POST', body: JSON.stringify(payload) }),
+};
+
+// ── Copilot Threads (E6) ──────────────────────────────────
+export const copilotThreadsApi = {
+  list:          (params?: { agent_id?: string; conversation_id?: string; status?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any[]>(`/copilot-threads${qs}`);
+  },
+  get:           (conversationId: string, agentId: string) =>
+    request<any>(`/copilot-threads/${conversationId}/${agentId}`),
+  getOrCreate:   (conversationId: string, agentId: string) =>
+    request<any>('/copilot-threads', {
+      method: 'POST', body: JSON.stringify({ conversation_id: conversationId, agent_id: agentId }),
+    }),
+  appendMessage: (conversationId: string, agentId: string, role: string, content: string) =>
+    request<any>('/copilot-threads/messages', {
+      method: 'POST',
+      body: JSON.stringify({ conversation_id: conversationId, agent_id: agentId, role, content }),
+    }),
+  close: (conversationId: string, agentId: string) =>
+    request<any>('/copilot-threads/close', {
+      method: 'POST', body: JSON.stringify({ conversation_id: conversationId, agent_id: agentId }),
+    }),
+};
+
+// ── MCP Servers (E7) ──────────────────────────────────────
+export const mcpServersApi = {
+  list:          (onlyEnabled?: boolean) => request<any[]>(`/mcp-servers${onlyEnabled ? '?enabled=true' : ''}`),
+  get:           (id: string) => request<any>(`/mcp-servers/${id}`),
+  create:        (payload: Record<string, unknown>) =>
+    request<any>('/mcp-servers', { method: 'POST', body: JSON.stringify(payload) }),
+  update:        (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/mcp-servers/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete:        (id: string) => request<any>(`/mcp-servers/${id}`, { method: 'DELETE' }),
+  ping:          (id: string) => request<any>(`/mcp-servers/${id}/ping`, { method: 'POST' }),
+  updateTools:   (id: string, toolsSchema: unknown[], resources?: unknown[]) =>
+    request<any>(`/mcp-servers/${id}/tools`, {
+      method: 'PATCH', body: JSON.stringify({ tools_schema: toolsSchema, resources: resources ?? [] }),
+    }),
+};
+
+// ── Mentions (G1) ─────────────────────────────────────────
+export const mentionsApi = {
+  list:       (userId: string, unreadOnly?: boolean) =>
+    request<any[]>(`/mentions/${userId}${unreadOnly ? '?unread=true' : ''}`),
+  create:     (payload: Record<string, unknown>) =>
+    request<any>('/mentions', { method: 'POST', body: JSON.stringify(payload) }),
+  markRead:   (id: string) => request<any>(`/mentions/${id}/read`, { method: 'PATCH' }),
+  markAllRead: (userId: string) => request<any>(`/mentions/read-all/${userId}`, { method: 'POST' }),
+};
+
+// ── Notifications (G2) ────────────────────────────────────
+export const notificationsApi = {
+  list:       (userId: string, unreadOnly?: boolean) =>
+    request<any[]>(`/notifications/${userId}${unreadOnly ? '?unread=true' : ''}`),
+  count:      (userId: string) => request<any>(`/notifications/${userId}/count`),
+  create:     (payload: Record<string, unknown>) =>
+    request<any>('/notifications', { method: 'POST', body: JSON.stringify(payload) }),
+  markRead:   (id: string) => request<any>(`/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllRead: (userId: string) => request<any>(`/notifications/read-all/${userId}`, { method: 'POST' }),
+};
+
+// ── Custom Filters (G3) ───────────────────────────────────
+export const customFiltersApi = {
+  list:   (ownerId?: string, entityType?: string) => {
+    const qs = new URLSearchParams();
+    if (ownerId) qs.set('owner_id', ownerId);
+    if (entityType) qs.set('entity_type', entityType);
+    return request<any[]>(`/custom-filters${qs.toString() ? '?' + qs : ''}`);
+  },
+  create: (payload: Record<string, unknown>) =>
+    request<any>('/custom-filters', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/custom-filters/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) => request<any>(`/custom-filters/${id}`, { method: 'DELETE' }),
+};
+
+// ── Email Templates (G4) ──────────────────────────────────
+export const emailTemplatesApi = {
+  list:   (params?: { active?: boolean; category?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any[]>(`/email-templates${qs}`);
+  },
+  get:    (id: string) => request<any>(`/email-templates/${id}`),
+  create: (payload: Record<string, unknown>) =>
+    request<any>('/email-templates', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/email-templates/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) => request<any>(`/email-templates/${id}`, { method: 'DELETE' }),
+  render: (id: string, context: Record<string, string>) =>
+    request<any>(`/email-templates/${id}/render`, { method: 'POST', body: JSON.stringify({ context }) }),
+};
+
+// ── Visual Flows (H1+H2) ──────────────────────────────────
+export const visualFlowsApi = {
+  list:           (status?: string) => request<any[]>(`/visual-flows${status ? '?status=' + status : ''}`),
+  get:            (id: string) => request<any>(`/visual-flows/${id}`),
+  create:         (payload: Record<string, unknown>) =>
+    request<any>('/visual-flows', { method: 'POST', body: JSON.stringify(payload) }),
+  update:         (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/visual-flows/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete:         (id: string) => request<any>(`/visual-flows/${id}`, { method: 'DELETE' }),
+  createVersion:  (id: string, changeSummary?: string, createdBy?: string) =>
+    request<any>(`/visual-flows/${id}/versions`, {
+      method: 'POST', body: JSON.stringify({ change_summary: changeSummary, created_by: createdBy }),
+    }),
+  listVersions:   (id: string) => request<any[]>(`/visual-flows/${id}/versions`),
+  restoreVersion: (id: string, version: number) =>
+    request<any>(`/visual-flows/${id}/versions/${version}/restore`, { method: 'POST' }),
+};
+
+// ── Data Imports (I1) ─────────────────────────────────────
+export const dataImportsApi = {
+  list:           (params?: { status?: string; entity_type?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any[]>(`/data-imports${qs}`);
+  },
+  get:            (id: string) => request<any>(`/data-imports/${id}`),
+  create:         (payload: Record<string, unknown>) =>
+    request<any>('/data-imports', { method: 'POST', body: JSON.stringify(payload) }),
+  updateProgress: (id: string, update: Record<string, unknown>) =>
+    request<any>(`/data-imports/${id}/progress`, { method: 'PATCH', body: JSON.stringify(update) }),
+};
+
+// ── Custom Roles (I2) ─────────────────────────────────────
+export const customRolesApi = {
+  list:   () => request<any[]>('/custom-roles'),
+  get:    (id: string) => request<any>(`/custom-roles/${id}`),
+  create: (payload: Record<string, unknown>) =>
+    request<any>('/custom-roles', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/custom-roles/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) => request<any>(`/custom-roles/${id}`, { method: 'DELETE' }),
+};
+
+// ── Calls (I3) ────────────────────────────────────────────
+export const callsApi = {
+  list:  (params?: { contact_id?: string; agent_id?: string; status?: string; direction?: string; from?: string; to?: string; limit?: number }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any[]>(`/calls${qs}`);
+  },
+  stats:        (params?: { agent_id?: string; from?: string; to?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)])),
+        ).toString()
+      : '';
+    return request<any>(`/calls/stats${qs}`);
+  },
+  get:          (id: string) => request<any>(`/calls/${id}`),
+  create:       (payload: Record<string, unknown>) =>
+    request<any>('/calls', { method: 'POST', body: JSON.stringify(payload) }),
+  updateStatus: (id: string, payload: Record<string, unknown>) =>
+    request<any>(`/calls/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }),
+};

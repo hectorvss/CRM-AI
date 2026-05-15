@@ -780,4 +780,65 @@ router.post('/accept-invite', async (req, res) => {
   }
 });
 
+// GET /iam/teams — list workspace teams
+router.get('/teams', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {
+  if (!req.tenantId || !req.workspaceId) {
+    return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  }
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('teams')
+      .select('id, name, description, created_at')
+      .eq('workspace_id', req.workspaceId)
+      .order('name', { ascending: true });
+    if (error) throw error;
+    res.json(data ?? []);
+  } catch (err) {
+    console.error('Error fetching teams:', err);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// POST /iam/teams — create a new team
+router.post('/teams', requirePermission('members.write'), async (req: MultiTenantRequest, res) => {
+  const { name, description } = req.body ?? {};
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return sendError(res, 400, 'VALIDATION_ERROR', 'name is required');
+  }
+  if (!req.tenantId || !req.workspaceId) {
+    return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  }
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('teams')
+      .insert({ id: crypto.randomUUID(), name: name.trim(), description: description ?? null, workspace_id: req.workspaceId })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) {
+    console.error('Error creating team:', err);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// DELETE /iam/teams/:id — delete a team
+router.delete('/teams/:id', requirePermission('members.write'), async (req: MultiTenantRequest, res) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('teams')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('workspace_id', req.workspaceId!);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Error deleting team:', err);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
 export default router;

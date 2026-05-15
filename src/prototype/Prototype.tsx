@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'fin' | 'knowledge' | 'reports' | 'outbound';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'companiesList' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'inboxes' | 'cannedResponses' | 'aiGuardrails' | 'agentTools' | 'agentScenarios' | 'mcpServers' | 'emailTemplates' | 'visualFlows' | 'dataImports' | 'customRoles' | 'callsView';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -113,8 +113,8 @@ const ICON_EMPTY_STATE       = "https://www.figma.com/api/mcp/asset/29703bc6-2e1
 
 // ── Shared: Left Nav ──────────────────────────────────────────────────────────
 function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const isContacts = view === 'contacts' || view === 'allLeads';
-  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'billing' || view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels';
+  const isContacts = view === 'contacts' || view === 'allLeads' || view === 'companiesList';
+  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'billing' || view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels' || view === 'emailTemplates' || view === 'visualFlows' || view === 'dataImports' || view === 'customRoles' || view === 'callsView';
   const isActive = (v: View) => view === v;
 
   function NavBtn({ nav, icon, label, badge }: { nav: View; icon: string; label: string; badge?: number }) {
@@ -673,7 +673,7 @@ function InboxView() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ContactsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const activeItem = view === 'allLeads' ? 'allLeads' : 'contacts';
+  const activeItem = view === 'allLeads' ? 'allLeads' : view === 'companiesList' ? 'companiesList' : 'contacts';
 
   function SidebarItem({ label, count, itemView, opacity50Count = false }: {
     label: string; count: number; itemView: View; opacity50Count?: boolean;
@@ -717,10 +717,15 @@ function ContactsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
       <div className="h-px bg-[#e9eae6] mx-2 my-1" />
 
       <div className="flex flex-col gap-0.5">
-        <button className="flex items-center justify-between w-full px-2 py-1 rounded-[8px] hover:bg-white/60">
+        <div className="flex items-center gap-1.5 px-2 py-1">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="opacity-50">
+            <rect x="1" y="4" width="12" height="9" rx="1.5" stroke="#1a1a1a" strokeWidth="1.2"/>
+            <path d="M4 4V3a3 3 0 016 0v1" stroke="#1a1a1a" strokeWidth="1.2"/>
+          </svg>
           <span className="text-[12px] font-medium text-[#646462]">Empresas:</span>
-          <img src={ICON_CHEVRON} alt="" className="w-3 h-3 opacity-40" />
-        </button>
+        </div>
+        <SidebarItem label="Todas las empresas" count={0} itemView="companiesList" opacity50Count />
+        <SidebarItem label="Active" count={0} itemView="companiesList" opacity50Count />
       </div>
 
       <div className="h-px bg-[#e9eae6] mx-2 my-1" />
@@ -797,12 +802,29 @@ function ImportHero() {
   );
 }
 
+type ContactType = 'visitor' | 'lead' | 'customer';
+
+const CONTACT_TYPE_STYLES: Record<ContactType, { bg: string; text: string; label: string }> = {
+  visitor:  { bg: 'bg-[#f3f3f1]',  text: 'text-[#646462]', label: 'Visitante' },
+  lead:     { bg: 'bg-[#dbeafe]',  text: 'text-[#1d4ed8]', label: 'Lead' },
+  customer: { bg: 'bg-[#dcfce7]',  text: 'text-[#16a34a]', label: 'Cliente' },
+};
+
+function ContactTypeBadge({ type }: { type: ContactType }) {
+  const s = CONTACT_TYPE_STYLES[type];
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${s.bg} ${s.text}`}>
+      {s.label}
+    </span>
+  );
+}
+
 function UsersTable() {
-  const rows = [
-    { color: "#61d65c", initial: "E", name: "Email", channel: "en [Demo]", city: "Desconocido" },
-    { color: "#85e0d9", initial: "M", name: "Messenger", channel: "en [Demo]", city: "Desconocido" },
-    { color: "#b09efa", initial: "P", name: "Phone & SMS", channel: "en [Demo]", city: "Desconocido" },
-    { color: "#61d65c", initial: "W", name: "WhatsApp & Social", channel: "en [Demo]", city: "Desconocido" },
+  const rows: Array<{ color: string; initial: string; name: string; channel: string; city: string; contactType: ContactType; blocked: boolean; lastActivity: string }> = [
+    { color: "#61d65c", initial: "E", name: "Email", channel: "en [Demo]", city: "Desconocido", contactType: 'customer', blocked: false, lastActivity: 'hace 40 min' },
+    { color: "#85e0d9", initial: "M", name: "Messenger", channel: "en [Demo]", city: "Desconocido", contactType: 'lead', blocked: false, lastActivity: 'hace 2 horas' },
+    { color: "#b09efa", initial: "P", name: "Phone & SMS", channel: "en [Demo]", city: "Desconocido", contactType: 'visitor', blocked: true, lastActivity: 'hace 1 día' },
+    { color: "#61d65c", initial: "W", name: "WhatsApp & Social", channel: "en [Demo]", city: "Desconocido", contactType: 'customer', blocked: false, lastActivity: 'hace 3 días' },
   ];
   return (
     <div className="mx-4 flex flex-col gap-3">
@@ -853,34 +875,41 @@ function UsersTable() {
           <div className="w-7 flex-shrink-0" />
           <div className="flex-1 min-w-[180px]">Nombre</div>
           <div className="w-[130px] flex-shrink-0 flex items-center gap-1">
-            <span className="text-[#e35712]">Last seen</span>
+            <span className="text-[#e35712]">Última actividad</span>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-60">
               <path d="M5 2L7 5H3L5 2Z" fill="#e35712"/>
               <path d="M5 8L3 5H7L5 8Z" fill="#e35712" opacity="0.4"/>
             </svg>
           </div>
-          <div className="w-[90px] flex-shrink-0">Type</div>
+          <div className="w-[110px] flex-shrink-0">Tipo</div>
           <div className="w-[110px] flex-shrink-0">First seen</div>
           <div className="w-[100px] flex-shrink-0">Signed up</div>
           <div className="w-[100px] flex-shrink-0">Web sessions</div>
           <div className="w-[100px] flex-shrink-0">City</div>
         </div>
         {rows.map((row, i) => (
-          <div key={i} className="flex items-center border-b border-[#e9eae6] py-[10px] hover:bg-[#f8f8f7] cursor-pointer">
+          <div key={i} className={`flex items-center border-b border-[#e9eae6] py-[10px] hover:bg-[#f8f8f7] cursor-pointer ${row.blocked ? 'opacity-60' : ''}`}>
             <div className="w-7 flex-shrink-0">
               <input type="checkbox" className="w-3.5 h-3.5 rounded border-[#e9eae6]" />
             </div>
             <div className="flex-1 min-w-[180px] flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold text-white flex-shrink-0" style={{ backgroundColor: row.color }}>
-                {row.initial}
+              <div className="relative flex-shrink-0">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold text-white" style={{ backgroundColor: row.color }}>
+                  {row.initial}
+                </div>
+                {row.blocked && (
+                  <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center">
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 1.5l5 5M6.5 1.5l-5 5" stroke="white" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  </div>
+                )}
               </div>
               <div className="flex flex-col">
                 <span className="text-[13px] font-medium text-[#1a1a1a]">{row.name}</span>
                 <span className="text-[12px] text-[#646462]">{row.channel}</span>
               </div>
             </div>
-            <div className="w-[130px] flex-shrink-0 text-[13px] text-[#1a1a1a]">hace 40 minutos</div>
-            <div className="w-[90px] flex-shrink-0 text-[13px] text-[#1a1a1a]">Usuario</div>
+            <div className="w-[130px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{row.lastActivity}</div>
+            <div className="w-[110px] flex-shrink-0"><ContactTypeBadge type={row.contactType} /></div>
             <div className="w-[110px] flex-shrink-0 text-[13px] text-[#1a1a1a]">hace 40 min</div>
             <div className="w-[100px] flex-shrink-0 text-[13px] text-[#1a1a1a]">hace 40 min</div>
             <div className="w-[100px] flex-shrink-0 text-[13px] text-[#1a1a1a]">0</div>
@@ -1123,11 +1152,14 @@ const SETTINGS_NAV_MID = [
   { label: "Integraciones",       hasChevron: true },
 ];
 const INBOX_SUB: { label: string; nav: View | null }[] = [
+  { label: "Bandejas de entrada",  nav: 'inboxes' },
   { label: "Inbox para el equipo", nav: null },
+  { label: "Respuestas rápidas",   nav: 'cannedResponses' },
   { label: "Asignaciones",         nav: 'assignments' },
   { label: "Macros",               nav: 'macros' },
   { label: "Folios de atención",   nav: 'tickets' },
   { label: "SLA",                  nav: 'sla' },
+  { label: "Llamadas",             nav: 'callsView' },
 ];
 const DATOS_SUB: { label: string; nav: View | null }[] = [
   { label: "Etiquetas",                    nav: 'labels' },
@@ -1136,6 +1168,8 @@ const DATOS_SUB: { label: string; nav: View | null }[] = [
   { label: "Conversaciones",               nav: 'settings' },
   { label: "Objetos personalizados",       nav: null },
   { label: "Importaciones y exportaciones", nav: 'imports' },
+  { label: "Importaciones de datos",       nav: 'dataImports' },
+  { label: "Plantillas de email",          nav: 'emailTemplates' },
   { label: "Temas",                        nav: null },
 ];
 
@@ -1146,6 +1180,7 @@ const WORKSPACE_SUB: { label: string; nav: View | null; warn?: boolean }[] = [
   { label: "Marcas",                 nav: null },
   { label: "Seguridad",              nav: 'workspaceSecurity', warn: true },
   { label: "Multilingüe",            nav: 'workspaceMultilingual' },
+  { label: "Roles personalizados",   nav: 'customRoles' },
 ];
 
 const SUSCRIPCION_SUB: { label: string; nav: View | null }[] = [
@@ -1170,9 +1205,14 @@ const SETTINGS_NAV_BOTTOM = [
 ];
 
 const IA_SUB: { label: string; nav: View | null }[] = [
-  { label: "Fin AI Agent",   nav: 'fin' },
-  { label: "Buzón de IA",    nav: 'aiInbox' },
-  { label: "Automatización", nav: 'automation' },
+  { label: "Fin AI Agent",    nav: 'fin' },
+  { label: "Buzón de IA",     nav: 'aiInbox' },
+  { label: "Automatización",  nav: 'automation' },
+  { label: "Guardarraíles",   nav: 'aiGuardrails' },
+  { label: "Herramientas",    nav: 'agentTools' },
+  { label: "Escenarios",      nav: 'agentScenarios' },
+  { label: "Servidores MCP",  nav: 'mcpServers' },
+  { label: "Flujos visuales", nav: 'visualFlows' },
 ];
 const INTEG_SUB: { label: string; nav: View | null }[] = [
   { label: "Tienda de aplicaciones",   nav: 'appStore' },
@@ -1191,11 +1231,11 @@ const PERSONAL_SUB: { label: string; nav: View | null }[] = [
 ];
 
 function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies';
-  const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla';
-  const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin';
+  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies' || view === 'emailTemplates' || view === 'dataImports';
+  const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'inboxes' || view === 'cannedResponses' || view === 'callsView';
+  const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin' || view === 'aiGuardrails' || view === 'agentTools' || view === 'agentScenarios' || view === 'mcpServers' || view === 'visualFlows';
   const isIntegSection = view === 'appStore' || view === 'connectors';
-  const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual';
+  const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'customRoles';
   const isSuscripcionSection = view === 'billing';
   const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
@@ -2422,70 +2462,182 @@ function SettingsPromoCard({ title, description, primaryBtn, secondaryBtn, image
 
 // ── AssignmentsView ───────────────────────────────────────────────────────────
 
+type AssignmentPolicy = {
+  id: string; name: string; policy_type: 'round_robin' | 'capacity_based' | 'skills_based';
+  active: boolean; inbox_id: string | null; config: Record<string, unknown>;
+};
+
+const POLICY_TYPE_LABELS: Record<string, string> = {
+  round_robin:    'Turno rotativo',
+  capacity_based: 'Por capacidad',
+  skills_based:   'Por habilidades',
+};
+
+const POLICY_COLORS: Record<string, string> = {
+  round_robin:    'bg-[#dbeafe] text-[#1d4ed8]',
+  capacity_based: 'bg-[#dcfce7] text-[#15803d]',
+  skills_based:   'bg-[#ede9fe] text-[#5b21b6]',
+};
+
 function AssignmentsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [tab, setTab] = useState<'general' | 'workload' | 'limits'>('workload');
+  const [tab, setTab] = useState<'policies' | 'limits' | 'general'>('policies');
+  const [showNewPolicy, setShowNewPolicy] = useState(false);
+  const [policies, setPolicies] = useState<AssignmentPolicy[]>([
+    { id: '1', name: 'Soporte general (round-robin)', policy_type: 'round_robin', active: true, inbox_id: null, config: { max_per_agent: 5 } },
+    { id: '2', name: 'Facturación (por capacidad)', policy_type: 'capacity_based', active: true, inbox_id: 'billing', config: { max_capacity: 8, respect_online_status: true } },
+    { id: '3', name: 'Soporte técnico (por habilidades)', policy_type: 'skills_based', active: false, inbox_id: 'tech', config: { required_skills: ['javascript', 'api'], fallback_to_round_robin: true } },
+  ]);
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState<AssignmentPolicy['policy_type']>('round_robin');
+
+  function handleCreate() {
+    if (!newName.trim()) return;
+    setPolicies(prev => [...prev, {
+      id: String(Date.now()), name: newName, policy_type: newType,
+      active: true, inbox_id: null, config: {},
+    }]);
+    setNewName(''); setShowNewPolicy(false);
+  }
+
   const tabs = [
+    { id: 'policies' as const, label: 'Políticas de asignación' },
+    { id: 'limits'   as const, label: 'Límites por agente' },
     { id: 'general'  as const, label: 'General' },
-    { id: 'workload' as const, label: 'Gestión de la carga de trabajo' },
-    { id: 'limits'   as const, label: 'Límite de asignación de compañeros de equipo' },
   ];
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
             <h1 className="text-[20px] font-bold text-[#1a1a1a]">Asignaciones</h1>
-            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5">
-                <path d="M8 1v14M3 6l5-5 5 5"/><path d="M2 14h12"/>
-              </svg>
-              Aprender
+            <button onClick={() => setShowNewPolicy(true)}
+              className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">
+              + Nueva política
             </button>
           </div>
-          {/* Tabs */}
           <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
             {tabs.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
                 className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
-                  tab === t.id ? 'border-[#1a1a1a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                  tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
                 }`}>
                 {t.label}
               </button>
             ))}
           </div>
-          {/* Content */}
           <div className="flex-1 overflow-y-auto min-h-0">
-            {tab === 'workload' && (
-              <SettingsPromoCard
-                title="Mantén el control con la gestión de la carga de trabajo"
-                description="Agiliza la carga de trabajo de tu equipo con funciones de asignación inteligente. Controla qué conversaciones van a dónde, establece límites de asignación y más."
-                primaryBtn="Get the feature"
-                secondaryBtn="Gestión de carga de trabajo"
-                imageSlot={
-                  <div className="w-full h-[160px] rounded-[8px] bg-gradient-to-br from-[#e8e4f5] to-[#d4d0ea] flex items-center justify-center opacity-80">
-                    <div className="text-[12px] text-[#7c3aed] font-medium">Assignment Logic diagram</div>
+            {tab === 'policies' && (
+              <div className="px-6 py-4 flex flex-col gap-3">
+                {showNewPolicy && (
+                  <div className="border border-[#3b59f6] rounded-[10px] px-5 py-4 bg-[#f8f9ff] flex flex-col gap-3">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Nueva política de asignación</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input value={newName} onChange={e => setNewName(e.target.value)}
+                        placeholder="Nombre de la política..."
+                        className="border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6]" />
+                      <select value={newType} onChange={e => setNewType(e.target.value as AssignmentPolicy['policy_type'])}
+                        className="border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6] bg-white">
+                        {Object.entries(POLICY_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setShowNewPolicy(false)} className="px-4 py-[6px] text-[13px] border border-[#e9eae6] rounded-full hover:bg-[#f3f3f1]">Cancelar</button>
+                      <button onClick={handleCreate} className="px-4 py-[6px] text-[13px] font-semibold bg-[#1a1a1a] text-white rounded-full hover:bg-[#444]">Crear</button>
+                    </div>
                   </div>
-                }
-              />
+                )}
+
+                {policies.map(policy => (
+                  <div key={policy.id} className={`border rounded-[10px] px-5 py-4 flex items-center gap-4 ${policy.active ? 'border-[#e9eae6]' : 'border-[#e9eae6] opacity-60'}`}>
+                    <button
+                      onClick={() => setPolicies(prev => prev.map(p => p.id === policy.id ? { ...p, active: !p.active } : p))}
+                      className={`w-8 h-[18px] rounded-full flex-shrink-0 relative transition-colors ${policy.active ? 'bg-[#22c55e]' : 'bg-[#e9eae6]'}`}>
+                      <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-all ${policy.active ? 'right-0.5' : 'left-0.5'}`}/>
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[13px] font-semibold text-[#1a1a1a]">{policy.name}</span>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${POLICY_COLORS[policy.policy_type]}`}>
+                          {POLICY_TYPE_LABELS[policy.policy_type]}
+                        </span>
+                        {policy.inbox_id && (
+                          <span className="text-[11px] bg-[#f3f3f1] text-[#646462] px-2 py-0.5 rounded-full">
+                            Inbox: {policy.inbox_id}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 text-[12px] text-[#646462]">
+                        {policy.policy_type === 'round_robin' && `Máx. ${(policy.config as any).max_per_agent ?? '∞'} conversaciones/agente`}
+                        {policy.policy_type === 'capacity_based' && `Capacidad máx. ${(policy.config as any).max_capacity ?? '∞'} · ${(policy.config as any).respect_online_status ? 'Solo agentes online' : 'Todos los agentes'}`}
+                        {policy.policy_type === 'skills_based' && `Habilidades: ${((policy.config as any).required_skills as string[] ?? []).join(', ') || 'ninguna'}`}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button className="px-3 py-[5px] text-[12px] border border-[#e9eae6] rounded-full hover:bg-[#f3f3f1]">Editar</button>
+                      <button onClick={() => setPolicies(prev => prev.filter(p => p.id !== policy.id))}
+                        className="px-3 py-[5px] text-[12px] border border-[#e9eae6] rounded-full hover:bg-red-50 text-[#dc2626]">Eliminar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
+
             {tab === 'limits' && (
-              <SettingsPromoCard
-                title="A la medida de cada compañero"
-                description="Dale a cada compañero de equipo buzones principales en los que concentrarse. O establece límites de asignación individuales, para que las cargas de trabajo siempre se compartan de manera eficiente."
-                primaryBtn="Get the feature"
-                secondaryBtn="Límite de asignación de compañeros de equipo"
-                imageSlot={
-                  <div className="w-full h-[160px] rounded-[8px] bg-gradient-to-br from-[#fce7f3] to-[#f0abcc] flex items-center justify-center opacity-80">
-                    <div className="text-[12px] text-[#9d174d] font-medium">Assignment limits table</div>
-                  </div>
-                }
-              />
+              <div className="px-6 py-6">
+                <p className="text-[13px] text-[#646462] mb-4">Límites de conversaciones activas por agente. Dejar en blanco para sin límite.</p>
+                <table className="w-full text-[13px]">
+                  <thead><tr className="border-b border-[#e9eae6]">
+                    <th className="text-left py-2 px-4 font-medium text-[#646462] text-[12px]">Agente</th>
+                    <th className="text-left py-2 px-4 font-medium text-[#646462] text-[12px]">Límite</th>
+                    <th className="text-left py-2 px-4 font-medium text-[#646462] text-[12px]">Actual</th>
+                  </tr></thead>
+                  <tbody>
+                    {[
+                      { name: 'Ana García',    limit: 10, current: 7  },
+                      { name: 'Carlos López',  limit: 8,  current: 8  },
+                      { name: 'María Martín',  limit: 12, current: 3  },
+                      { name: 'Javier Ruiz',   limit: 10, current: 5  },
+                    ].map(agent => (
+                      <tr key={agent.name} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                        <td className="px-4 py-3 font-medium text-[#1a1a1a]">{agent.name}</td>
+                        <td className="px-4 py-3">
+                          <input type="number" defaultValue={agent.limit} min={1}
+                            className="w-20 border border-[#e9eae6] rounded-[6px] px-2 py-1 text-[13px] focus:outline-none focus:border-[#3b59f6]" />
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[12px] font-medium ${agent.current >= agent.limit ? 'text-[#dc2626]' : 'text-[#16a34a]'}`}>
+                            {agent.current} / {agent.limit}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <button className="mt-4 px-4 py-[6px] text-[13px] font-semibold bg-[#1a1a1a] text-white rounded-full hover:bg-[#444]">Guardar límites</button>
+              </div>
             )}
+
             {tab === 'general' && (
-              <div className="px-6 py-6 text-[13px] text-[#646462]">Configuración general de asignaciones</div>
+              <div className="px-6 py-6 flex flex-col gap-4">
+                {[
+                  { title: 'Auto-asignación al crear conversación', desc: 'Aplica la política activa automáticamente cuando se crea una nueva conversación.', on: true },
+                  { title: 'Re-asignar al cambiar de inbox', desc: 'Si una conversación se mueve de inbox, re-evalúa la política de asignación.', on: false },
+                  { title: 'Notificar al agente al ser asignado', desc: 'Envía una notificación push/email cuando un agente recibe una conversación asignada automáticamente.', on: true },
+                ].map(item => (
+                  <div key={item.title} className="border border-[#e9eae6] rounded-[10px] px-5 py-4 flex items-center gap-4">
+                    <div className="flex-1">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a]">{item.title}</p>
+                      <p className="text-[12px] text-[#646462] mt-0.5">{item.desc}</p>
+                    </div>
+                    <div className={`w-8 h-[18px] rounded-full flex-shrink-0 cursor-pointer ${item.on ? 'bg-[#22c55e]' : 'bg-[#e9eae6]'}`}>
+                      <div className={`m-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${item.on ? 'ml-auto mr-0.5' : ''}`}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -2496,16 +2648,51 @@ function AssignmentsView({ view, onNavigate }: { view: View; onNavigate: (v: Vie
 
 // ── MacrosView ────────────────────────────────────────────────────────────────
 
-const macrosList = [
-  { id: '1', emoji: '✅', label: 'Close conversation [Example]', active: true },
-  { id: '2', emoji: '🐞', label: 'Bug report [Example]', active: false },
-  { id: '3', emoji: '💵', label: 'Billing [Example]', active: false },
-  { id: '4', emoji: '',   label: 'Feature Request [Example]', active: false },
+type MacroItem = {
+  id: string; emoji: string; label: string; visibility: 'public' | 'private';
+  run_count: number; last_run_at: string | null;
+  actions: Array<{ action_name: string; label: string; color: string }>;
+};
+
+const macrosList: MacroItem[] = [
+  {
+    id: '1', emoji: '✅', label: 'Close conversation [Example]', visibility: 'public', run_count: 34, last_run_at: 'hace 2 horas',
+    actions: [
+      { action_name: 'update_status', label: 'Cerrar conversación', color: 'bg-[#dcfce7] text-[#15803d]' },
+      { action_name: 'send_message',  label: 'Enviar respuesta final', color: 'bg-[#dbeafe] text-[#1d4ed8]' },
+    ],
+  },
+  {
+    id: '2', emoji: '🐞', label: 'Bug report [Example]', visibility: 'public', run_count: 12, last_run_at: 'ayer',
+    actions: [
+      { action_name: 'add_label',   label: 'Añadir etiqueta: bug', color: 'bg-[#fef3c7] text-[#92400e]' },
+      { action_name: 'assign_team', label: 'Asignar: Tech Team',   color: 'bg-[#ede9fe] text-[#5b21b6]' },
+    ],
+  },
+  {
+    id: '3', emoji: '💵', label: 'Billing [Example]', visibility: 'public', run_count: 8, last_run_at: 'hace 3 días',
+    actions: [
+      { action_name: 'assign_team', label: 'Asignar: Facturación', color: 'bg-[#ede9fe] text-[#5b21b6]' },
+    ],
+  },
+  {
+    id: '4', emoji: '', label: 'Feature Request [Example]', visibility: 'private', run_count: 0, last_run_at: null,
+    actions: [
+      { action_name: 'add_label',    label: 'Añadir etiqueta: feature', color: 'bg-[#fef3c7] text-[#92400e]' },
+      { action_name: 'send_message', label: 'Enviar confirmación',      color: 'bg-[#dbeafe] text-[#1d4ed8]' },
+    ],
+  },
 ];
 
 function MacrosView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [selected, setSelected] = useState('1');
+  const [executedId, setExecutedId] = useState<string | null>(null);
   const macro = macrosList.find(m => m.id === selected)!;
+
+  function handleExecute() {
+    setExecutedId(selected);
+    setTimeout(() => setExecutedId(null), 2000);
+  }
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -2564,11 +2751,15 @@ function MacrosView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                   <div className="px-4 py-2 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Macros compartidas</div>
                   {macrosList.map(m => (
                     <button key={m.id} onClick={() => setSelected(m.id)}
-                      className={`w-full px-4 py-3 text-left text-[13px] border-b border-[#e9eae6] flex items-center gap-2 ${
+                      className={`w-full px-4 py-3 text-left text-[13px] border-b border-[#e9eae6] flex items-center justify-between gap-2 ${
                         selected === m.id ? 'bg-[#f0efff] text-[#1a1a1a] font-medium' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
                       }`}>
-                      {m.emoji && <span>{m.emoji}</span>}
-                      {m.label}
+                      <span className="flex items-center gap-2 min-w-0">
+                        {m.emoji && <span>{m.emoji}</span>}
+                        <span className="truncate">{m.label}</span>
+                        {m.visibility === 'private' && <span className="text-[10px] bg-[#f3f3f1] text-[#646462] px-1.5 py-0.5 rounded-full flex-shrink-0">Privada</span>}
+                      </span>
+                      {m.run_count > 0 && <span className="text-[11px] text-[#646462] flex-shrink-0">{m.run_count}×</span>}
                     </button>
                   ))}
                 </div>
@@ -2578,22 +2769,43 @@ function MacrosView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                 <div className="flex items-center justify-between px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
                   <h2 className="text-[16px] font-semibold text-[#1a1a1a]">{macro.emoji} {macro.label}</h2>
                   <div className="flex items-center gap-2">
-                    <button className="text-[13px] text-[#dc2626] font-medium border border-[#e9eae6] rounded-full px-3 py-[5px] hover:bg-red-50">Borrar macro</button>
+                    <button className="text-[13px] text-[#dc2626] font-medium border border-[#e9eae6] rounded-full px-3 py-[5px] hover:bg-red-50">Borrar</button>
                     <button className="text-[13px] font-medium border border-[#e9eae6] rounded-full px-3 py-[5px] hover:bg-[#f5f5f4]">Duplicar</button>
                     <button className="text-[13px] font-semibold bg-[#1a1a1a] text-white rounded-full px-4 py-[5px] hover:bg-[#444]">Guardar</button>
                   </div>
                 </div>
-                <p className="px-6 py-2 text-[12px] text-[#646462] flex-shrink-0">
-                  Creado por <span className="font-medium text-[#1a1a1a]">Hector Vidal Sanchez</span> 1 hora atrás · Todavía no se ha usado
-                </p>
+                <div className="px-6 py-2 flex items-center justify-between flex-shrink-0">
+                  <p className="text-[12px] text-[#646462]">
+                    Ejecutada <strong>{macro.run_count}</strong> veces
+                    {macro.last_run_at && <> · Última vez {macro.last_run_at}</>}
+                  </p>
+                  <button
+                    onClick={handleExecute}
+                    className={`flex items-center gap-1.5 text-[12px] font-semibold rounded-full px-3 py-[5px] transition-all ${
+                      executedId === macro.id
+                        ? 'bg-[#22c55e] text-white'
+                        : 'bg-[#f3f3f1] text-[#1a1a1a] hover:bg-[#e9eae6]'
+                    }`}>
+                    {executedId === macro.id ? (
+                      <><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> Ejecutada!</>
+                    ) : (
+                      <><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="#1a1a1a"/></svg> Ejecutar ahora</>
+                    )}
+                  </button>
+                </div>
                 <div className="flex-1 overflow-y-auto px-6 py-3">
-                  <div className="border border-[#e9eae6] rounded-[8px] p-4 text-[13px] text-[#1a1a1a] min-h-[120px]">
-                    <p>👋 Hi <span className="bg-[#ede9fe] text-[#7c3aed] rounded px-1 text-[12px]">A First name</span>,</p>
-                    <p className="mt-2">Unfortunately this is not a feature we support at the moment. However, we've logged your request with the product team. Thanks!</p>
-                    <p className="mt-2">Thanks!</p>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <span className="bg-[#d1fae5] text-[#065f46] text-[12px] font-medium rounded-full px-3 py-1 flex items-center gap-1">✓ Cerrar <span className="opacity-50">+</span></span>
+                  <p className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide mb-2">Acciones</p>
+                  <div className="flex flex-col gap-2">
+                    {macro.actions.map((a, i) => (
+                      <div key={i} className="flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-4 py-3">
+                        <span className="text-[11px] text-[#646462] w-5 text-center">{i + 1}</span>
+                        <span className={`text-[12px] font-medium rounded-full px-2.5 py-1 ${a.color}`}>{a.label}</span>
+                      </div>
+                    ))}
+                    <button className="flex items-center gap-2 border border-dashed border-[#e9eae6] rounded-[8px] px-4 py-3 text-[12px] text-[#646462] hover:bg-[#f8f8f7] hover:border-[#c8c9c4]">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="#646462" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                      Añadir acción
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2774,7 +2986,43 @@ function TicketsView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
 
 // ── SlaView ───────────────────────────────────────────────────────────────────
 
+type SlaPolicy = {
+  id: string; name: string; description: string | null;
+  first_response_time: number | null; next_response_time: number | null;
+  resolution_time: number | null; business_hours: boolean;
+};
+
+function fmtSecs(s: number | null): string {
+  if (s == null) return '—';
+  if (s < 60)    return `${s}s`;
+  if (s < 3600)  return `${Math.round(s / 60)}m`;
+  return `${Math.round(s / 3600)}h`;
+}
+
 function SlaView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [policies, setPolicies] = useState<SlaPolicy[]>([
+    { id: '1', name: 'Estándar',  description: 'Política SLA básica para todas las conversaciones', first_response_time: 3600,  next_response_time: 7200,  resolution_time: 86400,  business_hours: true  },
+    { id: '2', name: 'Prioritario', description: 'Clientes VIP y escalados urgentes',                 first_response_time: 900,   next_response_time: 1800,  resolution_time: 14400,  business_hours: true  },
+    { id: '3', name: '24/7',      description: 'Sin restricción de horario',                          first_response_time: 1800,  next_response_time: 3600,  resolution_time: 43200,  business_hours: false },
+  ]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', description: '', first_response_time: '', next_response_time: '', resolution_time: '', business_hours: false });
+
+  function addPolicy() {
+    if (!form.name.trim()) return;
+    setPolicies(prev => [...prev, {
+      id: String(Date.now()), name: form.name.trim(), description: form.description.trim() || null,
+      first_response_time: form.first_response_time ? parseInt(form.first_response_time) * 60 : null,
+      next_response_time:  form.next_response_time  ? parseInt(form.next_response_time)  * 60 : null,
+      resolution_time:     form.resolution_time     ? parseInt(form.resolution_time)     * 60 : null,
+      business_hours: form.business_hours,
+    }]);
+    setForm({ name: '', description: '', first_response_time: '', next_response_time: '', resolution_time: '', business_hours: false });
+    setShowForm(false);
+  }
+
+  function deletePolicy(id: string) { setPolicies(prev => prev.filter(p => p.id !== id)); }
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -2782,39 +3030,109 @@ function SlaView({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">SLA</h1>
-            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M8 1v14M3 6l5-5 5 5"/><path d="M2 14h12"/></svg>
-              Aprender
+            <div>
+              <h1 className="text-[18px] font-semibold text-[#1a1a1a]">Políticas SLA</h1>
+              <p className="text-[13px] text-[#646462] mt-0.5">Tiempos de respuesta y resolución por acuerdo</p>
+            </div>
+            <button
+              onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[10px] py-[7px] text-[13px] font-medium text-white hover:bg-[#333]"
+            >
+              <span className="text-[16px] leading-none">+</span>
+              <span>Nueva política</span>
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
-            <div className="rounded-[12px] bg-[#f8f7ff] border border-[#e9eae6] p-6 flex items-start gap-6 relative">
-              <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
-              </button>
-              <div className="flex-1 max-w-[500px]">
-                <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Acuerdos de nivel de servicio (SLA)</h2>
-                <p className="text-[13px] text-[#646462] mb-4">Los SLA te ayudan a establecer objetivos para que tu equipo proporcione una experiencia del cliente uniforme y de alta calidad. Al crear los SLA, puedes brindarle a cada cliente el nivel perfecto de asistencia.</p>
-                <div className="flex items-center gap-3">
-                  <button className="bg-[#7c3aed] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#6d28d9]">Get the feature</button>
-                  <button className="flex items-center gap-1 text-[13px] text-[#646462] hover:text-[#1a1a1a]">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/><rect x="5" y="1" width="6" height="4" rx="1"/></svg>
-                    Acuerdos de nivel de servicio para conversaciones y folios de atención
-                  </button>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {/* Columns */}
+            <div className="flex items-center text-[12px] font-semibold text-[#646462] px-6 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <div className="flex-1">Nombre</div>
+              <div className="w-28 flex-shrink-0 text-center">1ª respuesta</div>
+              <div className="w-28 flex-shrink-0 text-center">Siguiente resp.</div>
+              <div className="w-28 flex-shrink-0 text-center">Resolución</div>
+              <div className="w-24 flex-shrink-0 text-center">Horario</div>
+              <div className="w-16 flex-shrink-0" />
+            </div>
+            {policies.map(p => (
+              <div key={p.id} className="flex items-center px-6 py-3 border-b border-[#f0f0ee] hover:bg-[#fafafa] group">
+                <div className="flex-1 min-w-0">
+                  <span className="text-[14px] font-medium text-[#1a1a1a] block truncate">{p.name}</span>
+                  {p.description && <span className="text-[12px] text-[#999] block truncate">{p.description}</span>}
+                </div>
+                <div className="w-28 flex-shrink-0 text-center">
+                  <span className="text-[13px] font-mono text-[#7c5cfc]">{fmtSecs(p.first_response_time)}</span>
+                </div>
+                <div className="w-28 flex-shrink-0 text-center">
+                  <span className="text-[13px] font-mono text-[#646462]">{fmtSecs(p.next_response_time)}</span>
+                </div>
+                <div className="w-28 flex-shrink-0 text-center">
+                  <span className="text-[13px] font-mono text-[#646462]">{fmtSecs(p.resolution_time)}</span>
+                </div>
+                <div className="w-24 flex-shrink-0 flex justify-center">
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${p.business_hours ? 'bg-[#ecfdf5] text-[#059669]' : 'bg-[#f0f0ee] text-[#646462]'}`}>
+                    {p.business_hours ? 'Laborable' : '24/7'}
+                  </span>
+                </div>
+                <div className="w-16 flex-shrink-0 flex justify-end opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={() => deletePolicy(p.id)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#fee2e2] text-[#ef4444] text-[12px]"
+                  >✕</button>
                 </div>
               </div>
-              <img src={IMG_SLA_BANNER} alt="SLA preview" className="w-[458px] h-[213px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:26051" />
-            </div>
-            {/* Empty state */}
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <svg viewBox="0 0 40 40" className="w-10 h-10 fill-none stroke-[#ccc]" strokeWidth="1.5"><circle cx="20" cy="20" r="17"/><path d="M20 11v9l5 5"/></svg>
-              <p className="text-[14px] font-semibold text-[#1a1a1a]">Aún no se han creado SLA</p>
-              <a href="#" className="text-[13px] text-[#3b59f6] underline">Los SLA están limitados a planes específicos y configurados a través de flujos de trabajo.</a>
-            </div>
+            ))}
+            {policies.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <svg viewBox="0 0 40 40" className="w-10 h-10 fill-none stroke-[#ccc]" strokeWidth="1.5"><circle cx="20" cy="20" r="17"/><path d="M20 11v9l5 5"/></svg>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">Aún no se han creado políticas SLA</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[460px]">
+            <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-4">Nueva política SLA</h3>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre</label>
+                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Ej. Estándar, Prioritario..."
+                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc]" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-[#646462] mb-1">Descripción</label>
+                <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Opcional..."
+                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc]" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: '1ª respuesta (min)', key: 'first_response_time' as const },
+                  { label: 'Siguiente resp. (min)', key: 'next_response_time' as const },
+                  { label: 'Resolución (min)', key: 'resolution_time' as const },
+                ].map(({ label, key }) => (
+                  <div key={key}>
+                    <label className="block text-[11px] font-medium text-[#646462] mb-1">{label}</label>
+                    <input type="number" value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                      placeholder="—"
+                      className="w-full border border-[#e9eae6] rounded-lg px-2 py-2 text-[13px] outline-none focus:border-[#7c5cfc]" />
+                  </div>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={form.business_hours} onChange={e => setForm(f => ({ ...f, business_hours: e.target.checked }))} />
+                <span className="text-[13px] text-[#1a1a1a]">Solo horario laboral</span>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[13px] text-[#646462] hover:bg-[#f3f3f1] rounded-lg">Cancelar</button>
+              <button onClick={addPolicy} className="px-4 py-2 text-[13px] bg-[#222] text-white rounded-lg hover:bg-[#333]">Crear</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2901,51 +3219,232 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
 
 // ── AutomationView ────────────────────────────────────────────────────────────
 
+type AutomationRule = {
+  id: string; name: string; event_name: string; active: boolean;
+  run_count: number; condition_match: string;
+  conditions: Array<{ attribute: string; operator: string; value: unknown }>;
+  actions: Array<{ action_name: string; action_params: Record<string, unknown> }>;
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  conversation_created:  'Conversación creada',
+  conversation_updated:  'Conversación actualizada',
+  conversation_resolved: 'Conversación resuelta',
+  conversation_opened:   'Conversación abierta',
+  message_created:       'Mensaje recibido',
+  contact_created:       'Contacto creado',
+  contact_updated:       'Contacto actualizado',
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  assign_team:    'Asignar equipo',
+  assign_agent:   'Asignar agente',
+  add_label:      'Añadir etiqueta',
+  remove_label:   'Eliminar etiqueta',
+  send_message:   'Enviar mensaje',
+  send_email:     'Enviar email',
+  update_status:  'Cambiar estado',
+  mute_conversation: 'Silenciar conversación',
+  snooze:         'Posponer',
+};
+
 function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'rules' | 'settings'>('rules');
+  const [showNewRule, setShowNewRule] = useState(false);
+  const [rules, setRules] = useState<AutomationRule[]>([
+    {
+      id: '1', name: 'Auto-asignar soporte técnico', event_name: 'conversation_created',
+      active: true, run_count: 142, condition_match: 'all',
+      conditions: [{ attribute: 'status', operator: 'equals', value: 'open' }],
+      actions: [{ action_name: 'assign_team', action_params: { team: 'Soporte Técnico' } }],
+    },
+    {
+      id: '2', name: 'Etiquetar urgente por palabra clave', event_name: 'message_created',
+      active: true, run_count: 88, condition_match: 'any',
+      conditions: [{ attribute: 'message.content', operator: 'contains', value: 'urgente' }],
+      actions: [{ action_name: 'add_label', action_params: { label: 'urgente' } }],
+    },
+    {
+      id: '3', name: 'Cerrar conversaciones inactivas', event_name: 'conversation_updated',
+      active: false, run_count: 0, condition_match: 'all',
+      conditions: [],
+      actions: [{ action_name: 'update_status', action_params: { status: 'resolved' } }],
+    },
+  ]);
+
+  // New rule form state
+  const [newName, setNewName] = useState('');
+  const [newEvent, setNewEvent] = useState('conversation_created');
+  const [newMatch, setNewMatch] = useState<'all' | 'any'>('all');
+  const [newAction, setNewAction] = useState('assign_team');
+
+  function handleToggle(id: string) {
+    setRules(prev => prev.map(r => r.id === id ? { ...r, active: !r.active } : r));
+  }
+
+  function handleCreate() {
+    if (!newName.trim()) return;
+    setRules(prev => [...prev, {
+      id: String(Date.now()), name: newName, event_name: newEvent,
+      active: true, run_count: 0, condition_match: newMatch,
+      conditions: [], actions: [{ action_name: newAction, action_params: {} }],
+    }]);
+    setNewName(''); setShowNewRule(false);
+  }
+
+  function handleDelete(id: string) {
+    setRules(prev => prev.filter(r => r.id !== id));
+  }
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Automatización</h1>
-            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M13 3H3v10h10V3z"/><path d="M3 7h10M7 3v10"/></svg>
-              Ir a Flujos de trabajo
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6 flex flex-col gap-4">
-            {/* Card 1: Identidad */}
-            <div className="border border-[#e9eae6] rounded-[10px] px-5 py-4 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
-                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-[#646462]" strokeWidth="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/></svg>
-              </div>
-              <div className="flex-1">
-                <p className="text-[13px] font-semibold text-[#1a1a1a]">Elige una identidad para los bots de Fin y de los flujos de trabajo</p>
-                <p className="text-[12px] text-[#646462] mt-0.5">Personaliza la foto de perfil de Fin y el nombre. Esta identidad también se utilizará para los bots en los flujos de trabajo.</p>
-              </div>
-              <button className="flex-shrink-0 flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
-                Ajustes de Fin
+            <div className="flex items-center gap-3">
+              <h1 className="text-[20px] font-bold text-[#1a1a1a]">Automatización</h1>
+              <span className="text-[12px] bg-[#f3f3f1] text-[#646462] px-2 py-0.5 rounded-full">{rules.filter(r => r.active).length} activas</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => onNavigate('automation')} className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M13 3H3v10h10V3z"/><path d="M3 7h10M7 3v10"/></svg>
+                Flujos de trabajo
+              </button>
+              <button onClick={() => setShowNewRule(true)}
+                className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">
+                + Nueva regla
               </button>
             </div>
-            {/* Accordion items */}
-            {[
-              { title: 'Activar el Inbox del bot', desc: 'Mantén tus conversaciones en un buzón independiente mientras Fin AI Agent y los flujos de trabajo están activos al comienzo de una…' },
-              { title: 'Cierre automático de conversaciones de flujo de trabajo abandonadas', desc: 'Si un cliente no ha respondido en 3 minutos, la conversación se cerrará automáticamente. Otras respuestas reabrirán la conversación.' },
-            ].map(item => (
-              <div key={item.title} className="border border-[#e9eae6] rounded-[10px] px-5 py-4 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
-                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M9 12l2 2 4-4"/></svg>
-                </div>
-                <div className="flex-1">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">{item.title}</p>
-                  <p className="text-[12px] text-[#646462] mt-0.5">{item.desc}</p>
-                </div>
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4"/></svg>
-              </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+            {[{ id: 'rules' as const, label: 'Reglas' }, { id: 'settings' as const, label: 'Configuración' }].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors ${
+                  tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {t.label}
+              </button>
             ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {tab === 'rules' && (
+              <div className="px-6 py-4 flex flex-col gap-3">
+                {/* New rule form */}
+                {showNewRule && (
+                  <div className="border border-[#3b59f6] rounded-[10px] px-5 py-4 bg-[#f8f9ff] flex flex-col gap-3">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Nueva regla de automatización</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <input value={newName} onChange={e => setNewName(e.target.value)}
+                        placeholder="Nombre de la regla..."
+                        className="col-span-3 border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6]" />
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[11px] font-medium text-[#646462] uppercase tracking-wide">Evento</label>
+                        <select value={newEvent} onChange={e => setNewEvent(e.target.value)}
+                          className="border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6] bg-white">
+                          {Object.entries(EVENT_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[11px] font-medium text-[#646462] uppercase tracking-wide">Condiciones</label>
+                        <select value={newMatch} onChange={e => setNewMatch(e.target.value as 'all' | 'any')}
+                          className="border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6] bg-white">
+                          <option value="all">Todas (AND)</option>
+                          <option value="any">Alguna (OR)</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[11px] font-medium text-[#646462] uppercase tracking-wide">Acción principal</label>
+                        <select value={newAction} onChange={e => setNewAction(e.target.value)}
+                          className="border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6] bg-white">
+                          {Object.entries(ACTION_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setShowNewRule(false)} className="px-4 py-[6px] text-[13px] border border-[#e9eae6] rounded-full hover:bg-[#f3f3f1]">Cancelar</button>
+                      <button onClick={handleCreate} className="px-4 py-[6px] text-[13px] font-semibold bg-[#1a1a1a] text-white rounded-full hover:bg-[#444]">Crear regla</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rules list */}
+                {rules.map(rule => (
+                  <div key={rule.id} className={`border rounded-[10px] px-5 py-4 flex items-start gap-4 transition-colors ${rule.active ? 'border-[#e9eae6] bg-white' : 'border-[#e9eae6] bg-[#f8f8f7] opacity-70'}`}>
+                    {/* Toggle */}
+                    <button onClick={() => handleToggle(rule.id)}
+                      className={`mt-0.5 w-8 h-[18px] rounded-full flex-shrink-0 relative transition-colors ${rule.active ? 'bg-[#22c55e]' : 'bg-[#e9eae6]'}`}>
+                      <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-all ${rule.active ? 'right-0.5' : 'left-0.5'}`}/>
+                    </button>
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[13px] font-semibold text-[#1a1a1a]">{rule.name}</span>
+                        <span className="text-[11px] bg-[#f3f3f1] text-[#646462] px-2 py-0.5 rounded-full">
+                          {EVENT_LABELS[rule.event_name] ?? rule.event_name}
+                        </span>
+                        {rule.run_count > 0 && (
+                          <span className="text-[11px] text-[#646462]">· Ejecutada {rule.run_count} veces</span>
+                        )}
+                      </div>
+                      {/* Conditions + actions summary */}
+                      <div className="flex items-center gap-4 mt-2 text-[12px] text-[#646462] flex-wrap">
+                        {rule.conditions.length > 0 ? (
+                          <span className="flex items-center gap-1">
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M3.5 6h5M5 9h2" stroke="#646462" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                            {rule.conditions.length} condición{rule.conditions.length !== 1 ? 'es' : ''} ({rule.condition_match === 'all' ? 'todas' : 'alguna'})
+                          </span>
+                        ) : (
+                          <span className="text-[#aaa]">Sin condiciones (siempre se ejecuta)</span>
+                        )}
+                        <span className="flex items-center gap-1 text-[#fa7938]">
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v5l3 2" stroke="#fa7938" strokeWidth="1.2" strokeLinecap="round"/><circle cx="6" cy="6" r="5" stroke="#fa7938" strokeWidth="1.2"/></svg>
+                          {rule.actions.map(a => ACTION_LABELS[a.action_name] ?? a.action_name).join(', ')}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button className="px-3 py-[5px] text-[12px] border border-[#e9eae6] rounded-full hover:bg-[#f3f3f1] text-[#1a1a1a]">Editar</button>
+                      <button onClick={() => handleDelete(rule.id)} className="px-3 py-[5px] text-[12px] border border-[#e9eae6] rounded-full hover:bg-red-50 text-[#dc2626]">Eliminar</button>
+                    </div>
+                  </div>
+                ))}
+
+                {rules.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3 text-[#646462]">
+                    <svg width="40" height="40" viewBox="0 0 40 40" fill="none"><rect x="6" y="10" width="28" height="20" rx="3" stroke="#e9eae6" strokeWidth="2"/><path d="M6 16h28M14 10v4M26 10v4" stroke="#e9eae6" strokeWidth="2" strokeLinecap="round"/></svg>
+                    <span className="text-[15px] font-medium">No hay reglas de automatización</span>
+                    <button onClick={() => setShowNewRule(true)} className="mt-2 px-4 py-2 bg-[#1a1a1a] text-white rounded-full text-[13px] font-semibold hover:bg-[#444]">+ Crear primera regla</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === 'settings' && (
+              <div className="px-6 py-6 flex flex-col gap-4">
+                {[
+                  { title: 'Activar el Inbox del bot', desc: 'Mantén tus conversaciones en un buzón independiente mientras Fin AI Agent y los flujos de trabajo están activos.', on: true },
+                  { title: 'Cierre automático de conversaciones abandonadas', desc: 'Si un cliente no ha respondido en 3 minutos, la conversación se cerrará automáticamente.', on: false },
+                  { title: 'Notificar al agente al ejecutar una regla', desc: 'Muestra una notificación en el inbox cuando una regla de automatización se ejecuta en una conversación asignada.', on: true },
+                ].map(item => (
+                  <div key={item.title} className="border border-[#e9eae6] rounded-[10px] px-5 py-4 flex items-center gap-4">
+                    <div className="flex-1">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a]">{item.title}</p>
+                      <p className="text-[12px] text-[#646462] mt-0.5">{item.desc}</p>
+                    </div>
+                    <div className={`w-8 h-[18px] rounded-full relative flex-shrink-0 cursor-pointer ${item.on ? 'bg-[#22c55e]' : 'bg-[#e9eae6]'}`}>
+                      <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${item.on ? 'right-0.5' : 'left-0.5'}`}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -3337,6 +3836,117 @@ function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
               </div>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── CompaniesListView ─────────────────────────────────────────────────────────
+// CRM view showing company records (navigated from ContactsSidebar → Empresas)
+
+function CompaniesListView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [search, setSearch] = useState('');
+
+  const companies = [
+    { id: '1', name: 'Acme Corp', domain: 'acme.com', industry: 'Software', contacts: 12, lastActivity: 'hace 2 horas', country: 'España' },
+    { id: '2', name: 'Globex Industries', domain: 'globex.io', industry: 'Manufactura', contacts: 5, lastActivity: 'hace 1 día', country: 'USA' },
+    { id: '3', name: 'Initech Solutions', domain: 'initech.com', industry: 'Consultoría', contacts: 3, lastActivity: 'hace 3 días', country: 'España' },
+    { id: '4', name: 'Umbrella Ltd', domain: 'umbrella.co', industry: 'Salud', contacts: 27, lastActivity: 'hace 1 semana', country: 'UK' },
+  ];
+
+  const filtered = companies.filter(c =>
+    !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.domain.includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full overflow-hidden">
+      <div className="h-full flex-shrink-0 pt-3 pb-3 pl-1">
+        <div className="h-full rounded-[16px] overflow-hidden bg-[#fbfbf9] drop-shadow-[0px_1px_2px_rgba(20,20,20,0.15)] w-[230px]">
+          <ContactsSidebar view={view} onNavigate={onNavigate} />
+        </div>
+      </div>
+
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden bg-white rounded-[16px] mx-2 my-2 shadow-[0px_1px_2px_rgba(20,20,20,0.15)]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b border-[#e9eae6] flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button onClick={() => onNavigate('contacts')} className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#f8f8f7] hover:bg-[#efefed]">
+              <img src={ICON_BACK} alt="" className="w-4 h-4" />
+            </button>
+            <span className="text-[20px] font-semibold text-[#1a1a1a] tracking-[-0.4px]">Empresas</span>
+            <span className="text-[13px] text-[#646462] bg-[#f3f3f1] rounded-full px-2 py-0.5">{filtered.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="flex items-center gap-1.5 bg-[#f8f8f7] rounded-full pl-[12px] pr-[6px] py-[8px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#efefed]">
+              <img src={ICON_FILTER} alt="" className="w-3.5 h-3.5" />
+              <span>Filtrar</span>
+              <img src={ICON_CHEVRON} alt="" className="w-3.5 h-3.5 opacity-40" />
+            </button>
+            <button className="flex items-center gap-1.5 bg-[#222] rounded-full px-[14px] py-[8px] text-[13px] font-semibold text-[#f8f8f7] hover:bg-[#333]">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <span>Nueva empresa</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="px-6 py-3 flex-shrink-0">
+          <div className="flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-3 py-2 bg-[#f8f8f7] max-w-[360px]">
+            <img src={ICON_SEARCH2} alt="" className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar empresas..."
+              className="flex-1 bg-transparent text-[13px] text-[#1a1a1a] placeholder-[#646462] focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-6">
+          <table className="w-full text-[13px]">
+            <thead className="sticky top-0 bg-white z-10">
+              <tr className="border-b border-[#e9eae6]">
+                <th className="text-left py-3 pr-4 font-medium text-[#646462] text-[12px] w-7"><input type="checkbox" className="w-3.5 h-3.5 rounded border-[#e9eae6]" /></th>
+                <th className="text-left py-3 pr-4 font-medium text-[#646462] text-[12px]">Empresa</th>
+                <th className="text-left py-3 pr-4 font-medium text-[#646462] text-[12px]">Dominio</th>
+                <th className="text-left py-3 pr-4 font-medium text-[#646462] text-[12px]">Sector</th>
+                <th className="text-left py-3 pr-4 font-medium text-[#646462] text-[12px]">Contactos</th>
+                <th className="text-left py-3 pr-4 font-medium text-[#646462] text-[12px] flex items-center gap-1">
+                  <span className="text-[#e35712]">Última actividad</span>
+                </th>
+                <th className="text-left py-3 font-medium text-[#646462] text-[12px]">País</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={7} className="py-20 text-center text-[#646462] text-[14px]">No se encontraron empresas</td></tr>
+              ) : filtered.map(c => (
+                <tr key={c.id} className="border-b border-[#f3f3f1] hover:bg-[#f8f8f7] cursor-pointer group">
+                  <td className="py-3 pr-4"><input type="checkbox" className="w-3.5 h-3.5 rounded border-[#e9eae6]" /></td>
+                  <td className="py-3 pr-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-[6px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center text-[11px] font-bold text-[#646462] flex-shrink-0">
+                        {c.name[0]}
+                      </div>
+                      <span className="font-medium text-[#1a1a1a] group-hover:text-[#e35712] transition-colors">{c.name}</span>
+                    </div>
+                  </td>
+                  <td className="py-3 pr-4 text-[#646462]">{c.domain}</td>
+                  <td className="py-3 pr-4 text-[#646462]">{c.industry}</td>
+                  <td className="py-3 pr-4">
+                    <span className="inline-flex items-center gap-1 text-[#1a1a1a]">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="4" r="2.5" stroke="#646462" strokeWidth="1.1"/><path d="M1 10c0-2.21 2.239-4 5-4s5 1.79 5 4" stroke="#646462" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                      {c.contacts}
+                    </span>
+                  </td>
+                  <td className="py-3 pr-4 text-[#646462]">{c.lastActivity}</td>
+                  <td className="py-3 text-[#646462]">{c.country}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -4577,6 +5187,1912 @@ function AllChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   );
 }
 
+// ── InboxesView ───────────────────────────────────────────────────────────────
+// Settings view — manage all configured inboxes (email, WhatsApp, chat, etc.)
+
+const CHANNEL_ICONS: Record<string, string> = {
+  email:      '✉️', whatsapp: '💬', phone: '📞', messenger: '📨',
+  web_widget: '🌐', api: '⚙️', twitter: '🐦', instagram: '📸',
+  line:       '💚', telegram: '✈️', discord: '🎮', sms: '📱',
+};
+const CHANNEL_LABELS: Record<string, string> = {
+  email: 'Correo', whatsapp: 'WhatsApp', phone: 'Teléfono', messenger: 'Messenger',
+  web_widget: 'Widget Web', api: 'API', twitter: 'Twitter/X', instagram: 'Instagram',
+  line: 'LINE', telegram: 'Telegram', discord: 'Discord', sms: 'SMS',
+};
+
+type InboxItem = {
+  id: string; name: string; channel_type: string;
+  email?: string; enabled: boolean; conversations: number;
+};
+
+function InboxesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [inboxes, setInboxes] = useState<InboxItem[]>([
+    { id: '1', name: 'Soporte General',       channel_type: 'email',      email: 'soporte@acme.com',   enabled: true,  conversations: 148 },
+    { id: '2', name: 'Chat en vivo',          channel_type: 'web_widget', enabled: true,  conversations: 67 },
+    { id: '3', name: 'WhatsApp Ventas',        channel_type: 'whatsapp',   enabled: true,  conversations: 53 },
+    { id: '4', name: 'Telegram',              channel_type: 'telegram',   enabled: false, conversations: 0 },
+    { id: '5', name: 'API Externa',           channel_type: 'api',        enabled: true,  conversations: 22 },
+  ]);
+  const [newName, setNewName] = useState('');
+  const [newChannel, setNewChannel] = useState('email');
+
+  const filtered = inboxes.filter(i =>
+    i.name.toLowerCase().includes(search.toLowerCase()) ||
+    CHANNEL_LABELS[i.channel_type]?.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  function toggleEnabled(id: string) {
+    setInboxes(prev => prev.map(i => i.id === id ? { ...i, enabled: !i.enabled } : i));
+  }
+
+  function addInbox() {
+    if (!newName.trim()) return;
+    setInboxes(prev => [...prev, {
+      id: String(Date.now()), name: newName.trim(), channel_type: newChannel,
+      enabled: true, conversations: 0,
+    }]);
+    setNewName(''); setNewChannel('email'); setShowForm(false);
+  }
+
+  function deleteInbox(id: string) {
+    setInboxes(prev => prev.filter(i => i.id !== id));
+  }
+
+  return (
+    <div className="flex flex-col flex-1 h-full min-h-0 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 pt-4 pb-1 flex-shrink-0 text-[13px] text-[#646462]">
+        <button onClick={() => onNavigate('settings')} className="hover:underline">Ajustes</button>
+        <span>/</span><span className="text-[#1a1a1a] font-medium">Bandejas de entrada</span>
+      </div>
+      <div className="flex flex-1 min-h-0 gap-3 px-4 pb-4 pt-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <div>
+              <h2 className="text-[18px] font-semibold text-[#1a1a1a]">Bandejas de entrada</h2>
+              <p className="text-[13px] text-[#646462] mt-0.5">Gestiona todos los canales de comunicación</p>
+            </div>
+            <button
+              onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[10px] py-[7px] text-[13px] font-medium text-white hover:bg-[#333]"
+            >
+              <span className="text-[16px] leading-none">+</span>
+              <span>Nueva bandeja</span>
+            </button>
+          </div>
+
+          {/* Search */}
+          <div className="px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
+            <div className="flex items-center gap-2 bg-[#f8f8f7] rounded-lg px-3 py-2 w-72">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#888" strokeWidth="1.5"/><path d="M10.5 10.5L14 14" stroke="#888" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <input
+                value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar bandeja..."
+                className="flex-1 bg-transparent text-[13px] outline-none text-[#1a1a1a] placeholder-[#999]"
+              />
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="flex-1 overflow-y-auto">
+            {/* Column headers */}
+            <div className="flex items-center text-[12px] font-semibold text-[#646462] px-6 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <div className="w-8 flex-shrink-0" />
+              <div className="flex-1">Nombre</div>
+              <div className="w-36 flex-shrink-0">Canal</div>
+              <div className="w-40 flex-shrink-0">Email / Identificador</div>
+              <div className="w-24 flex-shrink-0 text-center">Convs.</div>
+              <div className="w-20 flex-shrink-0 text-center">Estado</div>
+              <div className="w-16 flex-shrink-0" />
+            </div>
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-[#999]">
+                <span className="text-4xl mb-3">📥</span>
+                <p className="text-[14px] font-medium">No hay bandejas</p>
+                <p className="text-[12px] mt-1">Crea tu primera bandeja de entrada</p>
+              </div>
+            ) : filtered.map(inbox => (
+              <div key={inbox.id} className="flex items-center px-6 py-3 border-b border-[#f0f0ee] hover:bg-[#fafafa] group">
+                <div className="w-8 flex-shrink-0 text-[18px]">{CHANNEL_ICONS[inbox.channel_type] ?? '📥'}</div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[14px] font-medium text-[#1a1a1a] truncate block">{inbox.name}</span>
+                </div>
+                <div className="w-36 flex-shrink-0">
+                  <span className="text-[12px] text-[#646462] bg-[#f0f0ee] px-2 py-0.5 rounded-full">
+                    {CHANNEL_LABELS[inbox.channel_type] ?? inbox.channel_type}
+                  </span>
+                </div>
+                <div className="w-40 flex-shrink-0 text-[12px] text-[#646462] truncate">
+                  {inbox.email ?? '—'}
+                </div>
+                <div className="w-24 flex-shrink-0 text-center text-[13px] text-[#1a1a1a]">
+                  {inbox.conversations}
+                </div>
+                <div className="w-20 flex-shrink-0 flex justify-center">
+                  <button
+                    onClick={() => toggleEnabled(inbox.id)}
+                    className={`w-9 h-5 rounded-full relative transition-colors ${inbox.enabled ? 'bg-[#25b15f]' : 'bg-[#ddd]'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${inbox.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
+                </div>
+                <div className="w-16 flex-shrink-0 flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={() => deleteInbox(inbox.id)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#fee2e2] text-[#ef4444] text-[12px]"
+                    title="Eliminar"
+                  >✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Create form modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[420px]">
+            <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-4">Nueva bandeja de entrada</h3>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="block text-[12px] font-medium text-[#646462] mb-1">Nombre</label>
+                <input
+                  value={newName} onChange={e => setNewName(e.target.value)}
+                  placeholder="Ej. Soporte técnico"
+                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc]"
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-[#646462] mb-1">Canal</label>
+                <select
+                  value={newChannel} onChange={e => setNewChannel(e.target.value)}
+                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc] bg-white"
+                >
+                  {Object.entries(CHANNEL_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{CHANNEL_ICONS[key]} {label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[13px] text-[#646462] hover:bg-[#f3f3f1] rounded-lg">Cancelar</button>
+              <button onClick={addInbox} className="px-4 py-2 text-[13px] bg-[#222] text-white rounded-lg hover:bg-[#333]">Crear</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CannedResponsesView ───────────────────────────────────────────────────────
+// Settings view — quick reply library (respuestas rápidas / canned responses)
+
+type CannedItem = {
+  id: string; short_code: string; content: string;
+  category: string | null; usage_count: number;
+};
+
+function CannedResponsesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [items, setItems] = useState<CannedItem[]>([
+    { id: '1', short_code: 'hola',        content: '¡Hola! ¿En qué puedo ayudarte hoy?',                                  category: 'Saludo',    usage_count: 84 },
+    { id: '2', short_code: 'gracias',     content: 'Muchas gracias por contactarnos. ¡Que tengas un excelente día!',       category: 'Cierre',    usage_count: 71 },
+    { id: '3', short_code: 'espera',      content: 'Un momento, por favor. Estoy revisando tu caso.',                      category: 'Gestión',   usage_count: 55 },
+    { id: '4', short_code: 'escalado',    content: 'He escalado tu solicitud a nuestro equipo especializado. Te contactarán pronto.', category: 'Escalado', usage_count: 33 },
+    { id: '5', short_code: 'horario',     content: 'Nuestro horario de atención es de lunes a viernes de 9:00 a 18:00 (CET).', category: 'Info',   usage_count: 29 },
+    { id: '6', short_code: 'pago-fallo',  content: 'Lamentamos los inconvenientes con tu pago. Por favor, intenta de nuevo o usa otro método.', category: 'Pagos', usage_count: 18 },
+    { id: '7', short_code: 'reembolso',   content: 'Tu solicitud de reembolso ha sido recibida. El proceso tarda 5-7 días hábiles.',            category: 'Pagos', usage_count: 12 },
+  ]);
+  const [form, setForm] = useState({ short_code: '', content: '', category: '' });
+
+  const filtered = items.filter(i =>
+    i.short_code.includes(search.toLowerCase()) ||
+    i.content.toLowerCase().includes(search.toLowerCase()) ||
+    (i.category ?? '').toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const categories = Array.from(new Set(items.map(i => i.category).filter(Boolean))) as string[];
+
+  function openCreate() { setForm({ short_code: '', content: '', category: '' }); setEditId(null); setShowForm(true); }
+  function openEdit(item: CannedItem) {
+    setForm({ short_code: item.short_code, content: item.content, category: item.category ?? '' });
+    setEditId(item.id); setShowForm(true);
+  }
+
+  function saveForm() {
+    if (!form.short_code.trim() || !form.content.trim()) return;
+    if (editId) {
+      setItems(prev => prev.map(i => i.id === editId
+        ? { ...i, short_code: form.short_code.trim(), content: form.content.trim(), category: form.category.trim() || null }
+        : i));
+    } else {
+      setItems(prev => [...prev, {
+        id: String(Date.now()), short_code: form.short_code.trim().toLowerCase(),
+        content: form.content.trim(), category: form.category.trim() || null, usage_count: 0,
+      }]);
+    }
+    setShowForm(false);
+  }
+
+  function deleteItem(id: string) { setItems(prev => prev.filter(i => i.id !== id)); }
+
+  return (
+    <div className="flex flex-col flex-1 h-full min-h-0 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 pt-4 pb-1 flex-shrink-0 text-[13px] text-[#646462]">
+        <button onClick={() => onNavigate('settings')} className="hover:underline">Ajustes</button>
+        <span>/</span><span className="text-[#1a1a1a] font-medium">Respuestas rápidas</span>
+      </div>
+      <div className="flex flex-1 min-h-0 gap-3 px-4 pb-4 pt-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <div>
+              <h2 className="text-[18px] font-semibold text-[#1a1a1a]">Respuestas rápidas</h2>
+              <p className="text-[13px] text-[#646462] mt-0.5">Usa <code className="bg-[#f0f0ee] px-1 rounded text-[12px]">/código</code> en la bandeja para insertar</p>
+            </div>
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[10px] py-[7px] text-[13px] font-medium text-white hover:bg-[#333]"
+            >
+              <span className="text-[16px] leading-none">+</span>
+              <span>Nueva respuesta</span>
+            </button>
+          </div>
+
+          {/* Search + filter row */}
+          <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
+            <div className="flex items-center gap-2 bg-[#f8f8f7] rounded-lg px-3 py-2 flex-1 max-w-xs">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#888" strokeWidth="1.5"/><path d="M10.5 10.5L14 14" stroke="#888" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <input
+                value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar por código o contenido..."
+                className="flex-1 bg-transparent text-[13px] outline-none text-[#1a1a1a] placeholder-[#999]"
+              />
+            </div>
+            <span className="text-[12px] text-[#999]">{filtered.length} respuesta{filtered.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Table */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="flex items-center text-[12px] font-semibold text-[#646462] px-6 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <div className="w-32 flex-shrink-0">Código</div>
+              <div className="flex-1">Contenido</div>
+              <div className="w-28 flex-shrink-0">Categoría</div>
+              <div className="w-16 flex-shrink-0 text-center">Usos</div>
+              <div className="w-20 flex-shrink-0" />
+            </div>
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-[#999]">
+                <span className="text-4xl mb-3">💬</span>
+                <p className="text-[14px] font-medium">Sin respuestas rápidas</p>
+                <p className="text-[12px] mt-1">Crea plantillas para agilizar la atención</p>
+              </div>
+            ) : filtered.map(item => (
+              <div key={item.id} className="flex items-center px-6 py-3 border-b border-[#f0f0ee] hover:bg-[#fafafa] group">
+                <div className="w-32 flex-shrink-0">
+                  <code className="bg-[#f0f0ee] text-[#7c5cfc] text-[12px] font-mono px-2 py-0.5 rounded">/{item.short_code}</code>
+                </div>
+                <div className="flex-1 min-w-0 pr-4">
+                  <span className="text-[13px] text-[#1a1a1a] line-clamp-2 block">{item.content}</span>
+                </div>
+                <div className="w-28 flex-shrink-0">
+                  {item.category ? (
+                    <span className="text-[11px] text-[#646462] bg-[#f0f0ee] px-2 py-0.5 rounded-full">{item.category}</span>
+                  ) : <span className="text-[12px] text-[#ccc]">—</span>}
+                </div>
+                <div className="w-16 flex-shrink-0 text-center text-[13px] text-[#646462]">{item.usage_count}</div>
+                <div className="w-20 flex-shrink-0 flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={() => openEdit(item)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f0f0ee] text-[#646462] text-[12px]"
+                    title="Editar"
+                  >✎</button>
+                  <button
+                    onClick={() => deleteItem(item.id)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#fee2e2] text-[#ef4444] text-[12px]"
+                    title="Eliminar"
+                  >✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Create / Edit modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[500px]">
+            <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-4">
+              {editId ? 'Editar respuesta rápida' : 'Nueva respuesta rápida'}
+            </h3>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="block text-[12px] font-medium text-[#646462] mb-1">Código corto (sin espacios)</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-[#7c5cfc] font-medium">/</span>
+                  <input
+                    value={form.short_code} onChange={e => setForm(f => ({ ...f, short_code: e.target.value.replace(/\s/g, '') }))}
+                    placeholder="ej. hola"
+                    className="flex-1 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc] font-mono"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-[#646462] mb-1">Contenido</label>
+                <textarea
+                  value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+                  placeholder="Escribe la respuesta predefinida..."
+                  rows={4}
+                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc] resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-[#646462] mb-1">Categoría (opcional)</label>
+                <input
+                  value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                  placeholder="Ej. Saludo, Pagos, Info..."
+                  list="canned-categories"
+                  className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc]"
+                />
+                <datalist id="canned-categories">
+                  {categories.map(c => <option key={c} value={c} />)}
+                </datalist>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[13px] text-[#646462] hover:bg-[#f3f3f1] rounded-lg">Cancelar</button>
+              <button onClick={saveForm} className="px-4 py-2 text-[13px] bg-[#222] text-white rounded-lg hover:bg-[#333]">
+                {editId ? 'Guardar' : 'Crear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AiGuardrailsView ──────────────────────────────────────────────────────────
+
+const RULE_TYPE_LABELS: Record<string, string> = {
+  blocked_topic: 'Tema bloqueado', required_disclaimer: 'Disclaimer requerido',
+  tone_enforcement: 'Tono', pii_redaction: 'Redacción PII',
+  language_restriction: 'Idioma', max_response_length: 'Longitud máxima', custom_regex: 'Regex custom',
+};
+const RULE_TYPE_COLORS: Record<string, string> = {
+  blocked_topic: 'bg-red-100 text-red-700', required_disclaimer: 'bg-blue-100 text-blue-700',
+  tone_enforcement: 'bg-purple-100 text-purple-700', pii_redaction: 'bg-orange-100 text-orange-700',
+  language_restriction: 'bg-teal-100 text-teal-700', max_response_length: 'bg-gray-100 text-gray-700',
+  custom_regex: 'bg-yellow-100 text-yellow-700',
+};
+
+type GuardrailItem = { id: string; name: string; rule_type: string; enabled: boolean; priority: number; description: string | null };
+
+function AiGuardrailsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [items, setItems] = useState<GuardrailItem[]>([
+    { id: '1', name: 'Sin temas de competencia', rule_type: 'blocked_topic', enabled: true,  priority: 10, description: 'Bloquea menciones a competidores directos' },
+    { id: '2', name: 'Redacción de emails',      rule_type: 'pii_redaction',  enabled: true,  priority: 8,  description: 'Elimina emails del output del agente' },
+    { id: '3', name: 'Tono profesional',         rule_type: 'tone_enforcement', enabled: true, priority: 5, description: 'Aplica tono formal en respuestas' },
+    { id: '4', name: 'Máx. 500 caracteres',      rule_type: 'max_response_length', enabled: false, priority: 3, description: 'Limita respuestas a 500 caracteres' },
+  ]);
+  const [showForm, setShowForm] = useState(false);
+  const [evalText, setEvalText] = useState('');
+  const [evalResult, setEvalResult] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState('blocked_topic');
+
+  function toggle(id: string) { setItems(prev => prev.map(i => i.id === id ? { ...i, enabled: !i.enabled } : i)); }
+  function remove(id: string) { setItems(prev => prev.filter(i => i.id !== id)); }
+  function addGuardrail() {
+    if (!newName.trim()) return;
+    setItems(prev => [...prev, { id: String(Date.now()), name: newName.trim(), rule_type: newType, enabled: true, priority: 0, description: null }]);
+    setNewName(''); setShowForm(false);
+  }
+
+  function evaluate() {
+    const violations = items.filter(g => {
+      if (!g.enabled) return false;
+      if (g.rule_type === 'max_response_length' && evalText.length > 200) return true;
+      return false;
+    });
+    setEvalResult(violations.length === 0 ? '✅ Sin violaciones detectadas' : `⚠️ ${violations.length} violación(es): ${violations.map(v => v.name).join(', ')}`);
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <div>
+              <h2 className="text-[18px] font-semibold text-[#1a1a1a]">Guardarraíles de IA</h2>
+              <p className="text-[13px] text-[#646462] mt-0.5">Controla el comportamiento del agente IA</p>
+            </div>
+            <button onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[10px] py-[7px] text-[13px] font-medium text-white hover:bg-[#333]">
+              <span className="text-[16px] leading-none">+</span><span>Nuevo</span>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+            {/* Evaluation tester */}
+            <div className="bg-[#f8f7ff] rounded-[10px] border border-[#e0deff] p-4">
+              <h3 className="text-[13px] font-semibold text-[#7c5cfc] mb-2">Probar texto</h3>
+              <div className="flex gap-2">
+                <textarea value={evalText} onChange={e => setEvalText(e.target.value)}
+                  placeholder="Introduce texto para evaluar contra los guardarraíles activos..."
+                  rows={2}
+                  className="flex-1 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none resize-none" />
+                <button onClick={evaluate}
+                  className="px-3 py-2 bg-[#7c5cfc] text-white rounded-lg text-[13px] font-medium hover:bg-[#6b4df0] self-end">Evaluar</button>
+              </div>
+              {evalResult && <p className="text-[12px] mt-2 text-[#1a1a1a]">{evalResult}</p>}
+            </div>
+            {/* List */}
+            {items.map(item => (
+              <div key={item.id} className="flex items-center gap-4 p-4 border border-[#e9eae6] rounded-[10px] hover:bg-[#fafafa] group">
+                <button
+                  onClick={() => toggle(item.id)}
+                  className={`w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${item.enabled ? 'bg-[#25b15f]' : 'bg-[#ddd]'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${item.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[14px] font-medium text-[#1a1a1a]">{item.name}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${RULE_TYPE_COLORS[item.rule_type] ?? 'bg-gray-100 text-gray-600'}`}>
+                      {RULE_TYPE_LABELS[item.rule_type] ?? item.rule_type}
+                    </span>
+                  </div>
+                  {item.description && <p className="text-[12px] text-[#999] mt-0.5">{item.description}</p>}
+                </div>
+                <span className="text-[11px] text-[#999] flex-shrink-0">P:{item.priority}</span>
+                <button onClick={() => remove(item.id)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#fee2e2] text-[#ef4444] text-[12px] opacity-0 group-hover:opacity-100">✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[400px]">
+            <h3 className="text-[16px] font-semibold mb-4">Nuevo guardarraíl</h3>
+            <div className="flex flex-col gap-3">
+              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nombre"
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc]" />
+              <select value={newType} onChange={e => setNewType(e.target.value)}
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] bg-white outline-none focus:border-[#7c5cfc]">
+                {Object.entries(RULE_TYPE_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[13px] text-[#646462] hover:bg-[#f3f3f1] rounded-lg">Cancelar</button>
+              <button onClick={addGuardrail} className="px-4 py-2 text-[13px] bg-[#222] text-white rounded-lg hover:bg-[#333]">Crear</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AgentToolsView ────────────────────────────────────────────────────────────
+
+type AgentToolItem = { id: string; name: string; tool_type: string; endpoint_url: string | null; enabled: boolean };
+
+const TOOL_TYPE_ICONS: Record<string, string> = {
+  http_request: '🌐', sql_query: '🗃️', javascript: '⚡', mcp_call: '🔌', builtin: '⚙️',
+};
+
+function AgentToolsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tools, setTools] = useState<AgentToolItem[]>([
+    { id: '1', name: 'Buscar pedidos',   tool_type: 'http_request', endpoint_url: 'https://api.example.com/orders/{{order_id}}', enabled: true },
+    { id: '2', name: 'Crear reembolso',  tool_type: 'http_request', endpoint_url: 'https://api.example.com/refunds', enabled: true },
+    { id: '3', name: 'Estado de envío',  tool_type: 'http_request', endpoint_url: 'https://shipping.example.com/track', enabled: false },
+    { id: '4', name: 'Calcular precio',  tool_type: 'javascript',   endpoint_url: null, enabled: true },
+  ]);
+  const [showForm, setShowForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState('http_request');
+  const [newUrl, setNewUrl] = useState('');
+  const [testId, setTestId] = useState<string | null>(null);
+
+  function toggle(id: string) { setTools(prev => prev.map(t => t.id === id ? { ...t, enabled: !t.enabled } : t)); }
+  function remove(id: string) { setTools(prev => prev.filter(t => t.id !== id)); }
+  function addTool() {
+    if (!newName.trim()) return;
+    setTools(prev => [...prev, { id: String(Date.now()), name: newName.trim(), tool_type: newType, endpoint_url: newUrl.trim() || null, enabled: true }]);
+    setNewName(''); setNewUrl(''); setShowForm(false);
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <div>
+              <h2 className="text-[18px] font-semibold text-[#1a1a1a]">Herramientas del agente</h2>
+              <p className="text-[13px] text-[#646462] mt-0.5">APIs y acciones que el agente IA puede invocar</p>
+            </div>
+            <button onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[10px] py-[7px] text-[13px] font-medium text-white hover:bg-[#333]">
+              <span className="text-[16px] leading-none">+</span><span>Nueva herramienta</span>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="flex items-center text-[12px] font-semibold text-[#646462] px-6 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <div className="w-8 flex-shrink-0" />
+              <div className="flex-1">Nombre</div>
+              <div className="w-28 flex-shrink-0">Tipo</div>
+              <div className="flex-1">Endpoint</div>
+              <div className="w-20 flex-shrink-0 text-center">Estado</div>
+              <div className="w-24 flex-shrink-0" />
+            </div>
+            {tools.map(tool => (
+              <div key={tool.id} className="flex items-center px-6 py-3 border-b border-[#f0f0ee] hover:bg-[#fafafa] group">
+                <div className="w-8 flex-shrink-0 text-[18px]">{TOOL_TYPE_ICONS[tool.tool_type] ?? '⚙️'}</div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[14px] font-medium text-[#1a1a1a]">{tool.name}</span>
+                </div>
+                <div className="w-28 flex-shrink-0">
+                  <span className="text-[11px] bg-[#f0f0ee] text-[#646462] px-2 py-0.5 rounded-full">{tool.tool_type}</span>
+                </div>
+                <div className="flex-1 min-w-0 px-2">
+                  <code className="text-[11px] text-[#999] truncate block">{tool.endpoint_url ?? '—'}</code>
+                </div>
+                <div className="w-20 flex-shrink-0 flex justify-center">
+                  <button onClick={() => toggle(tool.id)}
+                    className={`w-9 h-5 rounded-full relative transition-colors ${tool.enabled ? 'bg-[#25b15f]' : 'bg-[#ddd]'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${tool.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
+                </div>
+                <div className="w-24 flex-shrink-0 flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+                  <button onClick={() => setTestId(testId === tool.id ? null : tool.id)}
+                    className="text-[11px] px-2 py-1 bg-[#f0f0ee] hover:bg-[#e0deff] text-[#7c5cfc] rounded-md font-medium">Test</button>
+                  <button onClick={() => remove(tool.id)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#fee2e2] text-[#ef4444] text-[12px]">✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {testId && (
+            <div className="px-6 py-4 border-t border-[#e9eae6] bg-[#f8f8f7] flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[13px] font-medium text-[#1a1a1a]">Probar: {tools.find(t => t.id === testId)?.name}</span>
+                <button onClick={() => setTestId(null)} className="text-[12px] text-[#999] hover:text-[#1a1a1a]">✕</button>
+              </div>
+              <div className="bg-[#1a1a1a] rounded-lg p-3 text-[12px] font-mono text-[#25b15f]">
+                {`> POST ${tools.find(t => t.id === testId)?.endpoint_url ?? '—'}\n> { "test": true }\n\n200 OK — { "status": "ok", "result": "mock_response" }`}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[420px]">
+            <h3 className="text-[16px] font-semibold mb-4">Nueva herramienta</h3>
+            <div className="flex flex-col gap-3">
+              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nombre"
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc]" />
+              <select value={newType} onChange={e => setNewType(e.target.value)}
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] bg-white outline-none">
+                {Object.entries(TOOL_TYPE_ICONS).map(([k]) => <option key={k} value={k}>{TOOL_TYPE_ICONS[k]} {k}</option>)}
+              </select>
+              {newType === 'http_request' && (
+                <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://..."
+                  className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] font-mono outline-none focus:border-[#7c5cfc]" />
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[13px] text-[#646462] hover:bg-[#f3f3f1] rounded-lg">Cancelar</button>
+              <button onClick={addTool} className="px-4 py-2 text-[13px] bg-[#222] text-white rounded-lg hover:bg-[#333]">Crear</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AgentScenariosView ────────────────────────────────────────────────────────
+
+type ScenarioItem = { id: string; name: string; trigger_type: string; enabled: boolean; run_count: number; description: string | null };
+
+const TRIGGER_LABELS: Record<string, string> = {
+  intent_match: '🎯 Intención', keyword_match: '🔑 Palabras clave',
+  routing_rule: '📋 Regla', time_based: '⏰ Tiempo', manual: '👆 Manual',
+};
+
+function AgentScenariosView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [scenarios, setScenarios] = useState<ScenarioItem[]>([
+    { id: '1', name: 'Bienvenida a nuevos contactos', trigger_type: 'intent_match',   enabled: true,  run_count: 234, description: 'Se activa cuando se detecta intención "new_user"' },
+    { id: '2', name: 'Escalado automático',           trigger_type: 'keyword_match',  enabled: true,  run_count: 78,  description: 'Detecta "urgente" o "manager"' },
+    { id: '3', name: 'Seguimiento tras resolución',   trigger_type: 'time_based',     enabled: false, run_count: 12,  description: 'Envía CSAT 24h después de resolver' },
+    { id: '4', name: 'Oferta de descuento',           trigger_type: 'intent_match',   enabled: true,  run_count: 45,  description: 'Propone descuento a usuarios con intención de cancelar' },
+  ]);
+  const [showForm, setShowForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newTrigger, setNewTrigger] = useState('intent_match');
+
+  function toggle(id: string) { setScenarios(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s)); }
+  function remove(id: string) { setScenarios(prev => prev.filter(s => s.id !== id)); }
+  function addScenario() {
+    if (!newName.trim()) return;
+    setScenarios(prev => [...prev, { id: String(Date.now()), name: newName.trim(), trigger_type: newTrigger, enabled: true, run_count: 0, description: null }]);
+    setNewName(''); setShowForm(false);
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <div>
+              <h2 className="text-[18px] font-semibold text-[#1a1a1a]">Escenarios del agente</h2>
+              <p className="text-[13px] text-[#646462] mt-0.5">Flujos automáticos con triggers definidos</p>
+            </div>
+            <button onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[10px] py-[7px] text-[13px] font-medium text-white hover:bg-[#333]">
+              <span className="text-[16px] leading-none">+</span><span>Nuevo escenario</span>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-3">
+            {scenarios.map(s => (
+              <div key={s.id} className="flex items-start gap-4 p-4 border border-[#e9eae6] rounded-[10px] hover:bg-[#fafafa] group">
+                <button onClick={() => toggle(s.id)}
+                  className={`w-9 h-5 rounded-full relative flex-shrink-0 mt-0.5 transition-colors ${s.enabled ? 'bg-[#25b15f]' : 'bg-[#ddd]'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${s.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[14px] font-medium text-[#1a1a1a]">{s.name}</span>
+                    <span className="text-[11px] bg-[#f0f0ee] text-[#646462] px-2 py-0.5 rounded-full">{TRIGGER_LABELS[s.trigger_type] ?? s.trigger_type}</span>
+                    <span className="text-[11px] text-[#999]">Ejecuciones: {s.run_count}</span>
+                  </div>
+                  {s.description && <p className="text-[12px] text-[#999] mt-0.5">{s.description}</p>}
+                </div>
+                <button onClick={() => remove(s.id)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#fee2e2] text-[#ef4444] text-[12px] opacity-0 group-hover:opacity-100 flex-shrink-0">✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[400px]">
+            <h3 className="text-[16px] font-semibold mb-4">Nuevo escenario</h3>
+            <div className="flex flex-col gap-3">
+              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nombre del escenario"
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc]" />
+              <select value={newTrigger} onChange={e => setNewTrigger(e.target.value)}
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] bg-white outline-none">
+                {Object.entries(TRIGGER_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[13px] text-[#646462] hover:bg-[#f3f3f1] rounded-lg">Cancelar</button>
+              <button onClick={addScenario} className="px-4 py-2 text-[13px] bg-[#222] text-white rounded-lg hover:bg-[#333]">Crear</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── McpServersView ────────────────────────────────────────────────────────────
+
+type McpServerItem = { id: string; name: string; transport: string; endpoint_url: string | null; enabled: boolean; last_ping_at: string | null; tools_schema: unknown[] };
+
+const TRANSPORT_ICONS: Record<string, string> = { stdio: '💻', http: '🌐', sse: '📡' };
+
+function McpServersView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [servers, setServers] = useState<McpServerItem[]>([
+    { id: '1', name: 'Stripe MCP',   transport: 'http',  endpoint_url: 'https://mcp.stripe.com/v1',    enabled: true,  last_ping_at: new Date(Date.now() - 60000).toISOString(),  tools_schema: [{ name: 'create_payment' }, { name: 'refund_charge' }] },
+    { id: '2', name: 'Linear MCP',   transport: 'http',  endpoint_url: 'https://mcp.linear.app/v1',    enabled: true,  last_ping_at: new Date(Date.now() - 300000).toISOString(), tools_schema: [{ name: 'create_issue' }, { name: 'list_issues' }] },
+    { id: '3', name: 'Local Tools',  transport: 'stdio', endpoint_url: null,                            enabled: false, last_ping_at: null, tools_schema: [] },
+  ]);
+  const [showForm, setShowForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newTransport, setNewTransport] = useState('http');
+  const [newUrl, setNewUrl] = useState('');
+
+  function toggle(id: string) { setServers(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s)); }
+  function remove(id: string) { setServers(prev => prev.filter(s => s.id !== id)); }
+  function addServer() {
+    if (!newName.trim()) return;
+    setServers(prev => [...prev, { id: String(Date.now()), name: newName.trim(), transport: newTransport, endpoint_url: newUrl.trim() || null, enabled: true, last_ping_at: null, tools_schema: [] }]);
+    setNewName(''); setNewUrl(''); setShowForm(false);
+  }
+
+  function relativeTime(iso: string | null) {
+    if (!iso) return '—';
+    const diff = Date.now() - new Date(iso).getTime();
+    if (diff < 60000) return 'hace <1 min';
+    if (diff < 3600000) return `hace ${Math.round(diff/60000)} min`;
+    return `hace ${Math.round(diff/3600000)}h`;
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <div>
+              <h2 className="text-[18px] font-semibold text-[#1a1a1a]">Servidores MCP</h2>
+              <p className="text-[13px] text-[#646462] mt-0.5">Model Context Protocol — herramientas externas para el agente</p>
+            </div>
+            <button onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[10px] py-[7px] text-[13px] font-medium text-white hover:bg-[#333]">
+              <span className="text-[16px] leading-none">+</span><span>Conectar servidor</span>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-3">
+            {servers.map(srv => (
+              <div key={srv.id} className="border border-[#e9eae6] rounded-[10px] overflow-hidden group">
+                <div className="flex items-center gap-4 px-5 py-3 hover:bg-[#fafafa]">
+                  <span className="text-[20px]">{TRANSPORT_ICONS[srv.transport] ?? '🔌'}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[14px] font-medium text-[#1a1a1a]">{srv.name}</span>
+                      <span className="text-[11px] bg-[#f0f0ee] text-[#646462] px-2 py-0.5 rounded-full">{srv.transport}</span>
+                      {srv.enabled && <span className="text-[11px] bg-[#ecfdf5] text-[#059669] px-2 py-0.5 rounded-full">●&nbsp;Activo</span>}
+                    </div>
+                    <code className="text-[11px] text-[#999]">{srv.endpoint_url ?? 'stdio'}</code>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-[11px] text-[#999]">Último ping: {relativeTime(srv.last_ping_at)}</p>
+                    <p className="text-[11px] text-[#7c5cfc]">{srv.tools_schema.length} herramienta{srv.tools_schema.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <button onClick={() => toggle(srv.id)}
+                    className={`w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${srv.enabled ? 'bg-[#25b15f]' : 'bg-[#ddd]'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${srv.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
+                  <button onClick={() => remove(srv.id)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#fee2e2] text-[#ef4444] text-[12px] opacity-0 group-hover:opacity-100">✕</button>
+                </div>
+                {srv.tools_schema.length > 0 && (
+                  <div className="border-t border-[#f0f0ee] px-5 py-2 bg-[#fafaf9] flex flex-wrap gap-1">
+                    {(srv.tools_schema as Array<{ name: string }>).map(t => (
+                      <span key={t.name} className="text-[11px] bg-[#f0f0ee] text-[#646462] px-2 py-0.5 rounded-full font-mono">{t.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-[16px] shadow-xl p-6 w-[420px]">
+            <h3 className="text-[16px] font-semibold mb-4">Conectar servidor MCP</h3>
+            <div className="flex flex-col gap-3">
+              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nombre del servidor"
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#7c5cfc]" />
+              <select value={newTransport} onChange={e => setNewTransport(e.target.value)}
+                className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] bg-white outline-none">
+                <option value="http">🌐 HTTP</option>
+                <option value="sse">📡 SSE</option>
+                <option value="stdio">💻 Stdio (local)</option>
+              </select>
+              {newTransport !== 'stdio' && (
+                <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://..."
+                  className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] font-mono outline-none focus:border-[#7c5cfc]" />
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[13px] text-[#646462] hover:bg-[#f3f3f1] rounded-lg">Cancelar</button>
+              <button onClick={addServer} className="px-4 py-2 text-[13px] bg-[#222] text-white rounded-lg hover:bg-[#333]">Conectar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ReportsView ───────────────────────────────────────────────────────────────
+// Main reporting dashboard: overview metrics + CSAT summary + sparkline bars
+
+function ReportsView({ onNavigate }: { onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'overview' | 'csat'>('overview');
+
+  // Mock rollup data for the last 14 days
+  const dailyData = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (13 - i));
+    return {
+      date: d.toLocaleDateString('es', { month: 'short', day: 'numeric' }),
+      opened:   Math.floor(Math.random() * 40 + 10),
+      resolved: Math.floor(Math.random() * 35 + 8),
+      msgs:     Math.floor(Math.random() * 120 + 30),
+    };
+  });
+
+  const totalOpened   = dailyData.reduce((s, d) => s + d.opened, 0);
+  const totalResolved = dailyData.reduce((s, d) => s + d.resolved, 0);
+  const totalMsgs     = dailyData.reduce((s, d) => s + d.msgs, 0);
+  const resolutionRate = totalOpened > 0 ? Math.round(totalResolved / totalOpened * 100) : 0;
+
+  // Mock CSAT data
+  const csatData = [
+    { label: '⭐⭐⭐⭐⭐', count: 84, pct: 52 },
+    { label: '⭐⭐⭐⭐', count: 41, pct: 26 },
+    { label: '⭐⭐⭐', count: 20, pct: 12 },
+    { label: '⭐⭐', count: 10, pct: 6 },
+    { label: '⭐', count: 6, pct: 4 },
+  ];
+  const avgCsat = (84*5 + 41*4 + 20*3 + 10*2 + 6*1) / 161;
+
+  const maxOpened = Math.max(...dailyData.map(d => d.opened));
+
+  return (
+    <div className="flex flex-col flex-1 h-full min-h-0 overflow-hidden bg-[#f3f3f1]">
+      {/* Header */}
+      <div className="px-6 pt-5 pb-0 flex-shrink-0">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-[24px] font-bold text-[#1a1a1a] tracking-[-0.4px]">Informes</h1>
+            <p className="text-[13px] text-[#646462] mt-0.5">Últimos 14 días</p>
+          </div>
+          <button
+            onClick={() => onNavigate('inbox')}
+            className="flex items-center gap-1.5 bg-white border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#646462] hover:bg-[#f3f3f1]"
+          >
+            ← Volver
+          </button>
+        </div>
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-[#e9eae6]">
+          {(['overview', 'csat'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${
+                tab === t ? 'border-[#1a1a1a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+              }`}
+            >
+              {t === 'overview' ? 'Visión general' : 'CSAT'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {tab === 'overview' && (
+          <div className="flex flex-col gap-4">
+            {/* KPI cards */}
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: 'Conversaciones abiertas', value: totalOpened,   color: '#7c5cfc' },
+                { label: 'Conversaciones resueltas', value: totalResolved, color: '#25b15f' },
+                { label: 'Mensajes intercambiados',  value: totalMsgs,    color: '#3b82f6' },
+                { label: 'Tasa de resolución',        value: `${resolutionRate}%`, color: '#f59e0b' },
+              ].map(kpi => (
+                <div key={kpi.label} className="bg-white rounded-[12px] border border-[#e9eae6] px-5 py-4">
+                  <p className="text-[12px] text-[#646462] mb-1">{kpi.label}</p>
+                  <p className="text-[28px] font-bold" style={{ color: kpi.color }}>{kpi.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Bar chart: conversations opened */}
+            <div className="bg-white rounded-[12px] border border-[#e9eae6] px-5 py-4">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-4">Conversaciones abiertas por día</h3>
+              <div className="flex items-end gap-1 h-[120px]">
+                {dailyData.map(d => (
+                  <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
+                    <div
+                      className="w-full rounded-t-[3px] bg-[#7c5cfc]/80 hover:bg-[#7c5cfc] transition-colors cursor-pointer"
+                      style={{ height: `${(d.opened / maxOpened) * 100}px` }}
+                      title={`${d.date}: ${d.opened}`}
+                    />
+                    <span className="text-[9px] text-[#999] whitespace-nowrap">{d.date}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Resolution chart */}
+            <div className="bg-white rounded-[12px] border border-[#e9eae6] px-5 py-4">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-4">Conversaciones resueltas por día</h3>
+              <div className="flex items-end gap-1 h-[80px]">
+                {dailyData.map(d => {
+                  const maxR = Math.max(...dailyData.map(x => x.resolved));
+                  return (
+                    <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
+                      <div
+                        className="w-full rounded-t-[3px] bg-[#25b15f]/70 hover:bg-[#25b15f] transition-colors cursor-pointer"
+                        style={{ height: `${(d.resolved / maxR) * 64}px` }}
+                        title={`${d.date}: ${d.resolved}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'csat' && (
+          <div className="flex flex-col gap-4">
+            {/* CSAT score card */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-[12px] border border-[#e9eae6] px-5 py-4 flex flex-col items-center justify-center">
+                <p className="text-[12px] text-[#646462] mb-1">Puntuación media</p>
+                <p className="text-[36px] font-bold text-[#f59e0b]">{avgCsat.toFixed(1)}</p>
+                <p className="text-[12px] text-[#999]">de 5.0</p>
+              </div>
+              <div className="bg-white rounded-[12px] border border-[#e9eae6] px-5 py-4 flex flex-col items-center justify-center">
+                <p className="text-[12px] text-[#646462] mb-1">Respuestas totales</p>
+                <p className="text-[36px] font-bold text-[#3b82f6]">161</p>
+              </div>
+              <div className="bg-white rounded-[12px] border border-[#e9eae6] px-5 py-4 flex flex-col items-center justify-center">
+                <p className="text-[12px] text-[#646462] mb-1">Satisfacción positiva</p>
+                <p className="text-[36px] font-bold text-[#25b15f]">78%</p>
+                <p className="text-[12px] text-[#999]">4+ estrellas</p>
+              </div>
+            </div>
+
+            {/* Rating breakdown */}
+            <div className="bg-white rounded-[12px] border border-[#e9eae6] px-5 py-4">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-4">Distribución de puntuaciones</h3>
+              <div className="flex flex-col gap-3">
+                {csatData.map(({ label, count, pct }) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <span className="text-[13px] w-32 flex-shrink-0">{label}</span>
+                    <div className="flex-1 bg-[#f0f0ee] rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full bg-[#f59e0b]"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-[12px] text-[#646462] w-16 text-right flex-shrink-0">{count} ({pct}%)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recent comments */}
+            <div className="bg-white rounded-[12px] border border-[#e9eae6] px-5 py-4">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Comentarios recientes</h3>
+              <div className="flex flex-col gap-3">
+                {[
+                  { stars: 5, msg: 'Excelente atención, resolvieron mi problema en minutos.', agent: 'Ana García', date: 'hace 1h' },
+                  { stars: 4, msg: 'Muy buena atención aunque tardaron un poco.', agent: 'Carlos López', date: 'hace 3h' },
+                  { stars: 2, msg: 'Tardaron demasiado en responder.', agent: 'María Ruiz', date: 'hace 5h' },
+                  { stars: 5, msg: '¡Increíble servicio! Totalmente satisfecho.', agent: 'Ana García', date: 'hace 8h' },
+                ].map(({ stars, msg, agent, date }, i) => (
+                  <div key={i} className="flex gap-3 p-3 bg-[#fafaf9] rounded-lg">
+                    <span className="text-[13px] flex-shrink-0">{'⭐'.repeat(stars)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-[#1a1a1a]">{msg}</p>
+                      <p className="text-[11px] text-[#999] mt-0.5">Agente: {agent} · {date}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMAIL TEMPLATES VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+
+type EmailTemplate = {
+  id: string; name: string; subject: string; body: string;
+  category: string; variables: string[]; updatedAt: string;
+};
+const MOCK_EMAIL_TEMPLATES: EmailTemplate[] = [
+  { id: '1', name: 'Bienvenida', subject: 'Bienvenido/a a {{company_name}}', body: 'Hola {{contact_name}},\n\nGracias por unirte a nosotros. Estamos encantados de tenerte.', category: 'Onboarding', variables: ['company_name','contact_name'], updatedAt: 'hace 2 días' },
+  { id: '2', name: 'Seguimiento post-venta', subject: 'Tu pedido {{order_id}} ha sido enviado', body: 'Hola {{contact_name}},\n\nTu pedido está en camino. Número de seguimiento: {{tracking_number}}.', category: 'Ventas', variables: ['contact_name','order_id','tracking_number'], updatedAt: 'hace 5 días' },
+  { id: '3', name: 'Encuesta CSAT', subject: '¿Cómo valorarías nuestra atención?', body: 'Hola {{contact_name}},\n\nTu opinión es muy importante para nosotros. Por favor, valora tu experiencia.', category: 'CSAT', variables: ['contact_name'], updatedAt: 'hace 1 semana' },
+  { id: '4', name: 'Recordatorio de renovación', subject: 'Tu suscripción vence el {{expiry_date}}', body: 'Hola {{contact_name}},\n\nTu plan {{plan_name}} vence pronto. Renueva para no perder el servicio.', category: 'Facturación', variables: ['contact_name','expiry_date','plan_name'], updatedAt: 'hace 2 semanas' },
+];
+
+function EmailTemplatesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [templates, setTemplates] = useState<EmailTemplate[]>(MOCK_EMAIL_TEMPLATES);
+  const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<EmailTemplate | null>(null);
+  const [preview, setPreview] = useState<EmailTemplate | null>(null);
+
+  const filtered = templates.filter(t =>
+    t.name.toLowerCase().includes(search.toLowerCase()) ||
+    t.subject.toLowerCase().includes(search.toLowerCase()) ||
+    t.category.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function openCreate() { setEditing(null); setShowModal(true); }
+  function openEdit(t: EmailTemplate) { setEditing(t); setShowModal(true); setPreview(null); }
+  function handleDelete(id: string) { setTemplates(ts => ts.filter(t => t.id !== id)); }
+
+  function handleSave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const name     = fd.get('name')     as string;
+    const subject  = fd.get('subject')  as string;
+    const body     = fd.get('body')     as string;
+    const category = fd.get('category') as string;
+    const vars     = body.match(/\{\{(\w+)\}\}/g)?.map(v => v.replace(/\{\{|\}\}/g, '')) ?? [];
+    if (editing) {
+      setTemplates(ts => ts.map(t => t.id === editing.id ? { ...t, name, subject, body, category, variables: vars, updatedAt: 'ahora' } : t));
+    } else {
+      setTemplates(ts => [...ts, { id: Date.now().toString(), name, subject, body, category, variables: vars, updatedAt: 'ahora' }]);
+    }
+    setShowModal(false);
+  }
+
+  const CAT_COLORS: Record<string, string> = {
+    'Onboarding': 'bg-[#dbeafe] text-[#1e40af]',
+    'Ventas':     'bg-[#dcfce7] text-[#166534]',
+    'CSAT':       'bg-[#fef9c3] text-[#854d0e]',
+    'Facturación':'bg-[#fce7f3] text-[#9d174d]',
+  };
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full gap-3 p-3 overflow-hidden">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 bg-white rounded-[16px] shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div>
+            <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Plantillas de email</h2>
+            <p className="text-[13px] text-[#646462] mt-0.5">Gestiona plantillas reutilizables con variables dinámicas.</p>
+          </div>
+          <button onClick={openCreate} className="px-4 py-2 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] flex items-center gap-2">
+            <span>+ Nueva plantilla</span>
+          </button>
+        </div>
+        {/* Search */}
+        <div className="px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
+          <input
+            value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar plantillas..."
+            className="w-full max-w-sm border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]"
+          />
+        </div>
+        {/* Body: split between list + preview */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* Table */}
+          <div className="flex-1 min-w-0 overflow-y-auto">
+            <table className="w-full text-[13px]">
+              <thead className="sticky top-0 bg-[#f8f8f7] z-10">
+                <tr className="border-b border-[#e9eae6]">
+                  <th className="text-left px-6 py-3 font-semibold text-[#646462]">Nombre</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#646462]">Asunto</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#646462]">Categoría</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#646462]">Variables</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#646462]">Actualizado</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(t => (
+                  <tr
+                    key={t.id}
+                    onClick={() => setPreview(preview?.id === t.id ? null : t)}
+                    className={`border-b border-[#f0f0ee] cursor-pointer transition-colors ${preview?.id === t.id ? 'bg-[#f0f0ff]' : 'hover:bg-[#fafaf9]'}`}
+                  >
+                    <td className="px-6 py-3 font-medium text-[#1a1a1a]">{t.name}</td>
+                    <td className="px-4 py-3 text-[#646462] max-w-[200px] truncate font-mono text-[12px]">{t.subject}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${CAT_COLORS[t.category] ?? 'bg-[#f0f0ee] text-[#444]'}`}>{t.category}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {t.variables.slice(0, 3).map(v => (
+                          <span key={v} className="text-[11px] bg-[#ede9fe] text-[#5b21b6] px-1.5 py-0.5 rounded font-mono">{`{{${v}}}`}</span>
+                        ))}
+                        {t.variables.length > 3 && <span className="text-[11px] text-[#999]">+{t.variables.length - 3}</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[#999]">{t.updatedAt}</td>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEdit(t)} className="px-2 py-1 text-[12px] bg-[#f0f0ee] rounded hover:bg-[#e0e0de]">Editar</button>
+                        <button onClick={() => handleDelete(t.id)} className="px-2 py-1 text-[12px] bg-[#fee2e2] text-[#b91c1c] rounded hover:bg-[#fecaca]">Eliminar</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={6} className="px-6 py-8 text-center text-[#999] text-[13px]">No se encontraron plantillas</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {/* Preview panel */}
+          {preview && (
+            <div className="w-[340px] flex-shrink-0 border-l border-[#e9eae6] overflow-y-auto bg-[#fafaf9]">
+              <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+                <span className="text-[14px] font-semibold text-[#1a1a1a]">Vista previa</span>
+                <button onClick={() => setPreview(null)} className="text-[#999] hover:text-[#444] text-[18px] leading-none">×</button>
+              </div>
+              <div className="px-5 py-4 flex flex-col gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-1">Asunto</p>
+                  <p className="text-[13px] text-[#1a1a1a] font-mono bg-white border border-[#e9eae6] rounded px-3 py-2">{preview.subject}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-1">Cuerpo</p>
+                  <pre className="text-[12px] text-[#1a1a1a] font-mono bg-white border border-[#e9eae6] rounded px-3 py-2 whitespace-pre-wrap leading-relaxed">{preview.body}</pre>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-1">Variables detectadas</p>
+                  <div className="flex flex-wrap gap-1">
+                    {preview.variables.map(v => (
+                      <span key={v} className="text-[11px] bg-[#ede9fe] text-[#5b21b6] px-2 py-0.5 rounded font-mono">{`{{${v}}}`}</span>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={() => openEdit(preview)} className="w-full py-2 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] mt-2">
+                  Editar plantilla
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Create / Edit modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">{editing ? 'Editar plantilla' : 'Nueva plantilla'}</h3>
+              <button onClick={() => setShowModal(false)} className="text-[#999] hover:text-[#444] text-[20px] leading-none">×</button>
+            </div>
+            <form onSubmit={handleSave} className="px-6 py-4 flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[12px] font-semibold text-[#646462]">Nombre</label>
+                  <input name="name" defaultValue={editing?.name ?? ''} required className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]" placeholder="Ej. Bienvenida" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[12px] font-semibold text-[#646462]">Categoría</label>
+                  <input name="category" defaultValue={editing?.category ?? ''} list="cat-list" className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]" placeholder="Onboarding" />
+                  <datalist id="cat-list">{['Onboarding','Ventas','CSAT','Facturación','Soporte'].map(c => <option key={c} value={c} />)}</datalist>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Asunto</label>
+                <input name="subject" defaultValue={editing?.subject ?? ''} required className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] font-mono outline-none focus:border-[#6366f1]" placeholder="Ej. Bienvenido a {{company_name}}" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Cuerpo <span className="text-[#999] font-normal">(usa {'{{variable}}'} para variables dinámicas)</span></label>
+                <textarea name="body" defaultValue={editing?.body ?? ''} required rows={5} className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[12px] font-mono outline-none focus:border-[#6366f1] resize-none" placeholder="Hola {{contact_name}},&#10;&#10;..." />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] text-[#646462] bg-[#f0f0ee] rounded-full hover:bg-[#e0e0de]">Cancelar</button>
+                <button type="submit" className="px-4 py-2 text-[13px] font-semibold text-white bg-[#222] rounded-full hover:bg-[#444]">{editing ? 'Guardar cambios' : 'Crear plantilla'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISUAL FLOWS VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+
+type VisualFlow = {
+  id: string; name: string; description: string;
+  trigger_type: 'keyword' | 'intent' | 'event' | 'schedule' | 'api';
+  status: 'draft' | 'published' | 'archived';
+  step_count: number; run_count: number; updatedAt: string;
+};
+const FLOW_TRIGGER_LABELS: Record<VisualFlow['trigger_type'], string> = {
+  keyword: 'Palabra clave', intent: 'Intención', event: 'Evento', schedule: 'Programado', api: 'API',
+};
+const FLOW_TRIGGER_COLORS: Record<VisualFlow['trigger_type'], string> = {
+  keyword: 'bg-[#dbeafe] text-[#1e40af]', intent: 'bg-[#ede9fe] text-[#5b21b6]',
+  event: 'bg-[#dcfce7] text-[#166534]', schedule: 'bg-[#fef9c3] text-[#854d0e]', api: 'bg-[#f0f0ee] text-[#444]',
+};
+const FLOW_STATUS_COLORS: Record<VisualFlow['status'], string> = {
+  draft: 'bg-[#fef9c3] text-[#854d0e]', published: 'bg-[#dcfce7] text-[#166534]', archived: 'bg-[#f0f0ee] text-[#999]',
+};
+const MOCK_FLOWS: VisualFlow[] = [
+  { id: '1', name: 'Onboarding automático', description: 'Secuencia de bienvenida para nuevos clientes', trigger_type: 'event', status: 'published', step_count: 5, run_count: 342, updatedAt: 'hace 1 día' },
+  { id: '2', name: 'Calificación de leads', description: 'Preguntas para calificar leads entrantes', trigger_type: 'intent', status: 'published', step_count: 8, run_count: 178, updatedAt: 'hace 3 días' },
+  { id: '3', name: 'Recuperación de carrito', description: 'Recordatorio de compra abandonada', trigger_type: 'schedule', status: 'draft', step_count: 3, run_count: 0, updatedAt: 'hace 5 días' },
+  { id: '4', name: 'Soporte técnico nivel 1', description: 'Triaje automático de incidencias técnicas', trigger_type: 'keyword', status: 'archived', step_count: 6, run_count: 1240, updatedAt: 'hace 2 semanas' },
+];
+
+// Simple visual flow canvas mock — shows steps as nodes
+function FlowCanvas({ flow }: { flow: VisualFlow }) {
+  const steps = [
+    { label: 'Trigger', color: '#6366f1', icon: '⚡' },
+    { label: 'Condición', color: '#f59e0b', icon: '?' },
+    { label: 'Acción IA', color: '#22c55e', icon: '🤖' },
+    { label: 'Espera', color: '#64748b', icon: '⏳' },
+    { label: 'Finalizar', color: '#ef4444', icon: '✓' },
+  ].slice(0, flow.step_count > 5 ? 5 : flow.step_count);
+  return (
+    <div className="flex items-center gap-0 overflow-x-auto py-3 px-4 bg-[#f8f8ff] rounded-xl border border-[#e9eae6] min-h-[80px]">
+      {steps.map((s, i) => (
+        <div key={i} className="flex items-center gap-0 flex-shrink-0">
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-[16px] shadow-sm" style={{ backgroundColor: s.color }}>
+              {s.icon}
+            </div>
+            <span className="text-[10px] text-[#646462] font-medium">{s.label}</span>
+          </div>
+          {i < steps.length - 1 && (
+            <div className="w-8 h-[2px] bg-[#e9eae6] mx-1 flex-shrink-0 relative">
+              <span className="absolute right-0 top-[-5px] text-[10px] text-[#999]">›</span>
+            </div>
+          )}
+        </div>
+      ))}
+      {flow.step_count > 5 && (
+        <div className="ml-2 text-[12px] text-[#999]">+{flow.step_count - 5} pasos</div>
+      )}
+    </div>
+  );
+}
+
+function VisualFlowsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [flows, setFlows] = useState<VisualFlow[]>(MOCK_FLOWS);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+
+  function toggleStatus(id: string) {
+    setFlows(fs => fs.map(f => {
+      if (f.id !== id) return f;
+      const next = f.status === 'published' ? 'draft' : f.status === 'draft' ? 'published' : f.status;
+      return { ...f, status: next };
+    }));
+  }
+  function handleDelete(id: string) { setFlows(fs => fs.filter(f => f.id !== id)); }
+
+  function handleCreate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const newFlow: VisualFlow = {
+      id: Date.now().toString(),
+      name: fd.get('name') as string,
+      description: fd.get('description') as string,
+      trigger_type: fd.get('trigger_type') as VisualFlow['trigger_type'],
+      status: 'draft', step_count: 1, run_count: 0, updatedAt: 'ahora',
+    };
+    setFlows(fs => [newFlow, ...fs]);
+    setShowModal(false);
+  }
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full gap-3 p-3 overflow-hidden">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 bg-white rounded-[16px] shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div>
+            <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Flujos visuales</h2>
+            <p className="text-[13px] text-[#646462] mt-0.5">Crea flujos de conversación y automatización sin código.</p>
+          </div>
+          <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444]">+ Nuevo flujo</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-3">
+          {flows.map(flow => (
+            <div key={flow.id} className="border border-[#e9eae6] rounded-xl overflow-hidden">
+              <div
+                className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-[#fafaf9]"
+                onClick={() => setExpanded(expanded === flow.id ? null : flow.id)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[14px] font-semibold text-[#1a1a1a]">{flow.name}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${FLOW_TRIGGER_COLORS[flow.trigger_type]}`}>{FLOW_TRIGGER_LABELS[flow.trigger_type]}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${FLOW_STATUS_COLORS[flow.status]}`}>{flow.status === 'published' ? 'Publicado' : flow.status === 'draft' ? 'Borrador' : 'Archivado'}</span>
+                  </div>
+                  <p className="text-[12px] text-[#646462] truncate">{flow.description}</p>
+                </div>
+                <div className="flex items-center gap-4 flex-shrink-0 text-[12px] text-[#999]">
+                  <span>{flow.step_count} pasos</span>
+                  <span>{flow.run_count.toLocaleString()} ejecuciones</span>
+                  <span>{flow.updatedAt}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                  {flow.status !== 'archived' && (
+                    <button
+                      onClick={() => toggleStatus(flow.id)}
+                      className={`px-3 py-1 text-[12px] font-semibold rounded-full ${flow.status === 'published' ? 'bg-[#dcfce7] text-[#166534] hover:bg-[#bbf7d0]' : 'bg-[#f0f0ee] text-[#444] hover:bg-[#e0e0de]'}`}
+                    >
+                      {flow.status === 'published' ? 'Pausar' : 'Publicar'}
+                    </button>
+                  )}
+                  <button onClick={() => handleDelete(flow.id)} className="p-1.5 text-[#ef4444] hover:bg-[#fee2e2] rounded-lg text-[12px]">✕</button>
+                </div>
+                <span className={`text-[#999] text-[14px] transition-transform ${expanded === flow.id ? 'rotate-90' : ''}`}>›</span>
+              </div>
+              {expanded === flow.id && (
+                <div className="px-5 pb-4 pt-0 border-t border-[#f0f0ee] bg-[#fafaf9]">
+                  <p className="text-[12px] font-semibold text-[#999] uppercase tracking-wide mb-3 pt-3">Vista previa del flujo</p>
+                  <FlowCanvas flow={flow} />
+                  <div className="flex gap-2 mt-3">
+                    <button className="px-3 py-1.5 text-[12px] font-semibold bg-[#6366f1] text-white rounded-full hover:bg-[#4f46e5]">✏️ Editar en canvas</button>
+                    <button className="px-3 py-1.5 text-[12px] font-semibold bg-[#f0f0ee] text-[#444] rounded-full hover:bg-[#e0e0de]">📋 Duplicar</button>
+                    <button className="px-3 py-1.5 text-[12px] font-semibold bg-[#f0f0ee] text-[#444] rounded-full hover:bg-[#e0e0de]">📊 Ver ejecuciones</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Nuevo flujo visual</h3>
+              <button onClick={() => setShowModal(false)} className="text-[#999] hover:text-[#444] text-[20px] leading-none">×</button>
+            </div>
+            <form onSubmit={handleCreate} className="px-6 py-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Nombre del flujo</label>
+                <input name="name" required className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]" placeholder="Ej. Onboarding de clientes" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Descripción</label>
+                <input name="description" className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]" placeholder="Breve descripción del flujo" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Tipo de trigger</label>
+                <select name="trigger_type" className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]">
+                  {(Object.entries(FLOW_TRIGGER_LABELS) as [VisualFlow['trigger_type'], string][]).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] text-[#646462] bg-[#f0f0ee] rounded-full hover:bg-[#e0e0de]">Cancelar</button>
+                <button type="submit" className="px-4 py-2 text-[13px] font-semibold text-white bg-[#222] rounded-full hover:bg-[#444]">Crear flujo</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA IMPORTS VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+
+type DataImport = {
+  id: string; entity_type: 'contacts' | 'conversations' | 'companies' | 'knowledge';
+  filename: string; status: 'pending' | 'processing' | 'completed' | 'failed';
+  total_rows: number; imported_rows: number; skipped_rows: number; error_rows: number;
+  imported_by: string; createdAt: string;
+};
+const DI_ENTITY_LABELS: Record<DataImport['entity_type'], string> = {
+  contacts: 'Contactos', conversations: 'Conversaciones', companies: 'Empresas', knowledge: 'Base de conocimiento',
+};
+const DI_ENTITY_COLORS: Record<DataImport['entity_type'], string> = {
+  contacts: 'bg-[#dbeafe] text-[#1e40af]', conversations: 'bg-[#ede9fe] text-[#5b21b6]',
+  companies: 'bg-[#dcfce7] text-[#166534]', knowledge: 'bg-[#fef9c3] text-[#854d0e]',
+};
+const DI_STATUS_COLORS: Record<DataImport['status'], string> = {
+  pending: 'bg-[#fef9c3] text-[#854d0e]', processing: 'bg-[#dbeafe] text-[#1e40af]',
+  completed: 'bg-[#dcfce7] text-[#166534]', failed: 'bg-[#fee2e2] text-[#b91c1c]',
+};
+const DI_STATUS_LABELS: Record<DataImport['status'], string> = {
+  pending: 'Pendiente', processing: 'Procesando', completed: 'Completado', failed: 'Error',
+};
+const MOCK_IMPORTS: DataImport[] = [
+  { id: '1', entity_type: 'contacts', filename: 'clientes_2026_q1.csv', status: 'completed', total_rows: 1500, imported_rows: 1480, skipped_rows: 12, error_rows: 8, imported_by: 'Hector Vidal', createdAt: 'hace 2 días' },
+  { id: '2', entity_type: 'companies', filename: 'empresas_partner.xlsx', status: 'completed', total_rows: 240, imported_rows: 238, skipped_rows: 2, error_rows: 0, imported_by: 'Ana García', createdAt: 'hace 4 días' },
+  { id: '3', entity_type: 'knowledge', filename: 'faq_soporte_v3.json', status: 'processing', total_rows: 420, imported_rows: 180, skipped_rows: 0, error_rows: 0, imported_by: 'Carlos López', createdAt: 'hace 1 hora' },
+  { id: '4', entity_type: 'contacts', filename: 'leads_evento_abril.csv', status: 'failed', total_rows: 890, imported_rows: 0, skipped_rows: 0, error_rows: 890, imported_by: 'Hector Vidal', createdAt: 'hace 1 semana' },
+  { id: '5', entity_type: 'conversations', filename: 'historico_2025.csv', status: 'pending', total_rows: 5600, imported_rows: 0, skipped_rows: 0, error_rows: 0, imported_by: 'María Ruiz', createdAt: 'hace 30 min' },
+];
+
+function DataImportsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [imports, setImports] = useState<DataImport[]>(MOCK_IMPORTS);
+  const [filterStatus, setFilterStatus] = useState<DataImport['status'] | 'all'>('all');
+  const [showModal, setShowModal] = useState(false);
+
+  const filtered = imports.filter(i => filterStatus === 'all' || i.status === filterStatus);
+
+  function handleCreate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const newImport: DataImport = {
+      id: Date.now().toString(),
+      entity_type: fd.get('entity_type') as DataImport['entity_type'],
+      filename: fd.get('filename') as string,
+      status: 'pending', total_rows: 0, imported_rows: 0, skipped_rows: 0, error_rows: 0,
+      imported_by: 'Hector Vidal', createdAt: 'ahora',
+    };
+    setImports(im => [newImport, ...im]);
+    setShowModal(false);
+  }
+
+  const statusCounts = {
+    all: imports.length,
+    pending: imports.filter(i => i.status === 'pending').length,
+    processing: imports.filter(i => i.status === 'processing').length,
+    completed: imports.filter(i => i.status === 'completed').length,
+    failed: imports.filter(i => i.status === 'failed').length,
+  };
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full gap-3 p-3 overflow-hidden">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 bg-white rounded-[16px] shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div>
+            <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Importaciones de datos</h2>
+            <p className="text-[13px] text-[#646462] mt-0.5">Historial y estado de importaciones masivas.</p>
+          </div>
+          <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444]">+ Nueva importación</button>
+        </div>
+        {/* Filter tabs */}
+        <div className="flex items-center gap-1 px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
+          {(['all','pending','processing','completed','failed'] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setFilterStatus(s)}
+              className={`px-3 py-1.5 text-[12px] font-semibold rounded-full transition-colors ${filterStatus === s ? 'bg-[#222] text-white' : 'bg-[#f0f0ee] text-[#444] hover:bg-[#e0e0de]'}`}
+            >
+              {s === 'all' ? 'Todos' : DI_STATUS_LABELS[s]} ({statusCounts[s]})
+            </button>
+          ))}
+        </div>
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-[13px]">
+            <thead className="sticky top-0 bg-[#f8f8f7] z-10">
+              <tr className="border-b border-[#e9eae6]">
+                <th className="text-left px-6 py-3 font-semibold text-[#646462]">Archivo</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Tipo</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Estado</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Progreso</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Importado por</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(imp => {
+                const pct = imp.total_rows > 0 ? Math.round((imp.imported_rows / imp.total_rows) * 100) : 0;
+                return (
+                  <tr key={imp.id} className="border-b border-[#f0f0ee] hover:bg-[#fafaf9]">
+                    <td className="px-6 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[16px]">📄</span>
+                        <span className="font-medium text-[#1a1a1a] truncate max-w-[180px]">{imp.filename}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${DI_ENTITY_COLORS[imp.entity_type]}`}>{DI_ENTITY_LABELS[imp.entity_type]}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${DI_STATUS_COLORS[imp.status]}`}>{DI_STATUS_LABELS[imp.status]}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {imp.total_rows > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 bg-[#f0f0ee] rounded-full h-1.5 flex-shrink-0">
+                            <div className={`h-1.5 rounded-full ${imp.status === 'failed' ? 'bg-[#ef4444]' : 'bg-[#22c55e]'}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-[11px] text-[#999] whitespace-nowrap">{imp.imported_rows.toLocaleString()} / {imp.total_rows.toLocaleString()}</span>
+                          {imp.error_rows > 0 && <span className="text-[11px] text-[#ef4444]">{imp.error_rows} errores</span>}
+                        </div>
+                      ) : (
+                        <span className="text-[12px] text-[#999]">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-[#646462]">{imp.imported_by}</td>
+                    <td className="px-4 py-3 text-[#999]">{imp.createdAt}</td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-[#999]">No hay importaciones en este estado</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Nueva importación</h3>
+              <button onClick={() => setShowModal(false)} className="text-[#999] hover:text-[#444] text-[20px] leading-none">×</button>
+            </div>
+            <form onSubmit={handleCreate} className="px-6 py-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Tipo de entidad</label>
+                <select name="entity_type" className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]">
+                  {(Object.entries(DI_ENTITY_LABELS) as [DataImport['entity_type'], string][]).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Nombre del archivo</label>
+                <input name="filename" required className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]" placeholder="Ej. clientes_mayo_2026.csv" />
+              </div>
+              <div className="p-3 bg-[#f8f8f7] rounded-lg border border-dashed border-[#e9eae6] text-center">
+                <p className="text-[13px] text-[#999]">📤 Arrastra tu archivo CSV/Excel aquí</p>
+                <p className="text-[11px] text-[#c0c0be] mt-1">o haz clic para seleccionar</p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] text-[#646462] bg-[#f0f0ee] rounded-full hover:bg-[#e0e0de]">Cancelar</button>
+                <button type="submit" className="px-4 py-2 text-[13px] font-semibold text-white bg-[#222] rounded-full hover:bg-[#444]">Iniciar importación</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOM ROLES VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+
+type CustomRole = {
+  id: string; name: string; description: string;
+  permissions: string[]; is_system: boolean; member_count: number; updatedAt: string;
+};
+const ALL_PERMISSIONS = [
+  'conversations.read','conversations.write','conversations.delete',
+  'contacts.read','contacts.write','contacts.delete',
+  'reports.read','settings.read','settings.write',
+  'inboxes.manage','agents.manage','billing.manage','*',
+];
+const MOCK_ROLES: CustomRole[] = [
+  { id: '1', name: 'Owner', description: 'Acceso total al espacio de trabajo', permissions: ['*'], is_system: true, member_count: 1, updatedAt: 'Sistema' },
+  { id: '2', name: 'Admin', description: 'Gestión completa excepto facturación', permissions: ['conversations.read','conversations.write','contacts.read','contacts.write','reports.read','settings.read','settings.write','inboxes.manage','agents.manage'], is_system: true, member_count: 3, updatedAt: 'Sistema' },
+  { id: '3', name: 'Agent', description: 'Acceso de agente de soporte estándar', permissions: ['conversations.read','conversations.write','contacts.read','contacts.write','reports.read'], is_system: true, member_count: 12, updatedAt: 'Sistema' },
+  { id: '4', name: 'Viewer', description: 'Solo lectura en todo el espacio', permissions: ['conversations.read','contacts.read','reports.read','settings.read'], is_system: true, member_count: 5, updatedAt: 'Sistema' },
+  { id: '5', name: 'Soporte Tier 2', description: 'Agentes senior con acceso a settings', permissions: ['conversations.read','conversations.write','contacts.read','contacts.write','reports.read','settings.read','inboxes.manage'], is_system: false, member_count: 4, updatedAt: 'hace 3 días' },
+];
+
+function CustomRolesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [roles, setRoles] = useState<CustomRole[]>(MOCK_ROLES);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<CustomRole | null>(null);
+  const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
+
+  function openCreate() { setEditing(null); setSelectedPerms([]); setShowModal(true); }
+  function openEdit(r: CustomRole) {
+    if (r.is_system) return;
+    setEditing(r); setSelectedPerms([...r.permissions]); setShowModal(true);
+  }
+  function handleDelete(id: string) { setRoles(rs => rs.filter(r => r.id !== id || r.is_system)); }
+  function togglePerm(p: string) {
+    setSelectedPerms(ps => ps.includes(p) ? ps.filter(x => x !== p) : [...ps, p]);
+  }
+
+  function handleSave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    if (editing) {
+      setRoles(rs => rs.map(r => r.id === editing.id ? { ...r, name: fd.get('name') as string, description: fd.get('description') as string, permissions: selectedPerms, updatedAt: 'ahora' } : r));
+    } else {
+      setRoles(rs => [...rs, {
+        id: Date.now().toString(), name: fd.get('name') as string, description: fd.get('description') as string,
+        permissions: selectedPerms, is_system: false, member_count: 0, updatedAt: 'ahora',
+      }]);
+    }
+    setShowModal(false);
+  }
+
+  const PERM_GROUPS: { label: string; perms: string[] }[] = [
+    { label: 'Conversaciones', perms: ['conversations.read','conversations.write','conversations.delete'] },
+    { label: 'Contactos',      perms: ['contacts.read','contacts.write','contacts.delete'] },
+    { label: 'Reportes',       perms: ['reports.read'] },
+    { label: 'Ajustes',        perms: ['settings.read','settings.write'] },
+    { label: 'Gestión',        perms: ['inboxes.manage','agents.manage','billing.manage'] },
+    { label: 'Superadmin',     perms: ['*'] },
+  ];
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full gap-3 p-3 overflow-hidden">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 bg-white rounded-[16px] shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div>
+            <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Roles personalizados</h2>
+            <p className="text-[13px] text-[#646462] mt-0.5">Define permisos granulares para tu equipo.</p>
+          </div>
+          <button onClick={openCreate} className="px-4 py-2 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444]">+ Nuevo rol</button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-[13px]">
+            <thead className="sticky top-0 bg-[#f8f8f7] z-10">
+              <tr className="border-b border-[#e9eae6]">
+                <th className="text-left px-6 py-3 font-semibold text-[#646462]">Nombre</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Descripción</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Permisos</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Miembros</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {roles.map(role => (
+                <tr key={role.id} className="border-b border-[#f0f0ee] hover:bg-[#fafaf9]">
+                  <td className="px-6 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-[#1a1a1a]">{role.name}</span>
+                      {role.is_system && <span className="text-[10px] bg-[#f0f0ee] text-[#999] px-1.5 py-0.5 rounded-full">Sistema</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-[#646462] max-w-[200px]">{role.description}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1 max-w-[300px]">
+                      {role.permissions.includes('*') ? (
+                        <span className="text-[11px] bg-[#fef9c3] text-[#854d0e] px-1.5 py-0.5 rounded font-medium">Todo (*)</span>
+                      ) : (
+                        <>
+                          {role.permissions.slice(0, 4).map(p => (
+                            <span key={p} className="text-[11px] bg-[#f0f0ee] text-[#444] px-1.5 py-0.5 rounded font-mono">{p}</span>
+                          ))}
+                          {role.permissions.length > 4 && <span className="text-[11px] text-[#999]">+{role.permissions.length - 4}</span>}
+                        </>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <span className="w-5 h-5 rounded-full bg-[#e9eae6] flex items-center justify-center text-[10px] font-semibold text-[#646462]">{role.member_count}</span>
+                      <span className="text-[#999]">miembros</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {!role.is_system && (
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEdit(role)} className="px-2 py-1 text-[12px] bg-[#f0f0ee] rounded hover:bg-[#e0e0de]">Editar</button>
+                        <button onClick={() => handleDelete(role.id)} className="px-2 py-1 text-[12px] bg-[#fee2e2] text-[#b91c1c] rounded hover:bg-[#fecaca]">Eliminar</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] sticky top-0 bg-white">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">{editing ? 'Editar rol' : 'Nuevo rol personalizado'}</h3>
+              <button onClick={() => setShowModal(false)} className="text-[#999] hover:text-[#444] text-[20px] leading-none">×</button>
+            </div>
+            <form onSubmit={handleSave} className="px-6 py-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Nombre del rol</label>
+                <input name="name" defaultValue={editing?.name ?? ''} required className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]" placeholder="Ej. Soporte Tier 2" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[12px] font-semibold text-[#646462]">Descripción</label>
+                <input name="description" defaultValue={editing?.description ?? ''} className="border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#6366f1]" placeholder="Describe el propósito del rol" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[12px] font-semibold text-[#646462]">Permisos ({selectedPerms.length} seleccionados)</label>
+                {PERM_GROUPS.map(g => (
+                  <div key={g.label}>
+                    <p className="text-[11px] font-semibold text-[#999] uppercase tracking-wide mb-1">{g.label}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {g.perms.map(p => (
+                        <button
+                          key={p} type="button" onClick={() => togglePerm(p)}
+                          className={`text-[11px] px-2 py-1 rounded-lg border font-mono transition-colors ${selectedPerms.includes(p) ? 'bg-[#222] text-white border-[#222]' : 'bg-white text-[#444] border-[#e9eae6] hover:border-[#999]'}`}
+                        >{p}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] text-[#646462] bg-[#f0f0ee] rounded-full hover:bg-[#e0e0de]">Cancelar</button>
+                <button type="submit" className="px-4 py-2 text-[13px] font-semibold text-white bg-[#222] rounded-full hover:bg-[#444]">{editing ? 'Guardar cambios' : 'Crear rol'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALLS VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Call = {
+  id: string; direction: 'inbound' | 'outbound'; status: 'completed' | 'missed' | 'in_progress' | 'voicemail' | 'failed';
+  from_number: string; to_number: string; agent: string;
+  duration_s: number | null; createdAt: string; recording: boolean;
+};
+const CALL_DIR_COLORS: Record<Call['direction'], string> = {
+  inbound: 'bg-[#dbeafe] text-[#1e40af]', outbound: 'bg-[#ede9fe] text-[#5b21b6]',
+};
+const CALL_STATUS_COLORS: Record<Call['status'], string> = {
+  completed: 'bg-[#dcfce7] text-[#166534]', missed: 'bg-[#fee2e2] text-[#b91c1c]',
+  in_progress: 'bg-[#dbeafe] text-[#1e40af]', voicemail: 'bg-[#fef9c3] text-[#854d0e]', failed: 'bg-[#f0f0ee] text-[#999]',
+};
+const CALL_STATUS_LABELS: Record<Call['status'], string> = {
+  completed: 'Completada', missed: 'Perdida', in_progress: 'En curso', voicemail: 'Buzón de voz', failed: 'Fallida',
+};
+const MOCK_CALLS: Call[] = [
+  { id: '1', direction: 'inbound', status: 'completed', from_number: '+34 612 345 678', to_number: '+34 900 123 456', agent: 'Ana García', duration_s: 245, createdAt: 'hace 5 min', recording: true },
+  { id: '2', direction: 'outbound', status: 'completed', from_number: '+34 900 123 456', to_number: '+34 655 234 567', agent: 'Carlos López', duration_s: 180, createdAt: 'hace 12 min', recording: true },
+  { id: '3', direction: 'inbound', status: 'missed', from_number: '+34 688 456 789', to_number: '+34 900 123 456', agent: '—', duration_s: null, createdAt: 'hace 25 min', recording: false },
+  { id: '4', direction: 'inbound', status: 'voicemail', from_number: '+34 699 567 890', to_number: '+34 900 123 456', agent: '—', duration_s: 42, createdAt: 'hace 1 hora', recording: true },
+  { id: '5', direction: 'outbound', status: 'failed', from_number: '+34 900 123 456', to_number: '+34 622 678 901', agent: 'Hector Vidal', duration_s: null, createdAt: 'hace 2 horas', recording: false },
+  { id: '6', direction: 'inbound', status: 'in_progress', from_number: '+34 633 789 012', to_number: '+34 900 123 456', agent: 'María Ruiz', duration_s: null, createdAt: 'ahora', recording: false },
+];
+
+function fmtDuration(s: number | null): string {
+  if (s === null) return '—';
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2,'0')}`;
+}
+
+function CallsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [calls] = useState<Call[]>(MOCK_CALLS);
+  const [filterDir, setFilterDir] = useState<'all' | 'inbound' | 'outbound'>('all');
+  const [filterStatus, setFilterStatus] = useState<Call['status'] | 'all'>('all');
+  const [playingId, setPlayingId] = useState<string | null>(null);
+
+  const filtered = calls.filter(c =>
+    (filterDir === 'all' || c.direction === filterDir) &&
+    (filterStatus === 'all' || c.status === filterStatus)
+  );
+
+  // Stats
+  const total     = calls.length;
+  const answered  = calls.filter(c => c.status === 'completed').length;
+  const missed    = calls.filter(c => c.status === 'missed').length;
+  const avgDur    = calls.filter(c => c.duration_s !== null).reduce((acc, c) => acc + (c.duration_s ?? 0), 0) /
+                    Math.max(1, calls.filter(c => c.duration_s !== null).length);
+
+  return (
+    <div className="flex flex-1 min-w-0 h-full gap-3 p-3 overflow-hidden">
+      <SettingsSidebar view={view} onNavigate={onNavigate} />
+      <div className="flex flex-col flex-1 min-w-0 bg-white rounded-[16px] shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div>
+            <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Llamadas</h2>
+            <p className="text-[13px] text-[#646462] mt-0.5">Historial y estado de llamadas del equipo.</p>
+          </div>
+          <button className="px-4 py-2 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] flex items-center gap-1">
+            📞 Nueva llamada
+          </button>
+        </div>
+        {/* KPI cards */}
+        <div className="grid grid-cols-4 gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+          {[
+            { label: 'Total hoy', value: total, icon: '📊' },
+            { label: 'Contestadas', value: answered, icon: '✅' },
+            { label: 'Perdidas', value: missed, icon: '❌' },
+            { label: 'Duración media', value: fmtDuration(Math.round(avgDur)), icon: '⏱' },
+          ].map(({ label, value, icon }) => (
+            <div key={label} className="bg-[#fafaf9] rounded-xl border border-[#e9eae6] px-4 py-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span>{icon}</span>
+                <span className="text-[12px] text-[#999]">{label}</span>
+              </div>
+              <span className="text-[22px] font-bold text-[#1a1a1a]">{value}</span>
+            </div>
+          ))}
+        </div>
+        {/* Filters */}
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
+          <div className="flex items-center gap-1">
+            {(['all','inbound','outbound'] as const).map(d => (
+              <button
+                key={d}
+                onClick={() => setFilterDir(d)}
+                className={`px-3 py-1.5 text-[12px] font-semibold rounded-full transition-colors ${filterDir === d ? 'bg-[#222] text-white' : 'bg-[#f0f0ee] text-[#444] hover:bg-[#e0e0de]'}`}
+              >{d === 'all' ? 'Todas' : d === 'inbound' ? '↙ Entrantes' : '↗ Salientes'}</button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            {(['all','completed','missed','voicemail','failed'] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
+                className={`px-3 py-1.5 text-[12px] font-semibold rounded-full transition-colors ${filterStatus === s ? 'bg-[#222] text-white' : 'bg-[#f0f0ee] text-[#444] hover:bg-[#e0e0de]'}`}
+              >{s === 'all' ? 'Todo' : CALL_STATUS_LABELS[s]}</button>
+            ))}
+          </div>
+        </div>
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-[13px]">
+            <thead className="sticky top-0 bg-[#f8f8f7] z-10">
+              <tr className="border-b border-[#e9eae6]">
+                <th className="text-left px-6 py-3 font-semibold text-[#646462]">Dirección</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Estado</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">De</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Para</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Agente</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Duración</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Grabación</th>
+                <th className="text-left px-4 py-3 font-semibold text-[#646462]">Hora</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(call => (
+                <tr key={call.id} className="border-b border-[#f0f0ee] hover:bg-[#fafaf9]">
+                  <td className="px-6 py-3">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${CALL_DIR_COLORS[call.direction]}`}>
+                      {call.direction === 'inbound' ? '↙ Entrante' : '↗ Saliente'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${CALL_STATUS_COLORS[call.status]}`}>
+                      {CALL_STATUS_LABELS[call.status]}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-[12px] text-[#646462]">{call.from_number}</td>
+                  <td className="px-4 py-3 font-mono text-[12px] text-[#646462]">{call.to_number}</td>
+                  <td className="px-4 py-3 text-[#1a1a1a]">{call.agent}</td>
+                  <td className="px-4 py-3 font-mono text-[#1a1a1a]">{fmtDuration(call.duration_s)}</td>
+                  <td className="px-4 py-3">
+                    {call.recording ? (
+                      <button
+                        onClick={() => setPlayingId(playingId === call.id ? null : call.id)}
+                        className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium transition-colors ${playingId === call.id ? 'bg-[#6366f1] text-white' : 'bg-[#ede9fe] text-[#5b21b6] hover:bg-[#ddd6fe]'}`}
+                      >
+                        {playingId === call.id ? '⏹ Detener' : '▶ Reproducir'}
+                      </button>
+                    ) : (
+                      <span className="text-[#ccc] text-[12px]">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-[#999]">{call.createdAt}</td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={8} className="px-6 py-8 text-center text-[#999]">No hay llamadas con estos filtros</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4587,8 +7103,9 @@ export default function Prototype() {
   function renderView() {
     switch (view) {
       case 'inbox':    return <InboxView />;
-      case 'allLeads': return <AllLeadsView view={view} onNavigate={setView} onBack={() => setView('contacts')} />;
-      case 'contacts': return <ContactsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;
+      case 'allLeads':      return <AllLeadsView view={view} onNavigate={setView} onBack={() => setView('contacts')} />;
+      case 'contacts':      return <ContactsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;
+      case 'companiesList': return <CompaniesListView view={view} onNavigate={setView} />;
       case 'settings': return <SettingsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;
       case 'imports':  return <ImportsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;
       case 'personal': return <PersonalView view={view} onNavigate={setView} />;
@@ -4598,12 +7115,18 @@ export default function Prototype() {
       case 'tokens':         return <TokensView view={view} onNavigate={setView} />;
       case 'accountAccess':  return <AccountAccessView view={view} onNavigate={setView} />;
       case 'multilingual':   return <MultilingualView view={view} onNavigate={setView} />;
+      case 'inboxes':        return <InboxesView view={view} onNavigate={setView} />;
+      case 'cannedResponses': return <CannedResponsesView view={view} onNavigate={setView} />;
       case 'assignments':    return <AssignmentsView view={view} onNavigate={setView} />;
       case 'macros':         return <MacrosView view={view} onNavigate={setView} />;
       case 'tickets':        return <TicketsView view={view} onNavigate={setView} />;
       case 'sla':            return <SlaView view={view} onNavigate={setView} />;
       case 'aiInbox':        return <AiInboxView view={view} onNavigate={setView} />;
       case 'automation':     return <AutomationView view={view} onNavigate={setView} />;
+      case 'aiGuardrails':  return <AiGuardrailsView view={view} onNavigate={setView} />;
+      case 'agentTools':    return <AgentToolsView view={view} onNavigate={setView} />;
+      case 'agentScenarios': return <AgentScenariosView view={view} onNavigate={setView} />;
+      case 'mcpServers':    return <McpServersView view={view} onNavigate={setView} />;
       case 'appStore':       return <AppStoreView view={view} onNavigate={setView} />;
       case 'connectors':     return <ConnectorsView view={view} onNavigate={setView} />;
       case 'labels':         return <LabelsView view={view} onNavigate={setView} />;
@@ -4620,9 +7143,14 @@ export default function Prototype() {
       case 'sms':            return <SmsView view={view} onNavigate={setView} />;
       case 'social':         return <SocialChannelsView view={view} onNavigate={setView} />;
       case 'allChannels':    return <AllChannelsView view={view} onNavigate={setView} />;
+      case 'emailTemplates': return <EmailTemplatesView view={view} onNavigate={setView} />;
+      case 'visualFlows':   return <VisualFlowsView view={view} onNavigate={setView} />;
+      case 'dataImports':   return <DataImportsView view={view} onNavigate={setView} />;
+      case 'customRoles':   return <CustomRolesView view={view} onNavigate={setView} />;
+      case 'callsView':     return <CallsView view={view} onNavigate={setView} />;
       case 'fin':            return <WIPView label="Fin AI" />;
       case 'knowledge':return <WIPView label="Knowledge Base" />;
-      case 'reports':  return <WIPView label="Reports" />;
+      case 'reports':  return <ReportsView onNavigate={setView} />;
       case 'outbound': return <WIPView label="Outbound" />;
     }
   }

@@ -13,6 +13,13 @@ export interface CaseFilters {
   priority?: string;
   risk_level?: string;
   q?: string;
+  created_by?: string;
+  scope?: string;
+  ai_handled?: boolean;       // filter cases where resolved_by = 'ai' OR ai_confidence > 0
+  approval_state?: string;    // filter by approval_state column
+  assigned_team_id?: string;  // filter by assigned_team_id
+  assigned_agent_id?: string; // filter by assigned_user_id (agent scope)
+  source_channel?: string;    // filter by source_channel column
 }
 
 function buildConflictSummary(bundle: any) {
@@ -1538,6 +1545,22 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
   if (filters.priority) query = query.eq('priority', filters.priority);
   if (filters.risk_level) query = query.eq('risk_level', filters.risk_level);
   if (filters.q) query = query.ilike('case_number', `%${filters.q}%`);
+  if (filters.created_by) query = query.eq('created_by_user_id', filters.created_by);
+  if (filters.scope === 'unassigned') query = query.is('assigned_user_id', null);
+  if (filters.scope === 'spam') query = query.eq('status', 'spam');
+  if (filters.ai_handled) query = query.or('resolved_by.eq.ai,ai_confidence.gt.0.1');
+  if (filters.approval_state) query = query.eq('approval_state', filters.approval_state);
+  if (filters.assigned_team_id) query = query.eq('assigned_team_id', filters.assigned_team_id);
+  if (filters.assigned_agent_id) query = query.eq('assigned_user_id', filters.assigned_agent_id);
+  if (filters.source_channel) {
+    // Support comma-separated values for OR channel matching
+    const channels = filters.source_channel.split(',').map(s => s.trim()).filter(Boolean);
+    if (channels.length === 1) {
+      query = query.eq('source_channel', channels[0]);
+    } else if (channels.length > 1) {
+      query = query.in('source_channel', channels);
+    }
+  }
 
   const { data, error } = await query;
   if (error) throw error;

@@ -82,9 +82,13 @@ export const CASE_STATUSES = new Set([
   'in_progress',
   'waiting_approval',
   'blocked',
+  'escalated',
+  'snoozed',
   'resolved',
   'closed',
   'cancelled',
+  'merged',
+  'spam',
 ]);
 
 // ── Reconciliation Issues ─────────────────────────────────────────────────────

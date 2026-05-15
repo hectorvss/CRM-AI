@@ -124,7 +124,16 @@ router.patch('/:id', requirePermission('customers.write'), async (req: MultiTena
     const existing = await customerRepository.getDetail(scope, req.params.id);
     if (!existing) return res.status(404).json({ error: 'Customer not found' });
 
-    const ALLOWED_FIELDS = ['segment', 'risk_level', 'preferred_channel', 'fraud_flag', 'canonical_name', 'canonical_email', 'phone'];
+    const ALLOWED_FIELDS = [
+      'segment', 'risk_level', 'preferred_channel', 'fraud_flag',
+      'canonical_name', 'canonical_email', 'phone',
+      // A2: contact funnel stage
+      'contact_type',
+      // A3: custom attributes (full replace)
+      'custom_attributes',
+      // A1: link to company
+      'company_id',
+    ];
     const body = req.body ?? {};
     const updates: Record<string, any> = {};
     for (const field of ALLOWED_FIELDS) {
@@ -156,6 +165,66 @@ router.patch('/:id', requirePermission('customers.write'), async (req: MultiTena
     res.json(updated ?? { id: req.params.id, ...updates });
   } catch (error) {
     console.error('Error updating customer:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/customers/:id/block ─────────────────────────────────────────────
+// A4: Block a customer — prevents inbound messages from being processed
+
+router.post('/:id/block', requirePermission('customers.write'), async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope  = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : null;
+
+    const existing = await customerRepository.getDetail(scope, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Customer not found' });
+
+    const supabase = getSupabaseAdmin();
+    await supabase
+      .from('customers')
+      .update({ blocked: true, blocked_at: new Date().toISOString(), blocked_reason: reason, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .eq('tenant_id', scope.tenantId);
+
+    await auditRepository.log(scope, {
+      actorId: req.userId || 'system', action: 'CUSTOMER_BLOCKED',
+      entityType: 'customer', entityId: req.params.id,
+      newValue: { blocked: true, reason }, metadata: { source: 'customers_api' },
+    });
+
+    res.json({ ok: true, blocked: true });
+  } catch (err) {
+    console.error('Error blocking customer:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/customers/:id/unblock ───────────────────────────────────────────
+
+router.post('/:id/unblock', requirePermission('customers.write'), async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+
+    const existing = await customerRepository.getDetail(scope, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Customer not found' });
+
+    const supabase = getSupabaseAdmin();
+    await supabase
+      .from('customers')
+      .update({ blocked: false, blocked_at: null, blocked_reason: null, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .eq('tenant_id', scope.tenantId);
+
+    await auditRepository.log(scope, {
+      actorId: req.userId || 'system', action: 'CUSTOMER_UNBLOCKED',
+      entityType: 'customer', entityId: req.params.id,
+      newValue: { blocked: false }, metadata: { source: 'customers_api' },
+    });
+
+    res.json({ ok: true, blocked: false });
+  } catch (err) {
+    console.error('Error unblocking customer:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

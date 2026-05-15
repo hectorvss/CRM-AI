@@ -220,4 +220,54 @@ router.get('/agent-runs', (req: MultiTenantRequest, res: Response) => {
   });
 });
 
+// ── GET /sse/case-events ─────────────────────────────────────────────────────
+// Long-lived SSE stream that pushes real-time case mutation events to the
+// InboxView. Events: case:created, case:updated, case:reply, case:note_added.
+// When a case is mutated the backend should call `pushCaseEvent(tenantId, type, payload)`.
+// For now, keeps the connection alive with heartbeats — mutations are pushed
+// by the cases router when it calls the exported helper below.
+
+const caseEventClients = new Map<string, Set<Response>>();
+
+/** Call from cases routes after any mutation to push real-time events. */
+export function pushCaseEvent(
+  tenantId: string,
+  eventType: 'case:created' | 'case:updated' | 'case:reply' | 'case:note_added',
+  payload: Record<string, unknown> = {},
+): void {
+  const clients = caseEventClients.get(tenantId);
+  if (!clients || clients.size === 0) return;
+  const data = `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`;
+  clients.forEach(res => {
+    try { res.write(data); } catch { /* client disconnected */ }
+  });
+}
+
+router.get('/case-events', (req: MultiTenantRequest, res: Response) => {
+  const tenantId = req.tenantId ?? 'org_default';
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write('retry: 5000\n\n');
+  res.write(`: connected\n\n`);
+
+  // Register this client
+  if (!caseEventClients.has(tenantId)) caseEventClients.set(tenantId, new Set());
+  caseEventClients.get(tenantId)!.add(res);
+
+  // Heartbeat every 20s to keep connection alive
+  const hb = setInterval(() => {
+    try { res.write(': keepalive\n\n'); } catch { clearInterval(hb); }
+  }, 20_000);
+
+  req.on('close', () => {
+    clearInterval(hb);
+    caseEventClients.get(tenantId)?.delete(res);
+  });
+});
+
 export default router;

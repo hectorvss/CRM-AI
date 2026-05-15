@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import crypto from 'crypto';
+import { pushCaseEvent } from './sse.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import {
@@ -59,6 +60,13 @@ router.get('/', async (req: MultiTenantRequest, res: Response) => {
       priority: typeof req.query.priority === 'string' ? req.query.priority : undefined,
       risk_level: typeof req.query.risk_level === 'string' ? req.query.risk_level : undefined,
       q: typeof req.query.q === 'string' ? req.query.q : undefined,
+      created_by: typeof req.query.created_by === 'string' ? req.query.created_by : undefined,
+      scope: typeof req.query.scope === 'string' ? req.query.scope : undefined,
+      ai_handled: req.query.ai_handled === 'true' ? true : undefined,
+      approval_state: typeof req.query.approval_state === 'string' ? req.query.approval_state : undefined,
+      assigned_team_id: typeof req.query.assigned_team_id === 'string' ? req.query.assigned_team_id : undefined,
+      assigned_agent_id: typeof req.query.assigned_agent_id === 'string' ? req.query.assigned_agent_id : undefined,
+      source_channel: typeof req.query.source_channel === 'string' ? req.query.source_channel : undefined,
     };
 
     const items = await caseRepository.list(scope, filters);
@@ -84,6 +92,7 @@ router.post('/', async (req: MultiTenantRequest, res: Response) => {
       status: req.body.status || 'open',
       customer_id: req.body.customer_id || null,
       assigned_user_id: req.body.assigned_user_id || null,
+      assigned_team_id: req.body.assigned_team_id || null,
       source_channel: req.body.source_channel || 'web',
       tags: req.body.tags || [],
       created_at: new Date().toISOString(),
@@ -102,6 +111,7 @@ router.post('/', async (req: MultiTenantRequest, res: Response) => {
       newValue: { type: data.type, status: data.status },
     });
 
+    pushCaseEvent(req.tenantId!, 'case:created', { id: caseId });
     res.status(201).json(data);
   } catch (error) {
     console.error('Error creating case:', error);
@@ -539,6 +549,42 @@ router.get('/:id/inbox-view', async (req: MultiTenantRequest, res: Response) => 
   }
 });
 
+// Generic PATCH — allows updating approval_state, status, assigned_user_id, etc.
+// Used by the ApprovalBanner in the frontend.
+router.patch('/:id', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+
+    const ALLOWED_FIELDS = ['approval_state', 'status', 'assigned_user_id', 'assigned_team_id', 'priority', 'risk_level', 'resolved_by'];
+    const patch: Record<string, any> = {};
+    for (const field of ALLOWED_FIELDS) {
+      if (field in req.body) patch[field] = req.body[field];
+    }
+    if (!Object.keys(patch).length) return res.status(400).json({ error: 'No valid fields to update' });
+
+    patch.last_activity_at = new Date().toISOString();
+    await caseRepository.update(scope, req.params.id, patch);
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'case.patched',
+      resourceType: 'case',
+      resourceId: req.params.id,
+      metadata: { patch },
+    });
+
+    const updated = await caseRepository.getBundle(scope, req.params.id);
+    res.json(updated?.case ?? { id: req.params.id, ...patch });
+  } catch (error) {
+    console.error('Error patching case:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
@@ -583,6 +629,7 @@ router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
       'case.updated',
       { caseId: req.params.id, status, previousStatus: oldStatus, reason: reason ?? null, customerId: bundle.case.customer_id },
     );
+    pushCaseEvent(req.tenantId!, 'case:updated', { id: req.params.id, status });
     res.json({ success: true, status });
   } catch (error) {
     console.error('Error updating status:', error);
@@ -615,6 +662,7 @@ router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
       'case.updated',
       { caseId: req.params.id, assignedUserId: user_id ?? null, assignedTeamId: team_id ?? null, change: 'assignment' },
     );
+    pushCaseEvent(req.tenantId!, 'case:updated', { id: req.params.id, change: 'assignment' });
     res.json({ success: true });
   } catch (error) {
     console.error('Error assigning case:', error);
@@ -673,6 +721,7 @@ async function handleInternalNote(req: MultiTenantRequest, res: Response): Promi
       metadata: { noteId: note.id },
     });
 
+    pushCaseEvent(req.tenantId!, 'case:note_added', { id: req.params.id, noteId: note.id });
     res.status(201).json({
       success: true,
       noteId: note.id,
