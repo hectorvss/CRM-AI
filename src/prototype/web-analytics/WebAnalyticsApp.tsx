@@ -17,7 +17,7 @@
  * active state, orange #e8572a for the primary action.
  */
 
-import * as React from 'react';
+import { useState, useEffect, useRef, useLayoutEffect, useCallback, type ReactNode, type CSSProperties } from 'react';
 import { TaxonomicFilterButton, TaxonomicGroupType, TaxonomicFilterValue } from '../charts/TaxonomicFilter';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,21 +61,27 @@ interface PropertyFilter {
 }
 
 interface WebFilterState {
-  range:        DateRangePreset;
-  compare:      boolean;
-  properties:   PropertyFilter[];
-  hosts:        string[];
-  testAccounts: boolean;
-  sampling:     SamplingMode;
+  range:         DateRangePreset;
+  compare:       boolean;
+  properties:    PropertyFilter[];
+  hosts:         string[];
+  testAccounts:  boolean;
+  sampling:      SamplingMode;
+  pathCleaning:  boolean;
+  device:        DeviceFilter;
+  graphMetric:   GraphMetric;
 }
 
 const DEFAULT_FILTERS: WebFilterState = {
-  range:        WA_DATE_PRESETS[5],
-  compare:      false,
-  properties:   [],
-  hosts:        [],
-  testAccounts: false,
-  sampling:     'auto',
+  range:         WA_DATE_PRESETS[5],
+  compare:       false,
+  properties:    [],
+  hosts:         [],
+  testAccounts:  false,
+  sampling:      'auto',
+  pathCleaning:  true,
+  device:        'all',
+  graphMetric:   'UNIQUE_USERS',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -88,6 +94,16 @@ function buildProperties(f: WebFilterState): any[] {
     props.push({ key: '$host', value: f.hosts[0], operator: 'exact', type: 'event', label: 'Host' });
   } else if (f.hosts.length > 1) {
     props.push({ key: '$host', value: f.hosts, operator: 'exact', type: 'event', label: 'Host' });
+  }
+  if (f.device && f.device !== 'all') {
+    const map: Record<DeviceFilter, string[]> = {
+      all:     [],
+      desktop: ['Desktop'],
+      mobile:  ['Mobile'],
+      tablet:  ['Tablet'],
+    };
+    const v = map[f.device];
+    if (v.length) props.push({ key: '$device_type', value: v, operator: 'exact', type: 'event', label: 'Dispositivo' });
   }
   return props;
 }
@@ -148,7 +164,7 @@ function Spinner({ size = 4 }: { size?: number }) {
   return <div className={`w-${size} h-${size} border-2 border-[#3b59f6] border-t-transparent rounded-full animate-spin`} />;
 }
 
-function Card({ title, action, children, className = '' }: { title?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
+function Card({ title, action, children, className = '' }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <div className={`bg-white border border-[#e9eae6] rounded-xl overflow-hidden ${className}`}>
       {(title || action) && (
@@ -162,7 +178,7 @@ function Card({ title, action, children, className = '' }: { title?: React.React
   );
 }
 
-function EmptyState({ title, hint, icon }: { title: string; hint?: string; icon?: React.ReactNode }) {
+function EmptyState({ title, hint, icon }: { title: string; hint?: string; icon?: ReactNode }) {
   return (
     <div className="text-center py-10 text-[#9ca3af]">
       {icon ?? <svg viewBox="0 0 24 24" className="w-8 h-8 mx-auto mb-2 text-[#c4c4be]"><path d="M3 13l2-6h14l2 6M3 13v5a1 1 0 001 1h16a1 1 0 001-1v-5M3 13h6l1 2h4l1-2h6" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg>}
@@ -198,9 +214,9 @@ function DeltaPill({ d, invert = false }: { d: { pct: number; up: boolean } | nu
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DateRangeButton({ value, compare, onChange }: { value: DateRangePreset; compare: boolean; onChange: (v: DateRangePreset, compare: boolean) => void }) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) { if (!ref.current?.contains(e.target as Node)) setOpen(false); }
     document.addEventListener('mousedown', onDown);
@@ -238,9 +254,9 @@ function DateRangeButton({ value, compare, onChange }: { value: DateRangePreset;
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SamplingButton({ mode, onChange }: { mode: SamplingMode; onChange: (m: SamplingMode) => void }) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) { if (!ref.current?.contains(e.target as Node)) setOpen(false); }
     document.addEventListener('mousedown', onDown);
@@ -293,10 +309,10 @@ function SamplingButton({ mode, onChange }: { mode: SamplingMode; onChange: (m: 
 // ─────────────────────────────────────────────────────────────────────────────
 
 function HostsFilter({ hosts, onChange }: { hosts: string[]; onChange: (h: string[]) => void }) {
-  const [open,  setOpen]  = React.useState(false);
-  const [input, setInput] = React.useState('');
-  const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
+  const [open,  setOpen]  = useState(false);
+  const [input, setInput] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) { if (!ref.current?.contains(e.target as Node)) setOpen(false); }
     document.addEventListener('mousedown', onDown);
@@ -391,11 +407,11 @@ const OVERVIEW_LABELS: Record<string, { label: string; format: 'count' | 'percen
 };
 
 function WebOverviewKPIs({ filters }: { filters: WebFilterState }) {
-  const [items,   setItems]   = React.useState<OverviewItem[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error,   setError]   = React.useState<string | null>(null);
+  const [items,   setItems]   = useState<OverviewItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const ph = await import('../../api/posthog');
@@ -414,7 +430,7 @@ function WebOverviewKPIs({ filters }: { filters: WebFilterState }) {
     finally { setLoading(false); }
   }, [filters]);
 
-  React.useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   if (loading) return <div className="grid grid-cols-5 gap-3">{[0,1,2,3,4].map(i => <div key={i} className="h-24 bg-white border border-[#e9eae6] rounded-xl animate-pulse" />)}</div>;
   if (error)   return <Card><ErrorState message={error} onRetry={load} /></Card>;
@@ -457,26 +473,31 @@ function WebTrendsChart({ filters }: { filters: WebFilterState }) {
     { event: '$pageview', name: 'Sesiones',            math: 'unique_session' },
   ];
   const COLORS = ['#3b59f6', '#e8572a', '#16a34a'];
-  const [data,    setData]    = React.useState<{ labels: string[]; series: { name: string; values: number[]; color: string }[] }>({ labels: [], series: [] });
-  const [loading, setLoading] = React.useState(true);
-  const [error,   setError]   = React.useState<string | null>(null);
+  const [data,    setData]    = useState<{ labels: string[]; series: { name: string; values: number[]; color: string }[] }>({ labels: [], series: [] });
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const ph = await import('../../api/posthog');
       if (!ph.getTeamId()) await ph.bootstrapPostHog();
+      // Single metric (driven by filters.graphMetric, parity with PostHog
+      // GraphsTab). When metric is one of the legacy combined ones we still
+      // fall back to the 3-series view.
+      const selectedMeta = GRAPH_METRICS.find(g => g.key === filters.graphMetric) ?? GRAPH_METRICS[0];
+      const seriesIn = [{ event: selectedMeta.event, name: selectedMeta.label, math: selectedMeta.math }];
       const res: any = await ph.posthog.webAnalytics.trends({
         dateRange:    { date_from: filters.range.date_from, date_to: filters.range.date_to ?? null },
         properties:   buildProperties(filters),
         compareFilter:{ compare: filters.compare },
         interval:     filters.range.interval,
-        series:       METRICS.map(m => ({ event: m.event, name: m.name, math: m.math })),
+        series:       seriesIn,
         filterTestAccounts: filters.testAccounts,
         sampling:     buildSampling(filters),
       });
       const series = (res?.results ?? []).map((s: any, i: number) => ({
-        name:   s.label || s.action?.name || METRICS[i % METRICS.length].name,
+        name:   s.label || s.action?.name || seriesIn[i % seriesIn.length]?.name || 'Serie',
         values: (s.data ?? []) as number[],
         color:  COLORS[i % COLORS.length],
       }));
@@ -486,21 +507,12 @@ function WebTrendsChart({ filters }: { filters: WebFilterState }) {
     finally { setLoading(false); }
   }, [filters]);
 
-  React.useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   return (
-    <Card
-      title="Tendencias"
-      action={
-        <div className="flex items-center gap-3 text-[11px] text-[#646462]">
-          {data.series.map((s, i) => (
-            <span key={i} className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />{s.name}</span>
-          ))}
-        </div>
-      }
-    >
+    <>
       {loading ? <div className="h-56 bg-[#fafaf9] animate-pulse rounded-lg" /> : error ? <ErrorState message={error} onRetry={load} /> : <MiniLineChart {...data} />}
-    </Card>
+    </>
   );
 }
 
@@ -542,35 +554,107 @@ function MiniLineChart({ labels, series, height = 220 }: { labels: string[]; ser
 // Web Stats Table — uses WebStatsTableQuery with breakdownBy selector
 // ─────────────────────────────────────────────────────────────────────────────
 
-type BreakdownBy = 'Page' | 'InitialPage' | 'ExitPage' | 'InitialChannelType' | 'InitialReferringDomain' | 'InitialUTMSource' | 'InitialUTMMedium' | 'InitialUTMCampaign' | 'Browser' | 'OS' | 'DeviceType' | 'Country' | 'Region' | 'City' | 'Viewport' | 'Language';
+// PostHog parity — full WebStatsBreakdown enum (25 values).
+type BreakdownBy =
+  | 'Page' | 'InitialPage' | 'ExitPage' | 'ExitClick' | 'PreviousPage' | 'NextPage' | 'ScreenName'
+  | 'InitialChannelType' | 'InitialReferringDomain' | 'InitialReferringURL'
+  | 'InitialUTMSource' | 'InitialUTMMedium' | 'InitialUTMCampaign' | 'InitialUTMTerm' | 'InitialUTMContent' | 'InitialUTMSourceMediumCampaign'
+  | 'Browser' | 'OS' | 'DeviceType' | 'Viewport' | 'Language'
+  | 'Country' | 'Region' | 'City' | 'Timezone'
+  | 'FrustrationMetrics';
 
 const BREAKDOWNS: { key: BreakdownBy; label: string; group: 'paths' | 'sources' | 'geography' | 'device' }[] = [
-  { key: 'Page',                   label: 'Páginas',           group: 'paths' },
-  { key: 'InitialPage',            label: 'Página de entrada', group: 'paths' },
-  { key: 'ExitPage',               label: 'Página de salida',  group: 'paths' },
-  { key: 'InitialChannelType',     label: 'Canales',           group: 'sources' },
-  { key: 'InitialReferringDomain', label: 'Dominios referido', group: 'sources' },
-  { key: 'InitialUTMSource',       label: 'UTM source',        group: 'sources' },
-  { key: 'InitialUTMMedium',       label: 'UTM medium',        group: 'sources' },
-  { key: 'InitialUTMCampaign',     label: 'UTM campaign',      group: 'sources' },
-  { key: 'Country',                label: 'Países',            group: 'geography' },
-  { key: 'Region',                 label: 'Regiones',          group: 'geography' },
-  { key: 'City',                   label: 'Ciudades',          group: 'geography' },
-  { key: 'Browser',                label: 'Navegadores',       group: 'device' },
-  { key: 'OS',                     label: 'Sistemas',          group: 'device' },
-  { key: 'DeviceType',             label: 'Dispositivos',      group: 'device' },
-  { key: 'Viewport',               label: 'Viewports',         group: 'device' },
-  { key: 'Language',               label: 'Idiomas',           group: 'device' },
+  { key: 'Page',                            label: 'Páginas',             group: 'paths' },
+  { key: 'InitialPage',                     label: 'Página de entrada',   group: 'paths' },
+  { key: 'ExitPage',                        label: 'Página de salida',    group: 'paths' },
+  { key: 'ExitClick',                       label: 'Click de salida',     group: 'paths' },
+  { key: 'PreviousPage',                    label: 'Página anterior',     group: 'paths' },
+  { key: 'NextPage',                        label: 'Página siguiente',    group: 'paths' },
+  { key: 'ScreenName',                      label: 'Pantalla (mobile)',   group: 'paths' },
+
+  { key: 'InitialChannelType',              label: 'Canales',             group: 'sources' },
+  { key: 'InitialReferringDomain',          label: 'Dominio referido',    group: 'sources' },
+  { key: 'InitialReferringURL',             label: 'URL referido',        group: 'sources' },
+  { key: 'InitialUTMSource',                label: 'UTM source',          group: 'sources' },
+  { key: 'InitialUTMMedium',                label: 'UTM medium',          group: 'sources' },
+  { key: 'InitialUTMCampaign',              label: 'UTM campaign',        group: 'sources' },
+  { key: 'InitialUTMTerm',                  label: 'UTM term',            group: 'sources' },
+  { key: 'InitialUTMContent',               label: 'UTM content',         group: 'sources' },
+  { key: 'InitialUTMSourceMediumCampaign',  label: 'UTM Source/Medium/Campaign', group: 'sources' },
+
+  { key: 'Country',                         label: 'Países',              group: 'geography' },
+  { key: 'Region',                          label: 'Regiones',            group: 'geography' },
+  { key: 'City',                            label: 'Ciudades',            group: 'geography' },
+  { key: 'Timezone',                        label: 'Zonas horarias',      group: 'geography' },
+  { key: 'Language',                        label: 'Idiomas',             group: 'geography' },
+
+  { key: 'Browser',                         label: 'Navegadores',         group: 'device' },
+  { key: 'OS',                              label: 'Sistemas',            group: 'device' },
+  { key: 'DeviceType',                      label: 'Dispositivos',        group: 'device' },
+  { key: 'Viewport',                        label: 'Viewports',           group: 'device' },
 ];
 
-function WebStatsTable({ filters, defaultBreakdown = 'Page', onRowClick }: { filters: WebFilterState; defaultBreakdown?: BreakdownBy; onRowClick?: (key: string, breakdown: BreakdownBy) => void }) {
-  const [breakdown, setBreakdown] = React.useState<BreakdownBy>(defaultBreakdown);
-  const [rows,      setRows]      = React.useState<any[]>([]);
-  const [columns,   setColumns]   = React.useState<string[]>([]);
-  const [loading,   setLoading]   = React.useState(true);
-  const [error,     setError]     = React.useState<string | null>(null);
+// Per-tile viz toggle — parity with PostHog TileVisualizationOption.
+type TileViz = 'table' | 'graph';
 
-  const load = React.useCallback(async () => {
+// Graphs tab metrics — parity with PostHog GraphsTab enum (8 metrics).
+type GraphMetric = 'UNIQUE_USERS' | 'PAGE_VIEWS' | 'NUM_SESSION' | 'SESSION_DURATION' | 'BOUNCE_RATE' | 'UNIQUE_CONVERSIONS' | 'TOTAL_CONVERSIONS' | 'CONVERSION_RATE';
+const GRAPH_METRICS: { key: GraphMetric; label: string; event: string; math: string; format: 'count' | 'percent' | 'duration' }[] = [
+  { key: 'UNIQUE_USERS',       label: 'Visitantes únicos',  event: '$pageview', math: 'dau',            format: 'count' },
+  { key: 'PAGE_VIEWS',         label: 'Páginas vistas',     event: '$pageview', math: 'total',          format: 'count' },
+  { key: 'NUM_SESSION',        label: 'Sesiones',           event: '$pageview', math: 'unique_session', format: 'count' },
+  { key: 'SESSION_DURATION',   label: 'Duración sesión',    event: '$pageview', math: 'session_duration_p50', format: 'duration' },
+  { key: 'BOUNCE_RATE',        label: 'Tasa de rebote',     event: '$pageview', math: 'bounce_rate',    format: 'percent' },
+  { key: 'UNIQUE_CONVERSIONS', label: 'Conversiones únicas',event: '$pageview', math: 'unique_conversion', format: 'count' },
+  { key: 'TOTAL_CONVERSIONS',  label: 'Conversiones totales',event: '$pageview', math: 'total_conversion', format: 'count' },
+  { key: 'CONVERSION_RATE',    label: 'Tasa de conversión', event: '$pageview', math: 'conversion_rate',format: 'percent' },
+];
+
+// Device segmented (Desktop/Mobile/All) — parity with toolbar device toggle.
+type DeviceFilter = 'all' | 'desktop' | 'mobile' | 'tablet';
+const DEVICE_OPTIONS: { k: DeviceFilter; l: string }[] = [
+  { k: 'all',     l: 'Todos' },
+  { k: 'desktop', l: 'Escritorio' },
+  { k: 'mobile',  l: 'Móvil' },
+  { k: 'tablet',  l: 'Tablet' },
+];
+
+// Visible tiles — parity with PostHog "Visible tiles" menu section. Persisted
+// in localStorage so el usuario puede esconder tiles del overview.
+type VisibleTile = 'overview' | 'graphs' | 'paths' | 'sources' | 'devices' | 'geography' | 'retention' | 'activeHours' | 'goals' | 'replay' | 'errorTracking' | 'frustratingPages' | 'externalClicks';
+const ALL_TILES: { k: VisibleTile; l: string }[] = [
+  { k: 'overview',         l: 'KPIs principales' },
+  { k: 'graphs',           l: 'Gráficas de tendencia' },
+  { k: 'paths',            l: 'Páginas y rutas' },
+  { k: 'sources',          l: 'Fuentes y canales' },
+  { k: 'devices',          l: 'Dispositivos y navegadores' },
+  { k: 'geography',        l: 'Geografía' },
+  { k: 'retention',        l: 'Retención' },
+  { k: 'activeHours',      l: 'Horas activas' },
+  { k: 'goals',            l: 'Objetivos de conversión' },
+  { k: 'frustratingPages', l: 'Páginas frustrantes' },
+  { k: 'externalClicks',   l: 'Enlaces externos' },
+  { k: 'replay',           l: 'Session replays' },
+  { k: 'errorTracking',    l: 'Error tracking' },
+];
+
+function readVisibleTiles(): Record<VisibleTile, boolean> {
+  const def: Record<string, boolean> = {};
+  ALL_TILES.forEach(t => { def[t.k] = true; });
+  try { const raw = localStorage.getItem('wa:visibleTiles'); if (raw) return { ...def, ...JSON.parse(raw) } as any; } catch {}
+  return def as any;
+}
+function writeVisibleTiles(v: Record<VisibleTile, boolean>) { try { localStorage.setItem('wa:visibleTiles', JSON.stringify(v)); } catch {} }
+
+function WebStatsTable({ filters, defaultBreakdown = 'Page', onRowClick, onShowMore }: { filters: WebFilterState; defaultBreakdown?: BreakdownBy; onRowClick?: (key: string, breakdown: BreakdownBy) => void; onShowMore?: (b: BreakdownBy, title: string) => void }) {
+  const [breakdown, setBreakdown] = useState<BreakdownBy>(defaultBreakdown);
+  const [viz,       setViz]       = useState<TileViz>('table');
+  const [rows,      setRows]      = useState<any[]>([]);
+  const [columns,   setColumns]   = useState<string[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
+
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const ph = await import('../../api/posthog');
@@ -582,6 +666,7 @@ function WebStatsTable({ filters, defaultBreakdown = 'Page', onRowClick }: { fil
         compareFilter:{ compare: filters.compare },
         includeBounceRate:  breakdown === 'Page' || breakdown === 'InitialPage' || breakdown === 'ExitPage',
         includeScrollDepth: breakdown === 'Page' || breakdown === 'InitialPage' || breakdown === 'ExitPage',
+        doPathCleaning:     filters.pathCleaning,
         filterTestAccounts: filters.testAccounts,
         limit:       20,
         sampling:    buildSampling(filters),
@@ -592,14 +677,46 @@ function WebStatsTable({ filters, defaultBreakdown = 'Page', onRowClick }: { fil
     finally { setLoading(false); }
   }, [filters, breakdown]);
 
-  React.useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const groups = Array.from(new Set(BREAKDOWNS.map(b => b.group)));
+  const breakdownMeta = BREAKDOWNS.find(b => b.key === breakdown);
+  const tileTitle = breakdownMeta?.label ?? 'Desglose';
+
+  function exportCsv() {
+    const header = columns.join(',');
+    const body = rows.map(r => (Array.isArray(r) ? r : Object.values(r)).map(c => {
+      if (c == null) return '';
+      const s = typeof c === 'object' ? JSON.stringify(c) : String(c);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(',')).join('\n');
+    const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${tileTitle.replace(/\s+/g, '_').toLowerCase()}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function openInsight() {
+    openAsNewInsight(`WA · ${tileTitle}`, {
+      kind: 'WebStatsTableQuery',
+      breakdownBy:  breakdown,
+      dateRange:    { date_from: filters.range.date_from, date_to: filters.range.date_to ?? null },
+      properties:   buildProperties(filters),
+      doPathCleaning: filters.pathCleaning,
+      filterTestAccounts: filters.testAccounts,
+    });
+  }
 
   return (
-    <Card
-      title="Desglose"
-      action={
+    <TileFrame
+      title={tileTitle}
+      vizMode={viz} onVizChange={setViz}
+      onShowMore={onShowMore ? () => onShowMore(breakdown, tileTitle) : undefined}
+      onOpenInsight={openInsight}
+      onExport={rows.length > 0 ? exportCsv : undefined}
+      rightExtra={
         <div className="flex items-center gap-1 text-xs">
           {groups.map(g => {
             const inGroup = BREAKDOWNS.filter(b => b.group === g);
@@ -627,7 +744,7 @@ function WebStatsTable({ filters, defaultBreakdown = 'Page', onRowClick }: { fil
               return (
                 <tr key={i} onClick={() => onRowClick?.(key, breakdown)} className={`border-b border-[#f3f3f1] last:border-b-0 ${onRowClick ? 'hover:bg-[#fafaf9] cursor-pointer' : ''}`}>
                   {cells.slice(0, 5).map((c, ci) => {
-                    let v: React.ReactNode = '—';
+                    let v: ReactNode = '—';
                     if (ci === 0) v = <span className="text-sm text-[#1a1a18] truncate max-w-[300px] inline-block">{String(c ?? '—')}</span>;
                     else if (typeof c === 'number') v = <span className="text-xs text-[#646462] font-mono">{ci >= 3 ? fmtPct(c) : fmtNum(c)}</span>;
                     else if (Array.isArray(c)) v = <span className="text-xs text-[#646462] font-mono">{fmtNum(c[0])}</span>;
@@ -640,14 +757,40 @@ function WebStatsTable({ filters, defaultBreakdown = 'Page', onRowClick }: { fil
           </tbody>
         </table>
       )}
-    </Card>
+      {viz === 'graph' && !loading && rows.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {(() => {
+            const max = rows.reduce((m, r) => {
+              const cells = Array.isArray(r) ? r : Object.values(r);
+              const v = Number(Array.isArray(cells[1]) ? cells[1][0] : cells[1] ?? 0);
+              return v > m ? v : m;
+            }, 0) || 1;
+            return rows.slice(0, 15).map((r, i) => {
+              const cells = Array.isArray(r) ? r : Object.values(r);
+              const label = String(cells[0] ?? '—');
+              const value = Number(Array.isArray(cells[1]) ? cells[1][0] : cells[1] ?? 0);
+              const pct = (value / max) * 100;
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs text-[#1a1a18] truncate w-40 flex-shrink-0">{label}</span>
+                  <div className="flex-1 h-5 bg-[#fafaf9] rounded overflow-hidden relative">
+                    <div className="absolute inset-y-0 left-0 bg-[#3b59f6]/30" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs text-[#646462] font-mono w-16 text-right">{fmtNum(value)}</span>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
+    </TileFrame>
   );
 }
 
 function BreakdownGroupSelect({ group, items, value, active, onChange }: { group: string; items: { key: BreakdownBy; label: string }[]; value: BreakdownBy; active: boolean; onChange: (v: BreakdownBy) => void }) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) { if (!ref.current?.contains(e.target as Node)) setOpen(false); }
     document.addEventListener('mousedown', onDown);
@@ -676,10 +819,10 @@ function BreakdownGroupSelect({ group, items, value, active, onChange }: { group
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WebGoalsWidget({ filters }: { filters: WebFilterState }) {
-  const [rows,    setRows]    = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error,   setError]   = React.useState<string | null>(null);
-  const load = React.useCallback(async () => {
+  const [rows,    setRows]    = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const ph = await import('../../api/posthog');
@@ -696,7 +839,7 @@ function WebGoalsWidget({ filters }: { filters: WebFilterState }) {
     } catch (e: any) { setRows([]); setError(e?.message ?? 'Error al cargar objetivos'); }
     finally { setLoading(false); }
   }, [filters]);
-  React.useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <Card title="Objetivos de conversión">
@@ -729,10 +872,10 @@ function WebGoalsWidget({ filters }: { filters: WebFilterState }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WebExternalClicksWidget({ filters }: { filters: WebFilterState }) {
-  const [rows,    setRows]    = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error,   setError]   = React.useState<string | null>(null);
-  const load = React.useCallback(async () => {
+  const [rows,    setRows]    = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const ph = await import('../../api/posthog');
@@ -750,7 +893,7 @@ function WebExternalClicksWidget({ filters }: { filters: WebFilterState }) {
     } catch (e: any) { setRows([]); setError(e?.message ?? 'Error al cargar enlaces'); }
     finally { setLoading(false); }
   }, [filters]);
-  React.useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
   return (
     <Card title="Enlaces externos">
       {loading ? <div className="space-y-2">{[0,1,2].map(i => <div key={i} className="h-6 bg-[#fafaf9] animate-pulse rounded" />)}</div>
@@ -776,12 +919,12 @@ function WebExternalClicksWidget({ filters }: { filters: WebFilterState }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WebActiveHoursHeatmap({ filters }: { filters: WebFilterState }) {
-  const [grid,    setGrid]    = React.useState<number[][]>([]);
-  const [max,     setMax]     = React.useState(0);
-  const [loading, setLoading] = React.useState(true);
-  const [error,   setError]   = React.useState<string | null>(null);
+  const [grid,    setGrid]    = useState<number[][]>([]);
+  const [max,     setMax]     = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const ph = await import('../../api/posthog');
@@ -806,7 +949,7 @@ function WebActiveHoursHeatmap({ filters }: { filters: WebFilterState }) {
     } catch (e: any) { setGrid([]); setMax(0); setError(e?.message ?? 'Error al cargar heatmap'); }
     finally { setLoading(false); }
   }, [filters]);
-  React.useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
@@ -847,11 +990,11 @@ function WebActiveHoursHeatmap({ filters }: { filters: WebFilterState }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WebRetentionWidget({ filters }: { filters: WebFilterState }) {
-  const [cohorts, setCohorts] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error,   setError]   = React.useState<string | null>(null);
+  const [cohorts, setCohorts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const ph = await import('../../api/posthog');
@@ -874,7 +1017,7 @@ function WebRetentionWidget({ filters }: { filters: WebFilterState }) {
     } catch (e: any) { setCohorts([]); setError(e?.message ?? 'Error al cargar retención'); }
     finally { setLoading(false); }
   }, [filters]);
-  React.useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <Card title="Retención">
@@ -915,9 +1058,9 @@ function WebRetentionWidget({ filters }: { filters: WebFilterState }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WebFrustratingPages({ filters }: { filters: WebFilterState }) {
-  const [rows,    setRows]    = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  React.useEffect(() => {
+  const [rows,    setRows]    = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -962,7 +1105,7 @@ function WebFrustratingPages({ filters }: { filters: WebFilterState }) {
 // Session replay & error tracking summary cards
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SummaryCard({ icon, title, hint, link, count, accent }: { icon: React.ReactNode; title: string; hint: string; link: string; count?: number | null; accent: string }) {
+function SummaryCard({ icon, title, hint, link, count, accent }: { icon: ReactNode; title: string; hint: string; link: string; count?: number | null; accent: string }) {
   function go() { window.dispatchEvent(new CustomEvent('wa-navigate', { detail: { view: link } })); }
   return (
     <button onClick={go} className="text-left bg-white border border-[#e9eae6] rounded-xl p-4 hover:border-[#3b59f6] transition-colors w-full">
@@ -1013,10 +1156,10 @@ function bandLabel(b: 'good' | 'warn' | 'bad' | null): string {
 }
 
 function WebVitalsCards({ filters, percentile, onSelectMetric, selected }: { filters: WebFilterState; percentile: 'p75' | 'p90' | 'p99'; onSelectMetric: (m: WebVitalMetric) => void; selected: WebVitalMetric }) {
-  const [values,  setValues]  = React.useState<Record<WebVitalMetric, number | null>>({ INP: null, LCP: null, FCP: null, CLS: null });
-  const [loading, setLoading] = React.useState(true);
+  const [values,  setValues]  = useState<Record<WebVitalMetric, number | null>>({ INP: null, LCP: null, FCP: null, CLS: null });
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -1069,10 +1212,10 @@ function WebVitalsCards({ filters, percentile, onSelectMetric, selected }: { fil
 
 function WebVitalsPathBreakdown({ filters, metric, percentile }: { filters: WebFilterState; metric: WebVitalMetric; percentile: 'p75' | 'p90' | 'p99' }) {
   const meta = VITALS_META[metric];
-  const [bands,   setBands]   = React.useState<{ good: any[]; warn: any[]; bad: any[] }>({ good: [], warn: [], bad: [] });
-  const [loading, setLoading] = React.useState(true);
+  const [bands,   setBands]   = useState<{ good: any[]; warn: any[]; bad: any[] }>({ good: [], warn: [], bad: [] });
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -1134,8 +1277,8 @@ function WebVitalsPathBreakdown({ filters, metric, percentile }: { filters: WebF
 }
 
 function WebVitalsTab({ filters }: { filters: WebFilterState }) {
-  const [percentile, setPercentile] = React.useState<'p75' | 'p90' | 'p99'>('p75');
-  const [metric,     setMetric]     = React.useState<WebVitalMetric>('INP');
+  const [percentile, setPercentile] = useState<'p75' | 'p90' | 'p99'>('p75');
+  const [metric,     setMetric]     = useState<WebVitalMetric>('INP');
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -1160,12 +1303,12 @@ function WebVitalsTab({ filters }: { filters: WebFilterState }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PageReportsTab({ filters }: { filters: WebFilterState }) {
-  const [search,   setSearch]   = React.useState('');
-  const [results,  setResults]  = React.useState<{ path: string; visitors: number; views: number }[]>([]);
-  const [selected, setSelected] = React.useState<string | null>(null);
-  const [loading,  setLoading]  = React.useState(false);
+  const [search,   setSearch]   = useState('');
+  const [results,  setResults]  = useState<{ path: string; visitors: number; views: number }[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [loading,  setLoading]  = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let cancelled = false;
     const t = setTimeout(async () => {
       setLoading(true);
@@ -1274,11 +1417,11 @@ function MarketingAnalyticsTab({ filters }: { filters: WebFilterState }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CrossDomainHostBreakdown({ filters }: { filters: WebFilterState }) {
-  const [rows,    setRows]    = React.useState<{ host: string; visitors: number; views: number; sessions: number }[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error,   setError]   = React.useState<string | null>(null);
+  const [rows,    setRows]    = useState<{ host: string; visitors: number; views: number; sessions: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const ph = await import('../../api/posthog');
@@ -1328,7 +1471,7 @@ function CrossDomainHostBreakdown({ filters }: { filters: WebFilterState }) {
     } catch (e: any) { setRows([]); setError(e?.message ?? 'Error al cargar hosts'); }
     finally { setLoading(false); }
   }, [filters]);
-  React.useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const totalVisitors = rows.reduce((a, r) => a + r.visitors, 0) || 1;
   return (
@@ -1425,8 +1568,8 @@ function readSettings(): WaSettings { try { const raw = localStorage.getItem('wa
 function writeSettings(s: WaSettings) { try { localStorage.setItem('wa:settings', JSON.stringify(s)); } catch {} }
 
 function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [s, setS]    = React.useState<WaSettings>(readSettings);
-  const [tab, setTab] = React.useState<'goals' | 'channels' | 'frustration'>('goals');
+  const [s, setS]    = useState<WaSettings>(readSettings);
+  const [tab, setTab] = useState<'goals' | 'channels' | 'frustration'>('goals');
 
   function save(next: WaSettings) { setS(next); writeSettings(next); }
 
@@ -1518,46 +1661,464 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
 // Web Analytics Overview tab (everything wired together)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WebAnalyticsOverviewTab({ filters }: { filters: WebFilterState }) {
+function WebAnalyticsOverviewTab({ filters, visibleTiles, reloadKey, onChangeGraphMetric }: { filters: WebFilterState; visibleTiles: Record<VisibleTile, boolean>; reloadKey: number; onChangeGraphMetric: (m: GraphMetric) => void }) {
   function go(view: string, payload?: any) { window.dispatchEvent(new CustomEvent('wa-navigate', { detail: { view, payload } })); }
+  const [modalState, setModalState] = useState<{ breakdown: BreakdownBy; title: string } | null>(null);
   return (
-    <div className="space-y-5">
-      <WebOverviewKPIs filters={filters} />
-      <WebTrendsChart filters={filters} />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <WebStatsTable filters={filters} defaultBreakdown="Page"               onRowClick={(p) => go('appHeatmaps', { kind: 'heatmap-url', id: p })} />
-        <WebStatsTable filters={filters} defaultBreakdown="InitialChannelType" />
+    <div className="space-y-5" key={`overview-${reloadKey}`}>
+      {visibleTiles.overview && <WebOverviewKPIs filters={filters} />}
+      {visibleTiles.graphs && (
+        <TileFrame
+          title="Tendencias"
+          rightExtra={<MetricGraphSwitcher value={filters.graphMetric} onChange={onChangeGraphMetric} />}
+          onOpenInsight={() => openAsNewInsight(`WA · ${GRAPH_METRICS.find(g => g.key === filters.graphMetric)?.label ?? 'Trends'}`, {
+            kind: 'InsightVizNode',
+            source: {
+              kind: 'TrendsQuery',
+              dateRange: { date_from: filters.range.date_from, date_to: filters.range.date_to ?? null },
+              series: [{ kind: 'EventsNode', event: GRAPH_METRICS.find(g => g.key === filters.graphMetric)!.event, math: GRAPH_METRICS.find(g => g.key === filters.graphMetric)!.math }],
+              trendsFilter: { display: 'ActionsLineGraph' },
+            },
+          })}
+        >
+          <WebTrendsChart filters={filters} />
+        </TileFrame>
+      )}
+      {(visibleTiles.paths || visibleTiles.sources) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {visibleTiles.paths   && <WebStatsTable filters={filters} defaultBreakdown="Page" onRowClick={(p) => go('appHeatmaps', { kind: 'heatmap-url', id: p })} onShowMore={(b, t) => setModalState({ breakdown: b, title: t })} />}
+          {visibleTiles.sources && <WebStatsTable filters={filters} defaultBreakdown="InitialChannelType" onShowMore={(b, t) => setModalState({ breakdown: b, title: t })} />}
+        </div>
+      )}
+      {visibleTiles.geography && (
+        <CountryWorldMap filters={filters} onOpenModal={() => setModalState({ breakdown: 'Country', title: 'Países' })} />
+      )}
+      {visibleTiles.devices && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <WebStatsTable filters={filters} defaultBreakdown="DeviceType" onShowMore={(b, t) => setModalState({ breakdown: b, title: t })} />
+          <WebStatsTable filters={filters} defaultBreakdown="Browser"    onShowMore={(b, t) => setModalState({ breakdown: b, title: t })} />
+          <WebStatsTable filters={filters} defaultBreakdown="OS"         onShowMore={(b, t) => setModalState({ breakdown: b, title: t })} />
+        </div>
+      )}
+      {(visibleTiles.retention || visibleTiles.activeHours) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {visibleTiles.retention   && <WebRetentionWidget filters={filters} />}
+          {visibleTiles.activeHours && <WebActiveHoursHeatmap filters={filters} />}
+        </div>
+      )}
+      {(visibleTiles.goals || visibleTiles.frustratingPages) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {visibleTiles.goals            && <WebGoalsWidget      filters={filters} />}
+          {visibleTiles.frustratingPages && <WebFrustratingPages filters={filters} />}
+        </div>
+      )}
+      {visibleTiles.externalClicks && <WebExternalClicksWidget filters={filters} />}
+      {(visibleTiles.replay || visibleTiles.errorTracking) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {visibleTiles.replay && (
+            <SummaryCard
+              icon={<svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M6 5l5 3-5 3z" fill="currentColor"/></svg>}
+              title="Session replays"
+              hint="Reproduce sesiones para ver el comportamiento real de tus usuarios."
+              link="appSessionReplay" accent="#e8572a"
+            />
+          )}
+          {visibleTiles.errorTracking && (
+            <SummaryCard
+              icon={<svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M8 1l7 13H1z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M8 6v4M8 12v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+              title="Error tracking"
+              hint="Detecta y agrupa errores JS en tu producto."
+              link="appErrorTracking" accent="#dc2626"
+            />
+          )}
+        </div>
+      )}
+      <WebAnalyticsModal
+        open={modalState != null}
+        onClose={() => setModalState(null)}
+        filters={filters}
+        breakdown={modalState?.breakdown ?? 'Page'}
+        title={modalState?.title ?? ''}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TileFrame — header con título + viz toggle + "Show more" + "Open as insight"
+// + "Export CSV". Mirror del wrapper de PostHog para sus query-tiles.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface TileFrameProps {
+  title:           string;
+  children:        ReactNode;
+  vizMode?:        TileViz;
+  onVizChange?:    (m: TileViz) => void;
+  onOpenInsight?:  () => void;
+  onShowMore?:     () => void;
+  onExport?:       () => void;
+  rightExtra?:     ReactNode;
+}
+
+function TileFrame({ title, children, vizMode, onVizChange, onOpenInsight, onShowMore, onExport, rightExtra }: TileFrameProps) {
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-[#e9eae6] flex items-center justify-between gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold text-[#1a1a18]">{title}</h3>
+        <div className="flex items-center gap-1">
+          {rightExtra}
+          {vizMode !== undefined && onVizChange && (
+            <div className="inline-flex bg-white border border-[#e9eae6] rounded overflow-hidden">
+              <button onClick={() => onVizChange('table')} className={`px-2 py-1 ${vizMode === 'table' ? 'bg-[#1a1a18] text-white' : 'text-[#646462] hover:bg-[#fafaf9]'}`} title="Ver como tabla">
+                <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="1" y="3" width="14" height="10" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M1 7h14M6 3v10" stroke="currentColor" strokeWidth="1.3"/></svg>
+              </button>
+              <button onClick={() => onVizChange('graph')} className={`px-2 py-1 ${vizMode === 'graph' ? 'bg-[#1a1a18] text-white' : 'text-[#646462] hover:bg-[#fafaf9]'}`} title="Ver como gráfica">
+                <svg viewBox="0 0 16 16" className="w-3 h-3"><rect x="2" y="8" width="2" height="6" fill="currentColor"/><rect x="5" y="5" width="2" height="9" fill="currentColor"/><rect x="8" y="2" width="2" height="12" fill="currentColor"/><rect x="11" y="6" width="2" height="8" fill="currentColor"/></svg>
+              </button>
+            </div>
+          )}
+          {onShowMore && (
+            <button onClick={onShowMore} className="px-2 py-1 text-xs text-[#646462] hover:bg-[#fafaf9] rounded" title="Ver todos los datos">
+              Ver más
+            </button>
+          )}
+          {onOpenInsight && (
+            <button onClick={onOpenInsight} className="px-2 py-1 text-xs text-[#3b59f6] hover:bg-[#eff2ff] rounded" title="Abrir como nuevo insight">
+              ↗ Insight
+            </button>
+          )}
+          {onExport && (
+            <button onClick={onExport} className="px-2 py-1 text-[#646462] hover:bg-[#fafaf9] rounded" title="Exportar CSV">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 1v10m-3-3l3 3 3-3M2 14h12" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          )}
+        </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <WebStatsTable filters={filters} defaultBreakdown="Country" />
-        <WebStatsTable filters={filters} defaultBreakdown="DeviceType" />
-        <WebStatsTable filters={filters} defaultBreakdown="Browser" />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <WebRetentionWidget filters={filters} />
-        <WebActiveHoursHeatmap filters={filters} />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <WebGoalsWidget        filters={filters} />
-        <WebFrustratingPages   filters={filters} />
-      </div>
-      <WebExternalClicksWidget filters={filters} />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SummaryCard
-          icon={<svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M6 5l5 3-5 3z" fill="currentColor"/></svg>}
-          title="Session replays"
-          hint="Reproduce sesiones para ver el comportamiento real de tus usuarios."
-          link="appSessionReplay" accent="#e8572a"
-        />
-        <SummaryCard
-          icon={<svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M8 1l7 13H1z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M8 6v4M8 12v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-          title="Error tracking"
-          hint="Detecta y agrupa errores JS en tu producto."
-          link="appErrorTracking" accent="#dc2626"
-        />
+      <div className="p-4">{children}</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebAnalyticsModal — versión expandida de un tile (200 filas, más columnas).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function WebAnalyticsModal({
+  open, onClose, filters, breakdown, title,
+}: {
+  open:      boolean;
+  onClose:   () => void;
+  filters:   WebFilterState;
+  breakdown: BreakdownBy;
+  title:     string;
+}) {
+  const [rows,    setRows]    = useState<any[]>([]);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.webAnalytics.statsTable({
+          breakdownBy:         breakdown,
+          dateRange:           { date_from: filters.range.date_from, date_to: filters.range.date_to ?? null },
+          properties:          buildProperties(filters),
+          compareFilter:       { compare: filters.compare },
+          includeBounceRate:   true,
+          includeScrollDepth:  true,
+          doPathCleaning:      filters.pathCleaning,
+          filterTestAccounts:  filters.testAccounts,
+          limit:               200,
+          sampling:            buildSampling(filters),
+        });
+        if (cancelled) return;
+        setRows(res?.results ?? []);
+        setColumns(res?.columns ?? []);
+      } catch { if (!cancelled) setRows([]); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [open, filters, breakdown]);
+
+  function exportCsv() {
+    const header = columns.join(',');
+    const body = rows.map(r => (Array.isArray(r) ? r : Object.values(r)).map(c => {
+      if (c == null) return '';
+      const s = typeof c === 'object' ? JSON.stringify(c) : String(c);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(',')).join('\n');
+    const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${title.replace(/\s+/g, '_').toLowerCase()}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-[65] flex items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[920px] max-w-[95vw] max-h-[88vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-[#1a1a18]">{title}</h2>
+            <p className="text-xs text-[#646462] mt-0.5">{rows.length} filas · {breakdown}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={exportCsv} disabled={rows.length === 0} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#fafaf9] disabled:opacity-50">Exportar CSV</button>
+            <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-5">
+          {loading ? <div className="space-y-2">{[0,1,2,3,4,5,6,7,8].map(i => <div key={i} className="h-7 bg-[#fafaf9] animate-pulse rounded" />)}</div>
+           : rows.length === 0 ? <EmptyState title="Sin datos" hint="Prueba a ampliar el rango o quitar filtros." />
+           : (
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider border-b border-[#e9eae6] sticky top-0 bg-white">
+                {columns.map((c, i) => <th key={i} className="py-2 pr-3 whitespace-nowrap">{c}</th>)}
+              </tr></thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const cells = Array.isArray(r) ? r : Object.values(r);
+                  return (
+                    <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                      {cells.map((c: any, ci: number) => {
+                        let v: ReactNode = '—';
+                        if (ci === 0) v = <span className="text-[#1a1a18] truncate max-w-[460px] inline-block">{String(c ?? '—')}</span>;
+                        else if (typeof c === 'number') v = <span className="text-[#646462] font-mono">{ci >= 3 ? fmtPct(c) : fmtNum(c)}</span>;
+                        else if (Array.isArray(c)) v = <span className="text-[#646462] font-mono">{fmtNum(c[0])}</span>;
+                        else v = <span className="text-[#646462]">{String(c ?? '—')}</span>;
+                        return <td key={ci} className="py-1.5 pr-3 align-top">{v}</td>;
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LiveUserCount — visitantes en la última hora. Polling cada 20s.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function LiveUserCount({ filters }: { filters: WebFilterState }) {
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let timer: any;
+    async function tick() {
+      try {
+        const ph = await import('../../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.webAnalytics.overview({
+          dateRange:          { date_from: '-1h', date_to: null },
+          properties:         buildProperties(filters),
+          filterTestAccounts: filters.testAccounts,
+        });
+        if (cancelled) return;
+        const visitors = (res?.results ?? []).find((r: any) => /visitor/i.test(r.key || ''));
+        setCount(visitors ? Math.round(Number(visitors.value) || 0) : null);
+      } catch { if (!cancelled) setCount(null); }
+      finally { if (!cancelled) timer = setTimeout(tick, 20_000); }
+    }
+    tick();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [filters]);
+  return (
+    <div className="inline-flex items-center gap-1.5 h-8 px-3 bg-white border border-[#e9eae6] rounded-lg" title="Visitantes únicos en la última hora">
+      <span className="relative w-2 h-2 rounded-full bg-[#16a34a] flex-shrink-0">
+        <span className="absolute inset-0 rounded-full bg-[#16a34a] animate-ping opacity-75" />
+      </span>
+      <span className="text-xs font-medium text-[#1a1a18]">{count == null ? '…' : fmtNum(count)}</span>
+      <span className="text-[10px] text-[#9ca3af]">en vivo</span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebAnalyticsMenu — header dropdown con Session Attribution + Visible tiles.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function WebAnalyticsMenu({
+  visibleTiles, onToggleTile, onResetTiles,
+}: {
+  visibleTiles:  Record<VisibleTile, boolean>;
+  onToggleTile:  (k: VisibleTile) => void;
+  onResetTiles:  () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) { if (!ref.current?.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-1 h-8 px-2 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#fafaf9]" title="Más opciones">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="3" cy="8" r="1.4" fill="currentColor"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="13" cy="8" r="1.4" fill="currentColor"/></svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-72 z-50 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1 max-h-[80vh] overflow-y-auto">
+          <button
+            onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent('wa-navigate', { detail: { view: 'sessionAttribution' } })); }}
+            className="w-full text-left px-3 py-2 text-sm text-[#1a1a18] hover:bg-[#fafaf9] flex items-center gap-2"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-[#3b59f6]"><circle cx="3" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="13" cy="4" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="13" cy="12" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M5 7l6.5-2.5M5 9l6.5 2.5" stroke="currentColor" strokeWidth="1.3"/></svg>
+            Session Attribution Explorer
+          </button>
+          <div className="border-t border-[#e9eae6] my-1" />
+          <div className="px-3 py-1 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">Tarjetas visibles</span>
+            <button onClick={onResetTiles} className="text-[10px] text-[#3b59f6] hover:underline">Restablecer</button>
+          </div>
+          {ALL_TILES.map(t => (
+            <label key={t.k} className="flex items-center gap-3 px-3 py-1.5 hover:bg-[#fafaf9] cursor-pointer">
+              <input type="checkbox" checked={visibleTiles[t.k]} onChange={() => onToggleTile(t.k)} className="accent-[#3b59f6]" />
+              <span className="text-sm text-[#1a1a18]">{t.l}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DeviceSegmented — Desktop/Mobile/Tablet/All toggle.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DeviceSegmented({ value, onChange }: { value: DeviceFilter; onChange: (v: DeviceFilter) => void }) {
+  const ICONS: Record<DeviceFilter, ReactNode> = {
+    all:     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12" stroke="currentColor" strokeWidth="1.1" fill="none"/></svg>,
+    desktop: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><rect x="1" y="3" width="14" height="9" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M6 14h4M8 12v2" stroke="currentColor" strokeWidth="1.3"/></svg>,
+    mobile:  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><rect x="5" y="1" width="6" height="14" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="12.5" r="0.7" fill="currentColor"/></svg>,
+    tablet:  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><rect x="3" y="1" width="10" height="14" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="13" r="0.7" fill="currentColor"/></svg>,
+  };
+  return (
+    <div className="inline-flex bg-white border border-[#e9eae6] rounded-lg overflow-hidden">
+      {DEVICE_OPTIONS.map(d => (
+        <button
+          key={d.k}
+          onClick={() => onChange(d.k)}
+          title={d.l}
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs ${value === d.k ? 'bg-[#1a1a18] text-white' : 'text-[#646462] hover:bg-[#fafaf9]'}`}
+        >
+          {ICONS[d.k]}
+          {value === d.k && <span>{d.l}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MetricGraphSwitcher — chip-row con las 8 métricas (PostHog GraphsTab).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MetricGraphSwitcher({ value, onChange }: { value: GraphMetric; onChange: (m: GraphMetric) => void }) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {GRAPH_METRICS.map(m => (
+        <button
+          key={m.key}
+          onClick={() => onChange(m.key)}
+          className={`px-2.5 py-1 rounded text-xs whitespace-nowrap ${value === m.key ? 'bg-[#1a1a18] text-white' : 'text-[#646462] hover:bg-[#fafaf9] border border-[#e9eae6]'}`}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CountryWorldMap — visualización de mapa para el breakdown de países.
+// Reutiliza el componente charts/WorldMap si está disponible; fallback a tabla.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CountryWorldMap({ filters, onOpenModal }: { filters: WebFilterState; onOpenModal: () => void }) {
+  const [rows, setRows] = useState<{ code: string; value: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [WorldMapComp, setWorldMapComp] = useState<any>(null);
+
+  useEffect(() => {
+    (async () => { try { const m = await import('../charts/WorldMap'); setWorldMapComp(() => m.WorldMap ?? m.default ?? null); } catch {} })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const res: any = await ph.posthog.webAnalytics.statsTable({
+          breakdownBy: 'Country',
+          dateRange:   { date_from: filters.range.date_from, date_to: filters.range.date_to ?? null },
+          properties:  buildProperties(filters),
+          filterTestAccounts: filters.testAccounts,
+          limit:       250,
+        });
+        if (cancelled) return;
+        const out = (res?.results ?? []).map((r: any) => {
+          const cells = Array.isArray(r) ? r : Object.values(r);
+          return { code: String(cells[0] ?? '').toUpperCase(), value: Number(Array.isArray(cells[1]) ? cells[1][0] : cells[1] ?? 0) };
+        }).filter((x: any) => x.code && Number.isFinite(x.value));
+        setRows(out);
+      } catch { if (!cancelled) setRows([]); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [filters]);
+
+  return (
+    <TileFrame title="Mapa de visitantes por país" onShowMore={onOpenModal}>
+      {loading ? <div className="h-64 bg-[#fafaf9] rounded animate-pulse" />
+       : rows.length === 0 ? <EmptyState title="Sin datos geográficos" />
+       : WorldMapComp ? <WorldMapComp data={rows.map(r => ({ countryCode: r.code, count: r.value }))} height={320} />
+       : (
+        // Fallback: lista visual cuando WorldMap no está disponible.
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-72 overflow-y-auto">
+          {rows.slice(0, 30).map(r => (
+            <div key={r.code} className="flex items-center justify-between px-2 py-1 bg-[#fafaf9] rounded">
+              <span className="text-xs text-[#1a1a18] font-mono">{r.code}</span>
+              <span className="text-xs text-[#646462] font-mono">{fmtNum(r.value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </TileFrame>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// openAsNewInsight — helper para "Open as new insight" en cada tile.
+// Crea un Insight con la misma query y navega al detalle.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function openAsNewInsight(name: string, query: any) {
+  try {
+    const ph = await import('../../api/posthog');
+    if (!ph.getTeamId()) await ph.bootstrapPostHog();
+    const created: any = await ph.phPost(`/api/environments/${ph.getTeamId()}/insights/`, {
+      name, saved: true, query,
+    });
+    window.dispatchEvent(new CustomEvent('app-navigate', { detail: { app: 'appProductAnalytics', payload: { kind: 'insight', id: created.id } } }));
+  } catch (e: any) { alert(e?.message ?? 'No se pudo crear el insight'); }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1565,9 +2126,24 @@ function WebAnalyticsOverviewTab({ filters }: { filters: WebFilterState }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function WebAnalyticsScreen() {
-  const [tab,          setTab]          = React.useState<Tab>('webAnalytics');
-  const [filters,      setFilters]      = React.useState<WebFilterState>(DEFAULT_FILTERS);
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [tab,           setTab]           = useState<Tab>('webAnalytics');
+  const [filters,       setFilters]       = useState<WebFilterState>(DEFAULT_FILTERS);
+  const [settingsOpen,  setSettingsOpen]  = useState(false);
+  const [reloadKey,     setReloadKey]     = useState(0);
+  const [visibleTiles,  setVisibleTiles]  = useState<Record<VisibleTile, boolean>>(readVisibleTiles);
+  const [shareCopied,   setShareCopied]   = useState(false);
+
+  function reload()      { setReloadKey(k => k + 1); }
+  function toggleTile(k: VisibleTile) {
+    setVisibleTiles(v => { const n = { ...v, [k]: !v[k] }; writeVisibleTiles(n); return n; });
+  }
+  function resetTiles() {
+    const def: any = {}; ALL_TILES.forEach(t => def[t.k] = true);
+    setVisibleTiles(def); writeVisibleTiles(def);
+  }
+  async function shareView() {
+    try { await navigator.clipboard.writeText(window.location.href); setShareCopied(true); setTimeout(() => setShareCopied(false), 1500); } catch {}
+  }
 
   const TABS: { key: Tab; label: string; beta?: boolean }[] = [
     { key: 'webAnalytics',    label: 'Overview' },
@@ -1596,10 +2172,20 @@ export function WebAnalyticsScreen() {
             <p className="text-xs text-[#646462]">Visitantes, páginas, fuentes y rendimiento del sitio.</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <LiveUserCount filters={filters} />
+            <button onClick={shareView} title="Copiar enlace a esta vista" className="flex items-center gap-1.5 h-8 px-3 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#fafaf9]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="4" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="4" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="12" r="2" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M5.7 7l4.6-2.5M5.7 9l4.6 2.5" stroke="currentColor" strokeWidth="1.3"/></svg>
+              {shareCopied ? 'Copiado' : 'Compartir'}
+            </button>
             <button onClick={() => setSettingsOpen(true)} className="flex items-center gap-1.5 h-8 px-3 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#fafaf9]">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><circle cx="8" cy="8" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
               Ajustes
             </button>
+            <WebAnalyticsMenu
+              visibleTiles={visibleTiles}
+              onToggleTile={toggleTile}
+              onResetTiles={resetTiles}
+            />
           </div>
         </div>
         <div className="flex gap-4 overflow-x-auto">
@@ -1614,11 +2200,15 @@ export function WebAnalyticsScreen() {
 
       {/* Toolbar */}
       <div className="bg-white px-6 py-3 border-b border-[#e9eae6] flex flex-wrap items-center gap-2 flex-shrink-0">
+        <button onClick={reload} title="Recargar todos los datos" className="flex items-center gap-1.5 h-8 px-2.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#fafaf9]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+        </button>
         <DateRangeButton
           value={filters.range}
           compare={filters.compare}
           onChange={(range, compare) => setFilters(f => ({ ...f, range, compare }))}
         />
+        <DeviceSegmented value={filters.device} onChange={(device) => setFilters(f => ({ ...f, device }))} />
         <HostsFilter
           hosts={filters.hosts}
           onChange={(hosts) => setFilters(f => ({ ...f, hosts }))}
@@ -1627,7 +2217,13 @@ export function WebAnalyticsScreen() {
           filters={filters.properties}
           onChange={(properties) => setFilters(f => ({ ...f, properties }))}
         />
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-[#646462] cursor-pointer" title="Normaliza /user/123 → /user/:id en las páginas">
+            <span>Path cleaning</span>
+            <span className={`relative inline-block w-9 h-5 rounded-full transition-colors ${filters.pathCleaning ? 'bg-[#3b59f6]' : 'bg-[#d1d5db]'}`} onClick={() => setFilters(f => ({ ...f, pathCleaning: !f.pathCleaning }))}>
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${filters.pathCleaning ? 'translate-x-[16px]' : ''}`} />
+            </span>
+          </label>
           <label className="flex items-center gap-2 text-xs text-[#646462] cursor-pointer">
             <input type="checkbox" checked={filters.testAccounts} onChange={e => setFilters(f => ({ ...f, testAccounts: e.target.checked }))} className="accent-[#3b59f6]" />
             Filtrar cuentas de prueba
@@ -1638,7 +2234,7 @@ export function WebAnalyticsScreen() {
 
       {/* Body */}
       <div className="flex-1 p-6">
-        {tab === 'webAnalytics'    && <WebAnalyticsOverviewTab filters={filters} />}
+        {tab === 'webAnalytics'    && <WebAnalyticsOverviewTab filters={filters} visibleTiles={visibleTiles} reloadKey={reloadKey} onChangeGraphMetric={(graphMetric) => setFilters(f => ({ ...f, graphMetric }))} />}
         {tab === 'webVitals'       && <WebVitalsTab           filters={filters} />}
         {tab === 'pageReports'     && <PageReportsTab         filters={filters} />}
         {tab === 'marketing'       && <MarketingAnalyticsTab  filters={filters} />}
