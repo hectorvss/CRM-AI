@@ -1028,9 +1028,6 @@ export const posthog = {
       phPost(`/api/environments/${_teamId}/query/`, { query: { kind: 'HogQLMetadata', language: 'hogQL', ...data } }),
   },
 
-  // ── Generic /query/ runner (escape hatch) ────────────────────────────────
-  query: (data: any) =>
-    phPost(`/api/environments/${_teamId}/query/`, data),
 }
 
 export default posthog
