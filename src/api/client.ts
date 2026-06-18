@@ -1514,3 +1514,112 @@ export const callsApi = {
   updateStatus: (id: string, payload: Record<string, unknown>) =>
     request<any>(`/calls/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }),
 };
+
+// ── Attachments (synced from Oracle: required by Prototype.tsx) ──────────
+export const attachmentsApi = {
+  upload: (payload: { name: string; type: string; dataUrl: string }) =>
+    request<{ key: string; url: string; name: string; type: string; size: number }>(
+      '/attachments/upload',
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+  resign: (key: string) =>
+    request<{ key: string; url: string }>('/attachments/sign', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    }),
+};
+
+// ── Super-Agent chat (synced from Oracle: required by Prototype.tsx) ─────
+export const agentApi = {
+  /**
+   * Open an SSE connection to stream a chat response.
+   * Returns an EventSource-compatible object.
+   *
+   * Usage:
+   *   const source = agentApi.chat({ message, conversationId, context });
+   *   source.addEventListener('text_chunk', e => ...);
+   *   source.addEventListener('done', e => ...);
+   *   source.close();
+   *
+   * Because the browser EventSource API only supports GET, we use fetch +
+   * ReadableStream to post the JSON body and still read the SSE stream.
+   */
+  chat: async (
+    payload: {
+      message: string;
+      conversationId?: string;
+      context?: Record<string, unknown>;
+    },
+    onEvent: (event: string, data: unknown) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    const { data } = await (await import('./supabase')).supabase.auth.getSession();
+    const token = data.session?.access_token;
+    const user = data.session?.user;
+    const tenantId =
+      user?.app_metadata?.tenant_id || user?.user_metadata?.tenant_id ||
+      (import.meta as any).env?.VITE_TENANT_ID || 'org_default';
+    const workspaceId =
+      user?.app_metadata?.workspace_id || user?.user_metadata?.workspace_id ||
+      (import.meta as any).env?.VITE_WORKSPACE_ID || 'ws_default';
+
+    const res = await fetch(`${BASE}/agent/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId,
+        'x-workspace-id': workspaceId,
+        'x-user-id': user?.id ?? 'system',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal,
+    });
+
+    if (!res.ok || !res.body) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Agent error ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      let eventName = 'message';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventName = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const raw = line.slice(6).trim();
+          try {
+            const parsed = JSON.parse(raw);
+            onEvent(eventName, parsed);
+          } catch {
+            onEvent(eventName, raw);
+          }
+          eventName = 'message';
+        }
+      }
+    }
+  },
+
+  listConversations: () =>
+    request<{ ok: boolean; conversations: any[] }>('/agent/conversations'),
+
+  getConversation: (id: string) =>
+    request<{ ok: boolean; conversation: any; messages: any[] }>(`/agent/conversations/${id}`),
+
+  deleteConversation: (id: string) =>
+    request<{ ok: boolean }>(`/agent/conversations/${id}`, { method: 'DELETE' }),
+
+  // Approve or reject a dangerous operation proposed by the agent
+  approve: (payload: { proposalId: string; action: 'approve' | 'reject'; feedback?: string; conversationId: string }) =>
+    request<any>('/agent/chat/approve', { method: 'POST', body: JSON.stringify(payload) }),
+};

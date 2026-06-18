@@ -203,6 +203,9 @@ interface WorkflowDiagnostic {
 interface WorkflowsProps {
   onNavigate?: NavigateFn;
   focusWorkflowId?: string | null;
+  initialView?: WorkflowView;
+  createNewOnMount?: boolean;
+  startTemplateId?: string;
 }
 
 type FlowNodeData = {
@@ -333,7 +336,7 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'trigger', key: 'trigger.schedule', label: 'Schedule (cron)', category: 'Trigger', icon: 'event_repeat', requiresConfig: true, description: 'Run the workflow on a cron schedule.' },
 ];
 
-const TEMPLATES = [
+export const TEMPLATES = [
   {
     id: 'refund_guarded',
     label: 'Guarded refund',
@@ -1692,9 +1695,9 @@ function WorkflowEdgeButton(props: EdgeProps) {
 const nodeTypes = { workflowNode: WorkflowNodeCard };
 const edgeTypes = { workflowEdge: WorkflowEdgeButton };
 
-export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: WorkflowsProps) {
+export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId, initialView, createNewOnMount, startTemplateId }: WorkflowsProps) {
   const onNavigate = _onNavigate;
-  const [view, setView] = useState<WorkflowView>('list');
+  const [view, setView] = useState<WorkflowView>(initialView ?? 'list');
   const [activeTab, setActiveTab] = useState<WorkflowTab>('overview');
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [librarySection, setLibrarySection] = useState<WorkflowLibrarySection>('workflows');
@@ -1720,6 +1723,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const [editorMode, setEditorMode] = useState<'parameters' | 'settings'>('parameters');
   const [actionDialog, setActionDialog] = useState<WorkflowActionDialogState | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  const createNewMountedRef = useRef(false);
   const [pendingCardAction, setPendingCardAction] = useState<string | null>(null);
   const [variableModalOpen, setVariableModalOpen] = useState(false);
   const [editingVariable, setEditingVariable] = useState<WorkflowVariableRecord | null>(null);
@@ -1997,6 +2001,15 @@ function loadBuilderState(workflow: Workflow) {
       onNavigate?.({ page: 'workflows', entityType: 'workflow', entityId: workflow.id, section: 'builder', sourceContext: 'workflow_template' });
     }
   }
+
+  // Auto-create a new workflow when createNewOnMount=true
+  useEffect(() => {
+    if (!createNewOnMount || loading || createNewMountedRef.current) return;
+    createNewMountedRef.current = true;
+    const tpl = startTemplateId ? (TEMPLATES as readonly any[]).find((t) => t.id === startTemplateId) : undefined;
+    void createFromTemplate(tpl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createNewOnMount, loading]);
 
   function addNode(spec: NodeSpec, mode: AddPanelMode = addPanel) {
     const sourceNode = mode?.sourceNodeId ? workflowNodes.find((node) => node.id === mode.sourceNodeId) : selectedNode ?? workflowNodes.at(-1);
@@ -2628,8 +2641,15 @@ function loadBuilderState(workflow: Workflow) {
   );
   const addSections = useMemo(() => getAddPanelSections(addCategory, catalog, addSearch), [catalog, addCategory, addSearch]);
 
-  if (loading && workflows.length === 0) {
-    return <LoadingState title="Loading workflows" message="Fetching workflow definitions from Supabase." />;
+  if ((loading && workflows.length === 0) || (createNewOnMount && view !== 'builder')) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <svg className="w-5 h-5 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+      </div>
+    );
   }
 
   return (
