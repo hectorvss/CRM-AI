@@ -59,7 +59,7 @@
   function Logo() {
     return (
       <a data-spa href="/" className="nav-logo">
-        <span className="nav-logo-dot" />
+        <img src="/logos/clain-favicon.png" alt="" className="nav-logo-img" />
         Clain
       </a>
     );

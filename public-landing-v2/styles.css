@@ -532,6 +532,13 @@ h1, h2, h3, h4, h5 {
   background: var(--text-primary);
 }
 
+.nav-logo-img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  display: block;
+}
+
 .nav-links {
   display: flex;
   align-items: center;
