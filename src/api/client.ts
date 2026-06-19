@@ -304,6 +304,29 @@ export const casesApi = {
       method: 'POST',
       body: JSON.stringify({ sourceId }),
     }),
+
+  // ── synced from Oracle (required by Prototype.tsx) ──
+  create: (payload: Record<string, any>) =>
+    request<any>('/cases', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteInternalNote: (caseId: string, noteId: string) =>
+    request<any>(`/cases/${caseId}/internal-notes/${encodeURIComponent(noteId)}`, {
+      method: 'DELETE',
+    }),
+  patch: (id: string, payload: Record<string, any>) =>
+    request<any>(`/cases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  starCase:     (id: string) => request<any>(`/cases/${id}/star`, { method: 'PUT' }),
+  unstarCase:   (id: string) => request<any>(`/cases/${id}/star`, { method: 'DELETE' }),
+  isStarred:    (id: string) => request<{ starred: boolean }>(`/cases/${id}/star`).catch(() => ({ starred: false })),
+  updateTags:   (id: string, tags: string[], mode: 'add' | 'remove') =>
+    request<any>(`/cases/${id}/tags`, { method: 'POST', body: JSON.stringify({ tags, mode }) }),
+  updateInternalNote: (caseId: string, noteId: string, content: string) =>
+    request<any>(`/cases/${caseId}/internal-notes/${encodeURIComponent(noteId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content }),
+    }),
 };
 
 // ── Conversations ─────────────────────────────────────────
@@ -541,6 +564,14 @@ export const knowledgeApi = {
     }),
   listDomains: () => request<any>('/knowledge/domains').then(unwrapList),
   listPolicies: () => request<any>('/knowledge/policies').then(unwrapList),
+
+  // ── synced from Oracle (required by Prototype.tsx) ──
+  createDomain: (payload: { name: string; description?: string; parent_id?: string | null }) =>
+    request<any>('/knowledge/domains', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteDomain: (id: string) =>
+    request<any>(`/knowledge/domains/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  updateDomain: (id: string, payload: Record<string, any>) =>
+    request<any>(`/knowledge/domains/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
 };
 
 // ── Workflows ─────────────────────────────────────────────
@@ -757,6 +788,9 @@ export const iamApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+
+  // ── synced from Oracle (required by Prototype.tsx) ──
+  teams: () => request<any>('/iam/teams').then(unwrapList),
 };
 
 export const workspacesApi = {
@@ -852,6 +886,30 @@ export const reportsApi = {
     request<any>(`/reports/sla?${buildReportParams(period, channel, dateFrom, dateTo)}`),
   summary: (period = '7d', channel = 'all', audience = 'Executive / C-Suite') =>
     request<any>(`/reports/summary?${new URLSearchParams({ period, channel, audience }).toString()}`),
+
+  // ── synced from Oracle (required by Prototype.tsx) ──
+  articles: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/articles?${buildReportParams(period, channel)}`),
+  calls: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/calls?${buildReportParams(period, channel)}`),
+  conversations: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/conversations?${buildReportParams(period, channel)}`),
+  csat: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/csat?${buildReportParams(period, channel)}`),
+  effectiveness: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/effectiveness?${buildReportParams(period, channel)}`),
+  finagent: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/finagent?${buildReportParams(period, channel)}`),
+  outbound: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/outbound?${buildReportParams(period, channel)}`),
+  responsiveness: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/responsiveness?${buildReportParams(period, channel)}`),
+  teamInbox: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/team-inbox?${buildReportParams(period, channel)}`),
+  teammate: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/teammate?${buildReportParams(period, channel)}`),
+  tickets: (period = '30d', channel = 'all') =>
+    request<any>(`/reports/tickets?${buildReportParams(period, channel)}`),
 };
 
 export const operationsApi = {
@@ -1107,6 +1165,9 @@ export const macrosApi = {
   delete:  (id: string) => request<any>(`/macros/${id}`, { method: 'DELETE' }),
   execute: (id: string, payload?: { entity_type?: string; entity_id?: string }) =>
     request<any>(`/macros/${id}/execute`, { method: 'POST', body: JSON.stringify(payload ?? {}) }),
+
+  // ── synced from Oracle (required by Prototype.tsx) ──
+  recordUse: (id: string) => request<any>(`/macros/${encodeURIComponent(id)}/use`, { method: 'POST' }),
 };
 
 // ── Assignment Policies (B3) ──────────────────────────────
@@ -1146,6 +1207,10 @@ export const workingHoursApi = {
   update: (id: string, payload: Record<string, unknown>) =>
     request<any>(`/working-hours/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   delete: (id: string) => request<any>(`/working-hours/${id}`, { method: 'DELETE' }),
+
+  // ── synced from Oracle (required by Prototype.tsx) ──
+  upsert: (payload: Record<string, any>) =>
+    request<any>('/working-hours', { method: 'PUT', body: JSON.stringify(payload) }),
 };
 
 // ── Inboxes (C1 + C2) ─────────────────────────────────────
