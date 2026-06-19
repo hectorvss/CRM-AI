@@ -1,0 +1,187 @@
+// ── WADataSqlVarsView ──────────────────────────────────────────────────────────
+function WADataSqlVarsView() {
+  type SqlVarsView = 'list' | 'new';
+  const [view, setView] = useState<SqlVarsView>('list');
+  const [search, setSearch] = useState('');
+  const [varName, setVarName] = useState('');
+  const [varType, setVarType] = useState('String');
+  const [varDefault, setVarDefault] = useState('');
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const types = ['String', 'Number', 'Boolean', 'List', 'Date'];
+
+  // ── New variable view ──────────────────────────────────────────────────────
+  if (view === 'new') {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[#f3f3f1]">
+        {/* Top bar */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-5 h-12 bg-[#f3f3f1] border-b border-[#e9eae6]">
+          <button onClick={() => setView('list')} className="p-1 rounded hover:bg-[#e9eae6] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
+          <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Nueva variable</span>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#e9eae6] bg-[#f3f3f1]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+              Quick start
+            </button>
+            <button onClick={() => setView('list')} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#646462] hover:bg-[#e9eae6] bg-[#f3f3f1]">
+              Descartar cambios
+            </button>
+            <button className="h-7 px-4 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]">Guardar</button>
+          </div>
+        </div>
+
+        {/* Form body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-sm space-y-5">
+            {/* Name */}
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a]">
+                Nombre
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              </label>
+              <input
+                type="text"
+                value={varName}
+                onChange={e => setVarName(e.target.value)}
+                placeholder="ej., Fecha de inicio"
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+              />
+            </div>
+
+            {/* Type */}
+            <div className="space-y-1.5 relative">
+              <label className="block text-[13px] font-semibold text-[#1a1a1a]">Tipo</label>
+              <button
+                onClick={() => setShowTypeDropdown(d => !d)}
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white flex items-center justify-between hover:border-[#3b59f6] outline-none"
+              >
+                <span className="text-[#1a1a1a]">{varType}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+              </button>
+              {showTypeDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowTypeDropdown(false)}/>
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-[#e9eae6] rounded-lg shadow-lg z-50 overflow-hidden">
+                    {types.map(t => (
+                      <button
+                        key={t}
+                        onClick={() => { setVarType(t); setShowTypeDropdown(false); }}
+                        className={`w-full px-3 py-2 text-left text-[13px] hover:bg-[#fafaf9] ${t === varType ? 'bg-[#f3f3f1] font-medium text-[#1a1a1a]' : 'text-[#1a1a1a]'}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Default value */}
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-semibold text-[#1a1a1a]">Valor por defecto</label>
+              <input
+                type="text"
+                value={varDefault}
+                onChange={e => setVarDefault(e.target.value)}
+                placeholder="Introduce el valor por defecto"
+                className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── List view ──────────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Variables SQL</span>
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] cursor-pointer hover:fill-[#1a1a1a]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+        <div className="flex items-center gap-1.5 ml-2">
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+          <button
+            onClick={() => { setVarName(''); setVarType('String'); setVarDefault(''); setView('new'); }}
+            className="flex items-center gap-1.5 h-7 px-3 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Nueva variable
+          </button>
+        </div>
+      </div>
+
+      {/* Subtitle */}
+      <div className="flex-shrink-0 px-5 py-2.5 border-b border-[#e9eae6]">
+        <p className="text-[13px] text-[#646462]">
+          Crea variables reutilizables para tus consultas SQL. Usa variables para parametrizar tus consultas y hacerlas dinámicas.
+        </p>
+      </div>
+
+      {/* Search */}
+      <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6]">
+        <div className="relative w-56">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar variables..."
+            className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[#e9eae6] bg-white sticky top-0">
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  Nombre
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  Nombre en código
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-36">
+                <span className="flex items-center gap-1">
+                  Tipo
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+                </span>
+              </th>
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-44">Valor por defecto</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-[#e9eae6]">
+              <td colSpan={4} className="px-5 py-4 text-[13px] text-[#646462]">
+                No hay variables aún.{' '}
+                <button
+                  onClick={() => { setVarName(''); setVarType('String'); setVarDefault(''); setView('new'); }}
+                  className="text-[#e8572a] hover:underline"
+                >
+                  Crea tu primera variable para empezar.
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+

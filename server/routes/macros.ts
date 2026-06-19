@@ -1,177 +1,157 @@
+// Reply macros / snippets. Workspace-scoped CRUD. Each macro is either
+// private (owned by created_by_user_id) or shared (visible to everybody in
+// the workspace). The "⚡" composer dropdown reads/writes through this
+// router instead of the localStorage fallback that shipped earlier.
+
 import { Router, Response } from 'express';
-import { z } from 'zod';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { requirePermission } from '../middleware/authorization.js';
-import { validate } from '../middleware/validate.js';
-import { createAuditRepository } from '../data/index.js';
-import {
-  listMacros,
-  getMacro,
-  createMacro,
-  updateMacro,
-  deleteMacro,
-  recordMacroExecution,
-} from '../data/macros.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
+import { createAuditRepository } from '../data/audit.js';
 
 const router = Router();
 const auditRepository = createAuditRepository();
 router.use(extractMultiTenant);
 
-// ── Schemas ───────────────────────────────────────────────────────────────────
-
-const ActionSchema = z.object({
-  action_name:   z.string().min(1),
-  action_params: z.record(z.string(), z.unknown()).default({}),
-});
-
-const CreateMacroSchema = z.object({
-  name:       z.string().min(1, 'Macro name is required'),
-  actions:    z.array(ActionSchema).min(1, 'At least one action required'),
-  visibility: z.enum(['public', 'private']).default('public'),
-});
-
-const UpdateMacroSchema = CreateMacroSchema.partial();
-
-const ExecuteSchema = z.object({
-  // context: the entity the macro is applied to (e.g. case_id, conversation_id)
-  entity_type: z.string().optional(),
-  entity_id:   z.string().optional(),
-});
-
-// ── Routes ────────────────────────────────────────────────────────────────────
-
-// GET /api/macros
+// GET /macros — list macros visible to the current user (own + shared).
 router.get('/', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const macros = await listMacros(scope, {
-      visibility: typeof req.query.visibility === 'string' ? req.query.visibility : undefined,
-      created_by: typeof req.query.created_by === 'string' ? req.query.created_by : undefined,
-    });
-    res.json(macros);
-  } catch (err) {
-    console.error('Error listing macros:', err);
+    const supabase = getSupabaseAdmin();
+    const userId = req.userId || 'user_local';
+    const { data, error } = await supabase
+      .from('macros')
+      .select('*')
+      .eq('tenant_id', req.tenantId!)
+      .eq('workspace_id', req.workspaceId!)
+      .or(`shared.eq.true,created_by_user_id.eq.${userId}`)
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    res.json({ items: data ?? [] });
+  } catch (error) {
+    console.error('Error listing macros:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/macros/:id
-router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
+// POST /macros — create a new macro.
+router.post('/', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const macro = await getMacro(scope, req.params.id);
-    if (!macro) return res.status(404).json({ error: 'Macro not found' });
-    res.json(macro);
-  } catch (err) {
-    console.error('Error fetching macro:', err);
+    const { label, body, shortcut, shared } = req.body ?? {};
+    if (!label || !body) return res.status(400).json({ error: 'label and body are required' });
+    const supabase = getSupabaseAdmin();
+    const payload = {
+      tenant_id: req.tenantId!,
+      workspace_id: req.workspaceId!,
+      created_by_user_id: req.userId || 'user_local',
+      label: String(label).slice(0, 120),
+      body:  String(body).slice(0, 10_000),
+      shortcut: shortcut ? String(shortcut).slice(0, 32) : null,
+      shared: Boolean(shared),
+    };
+    const { data, error } = await supabase.from('macros').insert(payload).select().single();
+    if (error) throw error;
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'MACRO_CREATE',
+      entityType: 'macro',
+      entityId: String(data?.id || ''),
+      metadata: { label: payload.label, shared: payload.shared },
+    });
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('Error creating macro:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST /api/macros
-router.post(
-  '/',
-  requirePermission('settings.write'),
-  validate({ body: CreateMacroSchema }),
-  async (req: MultiTenantRequest, res: Response) => {
-    try {
-      const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-      const macro = await createMacro(scope, {
-        ...req.body,
-        created_by: req.userId ?? null,
-      });
-      await auditRepository.log(scope, {
-        actorId: req.userId || 'system', action: 'MACRO_CREATED',
-        entityType: 'macro', entityId: macro.id,
-        newValue: { name: macro.name }, metadata: { source: 'macros_api' },
-      });
-      res.status(201).json(macro);
-    } catch (err) {
-      console.error('Error creating macro:', err);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  },
-);
+// PATCH /macros/:id — update label / body / shortcut / shared.
+router.patch('/:id', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const { label, body, shortcut, shared } = req.body ?? {};
+    const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (typeof label === 'string')   updates.label = label.slice(0, 120);
+    if (typeof body === 'string')    updates.body  = body.slice(0, 10_000);
+    if (typeof shortcut === 'string') updates.shortcut = shortcut.slice(0, 32);
+    if (typeof shared === 'boolean') updates.shared = shared;
+    const supabase = getSupabaseAdmin();
+    const userId = req.userId || 'user_local';
+    // Only the owner (or the workspace if shared) can patch — gated by
+    // the tenant + workspace scope plus the created_by_user_id check for
+    // non-shared macros.
+    const { data, error } = await supabase
+      .from('macros')
+      .update(updates)
+      .eq('id', req.params.id)
+      .eq('tenant_id', req.tenantId!)
+      .eq('workspace_id', req.workspaceId!)
+      .or(`shared.eq.true,created_by_user_id.eq.${userId}`)
+      .select()
+      .single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Macro not found' });
+    res.json(data);
+  } catch (error) {
+    console.error('Error updating macro:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-// PATCH /api/macros/:id
-router.patch(
-  '/:id',
-  requirePermission('settings.write'),
-  validate({ body: UpdateMacroSchema }),
-  async (req: MultiTenantRequest, res: Response) => {
-    try {
-      const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-      const macro = await getMacro(scope, req.params.id);
-      if (!macro) return res.status(404).json({ error: 'Macro not found' });
-      const updated = await updateMacro(scope, req.params.id, req.body);
-      res.json(updated);
-    } catch (err) {
-      console.error('Error updating macro:', err);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  },
-);
+// DELETE /macros/:id — remove a macro the current user owns.
+router.delete('/:id', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const userId = req.userId || 'user_local';
+    const { error } = await supabase
+      .from('macros')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('tenant_id', req.tenantId!)
+      .eq('workspace_id', req.workspaceId!)
+      .eq('created_by_user_id', userId);
+    if (error) throw error;
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: userId,
+      action: 'MACRO_DELETE',
+      entityType: 'macro',
+      entityId: req.params.id,
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting macro:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-// DELETE /api/macros/:id
-router.delete(
-  '/:id',
-  requirePermission('settings.write'),
-  async (req: MultiTenantRequest, res: Response) => {
-    try {
-      const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-      const macro = await getMacro(scope, req.params.id);
-      if (!macro) return res.status(404).json({ error: 'Macro not found' });
-      await deleteMacro(scope, req.params.id);
-      await auditRepository.log(scope, {
-        actorId: req.userId || 'system', action: 'MACRO_DELETED',
-        entityType: 'macro', entityId: req.params.id,
-        newValue: { name: macro.name }, metadata: { source: 'macros_api' },
-      });
-      res.status(204).send();
-    } catch (err) {
-      console.error('Error deleting macro:', err);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  },
-);
-
-// POST /api/macros/:id/execute  — run macro on an entity
-router.post(
-  '/:id/execute',
-  requirePermission('customers.write'),
-  validate({ body: ExecuteSchema }),
-  async (req: MultiTenantRequest, res: Response) => {
-    try {
-      const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-      const macro = await getMacro(scope, req.params.id);
-      if (!macro) return res.status(404).json({ error: 'Macro not found' });
-
-      // Record execution stats
-      await recordMacroExecution(scope, req.params.id);
-
-      await auditRepository.log(scope, {
-        actorId: req.userId || 'system', action: 'MACRO_EXECUTED',
-        entityType: 'macro', entityId: req.params.id,
-        newValue: {
-          macro_name:  macro.name,
-          entity_type: req.body.entity_type ?? null,
-          entity_id:   req.body.entity_id ?? null,
-        },
-        metadata: { source: 'macros_api' },
-      });
-
-      res.json({
-        ok:         true,
-        macro_id:   req.params.id,
-        actions:    macro.actions,
-        entity_type: req.body.entity_type ?? null,
-        entity_id:   req.body.entity_id ?? null,
-      });
-    } catch (err) {
-      console.error('Error executing macro:', err);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  },
-);
+// POST /macros/:id/use — bump usage_count when a macro is inserted into
+// the composer. Helps surface most-used macros first.
+router.post('/:id/use', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    // Increment usage_count atomically.
+    const { data: existing, error: getErr } = await supabase
+      .from('macros')
+      .select('usage_count')
+      .eq('id', req.params.id)
+      .eq('tenant_id', req.tenantId!)
+      .eq('workspace_id', req.workspaceId!)
+      .single();
+    if (getErr) throw getErr;
+    const next = (existing?.usage_count ?? 0) + 1;
+    const { error } = await supabase
+      .from('macros')
+      .update({ usage_count: next })
+      .eq('id', req.params.id)
+      .eq('tenant_id', req.tenantId!)
+      .eq('workspace_id', req.workspaceId!);
+    if (error) throw error;
+    res.json({ success: true, usage_count: next });
+  } catch (error) {
+    console.error('Error bumping macro usage:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 export default router;

@@ -1,0 +1,83 @@
+            {tab === 'bot' && (() => {
+              const USER_FIELDS = [
+                { name: 'Name', desc: "A person's full name" },
+                { name: 'Email', desc: 'The email address assigned to a user or lead' },
+                { name: 'Phone', desc: "A person's phone number" },
+              ];
+              const COMPANY_FIELDS = [
+                { name: 'Company name', desc: 'The name of a company' },
+                { name: 'Company size', desc: 'The number of people employed in this company, expressed as a single number' },
+                { name: 'Company website', desc: "The web address for the company's primary marketing site" },
+                { name: 'Company industry', desc: "The category or domain this company belongs to e.g. 'ecommerce' or 'SaaS'" },
+              ];
+              const filteredUser = USER_FIELDS.filter(f => !botFields.some(b => b.name === f.name) && f.name.toLowerCase().includes(addSearch.toLowerCase()));
+              const filteredCompany = COMPANY_FIELDS.filter(f => !botFields.some(b => b.name === f.name) && f.name.toLowerCase().includes(addSearch.toLowerCase()));
+              return (
+                <div className="px-6 py-4 flex gap-6 relative">
+                  <div className="flex-1">
+                    <p className="text-[13px] text-[#646462] mb-2">Elige los datos que deseas usar para calificar a los clientes potenciales. Estos datos aparecerán en los perfiles de los clientes en Inbox, y también puedes recopilarlos con Automatización.</p>
+                    <a href="#" className="text-[13px] text-[#3b59f6] underline">Ver el Bot de Tareas de cualificación básica</a>
+                    <div className="mt-4 flex flex-col">
+                      {botFields.map(f => (
+                        <div key={f.name} className="flex items-center justify-between py-2.5 px-0 border-b border-[#f3f3f1] text-[13px]">
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium text-[#1a1a1a] w-[130px]">{f.name}</span>
+                            <span className="text-[#646462]">{f.desc}</span>
+                          </div>
+                          <button onClick={() => setBotFields(prev => prev.filter(b => b.name !== f.name))} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#f3f3f1] ml-2 flex-shrink-0">
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="relative mt-4">
+                      <button ref={addBtnRef} onClick={() => { setShowAddPopover(v => !v); setAddSearch(''); }} className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Agregar datos</button>
+                      {showAddPopover && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowAddPopover(false)} />
+                          <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[280px] bg-white rounded-[10px] shadow-[0_4px_24px_rgba(0,0,0,0.15)] border border-[#e9eae6] overflow-hidden">
+                            <div className="px-3 py-2 border-b border-[#f3f3f1]">
+                              <input autoFocus value={addSearch} onChange={e => setAddSearch(e.target.value)} placeholder="Search data..." className="w-full text-[13px] px-2 py-1.5 rounded-[6px] bg-[#f7f7f5] border border-transparent focus:outline-none focus:border-[#3b59f6] placeholder:text-[#aaa]" />
+                            </div>
+                            <div className="max-h-[280px] overflow-y-auto">
+                              {filteredUser.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-[#aaa] uppercase tracking-wide px-3 pt-2 pb-1">Datos del usuario</p>
+                                  {filteredUser.map(f => (
+                                    <button key={f.name} onClick={() => { setBotFields(prev => [...prev, f]); setShowAddPopover(false); setAddSearch(''); }} className="w-full text-left px-3 py-2 text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex flex-col gap-0.5">
+                                      <span className="font-medium">{f.name}</span>
+                                      <span className="text-[11px] text-[#aaa] line-clamp-1">{f.desc}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {filteredCompany.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-[#aaa] uppercase tracking-wide px-3 pt-2 pb-1">Datos de la empresa</p>
+                                  {filteredCompany.map(f => (
+                                    <button key={f.name} onClick={() => { setBotFields(prev => [...prev, f]); setShowAddPopover(false); setAddSearch(''); }} className="w-full text-left px-3 py-2 text-[13px] text-[#1a1a1a] hover:bg-[#f7f7f5] flex flex-col gap-0.5">
+                                      <span className="font-medium">{f.name}</span>
+                                      <span className="text-[11px] text-[#aaa] line-clamp-1">{f.desc}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {filteredUser.length === 0 && filteredCompany.length === 0 && (
+                                <p className="text-[13px] text-[#aaa] px-3 py-3">No se encontraron datos</p>
+                              )}
+                            </div>
+                            <div className="border-t border-[#f3f3f1] px-3 py-2">
+                              <button className="text-[13px] text-[#3b59f6] hover:underline w-full text-left">+ Crear nuevos datos</button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-[#646462] mt-3">Cambiar esta configuración modificará los datos de calificación visibles en todos los perfiles de usuarios y leads.</p>
+                  </div>
+                  <div className="w-[208px] flex-shrink-0 flex items-center justify-center">
+                    <img src={IMG_QUALIFICATION} alt="Vista previa del perfil de calificación" className="w-[208px] h-[299px]" data-node-id="1:37921" />
+                  </div>
+                </div>
+              );
+            })()}

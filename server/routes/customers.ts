@@ -127,12 +127,8 @@ router.patch('/:id', requirePermission('customers.write'), async (req: MultiTena
     const ALLOWED_FIELDS = [
       'segment', 'risk_level', 'preferred_channel', 'fraud_flag',
       'canonical_name', 'canonical_email', 'phone',
-      // A2: contact funnel stage
-      'contact_type',
-      // A3: custom attributes (full replace)
-      'custom_attributes',
-      // A1: link to company
-      'company_id',
+      'notes', 'tags',
+      'contact_type', 'custom_attributes', 'company_id',
     ];
     const body = req.body ?? {};
     const updates: Record<string, any> = {};

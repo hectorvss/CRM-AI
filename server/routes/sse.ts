@@ -167,6 +167,52 @@ function promoteSseQueryToken(req: MultiTenantRequest, _res: Response, next: Nex
 router.use(promoteSseQueryToken);
 router.use(extractMultiTenant);
 
+// GET /api/sse/case-events — live stream of case mutations for the inbox.
+// Same plumbing as /agent-runs, just a separate event taxonomy
+// (case:created, case:updated, case:reply, case:note_added).
+router.get('/case-events', (req: MultiTenantRequest, res: Response) => {
+  const tenantId = req.tenantId ?? 'org_default';
+  const workspaceId = req.workspaceId ?? null;
+  const lastEventId = Number(req.headers['last-event-id'] ?? 0) || 0;
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write('retry: 5000\n\n');
+
+  const connected = bufferEvent(tenantId, 'case:connected', { tenantId, workspaceId }, workspaceId);
+  res.write(formatEvent(connected));
+
+  if (lastEventId > 0) {
+    const bufferedEvents = eventBuffers.get(tenantId) ?? [];
+    for (const bufferedEvent of bufferedEvents) {
+      if (bufferedEvent.id <= lastEventId) continue;
+      if (!bufferedEvent.event.startsWith('case:')) continue;
+      if (workspaceId && bufferedEvent.workspaceId && bufferedEvent.workspaceId !== workspaceId) continue;
+      try {
+        res.write(formatEvent(bufferedEvent));
+      } catch {
+        break;
+      }
+    }
+  }
+
+  const client = addClient(tenantId, workspaceId, res);
+
+  const keepAlive = setInterval(() => {
+    try { res.write(': keepalive\n\n'); }
+    catch { clearInterval(keepAlive); }
+  }, 30_000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    removeClient(client.id);
+  });
+});
+
 router.get('/agent-runs', (req: MultiTenantRequest, res: Response) => {
   const tenantId = req.tenantId ?? 'org_default';
   const workspaceId = req.workspaceId ?? null;

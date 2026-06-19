@@ -1,0 +1,347 @@
+  // ── AccountCustomizationPage ──────────────────────────────────────────────
+  function AccountCustomizationPage() {
+    const [anonymize, setAnonymize] = useState(false);
+    const [suggestApps, setSuggestApps] = useState(true);
+    const [hedgehogEnabled, setHedgehogEnabled] = useState(false);
+    const [hedgehogProfile, setHedgehogProfile] = useState(false);
+    const [selectedColor, setSelectedColor] = useState(0);
+    const [selectedHeadwear, setSelectedHeadwear] = useState<number|null>(null);
+    const [selectedEyewear, setSelectedEyewear] = useState<number|null>(null);
+    const [selectedOther, setSelectedOther] = useState<number|null>(null);
+    const [selectedSkin, setSelectedSkin] = useState(0);
+    const [freeRoam, setFreeRoam] = useState(true);
+    const [keyboardControls, setKeyboardControls] = useState(true);
+
+    const colorPalette = ['#8B4513','#4a7c2f','#e05c8a','#4488cc','#9966cc','#7a6a5a','#c4b06a','#888888','#c8a84b','#3399aa','#6b6b6b'];
+    const headwearPalette = ['#6b8cba','#5a8a4a','#f0f0f0','#c49a2e','#7ab3cc','#c85a2a','#cc8844','#7ab870','#333333','#e05c5c','#8B6914'];
+    const eyewearPalette = ['#cc7733','#6699aa','#333333'];
+    const otherPalette = ['#8B4513','#cc6666'];
+    const skinPalette = ['#8B4513','#cc3333','#4488ff','#66aa44','#f0f0f0'];
+
+    const Dot = ({ color, selected, onClick, square }: { color: string; selected?: boolean; onClick?: () => void; square?: boolean }) => (
+      <div
+        onClick={onClick}
+        className={`w-11 h-11 cursor-pointer flex-shrink-0 ${square ? 'rounded-lg' : 'rounded-full'} ${selected ? 'ring-2 ring-[#3b59f6] ring-offset-1' : ''}`}
+        style={{ backgroundColor: color }}
+      />
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-8">
+
+          {/* Theme */}
+          <div className="space-y-3">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tema</h2>
+            <button className="flex items-center gap-2 h-9 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+              <svg viewBox="0 0 16 16" className="w-4 h-4"><circle cx="8" cy="8" r="2.5" fill="#f59e0b"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M3.2 12.8l1-1M11.8 4.2l1-1" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              Modo claro
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+            </button>
+          </div>
+
+          {/* Anonymize data */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Anonimizar recopilación de datos</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Clain usa Clain para capturar información sobre cómo las personas usan el producto. Anonimiza tus datos de uso si prefieres no compartirlos.</p>
+            <Toggle label="Anonimizar mis datos" checked={anonymize} onChange={setAnonymize} />
+          </div>
+
+          {/* Suggest new apps */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Sugerir nuevas aplicaciones automáticamente</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Cuando detectamos que estás usando un nuevo producto, lo añadiremos automáticamente a tu barra lateral como sugerencia. También podemos sugerir productos relacionados cuando lancemos uno nuevo.</p>
+            <Toggle label="Sugerir nuevas aplicaciones automáticamente" checked={suggestApps} onChange={setSuggestApps} />
+          </div>
+
+          {/* Hedgehog / mascot mode */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Modo mascota</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Activa la mascota de Clain que te acompaña por la aplicación.</p>
+            <div className="flex items-center gap-6">
+              <Toggle label="Activar modo mascota" checked={hedgehogEnabled} onChange={setHedgehogEnabled} />
+              <Toggle label="Usar como foto de perfil" checked={hedgehogProfile} onChange={setHedgehogProfile} />
+            </div>
+
+            {/* Mascot card */}
+            <div className="border border-[#e9eae6] rounded-[12px] p-5 space-y-5">
+              {/* Character intro */}
+              <div className="flex items-start gap-4">
+                <div className="w-16 h-16 rounded-lg bg-[#5a3e1b] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <div className="w-14 h-14 rounded-full bg-[#c49a6c] flex items-center justify-center">
+                    <span className="text-[10px] font-black text-[#5a3e1b] tracking-tighter select-none">CLN</span>
+                  </div>
+                </div>
+                <div className="font-mono text-[13px] space-y-1">
+                  <p className="font-bold text-[#1a1a1a]">hola, soy Clain!</p>
+                  <p className="text-[#646462]">no me hagas caso. solo estoy aquí para acompañarte.</p>
+                  <p className="text-[#646462]">puedes moverme haciendo clic y arrastrándome o controlarme con WASD / flechas.</p>
+                </div>
+              </div>
+
+              {/* options */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">opciones</p>
+                <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a]">
+                  <input type="checkbox" checked={freeRoam} onChange={e => setFreeRoam(e.target.checked)} className="w-4 h-4 accent-[#3b59f6] rounded"/>
+                  Libre movimiento
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1a1a1a] mt-1">
+                  <input type="checkbox" checked={keyboardControls} onChange={e => setKeyboardControls(e.target.checked)} className="w-4 h-4 accent-[#3b59f6] rounded"/>
+                  Controles de teclado (WASD / flechas)
+                </label>
+              </div>
+
+              {/* friends */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">amigos</p>
+                <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">Añadir amigo</button>
+              </div>
+
+              {/* colors */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">colores</p>
+                <div className="flex flex-wrap gap-2">
+                  {colorPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedColor === i} onClick={() => setSelectedColor(i)} />
+                  ))}
+                </div>
+              </div>
+
+              {/* headwear */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">tocados</p>
+                <div className="flex flex-wrap gap-2">
+                  {headwearPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedHeadwear === i} onClick={() => setSelectedHeadwear(selectedHeadwear === i ? null : i)} />
+                  ))}
+                </div>
+              </div>
+
+              {/* eyewear */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">gafas</p>
+                <div className="flex flex-wrap gap-2">
+                  {eyewearPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedEyewear === i} onClick={() => setSelectedEyewear(selectedEyewear === i ? null : i)} />
+                  ))}
+                </div>
+              </div>
+
+              {/* other */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">otros</p>
+                <div className="flex flex-wrap gap-2">
+                  {otherPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedOther === i} onClick={() => setSelectedOther(selectedOther === i ? null : i)} />
+                  ))}
+                </div>
+              </div>
+
+              {/* skins */}
+              <div>
+                <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-widest mb-2">pieles</p>
+                <div className="flex flex-wrap gap-2">
+                  {skinPalette.map((c, i) => (
+                    <Dot key={i} color={c} selected={selectedSkin === i} onClick={() => setSelectedSkin(i)} square />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Customization IRL */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Personalización fuera de la app</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">
+              Consigue <a href="#" className="text-[#e8572a] hover:underline">merchandising de Clain ↗</a> para personalizarte fuera de la app.
+            </p>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccountPreviewsPage ───────────────────────────────────────────────────
+  function AccountPreviewsPage() {
+    const [search, setSearch] = useState('');
+    const [flags, setFlags] = useState<Record<string, boolean>>({});
+    const toggle = (k: string) => setFlags(f => ({ ...f, [k]: !f[k] }));
+
+    const features: { id: string; title: string; desc: string; warning?: string; links?: string[] }[] = [
+      {
+        id: 'feature-flag-notifs',
+        title: 'Notificaciones de feature flags',
+        desc: 'Las organizaciones con planes Scale o Enterprise pueden configurar notificaciones de Slack, Discord, Teams y webhook cuando se crea, cambia o elimina un feature flag.',
+        warning: 'Esta función requiere el plan Enterprise o el complemento Scale. Activar la vista previa no la desbloqueará en tu plan actual.',
+      },
+      {
+        id: 'user-group-targeting',
+        title: 'Targeting de usuario y grupo',
+        desc: 'Los Feature Flags evalúan contra una entidad para decidir qué valor devolver. Por defecto, esa entidad es un usuario (identificado por su distinct ID), pero también puedes hacer targeting de grupos como organizaciones, empresas o equipos. Con targeting mixto, puedes combinar ambos en un solo flag.',
+        links: ['Saber más', 'Dar feedback'],
+      },
+      {
+        id: 'anomaly-alerts',
+        title: 'Alertas de detección de anomalías',
+        desc: 'Detectores de anomalías para alertar más allá de simples alertas de umbral.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'llm-prompts',
+        title: 'Prompts de análisis LLM',
+        desc: 'Lanzamos una función donde puedes definir prompts LLM en la interfaz de Clain e importarlos dinámicamente en tu código, para experimentación y ediciones sencillas.',
+        links: ['Saber más', 'Dar feedback'],
+      },
+      {
+        id: 'llma-feedback',
+        title: 'Feedback de usuario LLMA',
+        desc: 'Sin descripción.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'revenue-analytics-prev',
+        title: 'Revenue Analytics',
+        desc: 'Consulta tu MRR, ARR, tasa de crecimiento, tasa de abandono, riesgo de abandono, etc. de un vistazo desde una interfaz estandarizada. Todo lo que necesitas para tener bien las métricas de tu empresa.',
+        links: ['Saber más', 'Dar feedback'],
+      },
+      {
+        id: 'vim-mode',
+        title: 'Modo Vim para el Editor SQL',
+        desc: 'Lo que dice el nombre, básicamente.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'access-redesign',
+        title: 'Rediseño del control de acceso',
+        desc: 'Una experiencia de control de acceso más ágil y directa.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'feature-flags-v2',
+        title: 'feature-flags-v2',
+        desc: 'Nueva interfaz para la edición de feature flags + experiencia de solo lectura.',
+        links: ['Dar feedback'],
+      },
+      {
+        id: 'eval-contexts',
+        title: 'Contextos de evaluación',
+        desc: 'Los contextos de evaluación proporcionan un control detallado sobre dónde y cuándo evalúan tus feature flags. Al restringir la evaluación de flags a contextos específicos, puedes reducir evaluaciones innecesarias, optimizar costes y organizar mejor tu estrategia de gestión de flags.',
+        links: ['Saber más', 'Dar feedback'],
+      },
+    ];
+
+    const filtered = features.filter(f =>
+      !search || f.title.toLowerCase().includes(search.toLowerCase()) || f.desc.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Previsualizaciones de funciones</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Prueba las próximas funciones de Clain antes de que estén disponibles para todos. Activar una vista previa la habilita solo para tu cuenta.</p>
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 1a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM0 6.5a6.5 6.5 0 1111.6 4l3.2 3.2a1 1 0 01-1.4 1.4L10.1 12A6.5 6.5 0 010 6.5z"/></svg>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar previsualizaciones de funciones..."
+              className="w-full h-9 pl-9 pr-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+            />
+          </div>
+
+          {/* Feature list */}
+          <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden divide-y divide-[#e9eae6]">
+            {filtered.map(f => (
+              <div key={f.id} className="p-4 space-y-2 bg-white">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggle(f.id)}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${flags[f.id] ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${flags[f.id] ? 'translate-x-4' : 'translate-x-0.5'}`}/>
+                  </button>
+                  <span className="text-[14px] font-bold text-[#1a1a1a]">{f.title}</span>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+                </div>
+                <p className="text-[13px] text-[#646462] leading-relaxed">{f.desc}</p>
+                {f.warning && (
+                  <div className="flex items-start gap-2 bg-[#fef9e7] border border-[#f59e0b]/40 rounded-lg px-3 py-2.5">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#f59e0b] flex-shrink-0 mt-0.5"><path d="M8 2L1 14h14L8 2zm0 4v4m0 2v1.5" stroke="white" strokeWidth="0.5" strokeLinecap="round"/></svg>
+                    <p className="text-[13px] text-[#1a1a1a]">{f.warning}</p>
+                  </div>
+                )}
+                {f.links && f.links.length > 0 && (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {f.links.map((l, i) => (
+                      <span key={l} className="flex items-center gap-1">
+                        <a href="#" className="text-[13px] text-[#e8572a] hover:underline">{l}{l === 'Saber más' ? ' ↗' : ''}</a>
+                        {i < (f.links?.length ?? 0) - 1 && <span className="text-[#646462] mx-0.5">•</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccountIntegrationsPage ───────────────────────────────────────────────
+  function AccountIntegrationsPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Integraciones personales</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Tus integraciones personales de GitHub para acceso a repositorios, atribución de código y autoría de pull requests.</p>
+            <p className="text-[13px] text-[#646462]">Puedes conectar múltiples cuentas u organizaciones de GitHub.</p>
+          </div>
+
+          <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            {/* Empty state */}
+            <div className="flex flex-col items-center gap-3 py-10 px-6 text-center">
+              <svg viewBox="0 0 24 24" className="w-9 h-9 fill-[#999]"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85.004 1.7.115 2.5.337 1.9-1.29 2.74-1.02 2.74-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin instalaciones de GitHub conectadas aún</h3>
+              <p className="text-[13px] text-[#646462] max-w-lg">Conéctate para que Clain pueda acceder a tus repositorios, atribuir commits, abrir pull requests y asignarte issues. Puedes añadir múltiples instalaciones para diferentes cuentas u organizaciones.</p>
+            </div>
+            {/* Connect button row */}
+            <div className="border-t border-[#e9eae6] px-4 py-3 flex items-center gap-3 flex-wrap bg-[#fafaf9]">
+              <button className="flex items-center gap-1.5 h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+                + Conectar GitHub
+              </button>
+              <p className="text-[13px] text-[#646462]">
+                Atención: si el botón <strong>Guardar</strong> de GitHub aparece desactivado, alterna entre <strong>Todos los repositorios</strong> y <strong>Solo repositorios seleccionados</strong> para continuar.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+

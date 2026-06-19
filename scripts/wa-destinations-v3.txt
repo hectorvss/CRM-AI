@@ -1,0 +1,454 @@
+// ── WADataDestinationsView ────────────────────────────────────────────────────
+function WADataDestinationsView() {
+  type DestTab = 'all' | 'history';
+  const [tab, setTab] = useState<DestTab>('all');
+  const [selected, setSelected] = useState<string | null>(null);
+  const [newSearch, setNewSearch] = useState('');
+  const [includeAllProps, setIncludeAllProps] = useState(false);
+  const [destOn, setDestOn] = useState(true);
+  const [filterInternal, setFilterInternal] = useState(true);
+  const [matchers, setMatchers] = useState(['Identificar', 'Establecer propiedades de persona']);
+  const [propMappings, setPropMappings] = useState([
+    { k: 'name', v: "{f'{person.properties.first_name} {person.properties.last_name}' == ' ' ? null : f'{person.properties..." },
+    { k: 'phone', v: '{person.properties.phone}' },
+    { k: 'last_seen_at', v: '{toUnixTimestamp(event.timestamp)}' },
+  ]);
+  const [customMappings, setCustomMappings] = useState<{k:string;v:string}[]>([]);
+
+  type DestTemplate = {
+    key: string; name: string; desc: string;
+    badge?: 'Beta' | 'Experimental';
+    logo: React.ReactNode;
+  };
+
+  const templates: DestTemplate[] = [
+    { key:'activecampaign', name:'ActiveCampaign', badge:'Beta', desc:'Crea un nuevo contacto en ActiveCampaign cuando se dispara un evento.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#356AE6"/><path d="M8 22l8-14 4 7 3-4 5 7H8z" fill="white"/></svg> },
+    { key:'airtable', name:'Airtable', badge:'Beta', desc:'Crea registros en Airtable.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#18BFFF"/><path d="M7 12l9-4 9 4-9 4-9-4z" fill="white"/><path d="M16 16l9-4v8l-9 4V16z" fill="#FCB400"/><path d="M7 12v8l8 4v-8l-8-4z" fill="white" opacity=".7"/></svg> },
+    { key:'attio', name:'Attio', badge:'Beta', desc:'Crea y actualiza contactos en Attio.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M8 22l8-14 8 14H8zm8-10l4 7H12l4-7z" fill="white"/></svg> },
+    { key:'avo', name:'Avo', badge:'Beta', desc:'Envía eventos a Avo.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#CC3BE7"/><path d="M10 24l6-16 6 16H10zm6-11l3 8H13l3-8z" fill="white"/></svg> },
+    { key:'awskinesis', name:'AWS Kinesis', badge:'Beta', desc:'Envía datos a un stream de AWS Kinesis.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#8C4FFF"/><path d="M10 16a6 6 0 016-6v3a3 3 0 100 6v3a6 6 0 01-6-6z" fill="white"/><path d="M16 10a6 6 0 016 6h-3a3 3 0 10-3 3v3a6 6 0 010-12z" fill="white" opacity=".5"/></svg> },
+    { key:'azureblob', name:'Azure Blob Storage', badge:'Beta', desc:'Exportación por lotes a Azure Blob Storage.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#0078D4"/><path d="M7 23l7-12 4 7-3 2 5 3H7zm9-12l5 12h-4l-5-9 4-3z" fill="white"/></svg> },
+    { key:'bigquery', name:'BigQuery', desc:'Exportación por lotes a BigQuery.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#fff" stroke="#e9eae6"/><path d="M16 4l9 5.2v10.4L16 25 7 19.6V9.2L16 4z" fill="#4285F4"/><path d="M16 4v21l9-5.4V9.2L16 4z" fill="#1967D2"/><circle cx="16" cy="19" r="3.5" fill="white"/></svg> },
+    { key:'braze', name:'Braze', badge:'Beta', desc:'Envía eventos a Braze.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M9 9h8.5a5.5 5.5 0 010 11H9V9zm3 3v5h5.5a2.5 2.5 0 000-5H12z" fill="white"/><circle cx="9" cy="23" r="2" fill="#09B3AF"/></svg> },
+    { key:'brevo', name:'Brevo', desc:'Actualiza contactos en Brevo.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#0092FF"/><path d="M9 9h9a5 5 0 012.5 9.3A5 5 0 0117 27H9V9zm3 3v4.5h6a2 2 0 000-4.5H12zm0 7v4.5h5a2 2 0 000-4.5H12z" fill="white"/></svg> },
+    { key:'clearbit', name:'Clearbit', badge:'Beta', desc:'Enriquece datos de personas con la API de Clearbit.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#3F72F8"/><path d="M16 8a8 8 0 100 16A8 8 0 0016 8zm0 3a5 5 0 110 10A5 5 0 0116 11zm0 2a3 3 0 100 6 3 3 0 000-6z" fill="white"/></svg> },
+    { key:'customerio', name:'Customer.io', desc:'Identifica o rastrea eventos en Customer.io.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#F6C244"/><path d="M16 8a8 8 0 100 16 8 8 0 000-16zm0 13a5 5 0 110-10 5 5 0 010 10z" fill="#1a1a1a"/><circle cx="16" cy="16" r="2" fill="#1a1a1a"/><rect x="22" y="13" width="3" height="6" rx="1.5" fill="#1a1a1a"/></svg> },
+    { key:'databricks', name:'Databricks', badge:'Beta', desc:'Exportación por lotes a Databricks.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF3621"/><path d="M16 5l11 6v5l-11 6-11-6V11l11-6zm0 3L8 12l8 4 8-4-8-4zm-9 6v3l9 5 9-5v-3l-9 5-9-5z" fill="white"/></svg> },
+    { key:'discord', name:'Discord', desc:'Envía un mensaje a un canal de Discord.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#5865F2"/><path d="M22 10.5s-2.5-.9-5-1c-.2.5-.5 1-.7 1.5-1-.1-2-.1-3 0-.2-.5-.5-1-.7-1.5-2.5.1-5 1-5 1-3 5.2-3.8 10.3-3.5 14.2 2 1.5 4.8 2.3 4.8 2.3l1-1.5c-.8-.3-1.6-.7-2.2-1.2l.5-.5c2.4 1.3 5.3 1.3 7.8 0l.5.5c-.7.5-1.5.9-2.3 1.2l1 1.5s2.8-.8 4.8-2.3c.3-4-.4-9-3-14.2z" fill="white"/><circle cx="13" cy="19" r="1.5" fill="#5865F2"/><circle cx="19" cy="19" r="1.5" fill="#5865F2"/></svg> },
+    { key:'hubspot', name:'HubSpot', desc:'Sincroniza contactos y eventos con HubSpot CRM.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF7A59"/><path d="M18 11.5V8.7a1.5 1.5 0 001-1.4v-.05a1.5 1.5 0 00-3 0v.05a1.5 1.5 0 001 1.4v2.8A6 6 0 0011 17.5a6 6 0 1011.5 0A6 6 0 0018 11.5zm-1.5 9a3.5 3.5 0 110-7 3.5 3.5 0 010 7z" fill="white"/></svg> },
+    { key:'intercom', name:'Intercom', desc:'Actualiza contactos en Intercom.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1F8DED"/><path d="M10 11h12M10 15h12M10 19h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg> },
+    { key:'klaviyo', name:'Klaviyo', desc:'Actualiza un contacto en Klaviyo.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#000"/><path d="M8 8h5v9.5L20 8h6l-8 11 8 13h-6l-7-11.5V32H8V8z" fill="white"/></svg> },
+    { key:'mixpanel', name:'Mixpanel', desc:'Exporta eventos a Mixpanel.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#7856FF"/><path d="M7 24l4.5-8 4 6 3.5-5L23 24H7z" fill="white"/></svg> },
+    { key:'postgres', name:'Postgres', desc:'Exporta eventos a una base de datos PostgreSQL.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#336791"/><path d="M16 5c-5 0-9 4-9 9 0 3.8 2.3 7 5.6 8.4 0-.5 0-1.1.02-1.6-2.78.6-3.36-1.2-3.36-1.2-.45-1.15-1.1-1.46-1.1-1.46-.9-.62.07-.6.07-.6 1 .07 1.52 1.03 1.52 1.03.88 1.52 2.33 1.08 2.9.83.09-.64.35-1.08.63-1.33-2.2-.25-4.52-1.1-4.52-4.92 0-1.09.38-1.97 1.02-2.67-.1-.25-.44-1.26.1-2.63 0 0 .84-.27 2.75 1.03a9.5 9.5 0 012.5-.34c.85.01 1.7.11 2.5.34 1.9-1.3 2.74-1.03 2.74-1.03.54 1.37.2 2.38.1 2.63.64.7 1.02 1.58 1.02 2.67 0 3.82-2.33 4.66-4.54 4.9.36.31.67.93.67 1.87 0 1.35-.01 2.43-.01 2.76 0 .27.18.58.68.48A9 9 0 0025 14c0-5-4-9-9-9z" fill="white"/></svg> },
+    { key:'redshift', name:'Redshift', desc:'Exportación por lotes a Redshift.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#232F3E"/><ellipse cx="16" cy="11" rx="7" ry="3" fill="#A166FF"/><path d="M9 11v10c0 1.66 3.13 3 7 3s7-1.34 7-3V11" fill="#6229BF"/><ellipse cx="16" cy="16" rx="7" ry="3" fill="#8C4FFF"/></svg> },
+    { key:'rudderstack', name:'RudderStack', badge:'Beta', desc:'Envía datos a RudderStack.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1F2937"/><path d="M8 10h9a5 5 0 010 10H8V10zm3 3v4h6a2 2 0 000-4h-6z" fill="#E83F6F"/><circle cx="22" cy="22" r="3" fill="#E83F6F"/></svg> },
+    { key:'s3', name:'S3', desc:'Exportación por lotes a S3.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#232F3E"/><path d="M16 6l7 3.5V22.5L16 26 9 22.5V9.5L16 6z" fill="#E25444"/><path d="M16 6v20l7-3.5V9.5L16 6z" fill="#BF2E22"/></svg> },
+    { key:'salesforce_create', name:'Salesforce', badge:'Beta', desc:'Crea objetos en Salesforce.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#00A1E0"/><path d="M13 10.5a4 4 0 017.7-1.5A3.5 3.5 0 1122.5 16H10a3 3 0 010-6c.18 0 .35.01.52.04A4 4 0 0113 10.5z" fill="white"/></svg> },
+    { key:'salesforce_update', name:'Salesforce', badge:'Beta', desc:'Actualiza objetos en Salesforce.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#00A1E0"/><path d="M13 10.5a4 4 0 017.7-1.5A3.5 3.5 0 1122.5 16H10a3 3 0 010-6c.18 0 .35.01.52.04A4 4 0 0113 10.5z" fill="white"/></svg> },
+    { key:'segment', name:'Segment', desc:'Reenvía eventos hacia o desde Segment.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#52BD95"/><path d="M23 13H9a1 1 0 000 2h14a1 1 0 000-2zM21 17H9a1 1 0 000 2h12a1 1 0 000-2zM21 21H8a1 1 0 000 2h13a1 1 0 000-2z" fill="white"/></svg> },
+    { key:'sendgrid', name:'Sendgrid', badge:'Beta', desc:'Actualiza contactos de marketing en Sendgrid.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1A82E2"/><path d="M8 8h7v7H8zM17 8h7v7h-7zM8 17h7v7H8z" fill="white" opacity=".5"/><path d="M17 17h7v7h-7z" fill="white"/></svg> },
+    { key:'slack', name:'Slack', desc:'Envía un mensaje a un canal de Slack.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#611f69"/><path d="M13 8a2 2 0 11-2 2V8h2zm0 0V6a2 2 0 114 0v2h-4z" fill="#E01E5A"/><path d="M17 13a2 2 0 112 2h-2v-2zm0 0h2a2 2 0 110 4h-2v-4z" fill="#36C5F0"/><path d="M12 17a2 2 0 11-4 0h4zm0 0v2a2 2 0 11-4 0v-2h4z" fill="#2EB67D"/><path d="M17 17a2 2 0 112-2v2h-2zm0 0h-4a2 2 0 110-4h4v4z" fill="#ECB22E"/></svg> },
+    { key:'snapchat', name:'Snapchat Pixel', badge:'Experimental', desc:'Rastrea cómo los usuarios de Snapchat interactúan con tu web.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FFFC00"/><path d="M16 6c-2.8 0-5 2.2-5 5 0 .6.1 1.2.3 1.7-.5.3-1.1.3-1.5.3-.4 0-.8.3-.8.8 0 .5.4.8.9.9.8.1 1.9.6 2.5 1.3-.1.3-.3.5-.6.7-1.2.8-3 .8-3 1.4 0 .5.8.7 2 .9.1.3.2.7.4 1.1-.5.1-1.1.4-1.1.8 0 .4.5.5 1.2.5.8 0 1.7.6 2.7.6 1.3 0 2.3-.7 3-.7.7 0 1.7.7 3 .7 1 0 1.9-.6 2.7-.6.7 0 1.2-.1 1.2-.5 0-.4-.6-.7-1.1-.8.2-.4.3-.8.4-1.1 1.2-.2 2-.4 2-.9 0-.6-1.8-.6-3-1.4-.3-.2-.5-.4-.6-.7.6-.7 1.7-1.2 2.5-1.3.5-.1.9-.4.9-.9 0-.5-.4-.8-.8-.8-.4 0-1 0-1.5-.3.2-.5.3-1.1.3-1.7 0-2.8-2.2-5-5-5z" fill="#1A1A1A"/></svg> },
+    { key:'snowflake', name:'Snowflake', desc:'Exportación por lotes a Snowflake.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#29B5E8"/><path d="M16 5v22M6 10.5l10 5.5-10 5.5M26 10.5l-10 5.5 10 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+    { key:'stripe', name:'Stripe', desc:'Sincroniza eventos de pago con Stripe.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#635BFF"/><path d="M18.5 14.5c0-.8.7-1.1 1.8-1.1 1.6 0 3.6.5 5.2 1.4v-5c-1.7-.7-3.5-1-5.2-1-4.3 0-7.2 2.2-7.2 5.9 0 5.7 7.9 4.8 7.9 7.3 0 1-.8 1.3-2 1.3-1.7 0-3.9-.7-5.6-1.7v5.1c1.9.8 3.8 1.1 5.6 1.1 4.4 0 7.4-2.2 7.4-5.9-.1-6.2-7.9-5.1-7.9-7.4z" fill="white"/></svg> },
+    { key:'tiktok', name:'TikTok Pixel', badge:'Experimental', desc:'Rastrea cómo los usuarios de TikTok interactúan con tu web.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#010101"/><path d="M20 7h-3v12.5a2.5 2.5 0 11-2.5-2.5c.28 0 .55.04.8.12V14a6 6 0 101.7 11.8V16.2A8.5 8.5 0 0020 17V14a5.5 5.5 0 01-3-.88V7H20z" fill="white"/></svg> },
+    { key:'userlist', name:'Userlist', badge:'Beta', desc:'Envía datos de usuario, empresa y evento a Userlist.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><circle cx="16" cy="12" r="4" fill="white"/><path d="M8 24c.5-4 3.5-6 8-6s7.5 2 8 6H8z" fill="white"/></svg> },
+    { key:'zapier', name:'Zapier', desc:'Dispara Zaps de Zapier basados en eventos de Clain.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF4A00"/><path d="M16 6l2 8h8l-6.5 4.5 2.5 8.5L16 22l-6 5 2.5-8.5L6 14h8l2-8z" fill="white"/></svg> },
+    { key:'zendesk', name:'Zendesk', badge:'Beta', desc:'Actualiza contactos en Zendesk.',
+      logo:<svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#03363D"/><path d="M15 9a6 6 0 010 12H9L15 9z" fill="#03363D" stroke="white" strokeWidth="1.5"/><path d="M17 23a6 6 0 010-12h6L17 23z" fill="white"/></svg> },
+  ];
+
+  const filteredTemplates = templates.filter(t =>
+    newSearch === '' || t.name.toLowerCase().includes(newSearch.toLowerCase())
+  );
+
+  // ── RIGHT-PANEL config per destination ───────────────────────────────────────
+  function renderRightConfig(key: string) {
+    const dest = templates.find(t => t.key === key)!;
+
+    const field = (label: string, value: string, help?: string, locked?: boolean) => (
+      <div key={label}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <label className="text-[13px] font-semibold text-[#1a1a1a]">{label}</label>
+          {locked && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12 7H4V5a4 4 0 118 0v2zM3 8h10v7H3V8z"/></svg>}
+        </div>
+        <textarea defaultValue={value} rows={1}
+          className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6] resize-none font-mono"/>
+        {help && <p className="text-[11px] text-[#646462] mt-1 leading-relaxed">{help}</p>}
+      </div>
+    );
+
+    const mappingRows = (rows: {k:string;v:string}[], onAdd: () => void, help?: string) => (
+      <div>
+        <button className="flex items-center gap-1.5 text-[12px] text-[#1a1a1a] font-semibold border border-[#e9eae6] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1] mb-3">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Incluir propiedades de un objeto completo
+        </button>
+        <div className="space-y-2">
+          {rows.map((row, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input defaultValue={row.k} className="flex-1 h-8 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+              <textarea defaultValue={row.v} rows={1} className="flex-[2] px-2.5 py-1.5 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6] resize-none font-mono"/>
+              <button className="flex-shrink-0 p-1 text-[#646462] hover:text-[#1a1a1a]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+        <button onClick={onAdd} className="mt-2 flex items-center gap-1.5 text-[12px] text-[#1a1a1a] font-semibold border border-[#e9eae6] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1]">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Añadir entrada
+        </button>
+        {help && <p className="text-[11px] text-[#646462] mt-2">{help}</p>}
+      </div>
+    );
+
+    const editSourceTesting = () => (
+      <>
+        <div className="border-t border-[#e9eae6] pt-5">
+          <div className="flex items-start justify-between gap-4">
+            <div><h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-1">Editar fuente</h3>
+            <p className="text-[12px] text-[#646462]">Haz clic aquí para editar el código fuente de la función</p></div>
+            <button className="flex-shrink-0 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Editar código fuente</button>
+          </div>
+        </div>
+        <div className="border-t border-[#e9eae6] pt-5">
+          <div className="flex items-start justify-between gap-4">
+            <div><h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-1">Pruebas</h3>
+            <p className="text-[12px] text-[#646462]">Haz clic aquí para probar tu función con un evento de ejemplo</p></div>
+            <button className="flex-shrink-0 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Iniciar prueba</button>
+          </div>
+        </div>
+        <div className="border-t border-[#e9eae6] pt-4">
+          <button className="h-9 px-5 bg-[#e8572a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#c9451e]">Crear y activar</button>
+        </div>
+      </>
+    );
+
+    switch (key) {
+      case 'slack': return (<div className="space-y-5">{field('URL del Webhook','','Consulta cómo generar una URL de Webhook en https://api.slack.com/messaging/webhooks')}{field('Canal','#mi-canal','El canal de Slack al que enviar el mensaje.')}{field('Contenido del mensaje',"{person.name} desencadenó el evento: '{event.event}'")}{editSourceTesting()}</div>);
+      case 'discord': return (<div className="space-y-5">{field('URL del Webhook','','Consulta https://support.discord.com/hc/en-us/articles/228383668 para generar una URL de Webhook.')}{field('Contenido',"**{person.name}** desencadenó el evento: '{event.event}'")}{editSourceTesting()}</div>);
+      case 'activecampaign': return (
+        <div className="space-y-5">
+          {field('Nombre de cuenta','','Generalmente tiene la forma .activehosted.com')}
+          {field('Tu API Key de ActiveCampaign','','Consulta la documentación en https://help.activecampaign.com',true)}
+          {field('Email del usuario','{person.properties.email}','Dónde encontrar el email del contacto.')}
+          {field('Nombre del usuario','{person.properties.firstName}','Dónde encontrar el nombre del contacto.')}
+          {field('Apellido del usuario','{person.properties.lastName}')}
+          {field('Número de teléfono','{person.properties.phone}')}
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Campos adicionales de persona</h3>
+            {mappingRows([{k:'1',v:'{person.properties.company}'},{k:'2',v:'{person.properties.website}'}],()=>{},'Mapea valores a campos de persona de ActiveCampaign. (fieldId:value)')}
+          </div>
+          {editSourceTesting()}
+        </div>
+      );
+      case 'intercom': return (
+        <div className="space-y-5">
+          <div><label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Cuenta de Intercom</label>
+            <select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#646462] bg-white outline-none focus:border-[#3b59f6]"><option>Elegir conexión de Intercom</option></select>
+          </div>
+          {field('Email del usuario','{person.properties.email}')}
+          <div className="flex items-center gap-2">
+            <button onClick={()=>setIncludeAllProps(s=>!s)} className={`relative w-9 h-[18px] rounded-full transition-colors ${includeAllProps?'bg-[#e8572a]':'bg-[#d1d1cf]'}`}><span className={`absolute top-[1px] w-4 h-4 bg-white rounded-full shadow transition-transform ${includeAllProps?'translate-x-[18px]':'translate-x-[1px]'}`}/></button>
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Incluir todas las propiedades como atributos</span><span className="text-[11px] text-[#646462]">→ Alternar</span>
+          </div>
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Mapeo de propiedades predeterminado <span className="font-normal text-[#646462]">(opcional)</span></h3>
+            {mappingRows(propMappings,()=>setPropMappings(m=>[...m,{k:'',v:''}]),'Mapea propiedades de Intercom y sus valores.')}
+          </div>
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Mapeo de propiedades personalizadas <span className="font-normal text-[#646462]">(opcional)</span></h3>
+            {mappingRows(customMappings,()=>setCustomMappings(m=>[...m,{k:'',v:''}]),'Mapea propiedades personalizadas y sus valores.')}
+          </div>
+          {editSourceTesting()}
+        </div>
+      );
+      case 'klaviyo': return (
+        <div className="space-y-5">
+          {field('Klaviyo Private API Key','','Puedes crear una Private API Key en los ajustes de la cuenta (https://www.klaviyo.com/settings/account/api-keys)',true)}
+          {field('Email del usuario','{person.properties.email}')}
+          {field('ID externo','{person.id}','Un identificador único para asociar perfiles de Klaviyo con perfiles en un sistema externo.')}
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Propiedades personalizadas <span className="font-normal text-[#646462]">(opcional)</span></h3>
+            {mappingRows([{k:'title',v:'{person.properties.title}'},{k:'last_name',v:'{person.properties.lastname}'},{k:'first_name',v:'{person.properties.firstname}'},{k:'organization',v:'{person.properties.organization}'},{k:'phone_number',v:'{person.properties.phone}'}],()=>{},'Mapea propiedades personalizadas y sus valores.')}
+          </div>
+          {editSourceTesting()}
+        </div>
+      );
+      case 'postgres': case 'redshift': return (
+        <div className="space-y-5">
+          {field('Host', key==='redshift'?'mi-cluster.redshift.amazonaws.com':'localhost')}
+          {field('Puerto', key==='redshift'?'5439':'5432')}
+          {field('Base de datos','mi_base_datos')}{field('Schema','public')}
+          {field('Usuario','')}{field('Contraseña','',undefined,true)}
+          {editSourceTesting()}
+        </div>
+      );
+      case 'snowflake': return (<div className="space-y-5">{field('Account Identifier','orgname-accountname')}{field('Warehouse','COMPUTE_WH')}{field('Base de datos','CLAIN_DB')}{field('Schema','PUBLIC')}{field('Usuario','')}{field('Contraseña','',undefined,true)}{editSourceTesting()}</div>);
+      case 's3': return (<div className="space-y-5">{field('Bucket','mi-bucket-clain')}<div><label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Región</label><select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"><option>us-east-1</option><option>eu-west-1</option><option>ap-southeast-1</option></select></div>{field('Prefijo','clain/events/')}{field('Access Key ID','',undefined,true)}{field('Secret Access Key','',undefined,true)}{editSourceTesting()}</div>);
+      case 'salesforce_create': case 'salesforce_update': return (
+        <div className="space-y-5">
+          {field('URL de instancia','https://tu-instancia.my.salesforce.com')}
+          {field('Client ID','',undefined,true)}{field('Client Secret','',undefined,true)}
+          <div><label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Tipo de objeto</label><select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"><option>Contact</option><option>Lead</option><option>Account</option></select></div>
+          {key==='salesforce_update'&&field('Campo de coincidencia','Email')}
+          <div><h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Mapeo de campos</h3>{mappingRows([{k:'Email',v:'{person.properties.email}'},{k:'FirstName',v:'{person.properties.first_name}'},{k:'LastName',v:'{person.properties.last_name}'}],()=>{})}</div>
+          {editSourceTesting()}
+        </div>
+      );
+      default: return (<div className="space-y-5">{field('API Key','',undefined,true)}{editSourceTesting()}</div>);
+    }
+  }
+
+  // ── DETAIL VIEW ──────────────────────────────────────────────────────────────
+  if (selected) {
+    const dest = templates.find(t => t.key === selected)!;
+    return (
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-5 h-12 bg-white border-b border-[#e9eae6]">
+          <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {dest.logo}
+            <span className="text-[15px] font-bold text-[#1a1a1a]">{dest.name}</span>
+            {dest.badge && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${dest.badge==='Beta'?'text-[#7856FF] border-[#c4b5fd]':'text-[#d97706] border-[#fcd34d]'}`}>{dest.badge}</span>}
+            <button className="p-1 text-[#646462] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z" strokeLinejoin="round"/></svg></button>
+            <button onClick={() => setSelected(null)} className="p-1 text-[#646462] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg></button>
+          </div>
+          <button className="flex items-center gap-1.5 h-8 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+          <button className="h-8 px-3.5 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]">Crear y activar</button>
+        </div>
+        {/* Subtitle */}
+        <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-[#e9eae6]">
+          <p className="text-[12px] text-[#646462] flex items-center gap-1">{dest.desc}<svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current text-[#646462]" strokeWidth="1.5"><path d="M11 2l3 3-9 9H2v-3L11 2z" strokeLinejoin="round"/></svg></p>
+        </div>
+        {/* Body: 2 col */}
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* LEFT */}
+          <div className="w-[390px] flex-shrink-0 overflow-y-auto border-r border-[#e9eae6] bg-white">
+            <div className="p-5 space-y-4">
+              {/* Status */}
+              <div className="border border-[#e9eae6] rounded-xl p-4">
+                <h3 className="text-[13px] font-bold text-[#1a1a1a] mb-3">Estado</h3>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-[#1a1a1a]">Activar destino</span>
+                  <button onClick={()=>setDestOn(s=>!s)} className={`relative w-10 h-5 rounded-full transition-colors ${destOn?'bg-[#e8572a]':'bg-[#d1d1cf]'}`}><span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${destOn?'translate-x-5':'translate-x-0.5'}`}/></button>
+                </div>
+              </div>
+              {/* Filters */}
+              <div className="border border-[#e9eae6] rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-1.5"><h3 className="text-[13px] font-bold text-[#1a1a1a]">Filtros</h3><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></div>
+                <div className="flex items-center justify-between py-1 border-b border-[#f3f3f1]">
+                  <div className="flex items-center gap-2 text-[12px] text-[#1a1a1a]">Filtrar usuarios internos y de prueba<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></div>
+                  <button onClick={()=>setFilterInternal(s=>!s)} className={`relative w-9 h-[18px] rounded-full transition-colors ${filterInternal?'bg-[#e8572a]':'bg-[#d1d1cf]'}`}><span className={`absolute top-[1px] w-4 h-4 bg-white rounded-full shadow transition-transform ${filterInternal?'translate-x-[18px]':'translate-x-[1px]'}`}/></button>
+                </div>
+                <button className="flex items-center gap-1.5 text-[12px] font-semibold border border-[#e9eae6] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Filtro</button>
+              </div>
+              {/* Match events */}
+              <div className="border border-[#e9eae6] rounded-xl p-4 space-y-3">
+                <h3 className="text-[13px] font-bold text-[#1a1a1a]">Eventos y acciones coincidentes</h3>
+                <p className="text-[11px] text-[#646462]">Si se configura, el destino solo se ejecutará si el evento coincide con <span className="font-semibold text-[#1a1a1a]">alguno</span> de los siguientes.</p>
+                <div className="space-y-2">
+                  {matchers.map((m,i)=>(
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded bg-[#f3f3f1] flex items-center justify-center flex-shrink-0"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c.4-2.5 2.5-4 5-4s4.6 1.5 5 4H3z"/></svg></div>
+                      <select value={m} onChange={e=>setMatchers(ms=>ms.map((v,j)=>j===i?e.target.value:v))} className="flex-1 h-8 px-2 border border-[#e9eae6] rounded-lg text-[12px] bg-white outline-none focus:border-[#3b59f6]">
+                        <option>Identificar</option><option>Establecer propiedades de persona</option><option>Evento de página</option><option>Alias</option><option>Grupo</option>
+                      </select>
+                      <button className="p-1 text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 5h12M5 5V3h6v2M6 8v4M10 8v4" strokeLinecap="round"/></svg></button>
+                      <button className="p-1 text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><circle cx="3" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="13" cy="8" r="1"/></svg></button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={()=>setMatchers(ms=>[...ms,'Evento de página'])} className="flex items-center gap-1.5 text-[12px] font-semibold border border-[#e9eae6] px-3 py-1.5 rounded-lg hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir coincidencia de eventos</button>
+              </div>
+              {/* Trigger */}
+              <div className="border border-[#e9eae6] rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-1.5"><h3 className="text-[13px] font-bold text-[#1a1a1a]">Opciones de disparo</h3><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg></div>
+                <select className="w-full h-8 px-2.5 border border-[#e9eae6] rounded-lg text-[12px] bg-white outline-none focus:border-[#3b59f6]"><option>Ejecutar siempre</option><option>Ejecutar una vez por persona</option></select>
+              </div>
+              {/* Matching events */}
+              <div className="border border-[#e9eae6] rounded-xl p-4 space-y-3">
+                <h3 className="text-[13px] font-bold text-[#1a1a1a]">Eventos coincidentes</h3>
+                <p className="text-[12px] text-[#3b59f6]">Este destino habría disparado <span className="font-bold">0 veces</span> en los últimos 7 días.</p>
+                <p className="text-[12px] text-[#646462]">1</p>
+                <button className="w-full h-8 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Mostrar eventos coincidentes</button>
+              </div>
+            </div>
+          </div>
+          {/* RIGHT */}
+          <div className="flex-1 overflow-y-auto bg-white">
+            <div className="p-6 max-w-2xl space-y-5">
+              {renderRightConfig(selected)}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── MAIN LIST VIEW ───────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white rounded-[12px] border border-[#e9eae6] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 h-12 border-b border-[#e9eae6] flex-shrink-0">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 2v9M5 8l3 3 3-3" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 13h10" strokeLinecap="round"/></svg>
+        <span className="text-[16px] font-bold text-[#1a1a1a] flex-1">Destinos</span>
+        <button className="h-8 px-3.5 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e] flex items-center gap-1.5">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Nueva conexión
+        </button>
+      </div>
+
+      {/* Subtitle */}
+      <div className="flex-shrink-0 px-5 py-2.5 border-b border-[#e9eae6]">
+        <p className="text-[12px] text-[#1a1a1a]">Los destinos te permiten enviar tus datos a sistemas externos en tiempo real.</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex-shrink-0 flex items-center px-5 border-b border-[#e9eae6]">
+        {([['all','Todos los destinos'],['history','Historial']] as const).map(([k,label])=>(
+          <button key={k} onClick={()=>setTab(k)}
+            className={`h-10 px-1 mr-5 text-[13px] font-medium border-b-2 -mb-px transition-colors ${tab===k?'border-[#e8572a] text-[#1a1a1a]':'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {/* Empty state for existing destinations */}
+        <div className="border border-dashed border-[#c8c8c4] mx-5 mt-4 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-8 px-8 py-8">
+            <div className="flex-shrink-0">{ClainMascot({ size: 110, variant: 'suit' })}</div>
+            <div>
+              <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-2">Crea tu primera conexión</h2>
+              <p className="text-[13px] text-[#646462] leading-relaxed mb-4">Los destinos te permiten enviar tus datos a sistemas externos.</p>
+              <div className="flex items-center gap-3">
+                <button className="flex items-center gap-1.5 h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[13px] font-semibold rounded-lg hover:bg-[#fff5f2]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                  Nueva conexión
+                </button>
+                <button className="flex items-center gap-1.5 h-8 px-4 border border-[#e9eae6] text-[#1a1a1a] text-[13px] font-semibold rounded-lg hover:bg-[#f3f3f1]">
+                  Saber más
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Existing destinations table */}
+        <div className="mx-5 mt-4">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1 max-w-xs">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+              <input type="text" placeholder="Buscar..." className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+            <button className="text-[12px] text-[#646462] hover:text-[#1a1a1a]">¿No encuentras lo que buscas?</button>
+            <div className="flex-1"/>
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-[#646462]">Creado por:</span>
+              <select className="h-7 px-2 border border-[#e9eae6] rounded-lg text-[12px] bg-white outline-none"><option>Cualquier usuario</option></select>
+            </div>
+            <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#646462] hover:bg-[#f3f3f1]">Mostrar pausados</button>
+          </div>
+        </div>
+
+        <div className="mx-5 mt-2 border border-[#e9eae6] rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+              {['Nombre','Creado por','Actualizado','Últimos 7 días','Estado'].map((col,i)=>(
+                <th key={col} className={`text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide ${i===0?'w-[35%]':''}`}>
+                  <span className="flex items-center gap-1">{col}{i!==4&&<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>}</span>
+                </th>
+              ))}
+            </tr></thead>
+            <tbody><tr><td colSpan={5} className="px-4 py-4 text-[13px] text-[#646462]">No se encontraron destinos</td></tr></tbody>
+          </table>
+        </div>
+
+        {/* Create a new destination section */}
+        <div className="mx-5 mt-6 mb-4">
+          <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">Crear nueva conexión</h3>
+          <div className="flex items-center gap-4 mb-3">
+            <div className="relative">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+              <input type="text" placeholder="Buscar..." value={newSearch} onChange={e=>setNewSearch(e.target.value)} className="h-8 pl-8 pr-3 w-48 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+            </div>
+            <button className="text-[12px] text-[#646462] hover:text-[#1a1a1a]">¿No encuentras lo que buscas?</button>
+          </div>
+          <div className="border border-[#e9eae6] rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+                  <span className="flex items-center gap-1">Nombre<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg></span>
+                </th>
+              </tr></thead>
+              <tbody>
+                {filteredTemplates.map((t, idx) => (
+                  <tr key={t.key} className={`hover:bg-[#fafafa] ${idx<filteredTemplates.length-1?'border-b border-[#f3f3f1]':''}`}>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-3">
+                        {t.logo}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-[14px] font-semibold text-[#1a1a1a]">{t.name}</span>
+                            {t.badge && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${t.badge==='Beta'?'text-[#7856FF] border-[#c4b5fd]':'text-[#d97706] border-[#fcd34d]'}`}>{t.badge}</span>}
+                          </div>
+                          <p className="text-[12px] text-[#646462] truncate">{t.desc}</p>
+                        </div>
+                        <button
+                          onClick={() => setSelected(t.key)}
+                          className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 border border-[#e8572a] rounded-lg text-[12px] font-semibold text-[#e8572a] hover:bg-[#fff5f2]"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                          Crear
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredTemplates.length===0&&<tr><td className="px-4 py-8 text-center text-[13px] text-[#646462]">No se encontraron destinos</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

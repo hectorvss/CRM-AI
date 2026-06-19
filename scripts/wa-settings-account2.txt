@@ -1,0 +1,233 @@
+  // ── AccountConnectedAppsPage ──────────────────────────────────────────────
+  function AccountConnectedAppsPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Aplicaciones conectadas</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Aplicaciones a las que se ha concedido acceso a tu cuenta de Clain mediante OAuth. Puedes revocar el acceso en cualquier momento.</p>
+          </div>
+
+          <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide w-1/2">Aplicación</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Alcances</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Autorizado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={3} className="px-4 py-8">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-[#e8d5b0] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        <svg viewBox="0 0 40 40" className="w-10 h-10"><rect x="8" y="14" width="24" height="18" rx="3" fill="#8B6914"/><rect x="12" y="10" width="16" height="8" rx="2" fill="#6b4f10"/><circle cx="20" cy="32" r="2" fill="#c49a2e"/><rect x="16" y="20" width="8" height="6" rx="1" fill="#c49a2e"/><path d="M14 14 Q20 8 26 14" fill="none" stroke="#6b4f10" strokeWidth="2"/></svg>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M14 7H9V2a1 1 0 00-2 0v5H2a1 1 0 000 2h5v5a1 1 0 002 0V9h5a1 1 0 000-2z" transform="rotate(45 8 8)"/><circle cx="4" cy="4" r="2.5"/></svg>
+                          <span className="text-[13px] font-bold text-[#1a1a1a]">Sin aplicaciones conectadas</span>
+                        </div>
+                        <p className="text-[13px] text-[#646462]">Las aplicaciones aparecerán aquí cuando herramientas de terceros se conecten a tu cuenta.</p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── AccountApiKeysPage ────────────────────────────────────────────────────
+  function AccountApiKeysPage() {
+    const [showModal, setShowModal] = useState(false);
+    const [label, setLabel] = useState('');
+    const [orgAccess, setOrgAccess] = useState<'all'|'orgs'|'projects'>('all');
+    const [scopeSearch, setScopeSearch] = useState('');
+    const [scopes, setScopes] = useState<Record<string, 'none'|'read'|'write'>>({});
+
+    const allScopes = [
+      'Access control','Action','Activity log','Alert','Annotation','Batch export',
+      'Cohort','Comment','Customer analytics','Customer journey','Customer profile config',
+      'Dashboard','Dashboard template','Dataset','Desktop recording','Early access feature',
+      'Element','Endpoint','Error tracking','Evaluation','Event definition','Experiment',
+      'Export','External data source','Feature flag','Group','Health issue','Heatmap',
+      'Hog function','Insight',
+    ];
+
+    const filteredScopes = allScopes.filter(s =>
+      !scopeSearch || s.toLowerCase().includes(scopeSearch.toLowerCase())
+    );
+
+    const setScope = (scope: string, val: 'none'|'read'|'write') =>
+      setScopes(s => ({ ...s, [scope]: val }));
+
+    const ScopeBtn = ({ active, label: lbl, onClick }: { active: boolean; label: string; onClick: () => void }) => (
+      <button
+        onClick={onClick}
+        className={`h-7 px-3 text-[12px] font-semibold rounded border transition-colors ${
+          active
+            ? lbl === 'Sin acceso'
+              ? 'border-[#f59e0b] text-[#1a1a1a] bg-white'
+              : 'border-[#f59e0b] text-[#1a1a1a] bg-white'
+            : 'border-transparent text-[#646462] hover:text-[#1a1a1a] hover:border-[#e9eae6]'
+        }`}
+      >
+        {lbl}
+      </button>
+    );
+
+    return (
+      <div className="flex-1 overflow-y-auto relative">
+        <div className="max-w-4xl px-8 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Claves API personales</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">
+              Estas claves permiten acceso completo a tu cuenta personal a través de la API. Concede solo los permisos necesarios y elimina las claves no utilizadas cuanto antes.{' '}
+              <a href="#" className="text-[#e8572a] hover:underline">Docs ↗</a>
+            </p>
+          </div>
+
+          <button
+            onClick={() => { setLabel(''); setOrgAccess('all'); setScopeSearch(''); setScopes({}); setShowModal(true); }}
+            className="flex items-center gap-1.5 h-9 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white"
+          >
+            <span className="text-[15px] leading-none">+</span> Crear clave API personal
+          </button>
+
+          <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Etiqueta</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Clave secreta</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Alcances</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acceso org. y proyecto</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Último uso</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Creado</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Última renovación</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={8} className="px-4 py-3 text-[13px] text-[#646462]">Sin claves API personales</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Modal */}
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <div className="bg-white rounded-[12px] shadow-xl w-[560px] max-h-[80vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Crear clave API personal</h2>
+                <button onClick={() => setShowModal(false)} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {/* Label */}
+                <div className="space-y-1.5">
+                  <label className="text-[13px] font-bold text-[#1a1a1a]">Etiqueta</label>
+                  <input
+                    type="text"
+                    value={label}
+                    onChange={e => setLabel(e.target.value)}
+                    placeholder='Por ejemplo "Bot de informes" o "Zapier"'
+                    className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Org & project access */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[13px] font-bold text-[#1a1a1a]">Acceso a organización y proyecto</label>
+                    <div className="flex border border-[#e9eae6] rounded-lg overflow-hidden">
+                      {(['all','orgs','projects'] as const).map((opt, i) => (
+                        <button
+                          key={opt}
+                          onClick={() => setOrgAccess(opt)}
+                          className={`h-7 px-3 text-[12px] font-semibold transition-colors ${
+                            orgAccess === opt ? 'bg-white text-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'
+                          } ${i > 0 ? 'border-l border-[#e9eae6]' : ''}`}
+                        >
+                          {opt === 'all' ? 'Todo el acceso' : opt === 'orgs' ? 'Organizaciones' : 'Proyectos'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scopes */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[13px] font-bold text-[#1a1a1a]">Alcances</label>
+                    <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+                      Seleccionar preset
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                    </button>
+                  </div>
+                  <p className="text-[12px] text-[#646462] leading-relaxed">
+                    Las claves API personales tienen alcances para limitar qué acciones pueden realizar. Recomendamos encarecidamente que solo concedas a la clave los permisos que necesita para hacer su trabajo. Puedes añadir o revocar alcances más adelante.
+                  </p>
+                  <p className="text-[12px] text-[#646462]">Tu clave API personal nunca podrá realizar acciones para las que tu cuenta carezca de permisos.</p>
+
+                  {/* Scope search */}
+                  <div className="relative">
+                    <svg viewBox="0 0 16 16" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-[#646462]"><path d="M6.5 1a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM0 6.5a6.5 6.5 0 1111.6 4l3.2 3.2a1 1 0 01-1.4 1.4L10.1 12A6.5 6.5 0 010 6.5z"/></svg>
+                    <input
+                      value={scopeSearch}
+                      onChange={e => setScopeSearch(e.target.value)}
+                      placeholder="Buscar alcances..."
+                      className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[12px] bg-white outline-none focus:border-[#3b59f6]"
+                    />
+                  </div>
+
+                  {/* Scope rows */}
+                  <div className="space-y-0 divide-y divide-[#e9eae6] border border-[#e9eae6] rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                    {filteredScopes.map(scope => {
+                      const cur = scopes[scope] ?? 'none';
+                      return (
+                        <div key={scope} className="flex items-center justify-between px-3 py-2 bg-white hover:bg-[#fafaf9]">
+                          <span className="text-[13px] font-bold text-[#1a1a1a]">{scope}</span>
+                          <div className="flex items-center gap-0.5">
+                            <ScopeBtn active={cur === 'none'} label="Sin acceso" onClick={() => setScope(scope, 'none')} />
+                            <ScopeBtn active={cur === 'read'} label="Leer" onClick={() => setScope(scope, 'read')} />
+                            <ScopeBtn active={cur === 'write'} label="Escribir" onClick={() => setScope(scope, 'write')} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-[#e9eae6] px-6 py-4 flex justify-end gap-2">
+                <button onClick={() => setShowModal(false)} className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
+                <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">Crear clave</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+

@@ -1,0 +1,637 @@
+// ── WADataIngestionWarningsView ───────────────────────────────────────────────
+function WADataIngestionWarningsView() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-5 h-11 bg-white border-b border-[#e9eae6]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M8 2L1.5 13h13L8 2z" strokeLinejoin="round"/><path d="M8 6v3.5M8 11v.5" strokeLinecap="round"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Advertencias de ingesta de eventos</span>
+        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+          Quick start
+        </button>
+      </div>
+      {/* Subtitle */}
+      <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-[#e9eae6]">
+        <p className="text-[12px] text-[#1a1a1a]">Advertencias relacionadas con la ingesta de datos de los últimos 30 días.</p>
+      </div>
+
+      {/* Search */}
+      <div className="flex-shrink-0 px-5 py-3 bg-white border-b border-[#e9eae6]">
+        <div className="relative">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-3 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input
+            type="text"
+            placeholder="Prueba pegando un ID de persona o sesión, o un tipo de advertencia de ingesta"
+            className="w-full h-9 pl-9 pr-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"
+          />
+        </div>
+      </div>
+
+      {/* Table header */}
+      <div className="flex-shrink-0 bg-white border-b border-[#e9eae6]">
+        <div className="flex items-center px-5 h-9 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+          <div className="flex-[3]">Advertencia</div>
+          <div className="flex-[4]">Gráfico</div>
+          <div className="flex-[1] flex items-center gap-1">
+            Eventos
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+          </div>
+          <div className="flex-[2] flex items-center gap-1 justify-end">
+            Última vez visto
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 11L5 7h6l-3 4z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      {/* "No entries" row */}
+      <div className="flex-shrink-0 bg-white border-b border-[#e9eae6] px-5 py-2.5">
+        <span className="text-[13px] text-[#646462]">Sin entradas</span>
+      </div>
+
+      {/* Empty state */}
+      <div className="flex-1 flex items-center justify-center bg-[#fafaf9] border border-dashed border-[#c8c8c4] mx-5 my-4 rounded-xl">
+        <div className="flex items-center gap-8 max-w-xl">
+          {/* Clain reading mascot */}
+          <div className="flex-shrink-0">
+            {ClainMascot({ size: 120, variant: 'reading' })}
+          </div>
+          <div>
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-2">No hay advertencias de ingesta</h2>
+            <p className="text-[13px] text-[#646462] leading-relaxed mb-4">
+              ¡Genial! No has tenido advertencias de ingesta en los últimos 30 días. Si detectamos algún problema con tus datos, los mostraremos aquí.
+            </p>
+            <button className="flex items-center gap-1.5 h-8 px-3.5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] bg-white">
+              Saber más
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── WADataSourcesView ─────────────────────────────────────────────────────────
+function WADataSourcesView() {
+  type SourcesView = 'list' | 'picker' | 'config';
+  const [view, setView] = useState<SourcesView>('list');
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [configStep, setConfigStep] = useState(1);
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  type SourceItem = {
+    key: string; name: string;
+    badge?: 'Beta' | 'Experimental';
+    authType: 'apikey' | 'oauth' | 'direct';
+    desc: string; syncDesc: string;
+    logo: React.ReactNode;
+    scopes?: string[];
+  };
+
+  const sources: SourceItem[] = [
+    {
+      key: 'attio', name: 'Attio', authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de Attio con el data warehouse de Clain.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M8 22l8-14 8 14H8zm8-10l4 7H12l4-7z" fill="white"/></svg>,
+      scopes: ['object_configuration:read - Leer configuraciones de objetos', 'record_permission:read - Leer permisos de registros', 'record:read - Leer registros (empresas, personas, deals, usuarios, espacios de trabajo)', 'list_entry:read - Leer entradas de listas', 'note:read - Leer notas', 'task:read - Leer tareas', 'user_management:read - Leer miembros del espacio de trabajo'],
+    },
+    {
+      key: 'azure', name: 'Azure', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu almacenamiento de Azure Blob directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#0078D4"/><path d="M7 23l7-12 4 7-3 2 5 3H7zm9-12l5 12h-4l-5-9 4-3z" fill="white"/></svg>,
+    },
+    {
+      key: 'bigquery', name: 'BigQuery', authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de Google BigQuery con el data warehouse de Clain.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#fff" stroke="#e9eae6"/><path d="M16 4l9 5.2v10.4L16 25 7 19.6V9.2L16 4z" fill="#4285F4"/><path d="M16 4v21l9-5.4V9.2L16 4z" fill="#1967D2"/><circle cx="16" cy="19" r="3.5" fill="white"/></svg>,
+    },
+    {
+      key: 'bingads', name: 'Bing Ads', badge: 'Beta' as const, authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu cuenta de Microsoft Advertising para sincronizar datos de campañas.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#008272"/><path d="M9 6l3 1 9 11-4 3-8-5V6zm3 1v8l7 4-7-9-0-.5v-2.5z" fill="white"/><path d="M12 7l3 2v6l7 4-3 3-7-4V9l0-2z" fill="white" opacity=".7"/></svg>,
+    },
+    {
+      key: 'buildbetter', name: 'BuildBetter', badge: 'Beta' as const, authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de llamadas y transcripciones de BuildBetter.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#7C3AED"/><path d="M8 8h16v3H8zm0 6h16v3H8zm0 6h12v3H8z" fill="white"/></svg>,
+    },
+    {
+      key: 'chargebee', name: 'Chargebee', authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de facturación y suscripciones de Chargebee.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF3300"/><path d="M16 6a10 10 0 110 20A10 10 0 0116 6zm0 3a7 7 0 100 14A7 7 0 0016 9zm0 3a4 4 0 110 8 4 4 0 010-8z" fill="white"/></svg>,
+    },
+    {
+      key: 'clerk', name: 'Clerk', badge: 'Beta' as const, authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de usuarios y sesiones de Clerk Auth.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#6C47FF"/><circle cx="16" cy="12" r="4" fill="white"/><path d="M9 24c.5-4 3.5-6 7-6s6.5 2 7 6H9z" fill="white"/></svg>,
+    },
+    {
+      key: 'clickhouse', name: 'ClickHouse', badge: 'Beta' as const, authType: 'direct',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu instancia de ClickHouse directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FFCC00"/><rect x="7" y="7" width="3" height="18" rx="1.5" fill="#1a1a1a"/><rect x="12" y="7" width="3" height="18" rx="1.5" fill="#1a1a1a"/><rect x="17" y="7" width="3" height="18" rx="1.5" fill="#1a1a1a"/><rect x="22" y="13" width="3" height="12" rx="1.5" fill="#1a1a1a"/></svg>,
+    },
+    {
+      key: 'cloudflare', name: 'Cloudflare R2', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu bucket de Cloudflare R2 directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#F38020"/><path d="M22 19.5c.3-1 .2-2-.3-2.8-.4-.6-1-.9-1.8-.9h-.2c-.2-1.5-1.5-2.8-3.2-2.8-1.2 0-2.2.7-2.8 1.7-.3-.1-.6-.2-1-.2-1.4 0-2.5 1.1-2.5 2.5 0 .2 0 .4.1.5H10c-1.1 0-2 .9-2 2s.9 2 2 2h12c.8 0 1.5-.5 1.8-1.3.1-.2.2-.5.2-.7z" fill="white"/></svg>,
+    },
+    {
+      key: 'convex', name: 'Convex', badge: 'Beta' as const, authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de tu backend de Convex.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#EE342F"/><path d="M7 16c0-5 4-9 9-9s9 4 9 9c0 3-1.5 5.6-3.7 7.2L19 22c1.5-1.3 2.5-3.2 2.5-5.5a6.5 6.5 0 00-11-4.7" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
+    },
+    {
+      key: 'dolt', name: 'Dolt', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu base de datos Dolt directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><circle cx="12" cy="10" r="3" fill="white"/><circle cx="12" cy="22" r="3" fill="white"/><circle cx="22" cy="10" r="3" fill="white"/><path d="M12 13v6M12 10h10M22 13v6a3 3 0 01-3 3h-4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>,
+    },
+    {
+      key: 'github', name: 'GitHub', badge: 'Beta' as const, authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu organización de GitHub para sincronizar issues, PRs, y más.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M16 5C9.9 5 5 10 5 16.2c0 4.9 3.2 9.1 7.6 10.6.6.1.8-.2.8-.6v-2.1c-3.2.7-3.9-1.5-3.9-1.5-.5-1.4-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 1.7 2.6 1.2 3.3.9.1-.7.4-1.2.7-1.5-2.5-.3-5.1-1.3-5.1-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 015.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.2 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.2 11.2 0 0027 16.2C27 10 22.1 5 16 5z" fill="white"/></svg>,
+    },
+    {
+      key: 'googleads', name: 'Google Ads', badge: 'Beta' as const, authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu cuenta de Google Ads para sincronizar datos de campañas.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#fff" stroke="#e9eae6"/><path d="M6 21.5l5.5-10L16 19l-3 2.5H6z" fill="#FBBC04"/><path d="M11.5 11.5L17 21.5h9l-5.5-10h-9z" fill="#4285F4"/><circle cx="22" cy="21.5" r="3.5" fill="#34A853"/></svg>,
+    },
+    {
+      key: 'gcs', name: 'Google Cloud Storage', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu bucket de Google Cloud Storage directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#fff" stroke="#e9eae6"/><path d="M16 6l9 5v10l-9 5-9-5V11l9-5z" fill="#4285F4" opacity=".2"/><path d="M16 6v20M7 11l9 5 9-5M16 16v10" stroke="#4285F4" strokeWidth="1.5" fill="none"/></svg>,
+    },
+    {
+      key: 'hubspot', name: 'HubSpot', authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu cuenta de HubSpot CRM para sincronizar contactos, deals y más.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#FF7A59"/><path d="M18 11.5V8.7a1.5 1.5 0 001-1.4v-.05a1.5 1.5 0 00-3 0v.05a1.5 1.5 0 001 1.4v2.8A6 6 0 0011 17.5a6 6 0 1011.5 0A6 6 0 0018 11.5zm-1.5 9a3.5 3.5 0 110-7 3.5 3.5 0 010 7z" fill="white"/></svg>,
+    },
+    {
+      key: 'linear', name: 'Linear', authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu espacio de trabajo de Linear para sincronizar issues, proyectos, equipos y más.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path d="M7 20L20 7l1 1L8 21l-1-1zM7 24l13-13 2 2L9 26l-2-2zM13 26l7-7 4 4-7 7-4-4z" fill="white"/></svg>,
+    },
+    {
+      key: 'mysql', name: 'MySQL', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu base de datos MySQL directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#4479A1"/><path d="M8 21c3-5 5-8 8-10 2 3 3 6 4 10H8z" fill="white"/><path d="M16 11c1 1 2 3 4 4v6" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>,
+    },
+    {
+      key: 'postgres', name: 'Postgres', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu base de datos PostgreSQL directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#336791"/><path d="M16 5c-5 0-9 4-9 9 0 3.8 2.3 7 5.6 8.4-.01-.5 0-1.1.02-1.6-2.78.6-3.36-1.2-3.36-1.2-.45-1.15-1.1-1.46-1.1-1.46-.9-.62.07-.6.07-.6 1 .07 1.52 1.03 1.52 1.03.88 1.52 2.33 1.08 2.9.83.09-.64.35-1.08.63-1.33-2.2-.25-4.52-1.1-4.52-4.92 0-1.09.38-1.97 1.02-2.67-.1-.25-.44-1.26.1-2.63 0 0 .84-.27 2.75 1.03a9.5 9.5 0 012.5-.34c.85.01 1.7.11 2.5.34 1.9-1.3 2.74-1.03 2.74-1.03.54 1.37.2 2.38.1 2.63.64.7 1.02 1.58 1.02 2.67 0 3.82-2.33 4.66-4.54 4.9.36.31.67.93.67 1.87 0 1.35-.01 2.43-.01 2.76 0 .27.18.58.68.48A9 9 0 0025 14c0-5-4-9-9-9z" fill="white"/></svg>,
+    },
+    {
+      key: 's3', name: 'S3', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu bucket de Amazon S3 directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#232F3E"/><path d="M16 6l7 3.5V22.5L16 26 9 22.5V9.5L16 6z" fill="#E25444"/><path d="M16 6v20l7-3.5V9.5L16 6z" fill="#BF2E22"/></svg>,
+    },
+    {
+      key: 'salesforce', name: 'Salesforce', authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu organización de Salesforce para sincronizar contactos, leads y oportunidades.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#00A1E0"/><path d="M13 10.5a4 4 0 017.7-1.5A3.5 3.5 0 1122.5 16H10a3 3 0 010-6c.18 0 .35.01.52.04A4 4 0 0113 10.5z" fill="white"/></svg>,
+    },
+    {
+      key: 'snowflake', name: 'Snowflake', authType: 'direct',
+      desc: 'Los datos se consultarán directamente desde tu fuente de datos que gestionas tú.',
+      syncDesc: 'Conecta tu data warehouse de Snowflake directamente.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#29B5E8"/><path d="M16 5v22M6 10.5l10 5.5-10 5.5M26 10.5l-10 5.5 10 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+    },
+    {
+      key: 'stripe', name: 'Stripe', authType: 'apikey',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Sincroniza datos de pagos, clientes y suscripciones de Stripe.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#635BFF"/><path d="M18.5 14.5c0-.8.7-1.1 1.8-1.1 1.6 0 3.6.5 5.2 1.4v-5c-1.7-.7-3.5-1-5.2-1-4.3 0-7.2 2.2-7.2 5.9 0 5.7 7.9 4.8 7.9 7.3 0 1-.8 1.3-2 1.3-1.7 0-3.9-.7-5.6-1.7v5.1c1.9.8 3.8 1.1 5.6 1.1 4.4 0 7.4-2.2 7.4-5.9-.1-6.2-7.9-5.1-7.9-7.4z" fill="white"/></svg>,
+    },
+    {
+      key: 'zendesk', name: 'Zendesk', authType: 'oauth',
+      desc: 'Los datos se sincronizarán con Clain y se actualizarán regularmente.',
+      syncDesc: 'Conecta tu cuenta de Zendesk para sincronizar tickets, usuarios y organizaciones.',
+      logo: <svg viewBox="0 0 32 32" className="w-8 h-8 flex-shrink-0"><rect width="32" height="32" rx="6" fill="#03363D"/><path d="M15 9a6 6 0 010 12H9L15 9z" fill="#03363D" stroke="white" strokeWidth="1.5"/><path d="M17 23a6 6 0 010-12h6L17 23z" fill="white"/></svg>,
+    },
+  ];
+
+  const filteredSources = sources.filter(s =>
+    pickerSearch === '' || s.name.toLowerCase().includes(pickerSearch.toLowerCase())
+  );
+
+  const currentSource = sources.find(s => s.key === selectedSource);
+
+  // ── Source config view ─────────────────────────────────────────────────────
+  if (view === 'config' && currentSource) {
+    const isOAuth = currentSource.authType === 'oauth';
+    const isDirect = currentSource.authType === 'direct';
+
+    return (
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-5 h-11 bg-white border-b border-[#e9eae6]">
+          <button onClick={() => { setView('picker'); setConfigStep(1); }} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <div className="flex items-center gap-2 flex-1">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M5 8c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3" strokeLinecap="round"/></svg>
+            <span className="text-[15px] font-bold text-[#1a1a1a]">Nueva fuente de datos</span>
+          </div>
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+          <button onClick={() => { setView('list'); setSelectedSource(null); setConfigStep(1); }} className="h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#646462] hover:bg-[#f3f3f1]">
+            Cancelar
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto bg-[#fafaf9] p-6">
+          <div className="max-w-2xl mx-auto bg-white rounded-[12px] border border-[#e9eae6] overflow-hidden">
+            {/* Source header */}
+            <div className="flex items-center gap-3 px-6 pt-6 pb-4">
+              {currentSource.logo}
+              <div>
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Vincular tu fuente de datos</h2>
+                <p className="text-[12px] text-[#646462]">{currentSource.syncDesc}</p>
+              </div>
+            </div>
+
+            {/* Info banner */}
+            <div className="mx-6 mb-4 flex items-center gap-2.5 bg-[#eff2ff] border border-[#c7d2fe] rounded-lg px-4 py-2.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              <p className="text-[12px] text-[#3b59f6] flex-1">
+                Sincroniza todos tus datos históricos desde cualquier nueva fuente gratis durante los primeros 7 días (límite de 100M filas para el plan gratuito)
+              </p>
+              <button className="flex-shrink-0 h-6 px-2.5 bg-[#e8572a] text-white text-[11px] font-semibold rounded hover:bg-[#c9451e]">
+                Saber más
+              </button>
+            </div>
+
+            <div className="px-6 pb-6 space-y-5">
+              {/* Source-specific intro text */}
+              {isOAuth ? (
+                <div>
+                  <p className="text-[13px] text-[#1a1a1a]">
+                    Conecta tu{' '}
+                    <span className="text-[#3b59f6] underline cursor-pointer">espacio de trabajo de {currentSource.name}</span>
+                    {' '}para sincronizar {currentSource.key === 'github' ? 'issues, proyectos, equipos' : currentSource.key === 'linear' ? 'issues, proyectos, equipos' : 'datos'}, y más.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[13px] text-[#1a1a1a]">
+                    Introduce tu API key de {currentSource.name} para importar automáticamente tus datos al Data Warehouse de Clain.
+                  </p>
+                  {currentSource.scopes && currentSource.scopes.length > 0 && (
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] mt-3 mb-1">Permisos de API requeridos:</p>
+                      <ul className="space-y-0.5">
+                        {currentSource.scopes.map((scope, i) => (
+                          <li key={i} className="text-[12px] text-[#1a1a1a] flex items-start gap-1.5">
+                            <span className="text-[#646462] mt-0.5">•</span>
+                            <span><span className="font-mono text-[#3b59f6] text-[11px]">{scope.split(' - ')[0]}</span> - {scope.split(' - ')[1]}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <button className="mt-3 flex items-center gap-1 text-[12px] text-[#e8572a] font-semibold hover:underline">
+                        Ver documentación
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Description */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">
+                  Descripción <span className="text-[#646462] font-normal">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder={isOAuth ? 'ej. Base de datos de producción' : `ej. 'Base de datos EU de producción' o 'Cuenta de facturación Stripe'`}
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"
+                />
+                <p className="text-[11px] text-[#646462] mt-1">Una descripción para identificar esta fuente.</p>
+              </div>
+
+              {/* OAuth: account connection OR API key: secret input */}
+              {isOAuth ? (
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">
+                    Cuenta de {currentSource.name}
+                  </label>
+                  <select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#646462] bg-white outline-none focus:border-[#3b59f6]">
+                    <option>Elegir conexión de {currentSource.name}</option>
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">API key</label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      defaultValue="••••••••••••••••"
+                      className="w-full h-9 px-3 pr-10 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"
+                    />
+                    <button
+                      onClick={() => setShowApiKey(s => !s)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#646462] hover:text-[#1a1a1a]"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5">
+                        {showApiKey
+                          ? <><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/><path d="M2 2l12 12" strokeLinecap="round"/></>
+                          : <><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></>
+                        }
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Table prefix */}
+              <div>
+                <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">
+                  Prefijo de tabla <span className="text-[#646462] font-normal">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="internal"
+                  className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"
+                />
+                <p className="text-[13px] text-[#1a1a1a] mt-1.5">
+                  El nombre de la tabla tendrá el aspecto de:{' '}
+                  <span className="font-bold">{currentSource.key}_nombre_tabla</span>
+                </p>
+                <p className="text-[11px] text-[#646462] mt-0.5">
+                  Usa solo letras, números y guiones bajos. Debe comenzar con una letra o guión bajo.
+                </p>
+              </div>
+
+              {/* Back / Next */}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setView('picker')}
+                  className="h-9 px-5 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]"
+                >
+                  Atrás
+                </button>
+                <button className="h-9 px-5 bg-[#e8572a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#c9451e]">
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Source picker view ─────────────────────────────────────────────────────
+  if (view === 'picker') {
+    return (
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-5 h-11 bg-white border-b border-[#e9eae6]">
+          <button onClick={() => setView('list')} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 4L6 8l4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <div className="flex items-center gap-2 flex-1">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M5 8c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3" strokeLinecap="round"/></svg>
+            <span className="text-[15px] font-bold text-[#1a1a1a]">Nueva fuente</span>
+          </div>
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+        </div>
+
+        {/* Search bar */}
+        <div className="flex-shrink-0 flex items-center gap-4 px-5 py-3 bg-white border-b border-[#e9eae6]">
+          <div className="relative flex-1 max-w-xs">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+            <input
+              type="text"
+              placeholder="Buscar..."
+              value={pickerSearch}
+              onChange={e => setPickerSearch(e.target.value)}
+              className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"
+            />
+          </div>
+          <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">¿No encuentras lo que buscas?</button>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto bg-white">
+          {/* Table header */}
+          <div className="flex items-center px-5 h-9 border-b border-[#e9eae6] text-[11px] font-semibold text-[#646462] uppercase tracking-wide">
+            <div className="flex items-center gap-1 flex-1">
+              Nombre
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3l3 4H5l3-4zm0 10l-3-4h6l-3 4z"/></svg>
+            </div>
+          </div>
+
+          {filteredSources.map((src, idx) => (
+            <div
+              key={src.key}
+              className={`flex items-center gap-4 px-5 py-3.5 hover:bg-[#fafafa] ${idx < filteredSources.length - 1 ? 'border-b border-[#f3f3f1]' : ''}`}
+            >
+              {src.logo}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[14px] font-semibold text-[#1a1a1a]">{src.name}</span>
+                  {src.badge && (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${src.badge === 'Beta' ? 'text-[#7856FF] border-[#c4b5fd]' : 'text-[#d97706] border-[#fcd34d]'}`}>
+                      {src.badge}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[12px] text-[#646462] truncate">{src.desc}</p>
+              </div>
+              <button
+                onClick={() => { setSelectedSource(src.key); setView('config'); }}
+                className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 border border-[#e8572a] rounded-lg text-[12px] font-semibold text-[#e8572a] hover:bg-[#fff5f2]"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Crear
+              </button>
+            </div>
+          ))}
+
+          {filteredSources.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">No se encontraron fuentes</p>
+              <p className="text-[12px] text-[#646462] mt-1">Prueba con otro término de búsqueda</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sources list view (default) ────────────────────────────────────────────
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-5 h-11 bg-white border-b border-[#e9eae6]">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M5 8c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3" strokeLinecap="round"/></svg>
+        <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">Fuentes</span>
+        <button className="p-1 rounded text-[#646462] hover:text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><circle cx="5" cy="8" r="1"/><circle cx="11" cy="8" r="1"/></svg>
+        </button>
+        <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+          Quick start
+        </button>
+        <button
+          onClick={() => setView('picker')}
+          className="flex items-center gap-1.5 h-7 px-3 bg-[#e8572a] text-white text-[12px] font-semibold rounded-lg hover:bg-[#c9451e]"
+        >
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Nueva fuente
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto bg-[#fafaf9]">
+        <div className="max-w-4xl mx-auto p-5 space-y-6">
+          {/* Empty state hero */}
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            <div className="flex items-center gap-8 px-8 py-8">
+              <div className="flex-shrink-0">
+                {ClainMascot({ size: 110, variant: 'suit' })}
+              </div>
+              <div>
+                <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-2">Crea tu primera fuente de datos</h2>
+                <p className="text-[13px] text-[#646462] leading-relaxed mb-4">
+                  Usa fuentes de data warehouse para importar datos desde tus{' '}
+                  <span className="text-[#3b59f6] underline cursor-pointer">fuentes externas</span>{' '}
+                  a Clain.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setView('picker')}
+                    className="flex items-center gap-1.5 h-8 px-4 bg-[#e8572a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#c9451e]"
+                  >
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                    Nueva fuente
+                  </button>
+                  <button className="flex items-center gap-1.5 h-8 px-4 border border-[#e9eae6] text-[#1a1a1a] text-[13px] font-semibold rounded-lg hover:bg-[#f3f3f1]">
+                    Saber más
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Managed sources */}
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            <div className="px-5 pt-5 pb-3">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-0.5">Fuentes gestionadas de data warehouse</h3>
+              <p className="text-[12px] text-[#646462] leading-relaxed">
+                Clain puede conectarse a fuentes externas e importar datos automáticamente<br/>al data warehouse de Clain
+              </p>
+            </div>
+            <div className="px-5 pb-3">
+              <div className="relative max-w-xs">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+                <input type="text" placeholder="Buscar..." className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-t border-[#e9eae6]">
+                  {['Fuente', 'Prefijo de tabla', 'Última ejecución exitosa', 'Total filas sincronizadas', 'Estado'].map((col, i) => (
+                    <th key={col} className={`text-left px-5 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6] ${i > 1 ? 'relative' : ''}`}>
+                      <span className="flex items-center gap-1">
+                        {col}
+                        {(col === 'Última ejecución exitosa' || col === 'Total filas sincronizadas') && (
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+                        )}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center">
+                    <p className="text-[13px] text-[#646462] mb-3">Sin fuentes gestionadas</p>
+                    <button
+                      onClick={() => setView('picker')}
+                      className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] mx-auto"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                      Nueva fuente
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            {/* 7-day banner */}
+            <div className="border-t border-[#e9eae6] px-5 py-3 flex items-center gap-2.5">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+              <p className="text-[12px] text-[#646462] flex-1">
+                Sincroniza todos tus datos históricos desde cualquier nueva fuente gratis durante los primeros 7 días (límite de 100M filas para el plan gratuito)
+              </p>
+              <button className="flex-shrink-0 h-6 px-2.5 bg-[#e8572a] text-white text-[11px] font-semibold rounded hover:bg-[#c9451e]">
+                Saber más
+              </button>
+            </div>
+          </div>
+
+          {/* Self-managed sources */}
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            <div className="px-5 pt-5 pb-3">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-0.5">Fuentes de data warehouse autogestionadas</h3>
+              <p className="text-[12px] text-[#646462]">
+                Conecta tus propias fuentes de datos,{' '}
+                <span className="text-[#3b59f6] underline cursor-pointer">haciéndolas consultables en Clain</span>
+              </p>
+            </div>
+            <div className="px-5 pb-3">
+              <div className="relative max-w-xs">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+                <input type="text" placeholder="Buscar..." className="w-full h-8 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-t border-[#e9eae6]">
+                  <th className="text-left px-5 py-2.5 text-[11px] font-semibold text-[#646462] uppercase tracking-wide border-b border-[#e9eae6]">Fuente</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="px-5 py-4">
+                    <span className="text-[13px] text-[#646462]">Sin entradas</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

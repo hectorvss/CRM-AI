@@ -1,0 +1,465 @@
+// ── WAAppEarlyAccessView ──────────────────────────────────────────────────────
+// PostHog Early Access Features — gestiona features beta opt-in/opt-out.
+// Backend:
+//   - List/Detail/CRUD: /api/projects/{id}/early_access_feature/
+//   - Linked feature flag: /api/projects/{id}/feature_flags/{id}/
+//   - Opt-ins via $feature_flag_called events / persons.properties
+//   - Stats: HogQL aggregations sobre $feature_enrollment_update events
+
+interface EarlyAccessFeature {
+  id:                 string;
+  name:               string;
+  description:        string;
+  stage:              'concept' | 'alpha' | 'beta' | 'general-availability';
+  documentation_url?: string;
+  feature_flag?:      { id: number; key: string } | null;
+  created_at:         string;
+  created_by?:        { first_name?: string; email?: string } | null;
+  archived?:          boolean;
+  enrollment_count?:  number;
+}
+
+const STAGE_META: Record<EarlyAccessFeature['stage'], { label: string; color: string; bg: string; description: string }> = {
+  'concept':              { label: 'Concept',  color: '#646462', bg: '#f3f3f1',  description: 'Idea inicial, sin código aún.' },
+  'alpha':                { label: 'Alpha',    color: '#a855f7', bg: '#f5f3ff',  description: 'Prueba interna con un grupo reducido.' },
+  'beta':                 { label: 'Beta',     color: '#3b59f6', bg: '#eff2ff',  description: 'Usuarios pueden activarla desde el widget.' },
+  'general-availability': { label: 'GA',       color: '#16a34a', bg: '#dcfce7',  description: 'Disponible para todos.' },
+};
+const STAGE_FLOW: EarlyAccessFeature['stage'][] = ['concept', 'alpha', 'beta', 'general-availability'];
+
+function formatEafDate(iso?: string | null): string {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return iso; }
+}
+
+// ── Stage progress bar ────────────────────────────────────────────────────────
+function StageProgress({ stage }: { stage: EarlyAccessFeature['stage'] }) {
+  const currentIdx = STAGE_FLOW.indexOf(stage);
+  return (
+    <div className="flex items-center gap-1">
+      {STAGE_FLOW.map((s, i) => {
+        const m = STAGE_META[s];
+        const isActive = i === currentIdx;
+        const isPast   = i < currentIdx;
+        return (
+          <React.Fragment key={s}>
+            <span title={m.description} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isActive ? '' : isPast ? 'opacity-50' : 'opacity-30'}`} style={{ color: m.color, backgroundColor: m.bg }}>{m.label}</span>
+            {i < STAGE_FLOW.length - 1 && <span className={`text-[#c4c4be] ${isPast ? 'text-[#16a34a]' : ''}`}>→</span>}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── New/Edit feature modal ────────────────────────────────────────────────────
+function EarlyAccessEditModal({ open, initial, onClose, onSave }: { open: boolean; initial: Partial<EarlyAccessFeature> | null; onClose: () => void; onSave: (f: Partial<EarlyAccessFeature>) => Promise<void> }) {
+  const [name, setName]       = React.useState(initial?.name ?? '');
+  const [desc, setDesc]       = React.useState(initial?.description ?? '');
+  const [stage, setStage]     = React.useState<EarlyAccessFeature['stage']>(initial?.stage ?? 'concept');
+  const [docUrl, setDocUrl]   = React.useState(initial?.documentation_url ?? '');
+  const [flagKey, setFlagKey] = React.useState(initial?.feature_flag?.key ?? '');
+  const [saving, setSaving]   = React.useState(false);
+  const [error, setError]     = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!open) return;
+    setName(initial?.name ?? '');
+    setDesc(initial?.description ?? '');
+    setStage(initial?.stage ?? 'concept');
+    setDocUrl(initial?.documentation_url ?? '');
+    setFlagKey(initial?.feature_flag?.key ?? '');
+    setError(null);
+  }, [open, initial]);
+  if (!open) return null;
+
+  async function save() {
+    if (!name.trim()) { setError('El nombre es obligatorio'); return; }
+    setSaving(true); setError(null);
+    try {
+      const payload: any = { name: name.trim(), description: desc.trim(), stage, documentation_url: docUrl.trim() || undefined };
+      // Auto-create feature flag if key provided and not existing
+      if (flagKey.trim() && !initial?.feature_flag) {
+        payload.feature_flag_key = flagKey.trim();
+      }
+      await onSave(initial?.id ? { ...payload, id: initial.id } : payload);
+      onClose();
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al guardar');
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-[#1a1a18]/30 z-50 flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-[92vw] max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-center justify-between">
+          <h2 className="text-base font-bold text-[#1a1a18]">{initial?.id ? 'Editar' : 'Nueva'} Early Access Feature</h2>
+          <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18]"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-[#1a1a18] mb-1">Nombre <span className="text-[#dc2626]">*</span></label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Dark mode beta" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#14b8a6]" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#1a1a18] mb-1">Descripción</label>
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="Qué hace la feature, a quién va dirigida, qué probar…" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#14b8a6] resize-y" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#1a1a18] mb-1">Fase</label>
+            <div className="grid grid-cols-4 gap-2">
+              {STAGE_FLOW.map(s => {
+                const m = STAGE_META[s];
+                return (
+                  <button key={s} onClick={() => setStage(s)} className={`p-2 border-2 rounded-lg text-left ${stage === s ? 'border-current' : 'border-[#e9eae6] opacity-50 hover:opacity-100'}`} style={stage === s ? { color: m.color, backgroundColor: m.bg } : {}}>
+                    <p className="text-xs font-semibold">{m.label}</p>
+                    <p className="text-[9px] mt-0.5 opacity-80">{m.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#1a1a18] mb-1">URL de documentación</label>
+            <input value={docUrl} onChange={e => setDocUrl(e.target.value)} placeholder="https://docs.empresa.com/dark-mode" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#14b8a6] font-mono" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#1a1a18] mb-1">Feature flag key {!initial?.feature_flag && <span className="text-[10px] text-[#9ca3af]">(se creará automáticamente si no existe)</span>}</label>
+            <input value={flagKey} onChange={e => setFlagKey(e.target.value)} placeholder="dark-mode-beta" className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#14b8a6] font-mono" disabled={!!initial?.feature_flag} />
+            {initial?.feature_flag && <p className="text-[10px] text-[#9ca3af] mt-1">El flag asociado no se puede cambiar una vez creado.</p>}
+          </div>
+          {error && <div className="bg-[#fef2f2] border border-[#fecaca] rounded p-2 text-xs text-[#991b1b]">{error}</div>}
+        </div>
+        <div className="px-5 py-3 bg-[#f9f9f7] border-t border-[#e9eae6] flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-[#1a1a18] hover:bg-white rounded">Cancelar</button>
+          <button onClick={save} disabled={saving || !name.trim()} className="px-3 py-1.5 bg-[#14b8a6] text-white text-sm rounded disabled:opacity-50">{saving ? 'Guardando…' : (initial?.id ? 'Guardar cambios' : 'Crear feature')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Feature detail drawer ────────────────────────────────────────────────────
+function EarlyAccessDetailDrawer({ feature, onClose, onEdit, onStageChange, onArchive, onDelete }: { feature: EarlyAccessFeature; onClose: () => void; onEdit: () => void; onStageChange: (s: EarlyAccessFeature['stage']) => void; onArchive: () => void; onDelete: () => void }) {
+  const [enrollments, setEnrollments] = React.useState<{ optedIn: number; optedOut: number; recent: any[] }>({ optedIn: 0, optedOut: 0, recent: [] });
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const ph = await import('../api/posthog');
+        if (!ph.getTeamId()) await ph.bootstrapPostHog();
+        const flagKey = feature.feature_flag?.key;
+        if (!flagKey) { if (!cancelled) setEnrollments({ optedIn: 0, optedOut: 0, recent: [] }); return; }
+        const escKey = flagKey.replace(/'/g, "''");
+        const hql = `
+          SELECT
+            countIf(event = '$feature_enrollment_update' AND toString(properties.$feature_enrollment) = 'true' AND toString(properties.$feature_flag) = '${escKey}') AS opted_in,
+            countIf(event = '$feature_enrollment_update' AND toString(properties.$feature_enrollment) = 'false' AND toString(properties.$feature_flag) = '${escKey}') AS opted_out
+          FROM events
+          WHERE timestamp >= now() - INTERVAL 90 DAY
+        `;
+        const res: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: hql } });
+        const r = res.results?.[0] ?? [0, 0];
+        // Recent enrollments
+        const recentHql = `
+          SELECT distinct_id, timestamp, toString(properties.$feature_enrollment) AS enrolled
+          FROM events
+          WHERE event = '$feature_enrollment_update' AND toString(properties.$feature_flag) = '${escKey}'
+          ORDER BY timestamp DESC
+          LIMIT 50
+        `;
+        const recentRes: any = await ph.posthog.query({ query: { kind: 'HogQLQuery', query: recentHql } });
+        const recent = (recentRes.results ?? []).map((row: any[]) => ({ distinct_id: row[0], ts: row[1], enrolled: row[2] === 'true' }));
+        if (!cancelled) setEnrollments({ optedIn: Number(r[0] ?? 0), optedOut: Number(r[1] ?? 0), recent });
+      } catch {}
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [feature.id, feature.feature_flag?.key]);
+
+  const stageMeta = STAGE_META[feature.stage];
+  const nextStage = STAGE_FLOW[STAGE_FLOW.indexOf(feature.stage) + 1];
+  const prevStage = STAGE_FLOW[STAGE_FLOW.indexOf(feature.stage) - 1];
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-[#1a1a18]/30" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white w-[760px] max-w-[95vw] h-full shadow-2xl flex flex-col">
+        <div className="px-5 py-4 border-b border-[#e9eae6] flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: stageMeta.color, backgroundColor: stageMeta.bg }}>{stageMeta.label}</span>
+              {feature.feature_flag && <span className="text-[10px] bg-[#f3f3f1] text-[#646462] px-1.5 py-0.5 rounded font-mono">flag: {feature.feature_flag.key}</span>}
+              {feature.archived && <span className="text-[10px] bg-[#fef3c7] text-[#92400e] px-1.5 py-0.5 rounded">Archivada</span>}
+            </div>
+            <h2 className="text-base font-bold text-[#1a1a18]">{feature.name}</h2>
+            {feature.description && <p className="text-xs text-[#646462] mt-1">{feature.description}</p>}
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={onEdit} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7]">Editar</button>
+            <button onClick={onArchive} className="px-2 py-1 bg-white border border-[#e9eae6] rounded text-xs hover:bg-[#f9f9f7]">{feature.archived ? 'Reactivar' : 'Archivar'}</button>
+            <button onClick={() => { if (confirm('¿Eliminar?')) onDelete(); }} className="px-2 py-1 text-[#dc2626] hover:bg-[#fee2e2] rounded text-xs">Eliminar</button>
+            <button onClick={onClose} className="text-[#9ca3af] hover:text-[#1a1a18] ml-1"><svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>
+          </div>
+        </div>
+
+        {/* Stage progression */}
+        <div className="px-5 py-3 border-b border-[#e9eae6] flex items-center justify-between bg-[#fafaf9]">
+          <div className="flex items-center gap-3">
+            <p className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest">Fase actual:</p>
+            <StageProgress stage={feature.stage} />
+          </div>
+          <div className="flex gap-2">
+            {prevStage && <button onClick={() => onStageChange(prevStage)} className="text-[11px] px-2 py-1 bg-white border border-[#e9eae6] rounded hover:bg-[#f9f9f7]">← {STAGE_META[prevStage].label}</button>}
+            {nextStage && <button onClick={() => onStageChange(nextStage)} className="text-[11px] px-2 py-1 bg-[#14b8a6] text-white rounded hover:bg-[#0d9488]">Promover a {STAGE_META[nextStage].label} →</button>}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <section className="grid grid-cols-3 gap-3">
+            <div className="bg-[#dcfce7] rounded-lg p-3">
+              <p className="text-[10px] text-[#16a34a] uppercase font-bold">Opt-ins</p>
+              {loading ? <div className="h-7 w-16 bg-white/50 animate-pulse rounded mt-1" /> : <p className="text-2xl font-bold text-[#16a34a]">{enrollments.optedIn.toLocaleString('es-ES')}</p>}
+              <p className="text-[10px] text-[#16a34a]/70 mt-1">Usuarios activos</p>
+            </div>
+            <div className="bg-[#fee2e2] rounded-lg p-3">
+              <p className="text-[10px] text-[#dc2626] uppercase font-bold">Opt-outs</p>
+              {loading ? <div className="h-7 w-16 bg-white/50 animate-pulse rounded mt-1" /> : <p className="text-2xl font-bold text-[#dc2626]">{enrollments.optedOut.toLocaleString('es-ES')}</p>}
+              <p className="text-[10px] text-[#dc2626]/70 mt-1">Salidas</p>
+            </div>
+            <div className="bg-[#eff2ff] rounded-lg p-3">
+              <p className="text-[10px] text-[#3b59f6] uppercase font-bold">Conversión</p>
+              <p className="text-2xl font-bold text-[#3b59f6]">{enrollments.optedIn + enrollments.optedOut === 0 ? '—' : `${((enrollments.optedIn / (enrollments.optedIn + enrollments.optedOut)) * 100).toFixed(1)}%`}</p>
+              <p className="text-[10px] text-[#3b59f6]/70 mt-1">Retenidos / total</p>
+            </div>
+          </section>
+
+          {feature.documentation_url && (
+            <section>
+              <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Documentación</h4>
+              <a href={feature.documentation_url} target="_blank" rel="noreferrer" className="text-sm text-[#3b59f6] hover:underline break-all">{feature.documentation_url} ↗</a>
+            </section>
+          )}
+
+          <section>
+            <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Enrollments recientes</h4>
+            {loading ? <div className="space-y-1">{[0,1,2,3].map(i => <div key={i} className="h-6 bg-[#f3f3f1] animate-pulse rounded" />)}</div>
+            : enrollments.recent.length === 0 ? <p className="text-xs text-[#9ca3af] italic">Sin enrollments aún. Cuando los usuarios activen la feature desde el widget, aparecerán aquí.</p>
+            : <div className="border border-[#e9eae6] rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-[#fafaf9] text-[10px] text-[#9ca3af] uppercase"><th className="text-left px-3 py-1.5">Usuario</th><th className="text-left px-3 py-1.5">Acción</th><th className="text-left px-3 py-1.5">Cuándo</th></tr></thead>
+                  <tbody>
+                    {enrollments.recent.slice(0, 20).map((r: any, i: number) => (
+                      <tr key={i} className="border-t border-[#f3f3f1]">
+                        <td className="px-3 py-1.5 font-mono text-[#646462] truncate max-w-[200px]">{r.distinct_id}</td>
+                        <td className="px-3 py-1.5">{r.enrolled ? <span className="text-[10px] bg-[#dcfce7] text-[#16a34a] px-1.5 py-0.5 rounded">Opt-in ✓</span> : <span className="text-[10px] bg-[#fee2e2] text-[#dc2626] px-1.5 py-0.5 rounded">Opt-out ✗</span>}</td>
+                        <td className="px-3 py-1.5 text-[#9ca3af]">{formatRelativeTime(r.ts)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>}
+          </section>
+
+          {feature.feature_flag && (
+            <section className="bg-[#eff2ff] rounded-lg p-3">
+              <h4 className="text-[10px] font-semibold text-[#3b59f6] uppercase tracking-widest mb-2">Feature flag asociado</h4>
+              <p className="text-xs text-[#1a1a18]">El flag <code className="bg-white px-1 rounded font-mono text-[#3b59f6]">{feature.feature_flag.key}</code> controla quién ve esta feature.</p>
+              <button onClick={() => navigateWA('appFeatureFlags', { kind: 'flag', id: feature.feature_flag!.id })} className="text-xs text-[#3b59f6] hover:underline mt-1">Ir al flag →</button>
+            </section>
+          )}
+
+          <section className="bg-[#fafaf9] rounded-lg p-3">
+            <h4 className="text-[10px] font-semibold text-[#9ca3af] uppercase tracking-widest mb-2">Integración</h4>
+            <p className="text-xs text-[#646462] mb-2">Los usuarios pueden ver y activar esta feature con el widget de PostHog:</p>
+            <pre className="bg-[#1a1a18] text-[#e9eae6] rounded p-3 text-[10px] font-mono overflow-auto">
+{`// JavaScript SDK
+posthog.showFeaturePreviewModal()
+// o desde React:
+const { features } = usePosthog().getEarlyAccessFeatures()
+features.forEach(f =>
+  posthog.updateEarlyAccessFeatureEnrollment(f.flagKey, true)
+)`}
+            </pre>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Main view
+// ══════════════════════════════════════════════════════════════════════════════
+function WAAppEarlyAccessView() {
+  type TabKey = 'all' | 'concept' | 'alpha' | 'beta' | 'ga' | 'archived';
+  const [tab,    setTab]    = React.useState<TabKey>('all');
+  const [search, setSearch] = React.useState('');
+  const [features, setFeatures] = React.useState<EarlyAccessFeature[]>([]);
+  const [loading, setLoading]   = React.useState(false);
+  const [error,   setError]     = React.useState<string | null>(null);
+  const [editing, setEditing]   = React.useState<Partial<EarlyAccessFeature> | null>(null);
+  const [selected, setSelected] = React.useState<EarlyAccessFeature | null>(null);
+  const [showNew, setShowNew]   = React.useState(false);
+
+  // Consume nav intent (e.g. from feature flag view "ver early access asociada")
+  React.useEffect(() => {
+    const intent = consumeNavIntent<string>('early-access');
+    if (intent?.id) {
+      // Load and open the specific feature
+      const f = features.find(ff => ff.id === intent.id);
+      if (f) setSelected(f);
+    }
+  }, [features]);
+
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const ph = await import('../api/posthog');
+      if (!ph.getProjectId()) await ph.bootstrapPostHog();
+      const res: any = await ph.phGet(`/api/projects/${ph.getProjectId()}/early_access_feature/`, { limit: 100 });
+      setFeatures(res.results ?? []);
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al cargar features');
+    } finally { setLoading(false); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  async function saveFeature(f: Partial<EarlyAccessFeature>) {
+    const ph = await import('../api/posthog');
+    if (f.id) {
+      const updated: any = await ph.phPatch(`/api/projects/${ph.getProjectId()}/early_access_feature/${f.id}/`, f);
+      setFeatures(prev => prev.map(x => x.id === f.id ? updated : x));
+      if (selected?.id === f.id) setSelected(updated);
+    } else {
+      const created: any = await ph.phPost(`/api/projects/${ph.getProjectId()}/early_access_feature/`, f);
+      setFeatures(prev => [created, ...prev]);
+    }
+  }
+  async function changeStage(f: EarlyAccessFeature, stage: EarlyAccessFeature['stage']) {
+    try { await saveFeature({ id: f.id, stage }); } catch (e: any) { alert(e?.message); }
+  }
+  async function archiveFeature(f: EarlyAccessFeature) {
+    try { await saveFeature({ id: f.id, archived: !f.archived }); } catch (e: any) { alert(e?.message); }
+  }
+  async function deleteFeature(f: EarlyAccessFeature) {
+    try {
+      const ph = await import('../api/posthog');
+      await ph.phDelete(`/api/projects/${ph.getProjectId()}/early_access_feature/${f.id}/`);
+      setFeatures(prev => prev.filter(x => x.id !== f.id));
+      setSelected(null);
+    } catch (e: any) { alert(e?.message); }
+  }
+
+  const filtered = features.filter(f => {
+    if (search && !`${f.name} ${f.description}`.toLowerCase().includes(search.toLowerCase())) return false;
+    if (tab === 'archived') return f.archived;
+    if (f.archived) return false;
+    if (tab === 'all') return true;
+    if (tab === 'ga') return f.stage === 'general-availability';
+    return f.stage === tab;
+  });
+
+  const stageCounts: Record<EarlyAccessFeature['stage'] | 'archived', number> = {
+    'concept': 0, 'alpha': 0, 'beta': 0, 'general-availability': 0, 'archived': 0,
+  };
+  features.forEach(f => { if (f.archived) stageCounts.archived++; else stageCounts[f.stage]++; });
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+      {/* Header */}
+      <div className="flex items-start justify-between px-6 pt-5 pb-0 flex-shrink-0">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 text-[#14b8a6]"><path d="M8 2c-1 2-4 3-4 6a4 4 0 008 0c0-3-3-4-4-6z" fill="currentColor"/><circle cx="8" cy="10" r="1.5" fill="white"/></svg>
+            <h1 className="text-[16px] font-bold text-[#1a1a18]">Early access features</h1>
+          </div>
+          <p className="text-[13px] text-[#646462]">Lanza funcionalidades beta y deja que tus usuarios opten por probarlas.</p>
+        </div>
+        <button onClick={() => { setEditing(null); setShowNew(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#14b8a6] text-white text-sm rounded-lg hover:bg-[#0d9488] flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          Nueva feature
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 px-6 mt-3 border-b border-[#e9eae6] flex-shrink-0">
+        {[
+          { k: 'all',      l: 'Todas',     c: features.filter(f => !f.archived).length },
+          { k: 'concept',  l: 'Concept',   c: stageCounts['concept'] },
+          { k: 'alpha',    l: 'Alpha',     c: stageCounts['alpha'] },
+          { k: 'beta',     l: 'Beta',      c: stageCounts['beta'] },
+          { k: 'ga',       l: 'GA',        c: stageCounts['general-availability'] },
+          { k: 'archived', l: 'Archivadas',c: stageCounts.archived },
+        ].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k as TabKey)} className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 ${tab === t.k ? 'border-[#14b8a6] text-[#14b8a6]' : 'border-transparent text-[#646462] hover:text-[#1a1a18]'}`}>
+            {t.l} {t.c > 0 && <span className="text-[10px] text-[#9ca3af]">{t.c}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
+      <div className="px-6 py-3 flex items-center gap-2 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="relative flex-1 max-w-sm">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar features…" className="w-full pl-10 pr-3 py-1.5 border border-[#e9eae6] rounded-lg text-sm focus:outline-none focus:border-[#14b8a6]" />
+        </div>
+        <button onClick={load} className="px-3 py-1.5 bg-white border border-[#e9eae6] rounded-lg text-xs text-[#1a1a18] hover:bg-[#f9f9f7]">
+          <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`}><path d="M13 8A5 5 0 112 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/><path d="M13 4v4h-4" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>
+        </button>
+      </div>
+
+      {/* List */}
+      <div className="flex-1 overflow-auto p-6">
+        {error && <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 text-xs text-[#991b1b] mb-3">{error}</div>}
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3">{[0,1,2,3].map(i => <div key={i} className="h-32 bg-[#f3f3f1] rounded-xl animate-pulse" />)}</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-16 h-16 rounded-full bg-[#ccfbf1] flex items-center justify-center mx-auto mb-3">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 text-[#14b8a6]"><path d="M12 3c-1.5 3-6 4.5-6 9a6 6 0 0012 0c0-4.5-4.5-6-6-9z" fill="currentColor"/><circle cx="12" cy="15" r="2" fill="white"/></svg>
+            </div>
+            <p className="text-base font-semibold text-[#1a1a18] mb-1">{features.length === 0 ? 'Sin features aún' : 'Sin coincidencias'}</p>
+            <p className="text-sm text-[#646462] mb-4">{features.length === 0 ? 'Crea tu primera feature para empezar a probar funcionalidades con usuarios reales.' : 'Ajusta los filtros o la búsqueda.'}</p>
+            {features.length === 0 && <button onClick={() => { setEditing(null); setShowNew(true); }} className="px-4 py-2 bg-[#14b8a6] text-white text-sm rounded-lg hover:bg-[#0d9488]">+ Nueva feature</button>}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {filtered.map(f => {
+              const m = STAGE_META[f.stage];
+              return (
+                <button key={f.id} onClick={() => setSelected(f)} className="text-left border border-[#e9eae6] rounded-xl p-4 hover:shadow-md hover:border-[#14b8a6] transition-all bg-white">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0" style={{ color: m.color, backgroundColor: m.bg }}>{m.label}</span>
+                      {f.archived && <span className="text-[10px] bg-[#f3f3f1] text-[#9ca3af] px-1.5 py-0.5 rounded">Archivada</span>}
+                    </div>
+                  </div>
+                  <h3 className="text-sm font-semibold text-[#1a1a18] mb-1">{f.name}</h3>
+                  <p className="text-xs text-[#646462] line-clamp-2 mb-3">{f.description || <span className="italic text-[#9ca3af]">Sin descripción</span>}</p>
+                  <div className="flex items-center justify-between text-[10px] text-[#9ca3af]">
+                    {f.feature_flag ? <span className="font-mono">flag: {f.feature_flag.key}</span> : <span className="italic">Sin flag</span>}
+                    <span>{formatEafDate(f.created_at)}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <EarlyAccessEditModal open={showNew || !!editing} initial={editing} onClose={() => { setShowNew(false); setEditing(null); }} onSave={saveFeature} />
+      {selected && (
+        <EarlyAccessDetailDrawer
+          feature={selected}
+          onClose={() => setSelected(null)}
+          onEdit={() => { setEditing(selected); setSelected(null); }}
+          onStageChange={s => changeStage(selected, s)}
+          onArchive={() => archiveFeature(selected)}
+          onDelete={() => deleteFeature(selected)}
+        />
+      )}
+    </div>
+  );
+}

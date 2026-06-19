@@ -37,12 +37,12 @@ export function MinimalCategoryShell({
 }: MinimalCategoryShellProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#fbfbfa] dark:bg-[#121212] p-2 pl-0">
-      <div className="flex-1 flex flex-col mx-2 my-2 overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-none dark:border-white/10 dark:bg-[#171717]">
-        <div className="flex-shrink-0 border-b border-black/5 px-6 py-5 dark:border-white/10">
+      <div className="flex-1 flex flex-col mx-2 my-2 overflow-hidden rounded-[12px] border border-[#e9eae6] bg-white shadow-none">
+        <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-[22px] font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
+              <h1 className="text-[22px] font-semibold tracking-tight text-[#1a1a1a]">{title}</h1>
+              <p className="mt-1 text-[12px] text-[#646462] dark:text-[#a4a4a2]">{subtitle}</p>
             </div>
             <div className="flex items-center gap-2">
               {secondaryAction ? (
@@ -50,7 +50,7 @@ export function MinimalCategoryShell({
                   type="button"
                   onClick={secondaryAction.onClick}
                   disabled={secondaryAction.disabled}
-                  className="rounded-full px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:text-gray-950 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-300 dark:hover:text-white"
+                  className="rounded-full px-4 py-2 text-[13px] font-medium text-[#646462] transition-colors hover:text-[#1a1a1a] disabled:cursor-not-allowed disabled:opacity-40 dark:text-[#c4c4c2] dark:hover:text-white"
                 >
                   {secondaryAction.label}
                 </button>
@@ -61,7 +61,7 @@ export function MinimalCategoryShell({
                   onClick={primaryAction.onClick}
                   disabled={primaryAction.disabled}
                   className={[
-                    'rounded-full px-5 py-2 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-40',
+                    'rounded-full px-5 py-2 text-[13px] font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-40',
                     primaryAction.tone === 'ghost'
                       ? 'bg-black/90 hover:bg-black'
                       : 'bg-black hover:bg-black/90',
@@ -73,7 +73,7 @@ export function MinimalCategoryShell({
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-5 border-t border-black/5 pt-4 text-sm dark:border-white/10">
+          <div className="mt-5 flex flex-wrap gap-5 border-t border-[#e9eae6] pt-4 text-[13px]">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -82,8 +82,8 @@ export function MinimalCategoryShell({
                 className={[
                   'pb-2 text-[15px] font-semibold transition-colors border-b',
                   activeTab === tab.id
-                    ? 'border-gray-950 text-gray-950 dark:border-white dark:text-white'
-                    : 'border-transparent text-gray-700 hover:border-gray-400 hover:text-gray-950 dark:text-gray-300 dark:hover:border-gray-500 dark:hover:text-white',
+                    ? 'border-gray-950 text-[#1a1a1a] dark:border-white'
+                    : 'border-transparent text-[#1a1a1a] hover:border-gray-400 hover:text-[#1a1a1a] dark:text-[#c4c4c2] dark:hover:border-gray-500 dark:hover:text-white',
                 ].join(' ')}
               >
                 {tab.label}
@@ -92,7 +92,7 @@ export function MinimalCategoryShell({
           </div>
         </div>
 
-        <div className={`flex-1 overflow-y-auto custom-scrollbar p-5 sm:p-6 ${contentClassName || ''}`}>
+        <div className={`flex-1 overflow-y-auto custom-scrollbar p-5 sm:p-5 ${contentClassName || ''}`}>
           {children}
         </div>
       </div>
@@ -114,17 +114,17 @@ export function MinimalCard({
   action?: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-[24px] border border-black/5 bg-white dark:border-white/10 dark:bg-[#1b1b1b]">
-      <div className="flex items-center justify-between gap-4 border-b border-black/5 px-5 py-4 dark:border-white/10">
+    <section className="overflow-hidden rounded-[12px] border border-[#e9eae6] bg-white">
+      <div className="flex items-center justify-between gap-4 border-b border-[#e9eae6] px-5 py-4">
         <div className="flex items-center gap-3">
           {icon ? (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5 text-gray-700 dark:bg-white/5 dark:text-gray-200">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f8f8f7] text-[#1a1a1a]">
               <span className="material-symbols-outlined text-[18px]">{icon}</span>
             </div>
           ) : null}
           <div>
-            <h2 className="text-sm font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h2>
-            {subtitle ? <p className="text-[11px] text-gray-500 dark:text-gray-400">{subtitle}</p> : null}
+            <h2 className="text-[13px] font-semibold tracking-tight text-[#1a1a1a]">{title}</h2>
+            {subtitle ? <p className="text-[11px] text-[#646462] dark:text-[#a4a4a2]">{subtitle}</p> : null}
           </div>
         </div>
         {action ? <div>{action}</div> : null}
@@ -149,15 +149,15 @@ export function MinimalProgressBar({
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <span className="text-sm font-medium text-gray-900 dark:text-white">{label}</span>
-        <span className="text-sm font-semibold text-gray-900 dark:text-white">
+        <span className="text-[13px] font-medium text-[#1a1a1a]">{label}</span>
+        <span className="text-[13px] font-semibold text-[#1a1a1a]">
           {value.toLocaleString()} / {max.toLocaleString()}
-          {suffix ? <span className="ml-1 text-gray-500">{suffix}</span> : null}
+          {suffix ? <span className="ml-1 text-[#646462]">{suffix}</span> : null}
         </span>
       </div>
-      <div className="h-2 rounded-full bg-black/5 dark:bg-white/10">
+      <div className="h-2 rounded-full bg-[#f8f8f7] dark:bg-white/10">
         <div
-          className="h-2 rounded-full bg-violet-500"
+          className="h-2 rounded-full bg-[#dc2626]"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -176,11 +176,11 @@ export function MinimalButton({
   disabled?: boolean;
   variant?: 'solid' | 'ghost' | 'outline';
 }) {
-  const base = 'inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40';
+  const base = 'inline-flex items-center justify-center rounded-full px-4 py-2 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40';
   const styles = {
     solid: 'bg-black text-white hover:bg-black/90',
-    ghost: 'text-gray-600 hover:bg-black/5 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-white',
-    outline: 'border border-black/10 bg-white text-gray-900 hover:bg-black/5 dark:border-white/10 dark:bg-[#171717] dark:text-white dark:hover:bg-white/5',
+    ghost: 'text-[#646462] hover:bg-[#f8f8f7] hover:text-[#1a1a1a] dark:text-[#c4c4c2] dark:hover:text-white',
+    outline: 'border border-[#e9eae6] bg-white text-[#1a1a1a] hover:bg-[#f8f8f7]',
   } as const;
 
   return (
@@ -198,9 +198,9 @@ export function MinimalPill({
   tone?: 'neutral' | 'active' | 'subtle';
 }) {
   const styles = {
-    neutral: 'bg-black/[0.03] text-gray-700 dark:bg-white/[0.06] dark:text-gray-300',
-    active: 'border border-black/10 bg-white text-gray-900 dark:border-white/10 dark:bg-[#171717] dark:text-white',
-    subtle: 'bg-transparent text-gray-500 dark:text-gray-400',
+    neutral: 'bg-[#f8f8f7] text-[#1a1a1a] dark:bg-white/[0.06] dark:text-[#c4c4c2]',
+    active: 'border border-[#e9eae6] bg-white text-[#1a1a1a]',
+    subtle: 'bg-transparent text-[#646462] dark:text-[#a4a4a2]',
   } as const;
 
   return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${styles[tone]}`}>{children}</span>;

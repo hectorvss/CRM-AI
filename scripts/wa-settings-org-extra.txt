@@ -1,0 +1,150 @@
+  // ── OrgSecurityPage ───────────────────────────────────────────────────────
+  function OrgSecurityPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Seguridad</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Configura las políticas de seguridad de toda la organización, incluyendo el uso compartido público, los tiempos de espera de sesión y los requisitos de contraseña.</p>
+            <div className="border border-[#e9eae6] rounded-[12px] p-8 flex flex-col items-center text-center gap-3">
+              <svg viewBox="0 0 40 40" className="w-10 h-10"><path d="M5 35L10 10l8 12 7-18 7 18 8-12 5 25H5z" fill="#f59e0b" opacity="0.8"/></svg>
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Ajustes de seguridad de la organización</h3>
+              <p className="text-[13px] text-[#646462]">Configura los permisos de seguridad para los miembros de la organización.</p>
+              <p className="text-[13px] text-[#646462]">Esta función solo está disponible en Clain Cloud.</p>
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Pasar a Clain Cloud</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgOAuthPage ──────────────────────────────────────────────────────────
+  function OrgOAuthPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Aplicaciones OAuth</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Consulta las aplicaciones que han sido autorizadas para conectarse a tu organización.</p>
+            <div className="border border-[#e9eae6] rounded-[12px] p-10 flex flex-col items-center text-center gap-2">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-[#646462]"><path d="M12.65 10A6 6 0 007 5.07V3h-2v2.07a6 6 0 000 11.86V19h2v-2.07A6 6 0 0012.65 14H14v2h2v-2h2v-2h-2v-2h-2v2h-1.35zm-6.65 2a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin aplicaciones conectadas</h3>
+              <p className="text-[13px] text-[#646462]">Las aplicaciones aparecerán aquí cuando herramientas de terceros se conecten a tu organización.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── OrgCIMDPage ───────────────────────────────────────────────────────────
+  function OrgCIMDPage() {
+    const [showModal, setShowModal] = useState(false);
+    const [tokenLabel, setTokenLabel] = useState('');
+
+    return (
+      <div className="flex-1 overflow-y-auto relative">
+        <div className="max-w-4xl px-8 py-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tokens de verificación CIMD</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462]">Vincula aplicaciones de socios CIMD a esta organización para límites de tasa más altos e identidad.</p>
+            <p className="text-[13px] text-[#646462] leading-relaxed">
+              Los tokens de verificación vinculan una aplicación de socio CIMD a esta organización. Añade el token a tu documento de metadatos CIMD en{' '}
+              <code className="px-1.5 py-0.5 bg-[#f3f3f1] rounded text-[12px] font-mono">clain_verification_token</code>.
+              {' '}Los socios verificados obtienen un límite de tasa predeterminado más alto para el aprovisionamiento de cuentas y una trazabilidad de identidad clara. Consulta los{' '}
+              <a href="#" className="text-[#e8572a] hover:underline">docs ↗</a>
+              {' '}para el formato de metadatos.
+            </p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => { setTokenLabel(''); setShowModal(true); }}
+                className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white"
+              >
+                Crear token de verificación
+              </button>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[12px] p-10 flex flex-col items-center text-center gap-2">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-[#646462]"><path d="M12.65 10A6 6 0 007 5.07V3h-2v2.07a6 6 0 000 11.86V19h2v-2.07A6 6 0 0012.65 14H14v2h2v-2h2v-2h-2v-2h-2v2h-1.35zm-6.65 2a4 4 0 110-8 4 4 0 010 8z"/></svg>
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Sin tokens de verificación</h3>
+              <p className="text-[13px] text-[#646462]">Crea uno para vincular una app de socio CIMD a esta organización.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal */}
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <div className="bg-white rounded-[12px] shadow-xl w-[480px] p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Crear token de verificación CIMD</h2>
+                <button onClick={() => setShowModal(false)} className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-[#1a1a1a]">Etiqueta</label>
+                <input
+                  type="text"
+                  value={tokenLabel}
+                  onChange={e => setTokenLabel(e.target.value)}
+                  placeholder="ej. Socio CIMD de producción"
+                  className="w-full h-9 px-3 border border-[#3b59f6] rounded-lg text-[13px] bg-white outline-none"
+                  autoFocus
+                />
+                <p className="text-[12px] text-[#646462]">Elige una etiqueta que te ayude a identificar este token más tarde. Solo verás el valor en texto plano una vez.</p>
+              </div>
+              <div className="border-t border-[#e9eae6] pt-4 flex justify-end gap-2">
+                <button onClick={() => setShowModal(false)} className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">Cancelar</button>
+                <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">Crear token</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── OrgProxyPage ──────────────────────────────────────────────────────────
+  function OrgProxyPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-8 py-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Proxies inversos gestionados</h2>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M7.5 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Dominio</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={2} className="px-4 py-4 text-[13px] text-[#646462]">Sin entradas.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button className="h-8 px-4 border border-[#f59e0b] rounded-lg text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#fef3c7] bg-white">
+              Añadir proxy gestionado
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+

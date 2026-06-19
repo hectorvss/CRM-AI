@@ -66,7 +66,9 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
     { target: 'payments',          label: 'Payments',     icon: 'payments',          requiredPermission: 'payments.read' },
     { target: 'returns',           label: 'Returns',      icon: 'assignment_return', requiredPermission: 'returns.read' },
     { target: 'approvals',         label: 'Approvals',    icon: 'check_circle',      requiredPermission: 'approvals.read', badge: pendingCount > 0 ? pendingCount : undefined },
-    { target: 'ai_studio',         label: 'AI Studio',    icon: 'smart_toy' },
+    // AI Studio is now reachable inside the new prototype shell at
+    // /?prototype=1&view=fin&sub=studio* — the standalone App route below
+    // still works for direct links but is no longer surfaced in the nav.
     { target: 'workflows',         label: 'Workflows',    icon: 'account_tree',      requiredPermission: 'workflows.read' },
     { target: 'knowledge',         label: 'Knowledge',    icon: 'menu_book',         requiredPermission: 'knowledge.read' },
     { target: 'reports',           label: 'Reports',      icon: 'bar_chart',         requiredPermission: 'reports.read' },

@@ -1,0 +1,653 @@
+// ── WADataDestinationsView ────────────────────────────────────────────────────
+function WADataDestinationsView() {
+  type DestFilter = 'all' | 'enabled' | 'disabled';
+  const [filter, setFilter] = useState<DestFilter>('all');
+  const [selected, setSelected] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({
+    slack: true,
+    bigquery: false,
+    webhook: true,
+    postgres: false,
+    snowflake: false,
+    stripe: false,
+    s3: false,
+    redshift: false,
+    pubsub: false,
+    hubspot: false,
+    intercom: false,
+    customerio: false,
+    amplitude: false,
+    segment: false,
+    mixpanel: false,
+    rudderstack: false,
+  });
+  const [showNewModal, setShowNewModal] = useState(false);
+
+  const destinations = [
+    {
+      key: 'slack',
+      name: 'Slack',
+      desc: 'Envía eventos a canales de Slack',
+      category: 'Mensajería',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#611f69"/>
+          <path d="M16.5 10.5a2.5 2.5 0 11-2.5 2.5v-2.5h2.5zm0 0v-2.5a2.5 2.5 0 115 0v2.5h-5z" fill="#E01E5A"/>
+          <path d="M21.5 16.5a2.5 2.5 0 112.5 2.5h-2.5v-2.5zm0 0h2.5a2.5 2.5 0 110 5h-2.5v-5z" fill="#36C5F0"/>
+          <path d="M15.5 21.5a2.5 2.5 0 11-5 0h5zm0 0v2.5a2.5 2.5 0 11-5 0v-2.5h5z" fill="#2EB67D"/>
+          <path d="M21.5 21.5a2.5 2.5 0 112.5-2.5v2.5h-2.5zm0 0h-5a2.5 2.5 0 110-5h5v5z" fill="#ECB22E"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'bigquery',
+      name: 'BigQuery',
+      desc: 'Exporta datos al data warehouse de Google',
+      category: 'Data Warehouse',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#fff"/>
+          <path d="M20 7l11 6.35v12.3L20 33 9 25.65V13.35L20 7z" fill="#4285F4"/>
+          <path d="M20 7v26l11-6.35V13.35L20 7z" fill="#1967D2"/>
+          <path d="M14 22.5l6 3.46 6-3.46v-6.93L20 12.11l-6 3.46v6.93z" fill="#fff"/>
+          <path d="M20 12.11v6.93l6 3.46V15.57L20 12.11z" fill="#E8F0FE"/>
+          <circle cx="20" cy="24.5" r="4" fill="#4285F4"/>
+          <path d="M22.83 27.33l2.12 2.12-.71.71-2.12-2.12.71-.71z" fill="#fff"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'webhook',
+      name: 'HTTP Webhook',
+      desc: 'Envía eventos a cualquier endpoint HTTP',
+      category: 'General',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#1a1a1a"/>
+          <path d="M12 20c0-4.42 3.58-8 8-8s8 3.58 8 8-3.58 8-8 8" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round"/>
+          <path d="M20 15v5l3 3" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="12" cy="20" r="2.5" fill="#3b59f6"/>
+          <path d="M8 17.5L12 20l-4 2.5" fill="none" stroke="#3b59f6" strokeWidth="1.5" strokeLinejoin="round"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'postgres',
+      name: 'Postgres',
+      desc: 'Exporta eventos a una base de datos PostgreSQL',
+      category: 'Base de datos',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#336791"/>
+          <path d="M20 8c-6.08 0-11 4.92-11 11 0 4.61 2.83 8.56 6.85 10.26-.02-.56-.01-1.27.02-1.97-3.38.73-4.09-1.45-4.09-1.45-.55-1.4-1.35-1.78-1.35-1.78-1.1-.75.08-.73.08-.73 1.22.09 1.86 1.25 1.86 1.25 1.08 1.85 2.83 1.32 3.52 1.01.11-.78.42-1.32.77-1.62-2.69-.31-5.52-1.35-5.52-5.99 0-1.32.47-2.4 1.25-3.25-.12-.31-.54-1.54.12-3.2 0 0 1.02-.33 3.35 1.25a11.6 11.6 0 013.05-.41c1.03.01 2.07.14 3.05.41 2.32-1.58 3.34-1.25 3.34-1.25.66 1.66.24 2.89.12 3.2.78.85 1.25 1.93 1.25 3.25 0 4.65-2.84 5.68-5.54 5.98.44.38.82 1.12.82 2.26 0 1.63-.01 2.95-.01 3.35 0 .32.22.7.83.58A11.01 11.01 0 0031 19c0-6.08-4.92-11-11-11z" fill="white"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'snowflake',
+      name: 'Snowflake',
+      desc: 'Exporta datos al data warehouse Snowflake',
+      category: 'Data Warehouse',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#29B5E8"/>
+          <path d="M20 8v24M8 14l12 6-12 6M32 14l-12 6 12 6" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="20" cy="8" r="2" fill="white"/>
+          <circle cx="20" cy="32" r="2" fill="white"/>
+          <circle cx="8" cy="14" r="2" fill="white"/>
+          <circle cx="8" cy="26" r="2" fill="white"/>
+          <circle cx="32" cy="14" r="2" fill="white"/>
+          <circle cx="32" cy="26" r="2" fill="white"/>
+          <circle cx="20" cy="20" r="3" fill="white"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'stripe',
+      name: 'Stripe',
+      desc: 'Sincroniza eventos de pago con Stripe',
+      category: 'Pagos',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#635BFF"/>
+          <path d="M18.5 16.5c0-.8.7-1.1 1.8-1.1 1.6 0 3.6.5 5.2 1.4v-5c-1.7-.7-3.5-1-5.2-1-4.3 0-7.2 2.2-7.2 5.9 0 5.7 7.9 4.8 7.9 7.3 0 1-.8 1.3-2 1.3-1.7 0-3.9-.7-5.6-1.7v5.1c1.9.8 3.8 1.1 5.6 1.1 4.4 0 7.4-2.2 7.4-5.9-.1-6.2-7.9-5.1-7.9-7.4z" fill="white"/>
+        </svg>
+      ),
+    },
+    {
+      key: 's3',
+      name: 'Amazon S3',
+      desc: 'Exporta eventos a un bucket de Amazon S3',
+      category: 'Almacenamiento',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#232F3E"/>
+          <path d="M20 9l8 4v14l-8 4-8-4V13l8-4z" fill="#E25444"/>
+          <path d="M20 9v22l8-4V13l-8-4z" fill="#BF2E22"/>
+          <path d="M12 13l8 4 8-4" stroke="#fff" strokeWidth="1.5" fill="none"/>
+          <path d="M20 17v14" stroke="#fff" strokeWidth="1.5"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'redshift',
+      name: 'Amazon Redshift',
+      desc: 'Exporta eventos al data warehouse de Amazon',
+      category: 'Data Warehouse',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#232F3E"/>
+          <ellipse cx="20" cy="14" rx="9" ry="4" fill="#8C4FFF"/>
+          <path d="M11 14v12c0 2.21 4.03 4 9 4s9-1.79 9-4V14" fill="#6229BF"/>
+          <ellipse cx="20" cy="20" rx="9" ry="4" fill="#8C4FFF"/>
+          <ellipse cx="20" cy="14" rx="9" ry="4" fill="#A166FF"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'pubsub',
+      name: 'Google Pub/Sub',
+      desc: 'Publica eventos en Google Cloud Pub/Sub',
+      category: 'Mensajería',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#fff"/>
+          <path d="M20 9l10 5.77v11.55L20 32 10 26.32V14.77L20 9z" fill="#4285F4"/>
+          <path d="M20 9v23l10-5.68V14.77L20 9z" fill="#1967D2"/>
+          <circle cx="20" cy="20" r="4" fill="white"/>
+          <circle cx="20" cy="20" r="2" fill="#4285F4"/>
+          <path d="M12 15.5l8 4.5M28 15.5l-8 4.5M20 28v-4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'hubspot',
+      name: 'HubSpot',
+      desc: 'Sincroniza contactos y eventos con HubSpot CRM',
+      category: 'CRM',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#FF7A59"/>
+          <path d="M22 15.5v-3.3a1.8 1.8 0 001.06-1.63v-.06a1.8 1.8 0 00-3.6 0v.06a1.8 1.8 0 001.06 1.63v3.3A7.5 7.5 0 0014 22.5a7.5 7.5 0 0014.5 0A7.5 7.5 0 0022 15.5zM20.5 28a5 5 0 110-10 5 5 0 010 10z" fill="white"/>
+          <circle cx="20.5" cy="23" r="2.5" fill="#FF7A59"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'intercom',
+      name: 'Intercom',
+      desc: 'Envía eventos y actualiza atributos de usuario en Intercom',
+      category: 'CRM',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#1F8DED"/>
+          <path d="M20 9c-6.08 0-11 4.92-11 11s4.92 11 11 11c1.92 0 3.73-.5 5.3-1.36L30 31l-1.36-4.7A10.96 10.96 0 0031 20c0-6.08-4.92-11-11-11z" fill="white" opacity=".2"/>
+          <path d="M14 17h12M14 20.5h12M14 24h9" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'customerio',
+      name: 'Customer.io',
+      desc: 'Envía eventos de comportamiento a Customer.io',
+      category: 'Marketing',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#F6C244"/>
+          <path d="M20 12a8 8 0 100 16 8 8 0 000-16zm0 13a5 5 0 110-10 5 5 0 010 10z" fill="#1a1a1a"/>
+          <circle cx="20" cy="20" r="2.5" fill="#1a1a1a"/>
+          <rect x="27" y="17" width="3" height="6" rx="1.5" fill="#1a1a1a"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'amplitude',
+      name: 'Amplitude',
+      desc: 'Exporta eventos a Amplitude Analytics',
+      category: 'Analytics',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#1C1C1C"/>
+          <path d="M20 10l4 10h6l-5 3.5 2 6.5-7-5-7 5 2-6.5L10 20h6l4-10z" fill="#00A6FF"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'segment',
+      name: 'Segment',
+      desc: 'Reenvía eventos hacia o desde Segment',
+      category: 'CDP',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#52BD95"/>
+          <path d="M28 16H14a1 1 0 000 2h14a1 1 0 000-2zM26 21H14a1 1 0 000 2h12a1 1 0 000-2z" fill="white"/>
+          <circle cx="28.5" cy="22" r="2.5" fill="white" stroke="#52BD95" strokeWidth="1"/>
+          <path d="M26 26H12a1 1 0 000 2h14a1 1 0 000-2z" fill="white"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'mixpanel',
+      name: 'Mixpanel',
+      desc: 'Exporta eventos a Mixpanel para análisis',
+      category: 'Analytics',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#7856FF"/>
+          <path d="M10 28l5.5-9 4.5 7 4-5.5L29 28H10z" fill="white"/>
+          <circle cx="10" cy="28" r="2" fill="white"/>
+          <circle cx="15.5" cy="19" r="2" fill="white"/>
+          <circle cx="20" cy="26" r="2" fill="white"/>
+          <circle cx="24" cy="20.5" r="2" fill="white"/>
+          <circle cx="29" cy="28" r="2" fill="white"/>
+        </svg>
+      ),
+    },
+    {
+      key: 'rudderstack',
+      name: 'RudderStack',
+      desc: 'Integra con la plataforma CDP de RudderStack',
+      category: 'CDP',
+      logo: (
+        <svg viewBox="0 0 40 40" className="w-8 h-8 flex-shrink-0">
+          <rect width="40" height="40" rx="8" fill="#1F2937"/>
+          <path d="M12 14h10a6 6 0 010 12H12V14zm3 3v6h7a3 3 0 000-6h-7z" fill="#E83F6F"/>
+          <circle cx="27" cy="26" r="3" fill="#E83F6F"/>
+        </svg>
+      ),
+    },
+  ];
+
+  const filtered = destinations.filter(d => {
+    if (filter === 'enabled') return enabled[d.key];
+    if (filter === 'disabled') return !enabled[d.key];
+    return true;
+  });
+
+  // ── Detail view ──────────────────────────────────────────────────────────────
+  if (selected) {
+    const dest = destinations.find(d => d.key === selected)!;
+    return (
+      <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+          <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          {dest.logo}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[18px] font-bold text-[#1a1a1a]">{dest.name}</h1>
+            <p className="text-[12px] text-[#646462]">{dest.desc}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`text-[12px] font-semibold px-2.5 py-1 rounded-full ${enabled[dest.key] ? 'bg-[#e6f4ea] text-[#1a7f3c]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+              {enabled[dest.key] ? 'Activo' : 'Inactivo'}
+            </span>
+            <button
+              onClick={() => setEnabled(s => ({ ...s, [dest.key]: !s[dest.key] }))}
+              className={`relative w-10 h-5 rounded-full transition-colors ${enabled[dest.key] ? 'bg-[#3b59f6]' : 'bg-[#d1d1cf]'}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${enabled[dest.key] ? 'translate-x-5' : 'translate-x-0.5'}`}/>
+            </button>
+          </div>
+        </div>
+
+        {/* Config body */}
+        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-[1fr_320px] gap-6">
+          {/* Left: settings */}
+          <div className="space-y-6">
+            {/* Connection section */}
+            <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+              <h2 className="text-[15px] font-semibold text-[#1a1a1a] mb-4">Configuración de conexión</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Nombre de la conexión</label>
+                  <input
+                    type="text"
+                    defaultValue={`Mi ${dest.name}`}
+                    className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"
+                  />
+                </div>
+                {dest.key === 'slack' && (
+                  <>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">URL del Webhook</label>
+                      <input type="text" placeholder="https://hooks.slack.com/services/..." className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"/>
+                    </div>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Canal</label>
+                      <input type="text" placeholder="#mi-canal" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"/>
+                    </div>
+                  </>
+                )}
+                {(dest.key === 'webhook') && (
+                  <>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">URL del Endpoint</label>
+                      <input type="text" placeholder="https://tu-servidor.com/webhook" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"/>
+                    </div>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Método HTTP</label>
+                      <select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6] bg-white">
+                        <option>POST</option><option>PUT</option><option>PATCH</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+                {(dest.key === 'bigquery' || dest.key === 'pubsub') && (
+                  <>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">ID del Proyecto GCP</label>
+                      <input type="text" placeholder="mi-proyecto-gcp" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6]"/>
+                    </div>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Credenciales JSON</label>
+                      <textarea rows={4} placeholder='{"type":"service_account",...}' className="w-full px-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] outline-none focus:border-[#3b59f6] resize-none font-mono text-[11px]"/>
+                    </div>
+                  </>
+                )}
+                {(dest.key === 'postgres' || dest.key === 'redshift') && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Host</label>
+                        <input type="text" placeholder="localhost" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Puerto</label>
+                        <input type="text" defaultValue={dest.key === 'postgres' ? '5432' : '5439'} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Base de datos</label>
+                        <input type="text" placeholder="mi_base_datos" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Schema</label>
+                        <input type="text" defaultValue="public" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Usuario</label>
+                        <input type="text" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Contraseña</label>
+                        <input type="password" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {(dest.key === 'snowflake') && (
+                  <>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Account Identifier</label>
+                      <input type="text" placeholder="org-account" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Warehouse</label>
+                        <input type="text" placeholder="COMPUTE_WH" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Database</label>
+                        <input type="text" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {(dest.key === 's3') && (
+                  <>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Nombre del Bucket</label>
+                      <input type="text" placeholder="mi-bucket-s3" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Región</label>
+                        <select className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]">
+                          <option>us-east-1</option><option>eu-west-1</option><option>ap-southeast-1</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Prefijo</label>
+                        <input type="text" placeholder="clain/events/" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Access Key ID</label>
+                        <input type="text" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Secret Access Key</label>
+                        <input type="password" className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Filters section */}
+            <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+              <h2 className="text-[15px] font-semibold text-[#1a1a1a] mb-1">Filtros de eventos</h2>
+              <p className="text-[12px] text-[#646462] mb-4">Selecciona qué eventos enviar a este destino</p>
+              <div className="flex items-center gap-3 p-3 bg-[#f8f8f7] rounded-lg border border-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0"><path d="M2 4h12v1.5L9 10v4.5L7 13V10L2 5.5V4z"/></svg>
+                <span className="text-[13px] text-[#1a1a1a]">Todos los eventos</span>
+                <button className="ml-auto text-[12px] text-[#3b59f6] font-semibold hover:underline">Cambiar</button>
+              </div>
+            </div>
+
+            {/* Batch export */}
+            <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-[15px] font-semibold text-[#1a1a1a]">Exportación por lotes</h2>
+                  <p className="text-[12px] text-[#646462] mt-0.5">Agrupa los eventos antes de enviarlos para reducir la cantidad de solicitudes</p>
+                </div>
+                <button className="relative w-10 h-5 rounded-full bg-[#3b59f6] flex-shrink-0">
+                  <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-white rounded-full shadow"/>
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Máximo de eventos por lote</label>
+                  <input type="number" defaultValue={1000} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-[#1a1a1a] mb-1.5">Intervalo (segundos)</label>
+                  <input type="number" defaultValue={60} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+                </div>
+              </div>
+            </div>
+
+            {/* Save */}
+            <div className="flex gap-3">
+              <button className="h-9 px-5 bg-[#3b59f6] text-white text-[13px] font-semibold rounded-lg hover:bg-[#2d47d4]">
+                Guardar cambios
+              </button>
+              <button onClick={() => setSelected(null)} className="h-9 px-5 border border-[#e9eae6] text-[13px] text-[#646462] rounded-lg hover:bg-[#f3f3f1]">
+                Cancelar
+              </button>
+            </div>
+          </div>
+
+          {/* Right: info panel */}
+          <div className="space-y-4">
+            <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Detalles</h3>
+              <div className="space-y-2.5 text-[12px]">
+                <div className="flex justify-between">
+                  <span className="text-[#646462]">Categoría</span>
+                  <span className="text-[#1a1a1a] font-medium">{dest.category}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#646462]">Estado</span>
+                  <span className={`font-medium ${enabled[dest.key] ? 'text-[#1a7f3c]' : 'text-[#646462]'}`}>{enabled[dest.key] ? 'Activo' : 'Inactivo'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#646462]">Eventos enviados (7d)</span>
+                  <span className="text-[#1a1a1a] font-medium">{enabled[dest.key] ? (Math.floor(Math.random() * 90000) + 10000).toLocaleString() : '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#646462]">Última actividad</span>
+                  <span className="text-[#1a1a1a] font-medium">{enabled[dest.key] ? 'hace 2 min' : '—'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#eff2ff] border border-[#c7d0fc] rounded-[12px] p-4">
+              <div className="flex items-start gap-2.5">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0 mt-0.5"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+                <div>
+                  <p className="text-[12px] font-semibold text-[#3b59f6] mb-1">Documentación</p>
+                  <p className="text-[11px] text-[#5468e7] leading-relaxed">Consulta la guía de configuración completa para {dest.name} en nuestra documentación.</p>
+                  <button className="mt-2 text-[11px] text-[#3b59f6] font-semibold hover:underline">Ver documentación →</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-[#e9eae6] rounded-[12px] p-4">
+              <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Actividad reciente</h3>
+              {enabled[dest.key] ? (
+                <div className="space-y-2">
+                  {['Lote enviado · 1.2k eventos', 'Lote enviado · 987 eventos', 'Lote enviado · 1.1k eventos'].map((ev, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[12px]">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#1a7f3c] flex-shrink-0"/>
+                      <span className="text-[#1a1a1a] flex-1">{ev}</span>
+                      <span className="text-[#646462]">{i === 0 ? '2m' : i === 1 ? '7m' : '13m'}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[12px] text-[#646462]">Sin actividad. Activa el destino para empezar a enviar eventos.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── List view ────────────────────────────────────────────────────────────────
+  return (
+    <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <h1 className="text-[18px] font-bold text-[#1a1a1a] flex-1">Destinos</h1>
+        <button
+          onClick={() => setShowNewModal(true)}
+          className="h-8 px-3.5 bg-[#3b59f6] text-white text-[13px] font-semibold rounded-lg hover:bg-[#2d47d4] flex items-center gap-1.5"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Nueva conexión
+        </button>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex items-center gap-1 px-6 py-3 border-b border-[#e9eae6] flex-shrink-0">
+        {(['all', 'enabled', 'disabled'] as const).map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`h-7 px-3 rounded-lg text-[13px] font-medium transition-colors ${filter === f ? 'bg-[#f3f3f1] text-[#1a1a1a]' : 'text-[#646462] hover:bg-[#f3f3f1]'}`}
+          >
+            {f === 'all' ? 'Todos' : f === 'enabled' ? 'Activos' : 'Inactivos'}
+            <span className="ml-1.5 text-[11px] font-semibold text-[#646462]">
+              {f === 'all' ? destinations.length : f === 'enabled' ? Object.values(enabled).filter(Boolean).length : Object.values(enabled).filter(v => !v).length}
+            </span>
+          </button>
+        ))}
+        <div className="flex-1"/>
+        <div className="relative">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+          <input type="text" placeholder="Buscar destinos..." className="h-7 pl-8 pr-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] outline-none focus:border-[#3b59f6] w-44"/>
+        </div>
+      </div>
+
+      {/* Destination grid */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="grid grid-cols-2 gap-3">
+          {filtered.map(dest => (
+            <button
+              key={dest.key}
+              onClick={() => setSelected(dest.key)}
+              className="flex items-center gap-4 p-4 bg-white border border-[#e9eae6] rounded-[12px] hover:border-[#3b59f6] hover:shadow-sm transition-all text-left group"
+            >
+              {dest.logo}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[14px] font-semibold text-[#1a1a1a] truncate">{dest.name}</span>
+                  <span className="text-[10px] text-[#646462] bg-[#f3f3f1] px-1.5 py-0.5 rounded font-medium flex-shrink-0">{dest.category}</span>
+                </div>
+                <p className="text-[12px] text-[#646462] truncate">{dest.desc}</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0" onClick={e => { e.stopPropagation(); setEnabled(s => ({ ...s, [dest.key]: !s[dest.key] })); }}>
+                <button
+                  className={`relative w-9 h-[18px] rounded-full transition-colors ${enabled[dest.key] ? 'bg-[#3b59f6]' : 'bg-[#d1d1cf]'}`}
+                >
+                  <span className={`absolute top-[1px] w-4 h-4 bg-white rounded-full shadow transition-transform ${enabled[dest.key] ? 'translate-x-[18px]' : 'translate-x-[1px]'}`}/>
+                </button>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-12 h-12 rounded-full bg-[#f3f3f1] flex items-center justify-center mb-4">
+              <svg viewBox="0 0 16 16" className="w-6 h-6 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M8 2v9M5 8l3 3 3-3" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 13h10" strokeLinecap="round"/></svg>
+            </div>
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay destinos {filter === 'enabled' ? 'activos' : 'inactivos'}</p>
+            <p className="text-[12px] text-[#646462] mt-1">
+              {filter === 'enabled' ? 'Activa un destino para empezar a exportar eventos.' : 'Todos los destinos están activos.'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* New connection modal */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-[16px] w-[640px] max-h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-[#e9eae6]">
+              <h2 className="text-[16px] font-bold text-[#1a1a1a] flex-1">Seleccionar destino</h2>
+              <button onClick={() => setShowNewModal(false)} className="p-1.5 rounded-lg hover:bg-[#f3f3f1] text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="relative mb-4">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-3 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+                <input type="text" placeholder="Buscar destinos..." className="w-full h-9 pl-9 pr-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <div className="overflow-y-auto max-h-[420px] grid grid-cols-2 gap-2">
+                {destinations.map(dest => (
+                  <button
+                    key={dest.key}
+                    onClick={() => { setShowNewModal(false); setSelected(dest.key); }}
+                    className="flex items-center gap-3 p-3 rounded-[10px] hover:bg-[#f3f3f1] text-left transition-colors"
+                  >
+                    {dest.logo}
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{dest.name}</p>
+                      <p className="text-[11px] text-[#646462] truncate">{dest.category}</p>
+                    </div>
+                    {enabled[dest.key] && (
+                      <span className="ml-auto text-[10px] font-semibold text-[#1a7f3c] bg-[#e6f4ea] px-1.5 py-0.5 rounded flex-shrink-0">Activo</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

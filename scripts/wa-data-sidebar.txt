@@ -1,0 +1,144 @@
+// ── WADataSidebar — identical pattern to ReportsSidebar / KnowledgeSidebar ──
+function WADataSidebar({ sub, onSelect }: { sub: WADataSubView; onSelect: (s: WADataSubView) => void }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({
+    Herramientas: true, Grupos: true, Metadatos: true,
+    Personas: true, Pipeline: false, Esquema: false,
+  });
+  const toggle = (g: string) => setOpen(s => ({ ...s, [g]: !s[g] }));
+
+  type DataGroup = {
+    label: string;
+    items: { key: WADataSubView; label: string; icon: React.ReactNode }[];
+  };
+
+  const groups: DataGroup[] = [
+    {
+      label: 'Herramientas',
+      items: [
+        { key: 'waDataModels', label: 'Modelos', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+        )},
+      ],
+    },
+    {
+      label: 'Grupos',
+      items: [
+        { key: 'waDataGroups', label: 'Grupos', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><circle cx="5" cy="5" r="2.5"/><circle cx="11" cy="5" r="2.5"/><path d="M0.5 13c.5-2 2.3-3 4.5-3s4 1 4.5 3H0.5z"/><path d="M6.5 13c.5-2 2.3-3 4.5-3s4 1 4.5 3H6.5z"/></svg>
+        )},
+      ],
+    },
+    {
+      label: 'Metadatos',
+      items: [
+        { key: 'waDataAnnotations', label: 'Anotaciones', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M3 2h10a1 1 0 011 1v7a1 1 0 01-1 1H6.5L4 13.5V11H3a1 1 0 01-1-1V3a1 1 0 011-1z" strokeLinejoin="round"/></svg>
+        )},
+        { key: 'waDataComments', label: 'Comentarios', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H9L6.5 13.5 7 11H3a1 1 0 01-1-1V3z" strokeLinejoin="round"/><path d="M5 6h6M5 8.5h4" strokeLinecap="round"/></svg>
+        )},
+      ],
+    },
+    {
+      label: 'Personas',
+      items: [
+        { key: 'waDataPersons', label: 'Personas', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><circle cx="8" cy="5" r="3"/><path d="M2.5 13c.5-2.5 2.8-4 5.5-4s5 1.5 5.5 4v.5h-11V13z"/></svg>
+        )},
+        { key: 'waDataCohorts', label: 'Cohortes', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><circle cx="5" cy="6" r="2.5"/><circle cx="11" cy="6" r="2.5"/><path d="M0 13c.4-2 2-3 5-3s4.6 1 5 3H0z"/><path d="M6 13c.4-2 2-3 5-3s4.6 1 5 3h-10z"/></svg>
+        )},
+      ],
+    },
+    {
+      label: 'Pipeline',
+      items: [
+        { key: 'waDataDestinations', label: 'Destinos', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M8 2v9M5 8l3 3 3-3" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 13h10" strokeLinecap="round"/></svg>
+        )},
+        { key: 'waDataIngestionWarnings', label: 'Advertencias de ingesta', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M8 2L1.5 13h13L8 2z" strokeLinejoin="round"/><path d="M8 6v3.5M8 11v.5" strokeLinecap="round"/></svg>
+        )},
+        { key: 'waDataSources', label: 'Fuentes', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M8 14V5M5 8l3-3 3 3" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 3h10" strokeLinecap="round"/></svg>
+        )},
+        { key: 'waDataTransformations', label: 'Transformaciones', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M2 5h8M2 11h8M12 5l2 2-2 2M4 11l-2-2 2-2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        )},
+      ],
+    },
+    {
+      label: 'Esquema',
+      items: [
+        { key: 'waDataActions', label: 'Acciones', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><path d="M5 3l6 5-6 5V3z"/></svg>
+        )},
+        { key: 'waDataEventDefs', label: 'Definiciones de eventos', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/><rect x="9" y="9" width="5.5" height="5.5" rx="1"/></svg>
+        )},
+        { key: 'waDataPropDefs', label: 'Definiciones de propiedades', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><path d="M3 4h10M3 8h7M3 12h5" strokeLinecap="round"/></svg>
+        )},
+        { key: 'waDataRevenueDefs', label: 'Definiciones de ingresos', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a] flex-shrink-0"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v1M8 10.5v1M6 8c0-.8.9-1.5 2-1.5s2 .7 2 1.5-.9 1.5-2 1.5-2 .7-2 1.5S6.9 12 8 12" fill="none" stroke="white" strokeWidth="1.2" strokeLinecap="round"/></svg>
+        )},
+        { key: 'waDataSqlVars', label: 'Variables SQL', icon: (
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 7l-2 1.5L5 10M11 7l2 1.5L11 10M8 6.5l-1 3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        )},
+      ],
+    },
+  ];
+
+  return (
+    <div className="w-[236px] flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
+        <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Datos</span>
+        <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+        </button>
+      </div>
+
+      {/* Nav items */}
+      <div className="flex-1 overflow-y-auto pl-3 pr-3 pb-2 flex flex-col gap-0.5 text-[13px]">
+        {groups.map(g => {
+          const isOpen = open[g.label] !== false;
+          const childActive = g.items.some(it => it.key === sub);
+          return (
+            <div key={g.label}>
+              {/* Section header row */}
+              <button
+                onClick={() => toggle(g.label)}
+                className={`w-full h-8 flex items-center gap-2 px-3 rounded-lg text-[13px] transition-colors hover:bg-[#e9eae6]/40`}
+              >
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                <span className="flex-1 text-left text-[11px] font-semibold text-[#646462] uppercase tracking-wide">{g.label}</span>
+              </button>
+
+              {/* Items */}
+              {isOpen && (
+                <div className="flex flex-col pl-4 mt-0.5 mb-1 gap-0.5">
+                  {g.items.map(it => (
+                    <button
+                      key={it.key}
+                      onClick={() => onSelect(it.key)}
+                      className={`h-8 flex items-center gap-2 pl-2 pr-3 rounded-lg text-left text-[13px] transition-colors w-full ${
+                        sub === it.key
+                          ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+                          : 'text-[#1a1a1a] hover:bg-[#e9eae6]/40'
+                      }`}
+                    >
+                      {it.icon}
+                      <span className="flex-1 truncate">{it.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+

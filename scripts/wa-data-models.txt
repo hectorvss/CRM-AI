@@ -1,0 +1,339 @@
+// ── WADataModelsView — PostHog Data > Models, Clain design ───────────────────
+function WADataModelsView() {
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'events' | 'properties' | 'actions'>('all');
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [showTypeMenu, setShowTypeMenu] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+
+  type ModelRow = {
+    id: number;
+    name: string;
+    type: 'event' | 'property' | 'action' | 'cohort';
+    verified: boolean;
+    description: string;
+    tags: string[];
+    lastSeen: string;
+    volume30d: number;
+    owner?: string;
+  };
+
+  const MODELS: ModelRow[] = [
+    { id: 1,  name: '$pageview',                    type: 'event',    verified: true,  description: 'Cuando un usuario visita una página',                             tags: ['core', 'web'],      lastSeen: 'hace 2 min',   volume30d: 184320 },
+    { id: 2,  name: '$pageleave',                   type: 'event',    verified: true,  description: 'Cuando un usuario abandona una página',                          tags: ['core', 'web'],      lastSeen: 'hace 3 min',   volume30d: 182100 },
+    { id: 3,  name: '$autocapture',                 type: 'event',    verified: true,  description: 'Evento capturado automáticamente al interactuar con la UI',       tags: ['core'],             lastSeen: 'hace 1 min',   volume30d: 921440 },
+    { id: 4,  name: '$identify',                    type: 'event',    verified: true,  description: 'Identifica al usuario con un ID distinto',                        tags: ['core', 'auth'],     lastSeen: 'hace 5 min',   volume30d: 43210 },
+    { id: 5,  name: 'user_signed_up',               type: 'event',    verified: true,  description: 'El usuario completó el proceso de registro',                      tags: ['product', 'funnel'],lastSeen: 'hace 12 min',  volume30d: 1240 },
+    { id: 6,  name: 'subscription_created',         type: 'event',    verified: true,  description: 'Se creó una nueva suscripción de pago',                          tags: ['revenue'],          lastSeen: 'hace 1 h',     volume30d: 318 },
+    { id: 7,  name: 'feature_flag_called',          type: 'event',    verified: false, description: '',                                                               tags: [],                   lastSeen: 'hace 4 min',   volume30d: 56720 },
+    { id: 8,  name: 'onboarding_step_completed',    type: 'event',    verified: false, description: 'Un paso del flujo de onboarding fue completado',                 tags: ['onboarding'],       lastSeen: 'hace 20 min',  volume30d: 8840 },
+    { id: 9,  name: '$current_url',                 type: 'property', verified: true,  description: 'URL actual de la página',                                        tags: ['core', 'web'],      lastSeen: 'hace 1 min',   volume30d: 184320 },
+    { id: 10, name: '$browser',                     type: 'property', verified: true,  description: 'Nombre del navegador del usuario',                               tags: ['device'],           lastSeen: 'hace 2 min',   volume30d: 184320 },
+    { id: 11, name: '$os',                          type: 'property', verified: true,  description: 'Sistema operativo del dispositivo',                              tags: ['device'],           lastSeen: 'hace 2 min',   volume30d: 184320 },
+    { id: 12, name: 'plan',                         type: 'property', verified: true,  description: 'Plan de suscripción del usuario',                                tags: ['billing'],          lastSeen: 'hace 8 min',   volume30d: 43210 },
+    { id: 13, name: 'Usuarios activos (30 días)',   type: 'action',   verified: true,  description: 'Usuarios que han iniciado sesión en los últimos 30 días',        tags: ['retention'],        lastSeen: 'hace 6 h',     volume30d: 0 },
+    { id: 14, name: 'Checkout completado',          type: 'action',   verified: false, description: '',                                                               tags: ['revenue', 'funnel'],lastSeen: 'hace 2 h',     volume30d: 0 },
+    { id: 15, name: 'session_id',                   type: 'property', verified: false, description: 'ID único de la sesión actual',                                   tags: ['core'],             lastSeen: 'hace 1 min',   volume30d: 184320 },
+  ];
+
+  const typeLabels: Record<ModelRow['type'], string> = {
+    event: 'Evento', property: 'Propiedad', action: 'Acción', cohort: 'Cohorte',
+  };
+  const typeColors: Record<ModelRow['type'], string> = {
+    event:    'bg-[#eff2ff] text-[#3b59f6]',
+    property: 'bg-[#f0fdf4] text-[#16a34a]',
+    action:   'bg-[#fef9ec] text-[#b45309]',
+    cohort:   'bg-[#fdf2f8] text-[#a21caf]',
+  };
+
+  function fmtVolume(n: number) {
+    if (n === 0) return '—';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(0) + 'K';
+    return String(n);
+  }
+
+  const filtered = MODELS.filter(m => {
+    if (typeFilter !== 'all') {
+      const map: Record<string, ModelRow['type']> = { events: 'event', properties: 'property', actions: 'action' };
+      if (m.type !== map[typeFilter]) return false;
+    }
+    if (verifiedOnly && !m.verified) return false;
+    if (search && !m.name.toLowerCase().includes(search.toLowerCase()) && !m.description.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const allSelected = filtered.length > 0 && filtered.every(m => selectedRows.has(m.id));
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedRows(s => { const ns = new Set(s); filtered.forEach(m => ns.delete(m.id)); return ns; });
+    } else {
+      setSelectedRows(s => { const ns = new Set(s); filtered.forEach(m => ns.add(m.id)); return ns; });
+    }
+  };
+  const toggleRow = (id: number) => {
+    setSelectedRows(s => { const ns = new Set(s); ns.has(id) ? ns.delete(id) : ns.add(id); return ns; });
+  };
+
+  const TYPE_TABS: { key: typeof typeFilter; label: string; count: number }[] = [
+    { key: 'all',        label: 'Todo',        count: MODELS.length },
+    { key: 'events',     label: 'Eventos',     count: MODELS.filter(m => m.type === 'event').length },
+    { key: 'properties', label: 'Propiedades', count: MODELS.filter(m => m.type === 'property').length },
+    { key: 'actions',    label: 'Acciones',    count: MODELS.filter(m => m.type === 'action').length },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* ── Toolbar ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6] flex-shrink-0">
+        {/* Type tabs */}
+        <div className="flex items-center bg-[#f3f3f1] rounded-[8px] p-0.5 gap-0.5 flex-shrink-0">
+          {TYPE_TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTypeFilter(t.key)}
+              className={`h-7 px-3 rounded-[6px] text-[12px] font-medium transition-colors flex items-center gap-1.5 ${
+                typeFilter === t.key
+                  ? 'bg-white shadow-[0px_1px_3px_rgba(20,20,20,0.10)] text-[#1a1a1a]'
+                  : 'text-[#646462] hover:text-[#1a1a1a]'
+              }`}
+            >
+              {t.label}
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                typeFilter === t.key ? 'bg-[#eff2ff] text-[#3b59f6]' : 'bg-[#e9eae6] text-[#9a9a98]'
+              }`}>{t.count}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center gap-2 bg-white border border-[#e9eae6] rounded-[8px] px-3 h-8 flex-1 min-w-0 max-w-[300px]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#9a9a98] flex-shrink-0" strokeWidth="1.5">
+            <circle cx="7" cy="7" r="4"/><path d="M10.5 10.5l2.5 2.5" strokeLinecap="round"/>
+          </svg>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar modelos…"
+            className="flex-1 text-[13px] bg-transparent outline-none text-[#1a1a1a] placeholder-[#9a9a98] min-w-0"
+          />
+        </div>
+
+        {/* Verified toggle */}
+        <button
+          onClick={() => setVerifiedOnly(v => !v)}
+          className={`h-8 px-3 rounded-[8px] text-[12px] font-medium flex items-center gap-1.5 border transition-colors ${
+            verifiedOnly
+              ? 'bg-[#eff2ff] border-[#c7d2fe] text-[#3b59f6]'
+              : 'bg-white border-[#e9eae6] text-[#646462] hover:border-[#c5c5c2]'
+          }`}
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0" fill={verifiedOnly ? '#3b59f6' : '#9a9a98'}>
+            <path d="M6.5 10.5L3.5 7.5l1-1L6.5 8.5l5-5 1 1z"/>
+            <path d="M8 1.5C4.41 1.5 1.5 4.41 1.5 8S4.41 14.5 8 14.5 14.5 11.59 14.5 8 11.59 1.5 8 1.5zm0 1.5a5 5 0 110 10A5 5 0 018 3z" fillRule="evenodd"/>
+          </svg>
+          Verificados
+        </button>
+
+        <div className="flex-1" />
+
+        {/* Actions */}
+        {selectedRows.size > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-[#646462]">{selectedRows.size} seleccionados</span>
+            <button className="h-8 px-3 rounded-[8px] text-[12px] font-medium bg-white border border-[#e9eae6] text-[#646462] hover:border-[#c5c5c2] transition-colors">
+              Verificar
+            </button>
+            <button className="h-8 px-3 rounded-[8px] text-[12px] font-medium bg-white border border-[#e9eae6] text-[#646462] hover:border-[#c5c5c2] transition-colors flex items-center gap-1.5">
+              Etiquetar
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#9a9a98]"><path d="M6 4l4 4-4 4z"/></svg>
+            </button>
+          </div>
+        )}
+
+        <button className="h-8 px-3 rounded-[8px] text-[12px] font-semibold bg-[#3b59f6] text-white hover:bg-[#2d46e0] transition-colors flex items-center gap-1.5 flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Nuevo modelo
+        </button>
+      </div>
+
+      {/* ── Table ───────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-auto min-h-0">
+        <table className="w-full text-[13px] border-collapse">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-[#f8f8f7] border-b border-[#e9eae6]">
+              <th className="w-10 px-4 py-2.5 text-left">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="w-3.5 h-3.5 rounded accent-[#3b59f6] cursor-pointer"
+                />
+              </th>
+              <th className="px-3 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide whitespace-nowrap">Nombre</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide whitespace-nowrap">Tipo</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide whitespace-nowrap">Descripción</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide whitespace-nowrap">Etiquetas</th>
+              <th className="px-3 py-2.5 text-right font-semibold text-[11px] text-[#646462] uppercase tracking-wide whitespace-nowrap">Volumen 30d</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-[11px] text-[#646462] uppercase tracking-wide whitespace-nowrap">Última vez</th>
+              <th className="w-10 px-3 py-2.5"/>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((m, i) => {
+              const isSelected = selectedRows.has(m.id);
+              return (
+                <tr
+                  key={m.id}
+                  className={`border-b border-[#f0f0ee] group transition-colors cursor-default ${
+                    isSelected ? 'bg-[#f5f6ff]' : 'hover:bg-[#fafaf9]'
+                  }`}
+                >
+                  {/* Checkbox */}
+                  <td className="px-4 py-2.5 align-middle">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleRow(m.id)}
+                      className="w-3.5 h-3.5 rounded accent-[#3b59f6] cursor-pointer"
+                    />
+                  </td>
+
+                  {/* Name + verified */}
+                  <td className="px-3 py-2.5 align-middle">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {/* Type icon */}
+                      {m.type === 'event' && (
+                        <div className="w-6 h-6 rounded-[6px] bg-[#eff2ff] flex items-center justify-center flex-shrink-0">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#3b59f6]" strokeWidth="1.5">
+                            <polyline points="1,10 4,6 7,8 10,4 13,7 15,5"/>
+                          </svg>
+                        </div>
+                      )}
+                      {m.type === 'property' && (
+                        <div className="w-6 h-6 rounded-[6px] bg-[#f0fdf4] flex items-center justify-center flex-shrink-0">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#16a34a]" strokeWidth="1.5">
+                            <path d="M3 4h10M3 8h7M3 12h5" strokeLinecap="round"/>
+                          </svg>
+                        </div>
+                      )}
+                      {m.type === 'action' && (
+                        <div className="w-6 h-6 rounded-[6px] bg-[#fef9ec] flex items-center justify-center flex-shrink-0">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#b45309]">
+                            <path d="M5 3l6 5-6 5V3z"/>
+                          </svg>
+                        </div>
+                      )}
+                      {m.type === 'cohort' && (
+                        <div className="w-6 h-6 rounded-[6px] bg-[#fdf2f8] flex items-center justify-center flex-shrink-0">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#a21caf]">
+                            <circle cx="5" cy="6" r="2.5"/>
+                            <path d="M0 13c.4-2 2-3 5-3s4.6 1 5 3H0z"/>
+                          </svg>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono text-[12.5px] text-[#1a1a1a] truncate max-w-[220px]">{m.name}</span>
+                        {m.verified && (
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-[#3b59f6]" title="Verificado">
+                            <path d="M8 1C4.13 1 1 4.13 1 8s3.13 7 7 7 7-3.13 7-7-3.13-7-7-7zm-1 10L3.5 7.5l1.06-1.06L7 8.88l4.44-4.44L12.5 5.5 7 11z"/>
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Type pill */}
+                  <td className="px-3 py-2.5 align-middle whitespace-nowrap">
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${typeColors[m.type]}`}>
+                      {typeLabels[m.type]}
+                    </span>
+                  </td>
+
+                  {/* Description */}
+                  <td className="px-3 py-2.5 align-middle max-w-[260px]">
+                    {m.description
+                      ? <span className="text-[13px] text-[#646462] truncate block">{m.description}</span>
+                      : <button className="text-[12px] text-[#9a9a98] hover:text-[#3b59f6] transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                          Añadir descripción
+                        </button>
+                    }
+                  </td>
+
+                  {/* Tags */}
+                  <td className="px-3 py-2.5 align-middle">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {m.tags.map(tag => (
+                        <span key={tag} className="text-[11px] font-medium px-1.5 py-0.5 rounded-[4px] bg-[#f3f3f1] text-[#646462] border border-[#e9eae6]">
+                          {tag}
+                        </span>
+                      ))}
+                      {m.tags.length === 0 && (
+                        <button className="text-[12px] text-[#9a9a98] hover:text-[#3b59f6] transition-colors opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                          Etiquetar
+                        </button>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Volume */}
+                  <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
+                    <span className={`text-[13px] font-mono ${m.volume30d > 0 ? 'text-[#1a1a1a]' : 'text-[#c0c0be]'}`}>
+                      {fmtVolume(m.volume30d)}
+                    </span>
+                  </td>
+
+                  {/* Last seen */}
+                  <td className="px-3 py-2.5 align-middle whitespace-nowrap">
+                    <span className="text-[12px] text-[#9a9a98]">{m.lastSeen}</span>
+                  </td>
+
+                  {/* Row actions */}
+                  <td className="px-3 py-2.5 align-middle">
+                    <button className="w-6 h-6 rounded-[4px] flex items-center justify-center hover:bg-[#e9eae6] opacity-0 group-hover:opacity-100 transition-all">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]">
+                        <circle cx="8" cy="3" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="8" cy="13" r="1.25"/>
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <svg viewBox="0 0 32 32" className="w-10 h-10 fill-none stroke-[#c0c0be]" strokeWidth="1.5">
+              <circle cx="15" cy="15" r="10"/><path d="M22 22l6 6" strokeLinecap="round"/>
+            </svg>
+            <p className="text-[14px] text-[#9a9a98]">No se encontraron modelos</p>
+            <button onClick={() => { setSearch(''); setTypeFilter('all'); setVerifiedOnly(false); }} className="text-[13px] text-[#3b59f6] hover:underline">
+              Limpiar filtros
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Footer / pagination ─────────────────────────────────────────── */}
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-t border-[#e9eae6] bg-[#f8f8f7]">
+        <span className="text-[12px] text-[#9a9a98]">
+          Mostrando {filtered.length} de {MODELS.length} modelos
+        </span>
+        <div className="flex items-center gap-1">
+          <button disabled className="h-7 px-2.5 rounded-[6px] text-[12px] text-[#c0c0be] border border-[#e9eae6] bg-white opacity-50 cursor-not-allowed">
+            Anterior
+          </button>
+          <button className="h-7 w-7 rounded-[6px] text-[12px] font-semibold bg-[#3b59f6] text-white">1</button>
+          <button disabled className="h-7 px-2.5 rounded-[6px] text-[12px] text-[#646462] border border-[#e9eae6] bg-white hover:bg-[#f7f7f5] opacity-50 cursor-not-allowed">
+            Siguiente
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+

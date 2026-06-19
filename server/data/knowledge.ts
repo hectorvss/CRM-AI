@@ -77,6 +77,28 @@ async function resolveOwnerSupabase(ownerUserId: string | null | undefined) {
   return data?.id ?? null;
 }
 
+// Helpers shared by create + update — sanitise the Intercom-style fields.
+const FIN_AUDIENCE_TOKENS = new Set(['users', 'leads', 'visitors']);
+function sanitiseAudience(value: any, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return fallback;
+  const cleaned = value
+    .map((v) => String(v || '').toLowerCase().trim())
+    .filter((v) => FIN_AUDIENCE_TOKENS.has(v));
+  return cleaned.length > 0 ? Array.from(new Set(cleaned)) : fallback;
+}
+function sanitiseTags(value: any): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .map((v) => String(v || '').trim())
+      .filter((v) => v.length > 0 && v.length <= 64),
+  )).slice(0, 32);
+}
+function sanitiseHelpcenterStatus(value: any, fallback: string): string {
+  const v = String(value || '').toLowerCase();
+  return v === 'published' || v === 'draft' ? v : fallback;
+}
+
 async function createArticleSupabase(scope: KnowledgeScope, input: any) {
   const supabase = getSupabaseAdmin();
   const now = new Date().toISOString();
@@ -100,6 +122,20 @@ async function createArticleSupabase(scope: KnowledgeScope, input: any) {
     version: 1,
     linked_workflow_ids: input.linked_workflow_ids ?? [],
     linked_approval_policy_ids: input.linked_approval_policy_ids ?? [],
+    // Intercom-style fields (added 2026-05-07). All have safe defaults so older
+    // callers that don't send them still work.
+    fin_service:               input.fin_service === true,
+    fin_sales:                 input.fin_sales === true,
+    copilot_enabled:           input.copilot_enabled !== false,  // default ON
+    fin_audience:              sanitiseAudience(input.fin_audience, ['users', 'leads', 'visitors']),
+    helpcenter_status:         sanitiseHelpcenterStatus(input.helpcenter_status, 'draft'),
+    helpcenter_collection_id:  input.helpcenter_collection_id ?? null,
+    helpcenter_audience:       sanitiseAudience(input.helpcenter_audience, ['users', 'leads', 'visitors']),
+    excluded_from_suggestions: input.excluded_from_suggestions === true,
+    tags:                      sanitiseTags(input.tags),
+    language:                  String(input.language || 'en').slice(0, 8),
+    author_user_id:            input.author_user_id ?? ownerUserId,
+    description:               input.description ?? null,
     created_at: now,
     updated_at: now,
   };
@@ -129,6 +165,20 @@ async function updateArticleSupabase(scope: KnowledgeScope, articleId: string, i
     version: nextVersion,
     linked_workflow_ids: input.linked_workflow_ids ?? existing.linked_workflow_ids ?? [],
     linked_approval_policy_ids: input.linked_approval_policy_ids ?? existing.linked_approval_policy_ids ?? [],
+    // Intercom-style fields — keep undefined keys as-is so callers that touch
+    // only one toggle don't blow away the rest of the panel state.
+    fin_service:               input.fin_service               !== undefined ? input.fin_service === true               : existing.fin_service               ?? false,
+    fin_sales:                 input.fin_sales                 !== undefined ? input.fin_sales === true                 : existing.fin_sales                 ?? false,
+    copilot_enabled:           input.copilot_enabled           !== undefined ? input.copilot_enabled !== false           : existing.copilot_enabled           ?? true,
+    fin_audience:              input.fin_audience              !== undefined ? sanitiseAudience(input.fin_audience, ['users', 'leads', 'visitors']) : existing.fin_audience              ?? ['users', 'leads', 'visitors'],
+    helpcenter_status:         input.helpcenter_status         !== undefined ? sanitiseHelpcenterStatus(input.helpcenter_status, 'draft') : existing.helpcenter_status         ?? 'draft',
+    helpcenter_collection_id:  input.helpcenter_collection_id  !== undefined ? input.helpcenter_collection_id            : existing.helpcenter_collection_id  ?? null,
+    helpcenter_audience:       input.helpcenter_audience       !== undefined ? sanitiseAudience(input.helpcenter_audience, ['users', 'leads', 'visitors']) : existing.helpcenter_audience       ?? ['users', 'leads', 'visitors'],
+    excluded_from_suggestions: input.excluded_from_suggestions !== undefined ? input.excluded_from_suggestions === true : existing.excluded_from_suggestions ?? false,
+    tags:                      input.tags                      !== undefined ? sanitiseTags(input.tags)                  : existing.tags                      ?? [],
+    language:                  input.language                  !== undefined ? String(input.language || 'en').slice(0, 8) : existing.language ?? 'en',
+    author_user_id:            input.author_user_id            !== undefined ? input.author_user_id                       : existing.author_user_id ?? ownerUserId,
+    description:               input.description               !== undefined ? input.description                          : existing.description ?? null,
     updated_at: now,
   };
 

@@ -1,0 +1,526 @@
+// ── WASettingsView ─────────────────────────────────────────────────────────────
+function WASettingsView() {
+  type SettingsPage = 'general' | 'customization' | 'autocapture' | 'ai' | 'mcp' |
+    'error-tracking' | 'experiments' | 'feature-flags' | 'heatmaps' | 'product-analytics' |
+    'revenue-analytics' | 'session-replay' | 'support' | 'surveys' | 'web-analytics' |
+    'privacy' | 'access-control' | 'activity-logs' | 'approvals' | 'discussions' |
+    'integrations' | 'danger-zone' | 'org-general' | 'org-members' | 'org-roles' |
+    'org-sso' | 'org-security';
+
+  const [page, setPage] = useState<SettingsPage>('general');
+  const [settingsSearch, setSettingsSearch] = useState('');
+  const [projectOpen, setProjectOpen] = useState(true);
+  const [aiOpen, setAiOpen] = useState(true);
+  const [productsOpen, setProductsOpen] = useState(true);
+  const [orgOpen, setOrgOpen] = useState(true);
+
+  // State for General
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [sdkTab, setSdkTab] = useState<'html'|'js'>('html');
+  const [sdkPlatform, setSdkPlatform] = useState('Web');
+
+  // State for Customization
+  const [displayName, setDisplayName] = useState('Proyecto por defecto');
+  const [timezone, setTimezone] = useState('UTC (UTC+0:00)');
+  const [weekStart, setWeekStart] = useState('Domingo');
+  const [businessModel, setBusinessModel] = useState('No especificado');
+
+  // State for Autocapture
+  const [autocaptureWeb, setAutocaptureWeb] = useState(true);
+  const [webVitals, setWebVitals] = useState(false);
+  const [captureCLS, setCaptureCLS] = useState(true);
+  const [captureFCP, setCaptureFCP] = useState(true);
+  const [captureLCP, setCaptureLCP] = useState(true);
+  const [captureINP, setCaptureINP] = useState(true);
+  const [deadClicks, setDeadClicks] = useState(false);
+
+  function Toggle({ val, set }: { val: boolean; set: (v: boolean) => void }) {
+    return (
+      <button
+        onClick={() => set(!val)}
+        className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${val ? 'bg-[#e8572a]' : 'bg-[#d1d5db]'}`}
+      >
+        <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm ${val ? 'translate-x-5' : 'translate-x-0.5'}`}/>
+      </button>
+    );
+  }
+
+  function SectionTitle({ title, link }: { title: string; link?: boolean }) {
+    return (
+      <div className="flex items-center gap-2 mb-1">
+        <h3 className="text-[14px] font-bold text-[#1a1a1a]">{title}</h3>
+        {link && (
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#1a1a1a]"><path d="M6.5 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V9.5M9 1h6v6M8.5 7.5L14 2"/></svg>
+        )}
+      </div>
+    );
+  }
+
+  function InfoBanner() {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#e9eae6] bg-white flex-shrink-0">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462] flex-shrink-0"><circle cx="8" cy="8" r="7"/><path d="M7 7h2v4.5H7zm0-2.5h2v1.8H7z" fill="white"/></svg>
+        <p className="text-[13px] text-[#646462]">
+          Estos ajustes solo aplican al proyecto actual (<strong>Proyecto por defecto</strong>).
+        </p>
+      </div>
+    );
+  }
+
+  function PlatformBadge({ label, check }: { label: string; check?: boolean }) {
+    return (
+      <span className="flex items-center gap-1 text-[11px] text-[#646462]">
+        {check
+          ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a]"><path d="M13 4L6 11 3 8"/></svg>
+          : <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#f59e0b]"><circle cx="8" cy="8" r="7"/><path d="M8 5v4M8 11v.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        }
+        {label}
+      </span>
+    );
+  }
+
+  // ── Sidebar NavItem ──────────────────────────────────────────────────────────
+  function SNavItem({ p, label, indent, red }: { p: SettingsPage; label: string; indent?: boolean; red?: boolean }) {
+    const active = page === p;
+    return (
+      <button
+        onClick={() => setPage(p)}
+        className={`w-full text-left px-3 py-1.5 rounded-lg text-[13px] transition-colors ${indent ? 'pl-5' : ''} ${active ? 'bg-[#eff2ff] text-[#3b59f6] font-medium' : red ? 'text-[#e8572a] hover:bg-[#fff5f2]' : 'text-[#646462] hover:bg-[#f3f3f1] hover:text-[#1a1a1a]'}`}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  function SGroup({ label, open, toggle, children }: { label: string; open: boolean; toggle: () => void; children: React.ReactNode }) {
+    return (
+      <div>
+        <button onClick={toggle} className="flex items-center justify-between w-full px-3 py-1.5 text-[12px] font-semibold text-[#1a1a1a] uppercase tracking-wide hover:bg-[#f3f3f1] rounded-lg">
+          {label}
+          <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${open ? '' : '-rotate-90'}`}><path d="M3 5l5 5 5-5"/></svg>
+        </button>
+        {open && <div className="mt-0.5 space-y-0.5">{children}</div>}
+      </div>
+    );
+  }
+
+  function DevPage({ title }: { title: string }) {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-8 flex items-center justify-center min-h-[300px]">
+          <div className="text-center space-y-2">
+            <p className="text-[16px] font-bold text-[#1a1a1a]">{title}</p>
+            <p className="text-[13px] text-[#646462]">Esta sección está en desarrollo.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Content pages ────────────────────────────────────────────────────────────
+  function GeneralPage() {
+    const token = 'cln_CSSyj2b29HPLUQNUinX5Ezc3QPpkCmQ2gvywjT2wJ5pF';
+    const codeHtml = `<script>
+  !function(t,e){var o,n,p,r;e.__SV||(window.clain=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a=u._i.push([i,[],a]),u.toString=function(t){var e="clain.";return void 0!==a&&(e+=a+"."),e},u.toString(1),o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.clain=window.clain||{});
+  clain.init('${token}', {
+    api_host: 'https://app.clainanalytics.com',
+    defaults: '2026-01-30',
+    person_profiles: 'identified_only', // o 'always' para crear perfiles de usuarios anónimos
+  })
+</script>`;
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Project token & ID */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Token e ID de proyecto</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4zM9 2.5L12.5 6H9V2.5z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-4">Tu token e ID de proyecto para conectar SDKs y APIs a este entorno.</p>
+
+            {/* Token card */}
+            <div className="border border-[#e9eae6] rounded-xl mb-3 overflow-hidden">
+              <div className="px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+                <p className="text-[12px] font-semibold text-[#646462]">Token del proyecto</p>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2.5">
+                <code className="flex-1 text-[12px] font-mono text-[#1a1a1a] truncate">{token}</code>
+                <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                </button>
+                <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 3v10M3 8l5 5 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+            <p className="text-[12px] text-[#646462] mb-4">Clave de solo escritura para uso en <span className="text-[#e8572a] cursor-pointer hover:underline">librerías de cliente</span>. Segura para usar en apps públicas.</p>
+
+            {/* Project ID card */}
+            <div className="border border-[#e9eae6] rounded-xl mb-3 overflow-hidden">
+              <div className="px-4 py-2 border-b border-[#e9eae6] bg-[#fafaf9]">
+                <p className="text-[12px] font-semibold text-[#646462]">ID del proyecto</p>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2.5">
+                <code className="flex-1 text-[12px] font-mono text-[#1a1a1a]">1</code>
+                <button className="p-1 rounded hover:bg-[#f3f3f1] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                </button>
+              </div>
+            </div>
+            <p className="text-[12px] text-[#646462]">Usa este ID en la <span className="text-[#e8572a] cursor-pointer hover:underline">API de Clain</span>.</p>
+          </div>
+
+          {/* SDK setup */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Configuración del SDK</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] cursor-pointer hover:fill-[#3b59f6]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4zM9 2.5L12.5 6H9V2.5z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Instala Clain en tu app usando uno de nuestros SDKs. Selecciona tu plataforma para ver las instrucciones de configuración.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <button className="flex items-center gap-1 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] text-[#1a1a1a] hover:bg-[#f3f3f1] mb-3">
+              {sdkPlatform}
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M3 5l5 5 5-5"/></svg>
+            </button>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Puedes añadir el snippet JavaScript directamente a tu HTML o instalar el SDK de JavaScript a través de tu gestor de paquetes.
+            </p>
+            {/* Tabs */}
+            <div className="flex border-b border-[#e9eae6] mb-0">
+              <button onClick={() => setSdkTab('html')} className={`px-4 pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${sdkTab === 'html' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>HTML snippet</button>
+              <button onClick={() => setSdkTab('js')} className={`px-4 pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${sdkTab === 'js' ? 'border-[#e8572a] text-[#e8572a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}>JavaScript SDK</button>
+            </div>
+            {sdkTab === 'html' && (
+              <div>
+                <p className="text-[12px] text-[#646462] my-3">
+                  Añade este snippet a tu web dentro de la etiqueta <code className="bg-[#f3f3f1] px-1 rounded text-[11px]">&lt;head&gt;</code>. También se puede usar en servicios como Google Tag Manager:
+                </p>
+                <div className="relative bg-[#1e1e2e] rounded-xl overflow-hidden">
+                  <button className="absolute top-3 right-3 p-1.5 rounded bg-[#2a2a3a] hover:bg-[#3a3a4a] text-[#9ca3af]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 4V3a1 1 0 011-1h7a1 1 0 011 1v8a1 1 0 01-1 1h-1M2 6a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/></svg>
+                  </button>
+                  <pre className="p-4 text-[11px] font-mono overflow-x-auto text-[#cdd6f4] leading-[18px]">
+                    <span className="text-[#89b4fa]">{'<script>'}</span>{'\n'}
+                    {'  '}
+                    <span className="text-[#6c7086]">{'// Clain Analytics SDK'}</span>{'\n'}
+                    {'  clain.init(\''}
+                    <span className="text-[#a6e3a1]">{token}</span>
+                    {'\', {\n    api_host: \''}
+                    <span className="text-[#a6e3a1]">https://app.clainanalytics.com</span>
+                    {'\',\n    defaults: \''}
+                    <span className="text-[#a6e3a1]">2026-01-30</span>
+                    {'\',\n    person_profiles: \''}
+                    <span className="text-[#a6e3a1]">identified_only</span>
+                    {'\',\n  });'}
+                    {'\n'}
+                    <span className="text-[#89b4fa]">{'</script>'}</span>
+                  </pre>
+                </div>
+              </div>
+            )}
+            {sdkTab === 'js' && (
+              <div>
+                <p className="text-[12px] text-[#646462] my-3">Instala el paquete npm:</p>
+                <div className="relative bg-[#1e1e2e] rounded-xl overflow-hidden">
+                  <pre className="p-4 text-[11px] font-mono text-[#cdd6f4]">
+                    <span className="text-[#cba6f7]">npm</span>
+                    {' install clain-js\n\n'}
+                    <span className="text-[#89b4fa]">import</span>
+                    {' Clain '}
+                    <span className="text-[#89b4fa]">from</span>
+                    {' \'clain-js\';\nClain.init(\''}
+                    <span className="text-[#a6e3a1]">{token}</span>
+                    {'\');'}
+                  </pre>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-3 mt-4">
+              <button className="h-8 px-4 border border-[#e9eae6] rounded-lg text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">Ver instrucciones completas de configuración</button>
+              <button className="text-[12px] text-[#e8572a] font-medium hover:underline">Web docs</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function CustomizationPage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Display name */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Nombre de visualización</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M11.5 2.5a1.4 1.4 0 012 2L5 13H3v-2l8.5-8.5z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Un nombre legible para este entorno.</p>
+            <input
+              type="text"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6] mb-2.5"
+            />
+            <button className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Renombrar proyecto</button>
+          </div>
+
+          {/* Date & time */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Fecha y hora</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-4">Establece la zona horaria y el día de inicio de semana para mostrar y agrupar datos de series temporales en insights y dashboards. Puede que necesites actualizar los insights para que los cambios se apliquen.</p>
+            <div className="flex items-start gap-6">
+              <div className="flex-1">
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Zona horaria</p>
+                <input type="text" value={timezone} onChange={e => setTimezone(e.target.value)} className="w-full h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] outline-none focus:border-[#3b59f6]"/>
+              </div>
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] mb-1.5">La semana empieza el</p>
+                <select value={weekStart} onChange={e => setWeekStart(e.target.value)} className="h-9 px-3 pr-7 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6] appearance-none cursor-pointer">
+                  {['Domingo','Lunes','Sábado'].map(d => <option key={d}>{d}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Business model */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Modelo de negocio</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">Indica si este proyecto atiende a clientes B2B o B2C para que Clain pueda adaptar la experiencia y las recomendaciones.</p>
+            <p className="text-[12px] font-semibold text-[#646462] mb-1.5">Modelo de negocio</p>
+            <select value={businessModel} onChange={e => setBusinessModel(e.target.value)} className="w-full max-w-xs h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] bg-white outline-none focus:border-[#3b59f6]">
+              {['No especificado','B2B','B2C','B2B2C'].map(m => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+
+          {/* Base currency */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Moneda base</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-1.5">Establece la moneda predeterminada para cálculos de ingresos y monetarios.</p>
+            <p className="text-[13px] text-[#646462] mb-3">Clain convertirá todos los valores de moneda del equipo a esta moneda antes de mostrártelos. Si no podemos detectar correctamente tu moneda, asumiremos que está en esta moneda también.</p>
+            <button className="flex items-center gap-2 h-9 px-3 border border-[#e9eae6] rounded-lg text-[13px] text-[#1a1a1a] bg-white hover:bg-[#f3f3f1]">
+              🇺🇸 Dólar estadounidense (USD)
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#646462]"><path d="M3 5l5 5 5-5"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function AutocapturePage() {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <InfoBanner />
+        <div className="p-6 max-w-2xl space-y-8">
+          {/* Autocapture */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <div className="flex items-center gap-2 ml-2">
+                <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
+                <PlatformBadge label="Web" check/>
+                <PlatformBadge label="React Native"/>
+                <PlatformBadge label="iOS"/>
+              </div>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Captura automáticamente eventos de frontend como clics, cambios de input y envíos de formulario al usar el SDK de JavaScript web. También disponible para React Native e iOS mediante configuración de código.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2.5">
+              <Toggle val={autocaptureWeb} set={setAutocaptureWeb}/>
+              <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura para web</span>
+            </div>
+          </div>
+
+          {/* Data attributes */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Atributos de datos</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Especifica atributos de datos utilizados en tu app (ej. data-attr, data-custom-id). Estos atributos ayudan a la barra de herramientas y definiciones de acciones a identificar elementos únicos en tus páginas. Usa * como comodín.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 h-10 bg-white mb-3">
+              <span className="flex items-center gap-1.5 bg-[#f3f3f1] px-2 h-6 rounded text-[12px] text-[#1a1a1a]">
+                data-attr
+                <button className="text-[#646462] hover:text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="2"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                </button>
+              </span>
+              <input type="text" placeholder="Añadir valor" className="flex-1 text-[13px] outline-none bg-transparent text-[#646462]"/>
+            </div>
+            <button className="h-8 px-4 border border-[#e8572a] text-[#e8572a] text-[12px] font-semibold rounded-lg hover:bg-[#fff5f2]">Guardar</button>
+          </div>
+
+          {/* Web vitals autocapture */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura de Web Vitals</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <div className="flex items-center gap-2 ml-2">
+                <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
+                <PlatformBadge label="Web" check/>
+              </div>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Captura las métricas de Web Vitals de Google Chrome (LCP, CLS, FCP, INP). Estos eventos mejoran el análisis web y la reproducción de sesiones con datos de rendimiento.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2.5 mb-4">
+              <Toggle val={webVitals} set={setWebVitals}/>
+              <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura de Web Vitals</span>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              También puedes elegir capturar solo métricas de Web Vitals específicas. Por defecto, se capturan las cuatro métricas principales: CLS, FCP, LCP e INP.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Capturar CLS', val: captureCLS, set: setCaptureCLS },
+                { label: 'Capturar FCP', val: captureFCP, set: setCaptureFCP },
+                { label: 'Capturar LCP', val: captureLCP, set: setCaptureLCP },
+                { label: 'Capturar INP', val: captureINP, set: setCaptureINP },
+              ].map(({ label, val, set }) => (
+                <div key={label} className="flex items-center gap-2.5">
+                  <Toggle val={val} set={set}/>
+                  <span className="text-[13px] text-[#1a1a1a]">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Dead clicks autocapture */}
+          <div>
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Autocaptura de clics muertos</h3>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6l-3-4z"/></svg>
+              <div className="flex items-center gap-2 ml-2">
+                <span className="text-[11px] text-[#646462]">Plataformas compatibles:</span>
+                <PlatformBadge label="Web" check/>
+              </div>
+            </div>
+            <p className="text-[13px] text-[#646462] mb-3">
+              Rastrea clics que no resultan en ninguna acción (sin desplazamiento, selección de texto ni mutación del DOM). Los clics muertos ayudan a encontrar elementos que los usuarios esperan que sean interactivos pero no lo son.{' '}
+              <span className="text-[#e8572a] cursor-pointer hover:underline">Docs ↗</span>
+            </p>
+            <div className="flex items-center gap-2.5">
+              <Toggle val={deadClicks} set={setDeadClicks}/>
+              <span className="text-[13px] text-[#1a1a1a]">Activar autocaptura de clics muertos</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Page title map ───────────────────────────────────────────────────────────
+  const pageTitles: Record<SettingsPage, string> = {
+    'general': 'Ajustes - General', 'customization': 'Ajustes - Personalización',
+    'autocapture': 'Ajustes - Autocaptura', 'ai': 'Ajustes - Clain AI',
+    'mcp': 'Ajustes - Clain MCP', 'error-tracking': 'Ajustes - Error Tracking',
+    'experiments': 'Ajustes - Experimentos', 'feature-flags': 'Ajustes - Feature Flags',
+    'heatmaps': 'Ajustes - Mapas de calor', 'product-analytics': 'Ajustes - Analíticas de producto',
+    'revenue-analytics': 'Ajustes - Revenue Analytics', 'session-replay': 'Ajustes - Replay de sesión',
+    'support': 'Ajustes - Soporte', 'surveys': 'Ajustes - Encuestas',
+    'web-analytics': 'Ajustes - Web Analytics', 'privacy': 'Ajustes - Privacidad',
+    'access-control': 'Ajustes - Control de acceso', 'activity-logs': 'Ajustes - Registros de actividad',
+    'approvals': 'Ajustes - Aprobaciones', 'discussions': 'Ajustes - Discusiones',
+    'integrations': 'Ajustes - Integraciones', 'danger-zone': 'Ajustes - Zona de peligro',
+    'org-general': 'Organización - General', 'org-members': 'Organización - Miembros',
+    'org-roles': 'Organización - Roles', 'org-sso': 'Organización - Autenticación y SSO',
+    'org-security': 'Organización - Seguridad',
+  };
+
+  return (
+    <div className="flex-1 flex min-h-0 bg-white">
+      {/* Settings sidebar */}
+      <div className="w-56 flex-shrink-0 flex flex-col border-r border-[#e9eae6] bg-[#fafaf9]">
+        {/* Search */}
+        <div className="px-3 py-2.5 border-b border-[#e9eae6]">
+          <div className="relative">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2"><path d="M6.5 2a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM1 6.5a5.5 5.5 0 1110.25 2.79l2.73 2.73-.71.71-2.73-2.73A5.5 5.5 0 011 6.5z"/></svg>
+            <input type="text" value={settingsSearch} onChange={e => setSettingsSearch(e.target.value)} placeholder="Buscar ajustes..." className="w-full h-7 pl-7 pr-2 border border-[#e9eae6] rounded-lg text-[12px] outline-none focus:border-[#3b59f6] bg-white"/>
+          </div>
+        </div>
+
+        {/* Nav tree */}
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+          <SGroup label="Proyecto" open={projectOpen} toggle={() => setProjectOpen(o => !o)}>
+            <SNavItem p="general" label="General" indent/>
+            <SNavItem p="customization" label="Personalización" indent/>
+            <SNavItem p="autocapture" label="Autocaptura" indent/>
+          </SGroup>
+          <SGroup label="IA" open={aiOpen} toggle={() => setAiOpen(o => !o)}>
+            <SNavItem p="ai" label="Clain AI" indent/>
+            <SNavItem p="mcp" label="Clain MCP" indent/>
+          </SGroup>
+          <SGroup label="Productos" open={productsOpen} toggle={() => setProductsOpen(o => !o)}>
+            <SNavItem p="error-tracking" label="Error tracking" indent/>
+            <SNavItem p="experiments" label="Experimentos" indent/>
+            <SNavItem p="feature-flags" label="Feature flags" indent/>
+            <SNavItem p="heatmaps" label="Mapas de calor" indent/>
+            <SNavItem p="product-analytics" label="Analíticas de producto" indent/>
+            <SNavItem p="revenue-analytics" label="Revenue analytics" indent/>
+            <SNavItem p="session-replay" label="Replay de sesión" indent/>
+            <SNavItem p="support" label="Soporte" indent/>
+            <SNavItem p="surveys" label="Encuestas" indent/>
+            <SNavItem p="web-analytics" label="Web analytics" indent/>
+          </SGroup>
+          <SNavItem p="privacy" label="Privacidad"/>
+          <SNavItem p="access-control" label="Control de acceso"/>
+          <SNavItem p="activity-logs" label="Registros de actividad"/>
+          <SNavItem p="approvals" label="Aprobaciones"/>
+          <SNavItem p="discussions" label="Discusiones"/>
+          <SNavItem p="integrations" label="Integraciones"/>
+          <SNavItem p="danger-zone" label="Zona de peligro" red/>
+          <SGroup label="Organización" open={orgOpen} toggle={() => setOrgOpen(o => !o)}>
+            <SNavItem p="org-general" label="General" indent/>
+            <SNavItem p="org-members" label="Miembros" indent/>
+            <SNavItem p="org-roles" label="Roles" indent/>
+            <SNavItem p="org-sso" label="Autenticación y SSO" indent/>
+            <SNavItem p="org-security" label="Seguridad" indent/>
+          </SGroup>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center gap-2 px-5 h-12 border-b border-[#e9eae6]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.5 1.5M11 11l1.5 1.5M3.5 12.5L5 11M11 5l1.5-1.5"/></svg>
+          <span className="text-[15px] font-bold text-[#1a1a1a] flex-1">{pageTitles[page]}</span>
+          <button className="flex items-center gap-1.5 h-7 px-3 border border-[#e9eae6] rounded-lg text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#f59e0b]"><path d="M8 2l1.5 4h4L10 8.5l1.5 4L8 10l-3.5 2.5 1.5-4L3 6h4L8 2z"/></svg>
+            Quick start
+          </button>
+        </div>
+
+        {/* Page content */}
+        {page === 'general'       && <GeneralPage />}
+        {page === 'customization' && <CustomizationPage />}
+        {page === 'autocapture'   && <AutocapturePage />}
+        {!['general','customization','autocapture'].includes(page) && <DevPage title={pageTitles[page]}/>}
+      </div>
+    </div>
+  );
+}
+
