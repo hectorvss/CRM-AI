@@ -20,6 +20,7 @@ import CaseGraph from './components/CaseGraph';
 import PageErrorBoundary from './components/PageErrorBoundary';
 import SuperAgent from './components/SuperAgent';
 import GlobalSearch from './components/GlobalSearch';
+import Prototype from './prototype/Prototype';
 import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
 import Paywall from './components/billing/Paywall';
@@ -511,52 +512,13 @@ export default function App() {
     );
   }
 
+  // Authenticated, with membership and app access → render the Clain product
+  // (the prototype UI: Platform Hub + Customer Experience + Web Analytics).
+  // All auth/membership/paywall gating above stays intact; only the rendered
+  // product surface changed from the legacy CRM shell to the prototype.
   return (
-    <PermissionsProvider>
-    <div className="bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200 font-sans h-screen flex overflow-hidden selection:bg-purple-200 dark:selection:bg-purple-900">
-      <Sidebar
-        currentPage={currentPage}
-        currentSection={navigationTarget.section}
-        onPageChange={navigate}
-        isOpen={isLeftSidebarOpen}
-        onToggle={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
-        onSearchOpen={() => setSearchOpen(true)}
-      />
-      <main className="flex-1 flex flex-col h-full min-w-0 relative">
-        <PageErrorBoundary page={currentPage}>
-          {currentPage === 'inbox' && <Inbox focusCaseId={pageFocus.caseId} />}
-          {currentPage === 'super_agent' && <SuperAgent onNavigate={navigate} activeTarget={navigationTarget} />}
-          {currentPage === 'home' && <Home onNavigate={navigate} />}
-          {currentPage === 'ai_studio' && <AIStudio />}
-          {currentPage === 'workflows' && <Workflows onNavigate={navigate} focusWorkflowId={pageFocus.workflowId} />}
-          {currentPage === 'approvals' && <Approvals onNavigate={navigate} focusApprovalId={pageFocus.approvalId} />}
-          {currentPage === 'knowledge' && <Knowledge />}
-          {currentPage === 'customers' && <Customers onNavigate={navigate} focusCustomerId={pageFocus.customerId} />}
-          {currentPage === 'tools_integrations' && <ToolsIntegrations />}
-          {currentPage === 'reports' && <Reports />}
-          {currentPage === 'settings' && <Settings onNavigate={navigate} initialSection={navigationTarget.section} />}
-          {currentPage === 'upgrade' && <Upgrade />}
-          {currentPage === 'profile' && <Profile onNavigate={navigate} initialSection={navigationTarget.section} />}
-          {currentPage === 'orders' && <Orders onNavigate={navigate} focusEntityId={pageFocus.orderId} focusSection={navigationTarget.section} />}
-          {currentPage === 'returns' && <Returns onNavigate={navigate} focusEntityId={pageFocus.returnId} focusSection={navigationTarget.section} />}
-          {currentPage === 'payments' && <Payments onNavigate={navigate} focusEntityId={pageFocus.paymentId} focusSection={navigationTarget.section} />}
-          {currentPage === 'case_graph' && <CaseGraph onPageChange={(target) => {
-            if (typeof target === 'string') {
-              navigate(target, target === 'case_graph' ? pageFocus.caseId : null);
-            } else {
-              navigate(target);
-            }
-          }} focusCaseId={pageFocus.caseId} />}
-        </PageErrorBoundary>
-      </main>
-
-      {/* Global Search modal — rendered outside main so it overlays everything */}
-      <GlobalSearch
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onNavigate={navigate}
-      />
+    <div className="h-screen w-screen bg-[#f3f3f1] overflow-hidden">
+      <Prototype />
     </div>
-    </PermissionsProvider>
   );
 }
