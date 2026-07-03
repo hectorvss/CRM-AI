@@ -110,7 +110,22 @@ contraseña por prompt al guardar. **No requiere migración** (usa la columna `e
 address antes de activarlo (en vez de `email_confirm:true` directo), para evitar apropiación si una
 sesión se ve comprometida. Ahora se cambia directo tras verificar la contraseña.
 
-## 4. Backend NUEVO añadido sin poder ejecutarlo (aplicar + probar al reactivar)
+## 3.quater 2FA (TOTP) — construido con MFA nativo de Supabase, pendiente de runtime
+
+El modal de 2FA de SecurityView ahora usa el **MFA nativo de Supabase** (no cripto propia):
+`supabase.auth.mfa.enroll({factorType:'totp'})` al abrir el modal → muestra el QR real
+(`data.totp.qr_code`) + la clave manual (`data.totp.secret`); "Validar y guardar" hace
+`challenge()` + `verify({factorId, challengeId, code})`. Supabase genera y verifica el secreto,
+así que la seguridad la aporta la plataforma. **No requiere migración ni backend propio.**
+
+**Qué probar al reactivar la BD (IMPRESCINDIBLE antes de confiar en ello):**
+1. Security → Configurar 2FA → debe aparecer un QR real; escanearlo en Google Authenticator.
+2. Introducir el código de 6 dígitos → "Validar y guardar" → debe verificar y activar (aal2).
+3. Código incorrecto → error, sin activar.
+4. **Enforcement en login (follow-up):** con MFA activo, Supabase exige completar el challenge al
+   iniciar sesión (nivel aal2). La página de login (SigninPage) debe manejar ese challenge —
+   NO construido aún. Sin ese paso, el factor queda enrolado pero el login no lo exige.
+5. Requisito: el proyecto Supabase debe tener **MFA/TOTP habilitado** en Authentication settings.
 
 > Esta sección se irá ampliando conforme se construya backend nuevo a ciegas.
 > Cada entrada incluye: migración a aplicar, rutas nuevas, y qué probar.
