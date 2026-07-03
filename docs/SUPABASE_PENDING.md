@@ -106,3 +106,23 @@ created_by, created_at, updated_at; UNIQUE(tenant_id, workspace_id, name)).
 **Pendiente (no bloqueante):** los contadores de uso por etiqueta
 (personas/empresas/conversaciones/mensajes/artículos/respuestas) se muestran como 0 —
 requieren un sistema de aplicación de etiquetas a entidades + agregación, aún no construido.
+
+### 4.2 — Topics / Temas (commit de esta sesión)
+
+Pantalla **Temas** (TopicsView): antes gestionaba temas solo en memoria. Backend nuevo completo.
+
+**Migración a aplicar:** `supabase/migrations/20260703_0002_topics.sql`
+→ tabla `public.topics` (id, tenant_id, workspace_id, name, color, archived, timestamps;
+UNIQUE(tenant_id, workspace_id, name)).
+
+**Archivos nuevos:**
+- `server/data/topics.ts` — CRUD + flag `archived`.
+- `server/routes/topics.ts` — `GET /api/topics` (`?includeArchived=true`), `POST`, `PATCH /:id` (rename/recolor/archive), `DELETE /:id` (montado en `server/index.ts`).
+- `topicsApi` en `src/api/client.ts`.
+
+**Qué probar al reactivar la BD:**
+1. Ajustes → Temas: la lista carga (`GET /api/topics`), vacía al principio.
+2. Escribir nombre + "Añadir" → persiste (`POST`) con color auto-asignado, reaparece tras refetch.
+3. Nombre duplicado → 409.
+4. "Archivar" en un tema → `PATCH {archived:true}` → desaparece de la lista (que excluye archivados).
+5. Recargar → los temas persisten.

@@ -1342,6 +1342,21 @@ export const labelsApi = {
     request<any>(`/labels/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
+// ── Topics (temas) ────────────────────────────────────────
+// Conversation topics managed from the Temas settings screen.
+export const topicsApi = {
+  list: (params?: { includeArchived?: boolean }) => {
+    const qs = params?.includeArchived ? '?includeArchived=true' : '';
+    return request<any[]>(`/topics${qs}`).then(unwrapList);
+  },
+  create: (payload: { name: string; color?: string | null }) =>
+    request<any>('/topics', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Partial<{ name: string; color: string | null; archived: boolean }>) =>
+    request<any>(`/topics/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/topics/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
+
 // ── Data Imports ──────────────────────────────────────────
 export const dataImportsApi = {
   list: (params?: { entityType?: string; status?: string }) => {
