@@ -76,6 +76,24 @@ Con CRMAI activa, validar en runtime lo cableado por compilación esta sesión (
 
 ---
 
+## 3.bis Revisión estática de los backends nuevos (hecha — sin runtime)
+
+Los 6 backends nuevos (labels, topics, webhooks, ticket_types, ticket_states,
+custom_object_types) pasaron una revisión estática de seguridad/corrección, ya que
+no se pudieron ejecutar (CRMAI pausado + Docker/WSL2 no funcional en la máquina):
+
+- **Sin inyección PostgREST**: ninguno usa `.or(\`...${var}...\`)` interpolado; el único
+  filtro de texto (`labels.ilike('name', \`%${q}%\`)`) va en la posición de valor, que el
+  método parametriza (a prueba de inyección SQL).
+- **Aislamiento multi-tenant**: toda función de datos filtra por `tenant_id` + `workspace_id`.
+- **Contrato de respuesta**: las rutas devuelven arrays planos y el cliente usa `unwrapList`,
+  que maneja arrays planos correctamente.
+- **Permisos**: mutaciones protegidas con `requirePermission('settings.write')`.
+- **Duplicados**: constraints UNIQUE + manejo de `23505` → 409 donde aplica.
+
+Pendiente solo la validación en RUNTIME (crear/listar/borrar contra una BD real), que
+requiere reactivar CRMAI.
+
 ## 4. Backend NUEVO añadido sin poder ejecutarlo (aplicar + probar al reactivar)
 
 > Esta sección se irá ampliando conforme se construya backend nuevo a ciegas.
