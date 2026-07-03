@@ -189,3 +189,13 @@ CHECK('submitted'|'in_progress'|'waiting_customer'|'resolved'), color, sort_orde
 2. "+ Añadir estado" en un grupo (o "+ Crear estado" en el header) → prompts de etiqueta interna + etiqueta de cliente → persiste (`POST`) en esa categoría → aparece en su grupo con el contador actualizado.
 3. "Eliminar" en un estado → `DELETE` → desaparece.
 4. Recargar → persisten.
+
+### 4.6 — Tickets · pestaña "Portal" (settings-blob, commit de esta sesión)
+
+TicketsView pestaña **Portal**: el toggle "Habilitar el portal de folios de atención" + botón
+"Guardar cambios" ahora persisten vía settings-blob (`workspacesApi.updateSettings` con clave
+`ticket_portal_enabled`) — sin backend nuevo ni migración. Hidrata de `wsCtx.settings.ticket_portal_enabled`.
+Con esto TicketsView queda funcional en sus 3 pestañas (Tipos, Estados, Portal). Pendiente solo la
+relación many-to-many estado↔tipo (enhancement).
+
+**Qué probar:** activar/desactivar el toggle del portal + "Guardar cambios" → persiste; recargar mantiene el valor.
