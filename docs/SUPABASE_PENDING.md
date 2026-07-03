@@ -122,9 +122,10 @@ así que la seguridad la aporta la plataforma. **No requiere migración ni backe
 1. Security → Configurar 2FA → debe aparecer un QR real; escanearlo en Google Authenticator.
 2. Introducir el código de 6 dígitos → "Validar y guardar" → debe verificar y activar (aal2).
 3. Código incorrecto → error, sin activar.
-4. **Enforcement en login (follow-up):** con MFA activo, Supabase exige completar el challenge al
-   iniciar sesión (nivel aal2). La página de login (SigninPage) debe manejar ese challenge —
-   NO construido aún. Sin ese paso, el factor queda enrolado pero el login no lo exige.
+4. **Enforcement en login (YA construido):** `src/components/auth/Login.tsx` ya maneja el gating MFA —
+   tras `signInWithPassword` lista los factores (`mfa.listFactors`), y si hay un TOTP verificado crea
+   un `challenge` y pasa al stage 'mfa' que pide el código y hace `mfa.verify`. Es decir, 2FA queda
+   **end-to-end**: enrolar en SecurityView + exigir el código en el login. Solo falta probarlo en runtime.
 5. Requisito: el proyecto Supabase debe tener **MFA/TOTP habilitado** en Authentication settings.
 
 > Esta sección se irá ampliando conforme se construya backend nuevo a ciegas.
@@ -282,8 +283,20 @@ los contadores muestran 0).
 4. Hover en una tarjeta → "Eliminar" → `DELETE` → desaparece.
 5. Recargar → persisten.
 
-**Pendiente (feature aparte, mayor):** campos dinámicos por tipo (`custom_object_fields`) y registros
-(`custom_object_records` con data JSONB) + su UI. Requiere la BD activa para validar el esquema dinámico.
+**Campos por tipo (AÑADIDO en commit posterior):** migración `20260703_0008_custom_object_fields.sql`
+→ tabla `custom_object_fields` (object_type_id FK→custom_object_types ON DELETE CASCADE, name,
+field_key UNIQUE por tipo, field_type CHECK(text|number|boolean|date|select|email|url), required,
+sort_order). `server/data/customObjectFields.ts` + `server/routes/customObjectFields.ts`
+(`GET ?object_type_id=` / POST / PATCH / DELETE `/api/custom-object-fields`). `customObjectFieldsApi`
+en client.ts. En CustomObjectsView, cada tarjeta se **expande** ("Campos") mostrando sus campos +
+"+ Añadir campo" (prompt nombre + tipo) + quitar; el contador de campos es real.
+
+**Qué probar:** expandir un objeto → añadir campos con distintos tipos → persisten y el contador sube;
+quitar campo → desaparece; borrar el objeto → CASCADE limpia sus campos.
+
+**Pendiente (última pieza, la mayor):** los REGISTROS (`custom_object_records` con data JSONB por
+campo) + una UI de tabla/formulario dinámico basada en los campos definidos. Es la parte que más se
+beneficia de la BD activa (validar el esquema dinámico y las queries JSONB en runtime).
 
 ### 4.8 — Ticket state↔type many-to-many (commit de esta sesión)
 

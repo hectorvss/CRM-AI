@@ -1410,6 +1410,21 @@ export const customObjectTypesApi = {
     request<any>(`/custom-object-types/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
+// ── Custom object fields (estructura por tipo) ────────────
+type CustomFieldType = 'text' | 'number' | 'boolean' | 'date' | 'select' | 'email' | 'url';
+export const customObjectFieldsApi = {
+  list: (objectTypeId?: string) => {
+    const qs = objectTypeId ? `?object_type_id=${encodeURIComponent(objectTypeId)}` : '';
+    return request<any[]>(`/custom-object-fields${qs}`).then(unwrapList);
+  },
+  create: (payload: { object_type_id: string; name: string; field_type?: CustomFieldType; required?: boolean }) =>
+    request<any>('/custom-object-fields', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Partial<{ name: string; field_type: CustomFieldType; required: boolean }>) =>
+    request<any>(`/custom-object-fields/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/custom-object-fields/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
+
 // ── Data Imports ──────────────────────────────────────────
 export const dataImportsApi = {
   list: (params?: { entityType?: string; status?: string }) => {
