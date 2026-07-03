@@ -1368,6 +1368,17 @@ export const webhookSubscriptionsApi = {
     request<any>(`/webhook-subscriptions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
+// ── Ticket types (folios de atención) ─────────────────────
+export const ticketTypesApi = {
+  list: () => request<any[]>('/ticket-types').then(unwrapList),
+  create: (payload: { name: string; description?: string | null; icon?: string | null; category?: 'customer' | 'follow_up' | 'back_office' }) =>
+    request<any>('/ticket-types', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Partial<{ name: string; description: string | null; icon: string | null; category: 'customer' | 'follow_up' | 'back_office' }>) =>
+    request<any>(`/ticket-types/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/ticket-types/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
+
 // ── Data Imports ──────────────────────────────────────────
 export const dataImportsApi = {
   list: (params?: { entityType?: string; status?: string }) => {

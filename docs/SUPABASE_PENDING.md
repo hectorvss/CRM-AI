@@ -151,3 +151,22 @@ created_by, timestamps).
 
 **Pendiente (no bloqueante):** la ENTREGA real de eventos a las URLs suscritas (disparar POST a
 cada webhook cuando ocurre un evento) — requiere enganchar al event bus del servidor. Feature aparte.
+
+### 4.4 — Ticket types / Folios de atención · pestaña "Tipos" (commit de esta sesión)
+
+Pantalla **Folios de atención** (TicketsView), pestaña **Tipos**: antes hardcoded. Ahora usa backend real.
+(Las pestañas **Estados** —relación many-to-many— y **Portal** —settings-blob— siguen pendientes; ver tarea flaggeada del sistema de tickets.)
+
+**Migración a aplicar:** `supabase/migrations/20260703_0004_ticket_types.sql`
+→ tabla `public.ticket_types` (id, tenant_id, workspace_id, name, description, icon, category
+CHECK('customer'|'follow_up'|'back_office'), created_by, timestamps).
+
+**Archivos nuevos:**
+- `server/data/ticketTypes.ts` + `server/routes/ticketTypes.ts` (`GET/POST/PATCH/DELETE /api/ticket-types`, montado).
+- `ticketTypesApi` en `src/api/client.ts`.
+
+**Qué probar al reactivar la BD:**
+1. Ajustes → Folios de atención → pestaña Tipos: las 3 secciones (Clientes/Seguimiento/Back-office) cargan de `GET /api/ticket-types`, vacías al principio.
+2. "+ Crear tipo" en cualquier sección → prompt de nombre → persiste (`POST`) con esa `category` → aparece en su sección + el contador `(N)` sube.
+3. "Eliminar" en un tipo → `DELETE` → desaparece.
+4. Recargar → persisten.
