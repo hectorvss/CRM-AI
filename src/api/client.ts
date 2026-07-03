@@ -817,6 +817,14 @@ export const iamApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+  // The server exposes no DELETE /iam/roles/:id route, so a role is
+  // "deleted" by soft-archiving it: rename with an [Eliminado] prefix and
+  // clear its permissions. Centralised here so every call site behaves the same.
+  deleteRole: (id: string, name?: string) =>
+    request<any>(`/iam/roles/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: `[Eliminado] ${name ?? 'rol'}`, permissions: [] }),
+    }),
   updateMe: (payload: Record<string, any>) =>
     request<any>('/iam/me', {
       method: 'PATCH',
@@ -1298,17 +1306,25 @@ export const customRolesApi = {
 };
 
 // ── Notifications (user) ──────────────────────────────────
+// Paths mirror server/routes/notificationsApi.ts exactly:
+//   GET  /notifications/:userId            → list
+//   GET  /notifications/:userId/count      → { unread }
+//   PATCH /notifications/:id/read          → mark one (by notification id)
+//   POST /notifications/read-all/:userId   → mark all for a user
 export const notificationsApi = {
-  list: (userId: string, params?: { unreadOnly?: boolean }) => {
-    const qs = params?.unreadOnly ? '?unread_only=true' : '';
-    return request<any>(`/notifications/${userId}${qs}`).then(unwrapList);
+  list: (userId: string, params?: { unreadOnly?: boolean; limit?: number }) => {
+    const p: Record<string, string> = {};
+    if (params?.unreadOnly) p.unread_only = 'true';
+    if (params?.limit) p.limit = String(params.limit);
+    const qs = Object.keys(p).length ? '?' + new URLSearchParams(p).toString() : '';
+    return request<any>(`/notifications/${encodeURIComponent(userId)}${qs}`).then(unwrapList);
   },
-  markRead: (userId: string, notificationId?: string) => {
-    const path = notificationId
-      ? `/notifications/${userId}/${notificationId}/read`
-      : `/notifications/${userId}/read-all`;
-    return request<any>(path, { method: 'PATCH' });
-  },
+  count: (userId: string) =>
+    request<{ unread: number }>(`/notifications/${encodeURIComponent(userId)}/count`),
+  markRead: (notificationId: string) =>
+    request<{ ok: boolean }>(`/notifications/${encodeURIComponent(notificationId)}/read`, { method: 'PATCH' }),
+  markAllRead: (userId: string) =>
+    request<{ ok: boolean }>(`/notifications/read-all/${encodeURIComponent(userId)}`, { method: 'POST' }),
 };
 
 // ── Data Imports ──────────────────────────────────────────
