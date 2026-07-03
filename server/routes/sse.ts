@@ -17,6 +17,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { logger } from '../utils/logger.js';
+import { deliverToWebhooks } from '../lib/webhookDelivery.js';
 
 // ── In-memory subscriber registry ────────────────────────────────────────────
 
@@ -116,6 +117,10 @@ export function broadcastSSE(
       // Client disconnected — will be cleaned up on close event
     }
   }
+
+  // Fan the same event out to any active webhook subscriptions (fire-and-forget
+  // so it never blocks the request path).
+  void deliverToWebhooks(tenantId, workspaceId, event, enrichedData);
 }
 
 // ── Router ───────────────────────────────────────────────────────────────────

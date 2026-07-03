@@ -198,8 +198,21 @@ created_by, timestamps).
 4. "Eliminar" en una fila → `DELETE` → desaparece.
 5. Recargar → persisten.
 
-**Pendiente (no bloqueante):** la ENTREGA real de eventos a las URLs suscritas (disparar POST a
-cada webhook cuando ocurre un evento) — requiere enganchar al event bus del servidor. Feature aparte.
+**ENTREGA (añadida en commit posterior de esta sesión):** `server/lib/webhookDelivery.ts` →
+`deliverToWebhooks(tenantId, workspaceId, event, data)`, enganchado dentro de `broadcastSSE`
+(server/routes/sse.ts). Cada evento SSE (`case:reply`, `case:updated`, …) se reenvía también a los
+webhook_subscriptions activos cuyo `events` incluya ese evento (o esté vacío = todos), como POST
+JSON `{ event, data, timestamp }` con header `X-Clain-Event`, timeout 5 s, fire-and-forget.
+
+**Seguridad (SSRF):** las URLs son configuradas por el workspace. Guarda de primera línea: solo
+http(s) y bloqueo de hosts internos (localhost/*.local/*.internal, loopback 127.*, privados 10./
+172.16-31./192.168., link-local/metadata 169.254.*). **Hardening pendiente:** validación por
+resolución DNS (un host público puede resolver a IP privada — DNS rebinding). Documentado en el
+propio módulo.
+
+**Qué probar al reactivar la BD:** suscribir una URL (p. ej. un endpoint de webhook.site) →
+provocar un evento de caso (responder/cambiar estado) → debe llegar el POST con el payload. Probar
+que una URL a `localhost`/IP privada se rechaza (no se entrega).
 
 ### 4.4 — Ticket types / Folios de atención · pestaña "Tipos" (commit de esta sesión)
 
