@@ -1327,6 +1327,21 @@ export const notificationsApi = {
     request<{ ok: boolean }>(`/notifications/read-all/${encodeURIComponent(userId)}`, { method: 'POST' }),
 };
 
+// ── Labels (etiquetas) ────────────────────────────────────
+// First-class label entities managed from the Etiquetas settings screen.
+export const labelsApi = {
+  list: (params?: { q?: string }) => {
+    const qs = params?.q ? `?q=${encodeURIComponent(params.q)}` : '';
+    return request<any[]>(`/labels${qs}`).then(unwrapList);
+  },
+  create: (payload: { name: string; color?: string | null }) =>
+    request<any>('/labels', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Partial<{ name: string; color: string | null }>) =>
+    request<any>(`/labels/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/labels/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
+
 // ── Data Imports ──────────────────────────────────────────
 export const dataImportsApi = {
   list: (params?: { entityType?: string; status?: string }) => {

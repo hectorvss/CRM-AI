@@ -81,4 +81,28 @@ Con CRMAI activa, validar en runtime lo cableado por compilación esta sesión (
 > Esta sección se irá ampliando conforme se construya backend nuevo a ciegas.
 > Cada entrada incluye: migración a aplicar, rutas nuevas, y qué probar.
 
-_(vacío por ahora — se rellenará en los próximos commits)_
+### 4.1 — Labels / Etiquetas (commit de esta sesión)
+
+Pantalla **Etiquetas** (LabelsView): antes gestionaba etiquetas solo en memoria.
+Ahora tiene backend completo. Construido y validado por compilación (build + tsc
+frontend y servidor), **sin ejecutar contra la BD todavía**.
+
+**Migración a aplicar:** `supabase/migrations/20260703_0001_labels.sql`
+→ crea la tabla `public.labels` (id, tenant_id, workspace_id, name, color,
+created_by, created_at, updated_at; UNIQUE(tenant_id, workspace_id, name)).
+
+**Archivos nuevos:**
+- `server/data/labels.ts` — CRUD (list/get/create/update/delete), patrón copiado de `cannedResponses`.
+- `server/routes/labels.ts` — `GET /api/labels`, `POST /api/labels`, `PATCH /api/labels/:id`, `DELETE /api/labels/:id` (montado en `server/index.ts`).
+- `labelsApi` en `src/api/client.ts` (list/create/update/delete).
+
+**Qué probar al reactivar la BD:**
+1. Ir a Ajustes → Etiquetas. La lista debe cargar (`GET /api/labels`) — vacía al principio.
+2. "+ Nueva etiqueta" → escribir nombre → Crear. Debe persistir (`POST`) y reaparecer tras refetch.
+3. Crear una con nombre duplicado → debe dar 409 (constraint UNIQUE) y mostrar error.
+4. Hover en una fila → "Eliminar" → debe borrar (`DELETE`) y desaparecer.
+5. Recargar la página → las etiquetas creadas siguen ahí (persistencia real).
+
+**Pendiente (no bloqueante):** los contadores de uso por etiqueta
+(personas/empresas/conversaciones/mensajes/artículos/respuestas) se muestran como 0 —
+requieren un sistema de aplicación de etiquetas a entidades + agregación, aún no construido.
