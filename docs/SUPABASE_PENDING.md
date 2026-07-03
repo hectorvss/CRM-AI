@@ -126,3 +126,28 @@ UNIQUE(tenant_id, workspace_id, name)).
 3. Nombre duplicado → 409.
 4. "Archivar" en un tema → `PATCH {archived:true}` → desaparece de la lista (que excluye archivados).
 5. Recargar → los temas persisten.
+
+### 4.3 — Webhook subscriptions / Centro para desarrolladores (commit de esta sesión)
+
+Pantalla **Centro para desarrolladores** (DeveloperView), pestaña Webhooks: antes gestionaba
+suscripciones de webhook solo en memoria. Backend nuevo (solo la suscripción; la ENTREGA de
+eventos a esas URLs es otra pieza, no construida todavía).
+
+**Migración a aplicar:** `supabase/migrations/20260703_0003_webhook_subscriptions.sql`
+→ tabla `public.webhook_subscriptions` (id, tenant_id, workspace_id, url, events jsonb, active,
+created_by, timestamps).
+
+**Archivos nuevos:**
+- `server/data/webhookSubscriptions.ts` — CRUD.
+- `server/routes/webhookSubscriptions.ts` — `GET/POST/PATCH/DELETE /api/webhook-subscriptions` (montado). Path distinto de `webhookRouter` (entrante) para no colisionar.
+- `webhookSubscriptionsApi` en `src/api/client.ts`.
+
+**Qué probar al reactivar la BD:**
+1. Ajustes → Centro para desarrolladores → pestaña Webhooks: la lista carga (`GET`), vacía al principio.
+2. Pegar una URL válida + "Añadir" → persiste (`POST`, evento por defecto `conversation.created`).
+3. URL inválida → 400 (validación zod `.url()`).
+4. "Eliminar" en una fila → `DELETE` → desaparece.
+5. Recargar → persisten.
+
+**Pendiente (no bloqueante):** la ENTREGA real de eventos a las URLs suscritas (disparar POST a
+cada webhook cuando ocurre un evento) — requiere enganchar al event bus del servidor. Feature aparte.

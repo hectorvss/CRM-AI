@@ -1357,6 +1357,17 @@ export const topicsApi = {
     request<any>(`/topics/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
+// ── Webhook subscriptions (Centro para desarrolladores) ────
+export const webhookSubscriptionsApi = {
+  list: () => request<any[]>('/webhook-subscriptions').then(unwrapList),
+  create: (payload: { url: string; events?: string[]; active?: boolean }) =>
+    request<any>('/webhook-subscriptions', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Partial<{ url: string; events: string[]; active: boolean }>) =>
+    request<any>(`/webhook-subscriptions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/webhook-subscriptions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
+
 // ── Data Imports ──────────────────────────────────────────
 export const dataImportsApi = {
   list: (params?: { entityType?: string; status?: string }) => {
