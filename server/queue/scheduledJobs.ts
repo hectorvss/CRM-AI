@@ -129,6 +129,37 @@ async function forEachActiveScope(
   }
 }
 
+/**
+ * Enqueue a recurring maintenance job, swallowing (and logging) any failure.
+ *
+ * The SLA / reconcile / churn sweepers fire on `setInterval`/`setTimeout`
+ * callbacks that are not awaited. If `enqueueDelayed` rejects (e.g. the
+ * database is briefly unreachable at boot), an un-caught rejection here would
+ * crash the whole process. Wrapping every enqueue in this helper guarantees a
+ * transient queue/DB failure degrades to a logged warning instead of taking
+ * the API server down.
+ */
+function safeEnqueue(
+  type: JobType,
+  scope: { tenantId: string; workspaceId: string },
+  priority: number,
+): Promise<void> {
+  return enqueueDelayed(type, {}, 0, {
+    tenantId: scope.tenantId,
+    workspaceId: scope.workspaceId,
+    priority,
+  })
+    .then(() => undefined)
+    .catch((err) => {
+      logger.warn('Scheduled enqueue failed', {
+        type,
+        tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId,
+        error: String((err as any)?.message ?? err),
+      });
+    });
+}
+
 export function startScheduledJobs(): void {
   logger.info('Starting scheduled job intervals', {
     slaIntervalMin:            SLA_INTERVAL_MS / 60_000,
@@ -149,26 +180,18 @@ export function startScheduledJobs(): void {
 
   // Fire once shortly after startup (give the worker a few seconds to be fully up)
   setTimeout(() => {
-    void forEachActiveScope((scope) => {
-      enqueueDelayed(JobType.SLA_CHECK,           {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-    });
+    void forEachActiveScope((scope) => safeEnqueue(JobType.SLA_CHECK, scope, 9));
   }, 10_000);
   setTimeout(() => {
-    void forEachActiveScope((scope) => {
-      enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-    });
+    void forEachActiveScope((scope) => safeEnqueue(JobType.RECONCILE_SCHEDULED, scope, 9));
   }, 30_000);
 
   slaIntervalId = setInterval(() => {
-    void forEachActiveScope((scope) => {
-      enqueueDelayed(JobType.SLA_CHECK, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-    });
+    void forEachActiveScope((scope) => safeEnqueue(JobType.SLA_CHECK, scope, 9));
   }, SLA_INTERVAL_MS);
 
   reconcileIntervalId = setInterval(() => {
-    void forEachActiveScope((scope) => {
-      enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-    });
+    void forEachActiveScope((scope) => safeEnqueue(JobType.RECONCILE_SCHEDULED, scope, 9));
   }, RECONCILE_INTERVAL_MS);
 
   // Workflow delay watcher: resume runs whose delay has expired
@@ -239,14 +262,10 @@ export function startScheduledJobs(): void {
 
   // Churn risk scanner: daily scan for customers at risk of churning
   setTimeout(() => {
-    void forEachActiveScope((scope) => {
-      enqueueDelayed(JobType.CHURN_RISK_SCAN, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 6 });
-    });
+    void forEachActiveScope((scope) => safeEnqueue(JobType.CHURN_RISK_SCAN, scope, 6));
   }, 60_000);
   churnRiskScanIntervalId = setInterval(() => {
-    void forEachActiveScope((scope) => {
-      enqueueDelayed(JobType.CHURN_RISK_SCAN, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 6 });
-    });
+    void forEachActiveScope((scope) => safeEnqueue(JobType.CHURN_RISK_SCAN, scope, 6));
   }, CHURN_RISK_SCAN_INTERVAL_MS);
 
   // Audit export request processor (hourly)

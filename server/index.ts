@@ -520,6 +520,21 @@ if (!isServerlessRuntime) {
   logger.info('Serverless runtime detected (Vercel) — skipping worker and scheduled jobs');
 }
 
+// ── Last-resort resilience ────────────────────────────────
+// A long-lived API server must not die from a single floating promise (e.g. a
+// background sweep that fails to reach the DB). Log unhandled rejections
+// instead of letting the default handler terminate the process. uncaughtException
+// is intentionally left to crash — those can leave the process in an undefined
+// state and should surface loudly.
+if (!isServerlessRuntime) {
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled promise rejection (kept alive)', {
+      error: reason instanceof Error ? reason.message : String(reason),
+      stack: reason instanceof Error ? reason.stack : undefined,
+    });
+  });
+}
+
 // ── Graceful shutdown ─────────────────────────────────────
 async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received — shutting down gracefully`);
