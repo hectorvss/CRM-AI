@@ -336,6 +336,85 @@ router.post('/me/password', async (req: MultiTenantRequest, res) => {
   }
 });
 
+// POST /iam/me/email — change the signed-in user's email address.
+// Same security pattern as the password change: the current password must be
+// verified before the email is updated in both Supabase Auth and the app's
+// users table.
+router.post('/me/email', async (req: MultiTenantRequest, res) => {
+  const userId = req.userId;
+  if (!userId || userId === 'system') {
+    return sendError(res, 401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required');
+  }
+  const { current, email } = (req.body || {}) as { current?: string; email?: string };
+  const nextEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  if (!current || !nextEmail) {
+    return sendError(res, 400, 'INVALID_EMAIL_PAYLOAD', 'La contraseña actual y el nuevo correo son obligatorios');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+    return sendError(res, 400, 'INVALID_EMAIL', 'El correo electrónico no es válido');
+  }
+
+  try {
+    const user = await iamRepository.getUserById(userId);
+    if (!user?.email) {
+      return sendError(res, 404, 'USER_NOT_FOUND', 'No se encontró al usuario');
+    }
+    if (nextEmail === String(user.email).toLowerCase()) {
+      return sendError(res, 400, 'EMAIL_UNCHANGED', 'El nuevo correo es igual al actual');
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    // Verify current password before allowing the change.
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: current,
+    });
+    if (verifyError) {
+      return sendError(res, 400, 'INVALID_CURRENT_PASSWORD', 'La contraseña actual no es correcta');
+    }
+
+    // Reject if the address is already taken by another account.
+    const existing = await iamRepository.getUserByEmail(nextEmail);
+    if (existing && existing.id !== userId) {
+      return sendError(res, 409, 'EMAIL_IN_USE', 'Ese correo ya está en uso por otra cuenta');
+    }
+
+    // Update Supabase Auth (source of truth for login) and mark confirmed so the
+    // user can keep signing in. A production flow would send a confirmation email
+    // to the new address; that is a follow-up (see docs/SUPABASE_PENDING.md).
+    const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+      email: nextEmail,
+      email_confirm: true,
+    });
+    if (updateError) {
+      logger.error('iam/me/email: admin update failed', { error: updateError.message });
+      return sendError(res, 500, 'INTERNAL_ERROR', 'No se pudo actualizar el correo');
+    }
+
+    // Keep the app-side users table in sync.
+    try { await iamRepository.updateUser(userId, { email: nextEmail }); }
+    catch (e: any) { logger.warn('iam/me/email: app record sync failed', { error: e?.message }); }
+
+    if (req.tenantId && req.workspaceId) {
+      try {
+        await auditRepository.logEvent(
+          { tenantId: req.tenantId, workspaceId: req.workspaceId },
+          { actorId: userId, actorType: 'human', action: 'auth.email_changed', entityType: 'user', entityId: userId },
+        );
+      } catch { /* non-fatal */ }
+    }
+
+    res.json({ ok: true, email: nextEmail });
+  } catch (error: any) {
+    if (error?.message?.includes('not configured')) {
+      return sendError(res, 503, 'AUTH_NOT_CONFIGURED', 'El proveedor de autenticación no está configurado');
+    }
+    console.error('Error changing email:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
 // GET /iam/me/sessions — list active sessions for the current user. Reads
 // from the `user_sessions` table directly so we can include device/IP info.
 router.get('/me/sessions', async (req: MultiTenantRequest, res) => {

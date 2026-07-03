@@ -94,6 +94,22 @@ no se pudieron ejecutar (CRMAI pausado + Docker/WSL2 no funcional en la máquina
 Pendiente solo la validación en RUNTIME (crear/listar/borrar contra una BD real), que
 requiere reactivar CRMAI.
 
+## 3.ter Cambio de email (auth) — construido, pendiente de probar en runtime
+
+`POST /iam/me/email` (server/routes/iam.ts) — mismo patrón de seguridad que el cambio de
+contraseña: verifica la contraseña actual (`signInWithPassword`) antes de cambiar el email en
+Supabase Auth (`admin.updateUserById`, `email_confirm:true`) y en la tabla `users`. Rechaza email
+duplicado (409) e inválido. `iamApi.updateEmail(current, email)` en client.ts; SecurityView pide la
+contraseña por prompt al guardar. **No requiere migración** (usa la columna `email` existente en `users`).
+
+**Qué probar al reactivar la BD:**
+1. Security → cambiar el correo + confirmar contraseña → debe actualizar y poder iniciar sesión con el nuevo email.
+2. Contraseña incorrecta → 400. Email ya en uso → 409. Email inválido → 400.
+
+**Follow-up de seguridad (recomendado):** en producción, enviar un correo de confirmación al NUEVO
+address antes de activarlo (en vez de `email_confirm:true` directo), para evitar apropiación si una
+sesión se ve comprometida. Ahora se cambia directo tras verificar la contraseña.
+
 ## 4. Backend NUEVO añadido sin poder ejecutarlo (aplicar + probar al reactivar)
 
 > Esta sección se irá ampliando conforme se construya backend nuevo a ciegas.

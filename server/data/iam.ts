@@ -25,6 +25,7 @@ export interface IAMRepository {
   }): Promise<void>;
   updateUser(id: string, updates: {
     name?: string;
+    email?: string;
     avatarUrl?: string | null;
     preferences?: Record<string, any>;
   }): Promise<void>;
@@ -135,6 +136,10 @@ class SupabaseIAMRepository implements IAMRepository {
 
     if (typeof updates.name === 'string') {
       toUpdate.name = updates.name;
+    }
+
+    if (typeof updates.email === 'string') {
+      toUpdate.email = updates.email;
     }
 
     if (Object.prototype.hasOwnProperty.call(updates, 'avatarUrl')) {

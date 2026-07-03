@@ -858,6 +858,11 @@ export const iamApi = {
       method: 'POST',
       body: JSON.stringify({ current, next }),
     }),
+  updateEmail: (current: string, email: string) =>
+    request<{ ok: boolean; email: string }>('/iam/me/email', {
+      method: 'POST',
+      body: JSON.stringify({ current, email }),
+    }),
   mySessions: () => request<any[]>('/iam/me/sessions').then(unwrapList),
   revokeSession: (id: string) =>
     request<{ ok: boolean }>(`/iam/me/sessions/${id}`, { method: 'DELETE' }),
