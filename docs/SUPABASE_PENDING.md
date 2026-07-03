@@ -170,3 +170,22 @@ CHECK('customer'|'follow_up'|'back_office'), created_by, timestamps).
 2. "+ Crear tipo" en cualquier sección → prompt de nombre → persiste (`POST`) con esa `category` → aparece en su sección + el contador `(N)` sube.
 3. "Eliminar" en un tipo → `DELETE` → desaparece.
 4. Recargar → persisten.
+
+### 4.5 — Ticket states / pestaña "Estados" (commit de esta sesión)
+
+TicketsView pestaña **Estados**: antes hardcoded. Ahora usa backend real. (Queda pendiente solo la
+relación many-to-many estado↔tipo y la pestaña Portal — ver tarea del sistema de tickets.)
+
+**Migración a aplicar:** `supabase/migrations/20260703_0005_ticket_states.sql`
+→ tabla `public.ticket_states` (internal_label, client_label, category
+CHECK('submitted'|'in_progress'|'waiting_customer'|'resolved'), color, sort_order, timestamps).
+
+**Archivos nuevos:**
+- `server/data/ticketStates.ts` + `server/routes/ticketStates.ts` (`GET/POST/PATCH/DELETE /api/ticket-states`, montado).
+- `ticketStatesApi` en `src/api/client.ts`.
+
+**Qué probar al reactivar la BD:**
+1. Ajustes → Folios de atención → pestaña Estados: los 4 grupos (Enviado/En curso/Esperando/Resuelto) cargan de `GET /api/ticket-states`, vacíos al principio.
+2. "+ Añadir estado" en un grupo (o "+ Crear estado" en el header) → prompts de etiqueta interna + etiqueta de cliente → persiste (`POST`) en esa categoría → aparece en su grupo con el contador actualizado.
+3. "Eliminar" en un estado → `DELETE` → desaparece.
+4. Recargar → persisten.

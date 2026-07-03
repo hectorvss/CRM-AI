@@ -1379,6 +1379,18 @@ export const ticketTypesApi = {
     request<any>(`/ticket-types/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
+// ── Ticket states (folios de atención) ────────────────────
+type TicketStateCategory = 'submitted' | 'in_progress' | 'waiting_customer' | 'resolved';
+export const ticketStatesApi = {
+  list: () => request<any[]>('/ticket-states').then(unwrapList),
+  create: (payload: { internal_label: string; client_label?: string | null; category?: TicketStateCategory; color?: string | null }) =>
+    request<any>('/ticket-states', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Partial<{ internal_label: string; client_label: string | null; category: TicketStateCategory; color: string | null; sort_order: number }>) =>
+    request<any>(`/ticket-states/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/ticket-states/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
+
 // ── Data Imports ──────────────────────────────────────────
 export const dataImportsApi = {
   list: (params?: { entityType?: string; status?: string }) => {
