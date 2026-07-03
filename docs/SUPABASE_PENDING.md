@@ -199,3 +199,26 @@ Con esto TicketsView queda funcional en sus 3 pestañas (Tipos, Estados, Portal)
 relación many-to-many estado↔tipo (enhancement).
 
 **Qué probar:** activar/desactivar el toggle del portal + "Guardar cambios" → persiste; recargar mantiene el valor.
+
+### 4.7 — Custom object types / Objetos personalizados · registro de tipos (commit de esta sesión)
+
+Pantalla **Objetos personalizados** (CustomObjectsView): antes lista hardcoded. Ahora el REGISTRO de
+tipos usa backend real (los campos dinámicos + registros por tipo son una feature aparte, no construida —
+los contadores muestran 0).
+
+**Migración a aplicar:** `supabase/migrations/20260703_0006_custom_object_types.sql`
+→ tabla `public.custom_object_types` (name, object_key UNIQUE por workspace, description, icon, timestamps).
+
+**Archivos nuevos:**
+- `server/data/customObjectTypes.ts` (con slugify de la clave) + `server/routes/customObjectTypes.ts` (`GET/POST/PATCH/DELETE /api/custom-object-types`, montado).
+- `customObjectTypesApi` en `src/api/client.ts`.
+
+**Qué probar al reactivar la BD:**
+1. Ajustes → Objetos personalizados: la lista carga (`GET`), vacía al principio.
+2. "+ Nuevo objeto" → prompt de nombre → persiste (`POST`, clave auto-slugificada) → aparece la tarjeta.
+3. Clave duplicada → 409.
+4. Hover en una tarjeta → "Eliminar" → `DELETE` → desaparece.
+5. Recargar → persisten.
+
+**Pendiente (feature aparte, mayor):** campos dinámicos por tipo (`custom_object_fields`) y registros
+(`custom_object_records` con data JSONB) + su UI. Requiere la BD activa para validar el esquema dinámico.

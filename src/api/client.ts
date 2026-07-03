@@ -1391,6 +1391,18 @@ export const ticketStatesApi = {
     request<any>(`/ticket-states/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
+// ── Custom object types (registro de tipos) ───────────────
+// The type registry only — dynamic fields + records are a separate feature.
+export const customObjectTypesApi = {
+  list: () => request<any[]>('/custom-object-types').then(unwrapList),
+  create: (payload: { name: string; object_key?: string; description?: string | null; icon?: string | null }) =>
+    request<any>('/custom-object-types', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Partial<{ name: string; object_key: string; description: string | null; icon: string | null }>) =>
+    request<any>(`/custom-object-types/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    request<any>(`/custom-object-types/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
+
 // ── Data Imports ──────────────────────────────────────────
 export const dataImportsApi = {
   list: (params?: { entityType?: string; status?: string }) => {
