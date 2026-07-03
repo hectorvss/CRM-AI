@@ -25,7 +25,45 @@ export async function listTicketStates(scope: TicketStateScope) {
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  const states = data ?? [];
+
+  // Attach the connected ticket-type ids (many-to-many) to each state.
+  const { data: links } = await supabase
+    .from('ticket_type_states')
+    .select('state_id, type_id')
+    .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId);
+  const byState: Record<string, string[]> = {};
+  for (const l of (links ?? []) as Array<{ state_id: string; type_id: string }>) {
+    (byState[l.state_id] ??= []).push(l.type_id);
+  }
+  return states.map((s: any) => ({ ...s, type_ids: byState[s.id] ?? [] }));
+}
+
+/** Replace the set of ticket types a state is connected to. */
+export async function setStateTypes(scope: TicketStateScope, stateId: string, typeIds: string[]) {
+  const supabase = getSupabaseAdmin();
+  const { randomUUID } = await import('crypto');
+  // Clear existing links for this state, then insert the new set.
+  await supabase
+    .from('ticket_type_states')
+    .delete()
+    .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId)
+    .eq('state_id', stateId);
+  const unique = Array.from(new Set(typeIds.filter(Boolean)));
+  if (unique.length) {
+    const rows = unique.map((type_id) => ({
+      id: randomUUID(),
+      tenant_id: scope.tenantId,
+      workspace_id: scope.workspaceId,
+      state_id: stateId,
+      type_id,
+    }));
+    const { error } = await supabase.from('ticket_type_states').insert(rows);
+    if (error) throw error;
+  }
+  return unique;
 }
 
 export async function getTicketState(scope: TicketStateScope, id: string) {

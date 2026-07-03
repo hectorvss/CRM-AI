@@ -9,6 +9,7 @@ import {
   createTicketState,
   updateTicketState,
   deleteTicketState,
+  setStateTypes,
 } from '../data/ticketStates.js';
 
 const router = Router();
@@ -64,6 +65,25 @@ router.patch(
       res.json(await updateTicketState(scope, req.params.id, req.body));
     } catch (err) {
       console.error('Error updating ticket state:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+);
+
+// PUT /api/ticket-states/:id/types — replace the connected ticket types
+router.put(
+  '/:id/types',
+  requirePermission('settings.write'),
+  validate({ body: z.object({ type_ids: z.array(z.string()) }) }),
+  async (req: MultiTenantRequest, res: Response) => {
+    try {
+      const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+      const item = await getTicketState(scope, req.params.id);
+      if (!item) return res.status(404).json({ error: 'Ticket state not found' });
+      const typeIds = await setStateTypes(scope, req.params.id, req.body.type_ids);
+      res.json({ ok: true, type_ids: typeIds });
+    } catch (err) {
+      console.error('Error setting ticket state types:', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   },

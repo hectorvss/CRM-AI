@@ -1394,6 +1394,8 @@ export const ticketStatesApi = {
     request<any>(`/ticket-states/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   delete: (id: string) =>
     request<any>(`/ticket-states/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  setTypes: (id: string, typeIds: string[]) =>
+    request<any>(`/ticket-states/${encodeURIComponent(id)}/types`, { method: 'PUT', body: JSON.stringify({ type_ids: typeIds }) }),
 };
 
 // ── Custom object types (registro de tipos) ───────────────

@@ -271,3 +271,20 @@ los contadores muestran 0).
 
 **Pendiente (feature aparte, mayor):** campos dinámicos por tipo (`custom_object_fields`) y registros
 (`custom_object_records` con data JSONB) + su UI. Requiere la BD activa para validar el esquema dinámico.
+
+### 4.8 — Ticket state↔type many-to-many (commit de esta sesión)
+
+Relación estado↔tipo de la pestaña Estados (antes hardcoded a "🎫 Tickets").
+
+**Migración a aplicar:** `supabase/migrations/20260703_0007_ticket_type_states.sql`
+→ tabla join `public.ticket_type_states` (state_id FK→ticket_states, type_id FK→ticket_types,
+UNIQUE(state_id,type_id), ON DELETE CASCADE).
+
+**Cambios:**
+- `server/data/ticketStates.ts`: `listTicketStates` adjunta `type_ids[]` por estado; nueva
+  `setStateTypes(stateId, typeIds[])` (borra + reinserta).
+- `server/routes/ticketStates.ts`: `PUT /api/ticket-states/:id/types { type_ids }`.
+- `ticketStatesApi.setTypes(id, typeIds)`; columna "Tipos conectados" con chips (clic para quitar)
+  + desplegable "+ conectar".
+
+**Qué probar al reactivar:** conectar/quitar tipos a un estado persiste; borrar tipo/estado limpia el join (CASCADE).
