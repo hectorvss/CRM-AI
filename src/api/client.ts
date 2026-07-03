@@ -1425,6 +1425,18 @@ export const customObjectFieldsApi = {
     request<any>(`/custom-object-fields/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
+// ── Custom object records (datos por tipo) ────────────────
+export const customObjectRecordsApi = {
+  list: (objectTypeId: string) =>
+    request<any[]>(`/custom-object-records?object_type_id=${encodeURIComponent(objectTypeId)}`).then(unwrapList),
+  create: (objectTypeId: string, data: Record<string, any>) =>
+    request<any>('/custom-object-records', { method: 'POST', body: JSON.stringify({ object_type_id: objectTypeId, data }) }),
+  update: (id: string, data: Record<string, any>) =>
+    request<any>(`/custom-object-records/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ data }) }),
+  delete: (id: string) =>
+    request<any>(`/custom-object-records/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
+
 // ── Data Imports ──────────────────────────────────────────
 export const dataImportsApi = {
   list: (params?: { entityType?: string; status?: string }) => {

@@ -294,9 +294,19 @@ en client.ts. En CustomObjectsView, cada tarjeta se **expande** ("Campos") mostr
 **Qué probar:** expandir un objeto → añadir campos con distintos tipos → persisten y el contador sube;
 quitar campo → desaparece; borrar el objeto → CASCADE limpia sus campos.
 
-**Pendiente (última pieza, la mayor):** los REGISTROS (`custom_object_records` con data JSONB por
-campo) + una UI de tabla/formulario dinámico basada en los campos definidos. Es la parte que más se
-beneficia de la BD activa (validar el esquema dinámico y las queries JSONB en runtime).
+**Registros (AÑADIDO — custom objects ya es end-to-end):** migración
+`20260703_0009_custom_object_records.sql` → tabla `custom_object_records` (object_type_id FK
+ON DELETE CASCADE, `data` JSONB, created_by). `server/data/customObjectRecords.ts` +
+`server/routes/customObjectRecords.ts` (`GET ?object_type_id=` / POST / PATCH / DELETE
+`/api/custom-object-records`). `customObjectRecordsApi` en client.ts. En CustomObjectsView, al
+expandir un objeto con campos aparece la sección **Registros**: "+ Añadir registro" abre un
+**formulario dinámico** (un input por campo, tipado por field_type: text/number/date/boolean/email/url),
+guarda el `data` JSONB, y una tabla lista los registros con quitar por fila.
+
+**Qué probar al reactivar la BD:** definir campos en un objeto → "+ Añadir registro" → rellenar el
+formulario dinámico → guardar → aparece en la tabla con los valores; recargar mantiene; quitar registro
+funciona; borrar el objeto/campo limpia por CASCADE. Con esto **Objetos personalizados** (tipos +
+campos + registros) queda completo por código.
 
 ### 4.8 — Ticket state↔type many-to-many (commit de esta sesión)
 
