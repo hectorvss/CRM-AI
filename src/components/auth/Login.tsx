@@ -18,6 +18,33 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowSignup }) => {
   const [factorId, setFactorId]       = useState<string | null>(null);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [otpCode, setOtpCode]         = useState('');
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
+
+  // OAuth sign-in (Google / Apple) via Supabase. Redirects the browser to the
+  // provider and back to the app; the session listener then completes login.
+  // NOTE: the provider must also be enabled + configured in the Supabase
+  // dashboard (client id/secret + redirect URL) — see docs/SUPABASE_PENDING.md.
+  const handleOAuth = async (provider: 'google' | 'apple') => {
+    setError('');
+    setOauthLoading(provider);
+    try {
+      const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo },
+      });
+      if (oauthError) throw oauthError;
+      // On success the browser is redirected away; nothing else to do here.
+    } catch (err: any) {
+      const raw = String(err?.message || '').toLowerCase();
+      if (raw.includes('provider is not enabled') || raw.includes('unsupported provider')) {
+        setError(`El inicio de sesión con ${provider === 'google' ? 'Google' : 'Apple'} no está habilitado todavía en Supabase.`);
+      } else {
+        setError(friendlyAuthError(err));
+      }
+      setOauthLoading(null);
+    }
+  };
 
   // Map cryptic Supabase auth errors to friendly UX strings. We deliberately
   // keep the wording generic for invalid-credential cases to avoid leaking
@@ -195,6 +222,40 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowSignup }) => {
               </button>
             </div>
           </form>
+        )}
+
+        {stage === 'credentials' && (
+          <div className="space-y-3">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
+              <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-gray-400">o continúa con</span></div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleOAuth('google')}
+              disabled={oauthLoading !== null || loading}
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 bg-white py-2 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M23.06 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h6.2a5.3 5.3 0 0 1-2.3 3.48v2.9h3.72c2.18-2 3.44-4.96 3.44-8.39z"/>
+                <path fill="#34A853" d="M12 24c3.1 0 5.7-1.03 7.6-2.79l-3.72-2.89c-1.03.69-2.35 1.1-3.88 1.1-2.98 0-5.5-2.01-6.4-4.72H1.76v2.98A11.99 11.99 0 0 0 12 24z"/>
+                <path fill="#FBBC05" d="M5.6 14.7A7.2 7.2 0 0 1 5.22 12c0-.94.16-1.85.38-2.7V6.32H1.76A11.99 11.99 0 0 0 .5 12c0 1.94.47 3.77 1.26 5.68l3.84-2.98z"/>
+                <path fill="#EA4335" d="M12 4.75c1.68 0 3.19.58 4.38 1.72l3.29-3.29C17.7 1.2 15.1 0 12 0 7.31 0 3.26 2.69 1.76 6.32l3.84 2.98C6.5 6.76 9.02 4.75 12 4.75z"/>
+              </svg>
+              {oauthLoading === 'google' ? 'Redirigiendo…' : 'Google'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth('apple')}
+              disabled={oauthLoading !== null || loading}
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 bg-black py-2 px-3 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-50"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M16.36 12.86c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.75 2.28-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.29 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 3 .72 1.24-.02 2.02-1.12 2.78-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.42-3.65zM14.13 5.6c.64-.78 1.07-1.85.95-2.93-.92.04-2.04.61-2.7 1.38-.59.69-1.11 1.79-.97 2.85 1.03.08 2.08-.52 2.72-1.3z"/>
+              </svg>
+              {oauthLoading === 'apple' ? 'Redirigiendo…' : 'Apple'}
+            </button>
+          </div>
         )}
 
         {stage === 'mfa' && (

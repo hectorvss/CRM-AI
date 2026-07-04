@@ -46,6 +46,13 @@
         </svg>
       </span>
     );
+    if (id === 'apple') return (
+      <span className="auth-sso-glyph">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M16.36 12.86c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.75 2.28-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.29 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 3 .72 1.24-.02 2.02-1.12 2.78-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.42-3.65zM14.13 5.6c.64-.78 1.07-1.85.95-2.93-.92.04-2.04.61-2.7 1.38-.59.69-1.11 1.79-.97 2.85 1.03.08 2.08-.52 2.72-1.3z"/>
+        </svg>
+      </span>
+    );
     if (id === 'microsoft') return (
       <span className="auth-sso-glyph">
         <svg width="18" height="18" viewBox="0 0 24 24">
@@ -107,6 +114,7 @@
 
   const SSO_OPTIONS = [
     { id: 'google',    label: 'Continue with Google',    provider: 'google' },
+    { id: 'apple',     label: 'Continue with Apple',     provider: 'apple' },
     { id: 'microsoft', label: 'Continue with Microsoft', provider: 'azure' },
     { id: 'sso',       label: 'Single sign-on (SAML)',   provider: null },
   ];
@@ -344,6 +352,7 @@
 
     const SIGNUP_SSO = [
       { id: 'google',    label: 'Sign up with Google',    provider: 'google' },
+      { id: 'apple',     label: 'Sign up with Apple',     provider: 'apple' },
       { id: 'microsoft', label: 'Sign up with Microsoft', provider: 'azure' },
     ];
 

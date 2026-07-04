@@ -128,6 +128,33 @@ así que la seguridad la aporta la plataforma. **No requiere migración ni backe
    **end-to-end**: enrolar en SecurityView + exigir el código en el login. Solo falta probarlo en runtime.
 5. Requisito: el proyecto Supabase debe tener **MFA/TOTP habilitado** en Authentication settings.
 
+## 3.quinquies OAuth Google + Apple — UI construida, falta ACTIVAR proveedores en Supabase
+
+El **código** está hecho (botones + `signInWithOAuth`), pero **activar** el login social requiere
+configurar los proveedores en el dashboard de Supabase con credenciales de Google/Apple — eso NO se
+puede hacer desde el repo.
+
+**Frontend (ya en el código):**
+- Landing (`public-landing-v2/auth.jsx`): Signin y Signup ya mostraban Google/Microsoft; **añadido Apple**
+  a `SSO_OPTIONS` y `SIGNUP_SSO` + su glyph en `SsoGlyph`. Llaman `supa.auth.signInWithOAuth({ provider,
+  options:{ redirectTo: origin + '/app' } })`.
+- App (`src/components/auth/Login.tsx`): añadidos botones **Google + Apple** con `handleOAuth(provider)`
+  → `supabase.auth.signInWithOAuth({ provider, options:{ redirectTo: origin } })`, con aviso claro si
+  el proveedor no está habilitado.
+
+**Pasos para ACTIVARLO (dashboard Supabase → Authentication → Providers):**
+1. **Google:** en Google Cloud Console crear un OAuth 2.0 Client ID (Web). Authorized redirect URI:
+   `https://<PROJECT_REF>.supabase.co/auth/v1/callback`. Copiar Client ID + Secret → pegarlos en el
+   provider *Google* de Supabase y habilitarlo.
+2. **Apple:** en Apple Developer crear un *Services ID* + una *Sign in with Apple* key (.p8). Return URL
+   `https://<PROJECT_REF>.supabase.co/auth/v1/callback`. En Supabase provider *Apple* poner Services ID
+   (client id), Team ID, Key ID y la clave .p8 → habilitar.
+3. Supabase → Authentication → URL Configuration → añadir a **Redirect URLs** los orígenes de la app
+   (`https://clain.app`, `https://clain.app/app`, `http://localhost:5173` para dev).
+
+**Qué probar tras activar:** "Continue with Google"/"Apple" en `/signin` y en el Login de la app →
+redirige al proveedor → vuelve autenticado a `/app`. Con el proveedor deshabilitado, la UI avisa.
+
 > Esta sección se irá ampliando conforme se construya backend nuevo a ciegas.
 > Cada entrada incluye: migración a aplicar, rutas nuevas, y qué probar.
 
