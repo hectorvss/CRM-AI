@@ -1442,6 +1442,34 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     if (result?.error) throw result.error;
   }
 
+  // Messages can be linked to a case in two ways: directly via `case_id`, or
+  // only via `conversation_id`. Channel/integration messages (email, WhatsApp,
+  // chat webhooks) usually carry ONLY conversation_id — so fetching by case_id
+  // alone (the query above) drops most of the thread, and for cases whose
+  // messages never got a case_id backfilled the inbox rendered an empty
+  // conversation. Merge both sources, deduping by message id, so the inbox
+  // shows the full thread regardless of how each message was linked.
+  let mergedMessages: any[] = messagesResult.data ?? [];
+  const bundleConversationId: string | null =
+    conversationResult.data?.id || caseRow.conversation_id || null;
+  if (bundleConversationId) {
+    const convMessagesResult = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', bundleConversationId)
+      .eq('tenant_id', scope.tenantId)
+      .order('sent_at', { ascending: true });
+    if (convMessagesResult?.error) throw convMessagesResult.error;
+    const byId = new Map<string, any>();
+    for (const m of mergedMessages) byId.set(m.id, m);
+    for (const m of (convMessagesResult.data ?? [])) byId.set(m.id, m);
+    mergedMessages = Array.from(byId.values()).sort((a, b) => {
+      const ta = new Date(a.sent_at || a.created_at || 0).getTime();
+      const tb = new Date(b.sent_at || b.created_at || 0).getTime();
+      return ta - tb;
+    });
+  }
+
   const workflowRunIds = compactStrings((workflowRunsResult.data ?? []).map((row: any) => row.id));
   const workflowRunStepsResult = workflowRunIds.length
     ? await supabase.from('workflow_run_steps').select('*').in('workflow_run_id', workflowRunIds).order('started_at', { ascending: false })
@@ -1510,7 +1538,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     linked_cases: linkedCases,
     drafts: draftsResult.data ?? [],
     internal_notes: notesResult.data ?? [],
-    messages: messagesResult.data ?? [],
+    messages: mergedMessages,
     order_events: orderEventsResult.data ?? [],
     order_line_items: orderLineItemsResult.data ?? [],
     return_events: returnEventsResult.data ?? [],
