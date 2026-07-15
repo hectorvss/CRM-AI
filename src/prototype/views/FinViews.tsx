@@ -1,0 +1,6890 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Fin AI Agent views
+// Extracted from the monolithic Prototype.tsx (auto-split, behavior-preserving).
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { useApi } from '../../api/hooks';
+import { agentsApi, aiApi, auditApi, casesApi, connectorsApi, knowledgeApi, policyRulesApi, reportsApi } from '../../api/client';
+import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../../components/Workflows';
+import AIStudio from '../../components/AIStudio';
+import SuperAgent from '../../components/SuperAgent';
+import { FIGMA_CDN, IMG_FIN_DEPLOY_CHAT, IMG_FIN_DEPLOY_EMAIL, IMG_FIN_PRO_TRIAL_BANNER, IMG_FIN_VOICE_BANNER } from '../assets';
+import { Dropdown, IMG_FIN_LOGO_MARK, IMG_FIN_SALES_AGENT, IMG_FIN_SERVICE_AGENT, KnowledgeArticleEditor, KnowledgeContentLibrary, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, SettingsSidebar, TrialBanner } from '../sharedUi';
+import type { DropdownItem, View } from '../types';
+
+
+// ─── Fin client-side resource store (localStorage-backed CRUD) ───────────────
+// Used by Pautas / Atributos editors so they work fully without the backend.
+function useFinResource<T extends { id: string }>(key: string, seed?: T[]) {
+  const lsKey = `clain.fin.${key}`;
+  const [items, setItems] = useState<T[]>(() => {
+    try {
+      const raw = window.localStorage.getItem(lsKey);
+      if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return seed ?? [];
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(lsKey, JSON.stringify(items)); } catch { /* ignore */ }
+  }, [items, lsKey]);
+  return {
+    items,
+    create: (item: Omit<T, 'id'>): T => {
+      const next = { ...item, id: `${key}_${Date.now()}_${Math.floor(Math.random() * 1000)}` } as T;
+      setItems(prev => [...prev, next]);
+      return next;
+    },
+    update: (id: string, patch: Partial<T>) =>
+      setItems(prev => prev.map(it => (it.id === id ? { ...it, ...patch } : it))),
+    remove: (id: string) => setItems(prev => prev.filter(it => it.id !== id)),
+    replace: (next: T[]) => setItems(next),
+  };
+}
+
+// ─── Fin domain types (used by Pautas + Atributos editors) ───────────────────
+type FinPauta = {
+  id: string;
+  category: string;
+  title: string;
+  audience: 'all' | 'users' | 'leads' | 'visitors';
+  channels: string[];
+  body: string;
+  enabled: boolean;
+  metrics?: { used?: number; resolved?: number; routed?: number };
+};
+type FinAtributoValue = { id: string; name: string; description: string };
+type FinAtributoCondition = { id: string; whenValue: string; thenAttributeId: string; usingValues: string[] };
+type FinAtributo = {
+  id: string;
+  name: string;
+  description: string;
+  audience: 'all' | 'users' | 'leads' | 'visitors';
+  escalationRules: number;
+  reDetectOnClose: boolean;
+  values: FinAtributoValue[];
+  conditions: FinAtributoCondition[];
+  enabled: boolean;
+};
+type FinProcedimientoStep = {
+  id: string;
+  kind: 'verification' | 'action' | 'condition';
+  title: string;
+  body: string;
+};
+type FinProcedimiento = {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  steps: FinProcedimientoStep[];
+  enabled: boolean;
+  createdAt: number;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIN AI AGENT VIEW (Figma nodes 1:807, 1:2082, 1:3591, 1:4825, 1:5966, 1:7382,
+// 1:9083, 1:10409, 1:12035, 1:13680, 1:14559, 1:16070, 1:16962, 1:18192,
+// 1:19066, 1:20145, 1:21030)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type FinSubView =
+  | 'allRoles'
+  | 'anaGetStarted'
+  | 'capacitar' | 'capContent' | 'capGuidance' | 'capAttributes' | 'capEscalation' | 'capProcedures'
+  | 'probar' | 'pruebaTesting'
+  | 'desplegar' | 'depChat' | 'depEmail' | 'depPhone'
+  | 'analizar' | 'anaPerformance' | 'anaRecommendations' | 'anaTopicExplorer' | 'anaTopicTrends' | 'anaMonitor'
+  | 'changelog' | 'settings' | 'settingsAudiences'
+  | 'finWorkflows' | 'finSimpleAutomations'
+  // Studio (legacy AIStudio merged into Fin shell)
+  | 'studio' | 'studioOverview' | 'studioAgents' | 'studioConnections' | 'studioPermissions' | 'studioKnowledge' | 'studioReasoning' | 'studioSafety' | 'studioSuperAgent';
+
+const FIN_NAV_ITEMS: { key: FinSubView; label: string; icon: 'book' | 'play' | 'rocket' | 'chart' | 'studio'; children?: { key: FinSubView; label: string; badge?: string }[] }[] = [
+  {
+    key: 'capacitar', label: 'Capacitar', icon: 'book',
+    children: [
+      { key: 'capContent',    label: 'Contenido' },
+      { key: 'capGuidance',   label: 'Orientación' },
+      { key: 'capAttributes', label: 'Atributos' },
+      { key: 'capEscalation', label: 'Escalada' },
+      { key: 'capProcedures', label: 'Procedimientos' },
+    ],
+  },
+  {
+    key: 'probar', label: 'Probar', icon: 'play',
+    children: [{ key: 'pruebaTesting', label: 'Pruebas' }],
+  },
+  {
+    key: 'desplegar', label: 'Desplegar', icon: 'rocket',
+    children: [
+      { key: 'depChat',  label: 'Chat' },
+      { key: 'depEmail', label: 'Correo electrónico' },
+      { key: 'depPhone', label: 'Teléfono' },
+    ],
+  },
+  {
+    key: 'analizar', label: 'Analizar', icon: 'chart',
+    children: [
+      { key: 'anaPerformance',     label: 'Desempeño' },
+      { key: 'anaRecommendations', label: 'Recomendaciones' },
+      { key: 'anaTopicExplorer',   label: 'Explorador de Temas' },
+      { key: 'anaTopicTrends',     label: 'Tendencias', badge: 'New' },
+      { key: 'anaMonitor',         label: 'Monitores' },
+    ],
+  },
+  // Studio — merges all functional AIStudio surface (agents, policy bundles,
+  // permissions, knowledge, reasoning, safety) into the Fin shell.
+  {
+    key: 'studio', label: 'Studio', icon: 'studio',
+    children: [
+      { key: 'studioOverview',    label: 'Resumen' },
+      { key: 'studioAgents',      label: 'Agentes' },
+      { key: 'studioConnections', label: 'Conexiones' },
+      { key: 'studioPermissions', label: 'Permisos' },
+      { key: 'studioKnowledge',   label: 'Conocimiento' },
+      { key: 'studioReasoning',   label: 'Razonamiento' },
+      { key: 'studioSafety',      label: 'Seguridad' },
+      { key: 'studioSuperAgent',  label: 'Super Agent' },
+    ],
+  },
+];
+
+// Bold/filled icons (Inbox-style) for FinSidebar — fill #1a1a1a, no stroke.
+function FinNavIcon({ kind }: { kind: 'book' | 'play' | 'rocket' | 'chart' | 'studio' }) {
+  const cls = "w-4 h-4 fill-[#1a1a1a]";
+  switch (kind) {
+    case 'book':   return <svg viewBox="0 0 16 16" className={cls}><path d="M2 2.5a1 1 0 011-1h4.5a2 2 0 012 2v10a1 1 0 01-1.7.7 2 2 0 00-1.4-.7H2v-11zm12 0a1 1 0 00-1-1H8.5a2 2 0 00-2 2v10a1 1 0 001.7.7 2 2 0 011.4-.7H14v-11z"/></svg>;
+    case 'play':   return <svg viewBox="0 0 16 16" className={cls}><circle cx="8" cy="8" r="6.5"/><path d="M6.6 5.4l4 2.6-4 2.6z" fill="#fff"/></svg>;
+    case 'rocket': return <svg viewBox="0 0 16 16" className={cls}><path d="M14.5 1.5c-2.5 0-5 1.5-7 3.5L5 8l3 3 3-2.5c2-2 3.5-4.5 3.5-7zM4 11c-1.5 0-3 1-3 3.5C3 14.5 5 13 5 11.5L4 11zm6.5-7a1 1 0 110 2 1 1 0 010-2z"/></svg>;
+    case 'chart':  return <svg viewBox="0 0 16 16" className={cls}><path d="M2 2v12h12v-2H4V2H2zm3 4v6h2V6H5zm3-2v8h2V4H8zm3 3v5h2V7h-2z"/></svg>;
+    // Studio — sparkle/spark mark for the agent-orchestration surface.
+    case 'studio': return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1l1.6 4.4L14 7l-4.4 1.6L8 13l-1.6-4.4L2 7l4.4-1.6L8 1zm5 9l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z"/></svg>;
+  }
+}
+
+function FinSidebar({ sub, onSelect, onCollapse }: { sub: FinSubView; onSelect: (s: FinSubView) => void; onCollapse?: () => void }) {
+  // Per-group expand/collapse state — explicit chevron toggle (not auto-expand).
+  // Default: only auto-open the group whose child is currently active (preserves nav context).
+  const isInGroup = (groupKey: FinSubView, childKeys: FinSubView[]): boolean =>
+    sub === groupKey || childKeys.includes(sub);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    FIN_NAV_ITEMS.forEach(g => {
+      const childKeys = (g.children ?? []).map(c => c.key);
+      init[g.key] = isInGroup(g.key, childKeys);
+    });
+    init['settings'] = sub === 'settings' || sub === 'settingsAudiences';
+    return init;
+  });
+  const toggle = (k: string) => setOpenGroups(s => ({ ...s, [k]: !s[k] }));
+  // Active item style — same shadow + font-semibold pattern as Inbox SidebarNavItem.
+  const itemCls = (isActive: boolean) =>
+    `relative flex items-center gap-2 h-8 pl-3 pr-3 py-1 rounded-lg cursor-pointer text-[13px] w-full text-left transition-colors ${
+      isActive
+        ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+        : 'hover:bg-[#e9eae6]/40 text-[#1a1a1a]'
+    }`;
+  return (
+    <div className="w-[236px] flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] flex flex-col overflow-hidden">
+      {/* Header — same pattern as Inbox */}
+      <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
+        <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Fin AI Agent</span>
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            title="Colapsar barra lateral"
+            className="w-6 h-6 -mr-2 rounded hover:bg-[#ededea] flex items-center justify-center"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 4l-4 4 4 4z"/></svg>
+          </button>
+        )}
+      </div>
+      {/* Role dropdown — shows "Todos los roles" on all-roles view, "Servicio" otherwise */}
+      <div className="px-3 pb-2 flex-shrink-0">
+        <button
+          onClick={() => onSelect('allRoles')}
+          className={`w-full h-10 flex items-center gap-3 px-3 rounded-[8px] border ${
+            sub === 'allRoles' ? 'bg-white border-[#e9eae6] shadow-[0px_1px_2px_rgba(20,20,20,0.04)]' : 'border-transparent hover:bg-white/60'
+          }`}
+        >
+          {sub === 'allRoles' ? (
+            <div className="w-4 h-4 rounded-[3px] flex items-center justify-center flex-shrink-0 bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M8 1l5.5 3.2v6.6L8 14 2.5 10.8V4.2z"/></svg>
+            </div>
+          ) : (
+            <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#ff5b16' }}>
+              <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white"><path d="M3 3l6 6M9 3l-6 6" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>
+            </div>
+          )}
+          <span className="flex-1 text-left text-[13px] font-medium text-[#1a1a1a]">{sub === 'allRoles' ? 'Todos los roles' : 'Servicio'}</span>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z" /></svg>
+        </button>
+      </div>
+      {/* Top-level "Comenzar" — bold filled clock icon */}
+      <div className="px-3 pb-1 flex-shrink-0">
+        <button onClick={() => onSelect('anaGetStarted')} className={itemCls(sub === 'anaGetStarted')}>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8.75 4v3.69l2.6 1.5-.75 1.3L7.25 8.5V4h1.5z"/></svg>
+          <span className="flex-1">Comenzar</span>
+        </button>
+      </div>
+      {/* Group items */}
+      <div className="flex-1 overflow-y-auto pl-3 pr-3 pb-4">
+        <div className="flex flex-col">
+          {FIN_NAV_ITEMS.map(group => {
+            const expanded = openGroups[group.key] ?? false;
+            return (
+              <div key={group.key}>
+                <button onClick={() => toggle(group.key)} className={itemCls(false)}>
+                  <FinNavIcon kind={group.icon} />
+                  <span className="flex-1">{group.label}</span>
+                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                </button>
+                {expanded && group.children && (
+                  <div className="flex flex-col pl-7 mt-0.5 mb-1 gap-0.5">
+                    {group.children.map(child => (
+                      <button key={child.key} onClick={() => onSelect(child.key)} className={itemCls(sub === child.key)}>
+                        <span className="flex-1 truncate">{child.label}</span>
+                        {child.badge && (
+                          <span className="ml-1 px-1.5 py-[1px] rounded-[4px] bg-[#1a1a1a] text-white text-[10px] font-semibold leading-[14px]">{child.badge}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {/* Bottom miscellaneous items */}
+          <div className="border-t border-[#e9eae6]/70 my-2" />
+          {/* Registro de cambios — bold filled clock with tick */}
+          <button onClick={() => onSelect('changelog')} className={itemCls(sub === 'changelog')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8.75 4v3.69l2.6 1.5-.75 1.3L7.25 8.5V4h1.5z"/></svg>
+            <span className="flex-1">Registro de cambios</span>
+          </button>
+          <div className="border-t border-[#e9eae6]/70 my-2" />
+          {/* Ajustes de Fin — bold filled gear icon, expandable */}
+          <button onClick={() => toggle('settings')} className={itemCls(sub === 'settings' || sub === 'settingsAudiences')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5zM7 1h2v2.2l1.6.7L12.2 2.5l1.4 1.4L12 5.5l.7 1.6H15v2h-2.2l-.7 1.6 1.6 1.6-1.4 1.4-1.6-1.6L9 12.8V15H7v-2.2l-1.6-.7L3.8 13.5l-1.4-1.4L4 10.5 3.3 8.9H1V7h2.3l.7-1.6L2.4 3.8l1.4-1.4L5.4 4l1.6-.7V1z"/></svg>
+            <span className="flex-1">Ajustes de Fin</span>
+            <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${openGroups['settings'] ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+          </button>
+          {openGroups['settings'] && (
+            <div className="flex flex-col pl-7 mt-0.5 mb-1 gap-0.5">
+              <button onClick={() => onSelect('settings')} className={itemCls(sub === 'settings')}>
+                <span className="flex-1 truncate">General</span>
+              </button>
+              <button onClick={() => onSelect('settingsAudiences')} className={itemCls(sub === 'settingsAudiences')}>
+                <span className="flex-1 truncate">Audiencias</span>
+              </button>
+            </div>
+          )}
+          {/* Flujos de trabajo — bold filled list-with-dot icon */}
+          <button onClick={() => onSelect('finWorkflows')} className={itemCls(sub === 'finWorkflows')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M2 3.5h6v1.5H2zm0 3.75h10v1.5H2zm0 3.75h6v1.5H2z"/><circle cx="11" cy="4.25" r="1.7"/><circle cx="13" cy="11.75" r="1.7"/></svg>
+            <span className="flex-1">Flujos de trabajo</span>
+          </button>
+          {/* Automatizaciones simples — bold filled lightning */}
+          <button onClick={() => onSelect('finSimpleAutomations')} className={itemCls(sub === 'finSimpleAutomations')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+            <span className="flex-1">Automatizaciones simples</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const FIN_FAQS: { q: string; a: string }[] = [
+  { q: '¿Cuáles son los roles de Fin AI Agent?', a: 'Servicio para soporte y Ventas para captación de clientes. Cada rol está optimizado para su etapa concreta del recorrido.' },
+  { q: '¿Los roles chocarán o interferirán entre sí?', a: 'No. Fin elige automáticamente el rol adecuado según el contexto y nunca aplica dos a la vez.' },
+  { q: '¿Necesito configurar cada rol de forma individual?', a: 'Sí. Cada rol se configura por separado para que adaptes el contenido, la voz y los flujos a tu negocio.' },
+  { q: '¿Por qué Fin se está expandiendo más allá de Servicio?', a: 'Porque la IA puede ayudar en cada etapa del ciclo de vida del cliente, no solo en soporte.' },
+];
+
+export function FinFaqItem({ q, a, open, onToggle }: { q: string; a: string; open: boolean; onToggle: () => void }) {
+  // Figma 1:758 — bg white, border #e9eae6, rounded 16px, pl-24 pr-16 py-24, gap 16
+  // Title: Inter Semi Bold 14/20. Chevron: Component 1 v20 (down caret asset, rotates open).
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[16px]">
+      <button onClick={onToggle} className="w-full flex items-center pl-[24px] pr-[16px] py-[24px] text-left gap-4">
+        <span className="flex-1 font-['Inter'] font-semibold text-[14px] leading-[20px] text-[#1a1a1a]">{q}</span>
+        <span className={`relative w-4 h-4 overflow-hidden block flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}>
+          <img src={`${FIGMA_CDN}/25319eba-f1b5-4b8a-9a54-c959532566ca`} alt="" className="absolute" style={{ inset: '33.75% 22.81%' }} />
+        </span>
+      </button>
+      {open && (
+        <div className="pl-[24px] pr-[16px] pb-[20px] -mt-1">
+          <p className="font-['Inter'] text-[13.5px] text-[#646462] leading-[20px]">{a}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinAllRolesContent() {
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  return (
+    <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[1021px] mx-auto px-14 pt-12 pb-16">
+        {/* Hero */}
+        <div className="flex flex-col items-center text-center">
+          <img src={IMG_FIN_LOGO_MARK} alt="Fin" className="w-8 h-8 mb-4 object-contain" />
+          <h1 className="text-[40px] font-light tracking-[-1.2px] leading-[40px] text-[#1a1a1a] max-w-[420px]">
+            Un agente para todo el<br/>recorrido del cliente
+          </h1>
+          <p className="text-[14px] text-[#646462] leading-[20px] mt-4 max-w-[520px]">
+            Fin cambia entre distintos roles para brindarle asistencia a los clientes en cada etapa.{' '}
+            <a href="#" className="underline">Más información.</a>
+          </p>
+        </div>
+
+        {/* Cards */}
+        <div className="mt-12 flex justify-center">
+          <div className="grid grid-cols-2 gap-4 w-[640px]">
+            <FinRoleCard
+              image={IMG_FIN_SERVICE_AGENT}
+              iconColor="#DE5612"
+              iconKind="service"
+              title="Servicio"
+              tagline="Brindar soporte a sus clientes"
+              bullets={[
+                'Proporcione asistencia inmediata',
+                'Resolver consultas complejas',
+                'En todos los canales',
+              ]}
+            />
+            <FinRoleCard
+              image={IMG_FIN_SALES_AGENT}
+              iconColor="#165FC6"
+              iconKind="sales"
+              title="Ventas"
+              tagline="Consiga nuevos clientes."
+              bullets={[
+                'Capte clientes potenciales B2B',
+                'Guía para el descubrimiento de productos',
+                'Calificar y canalizar clientes potenciales',
+              ]}
+            />
+          </div>
+        </div>
+
+        {/* More roles coming soon — 3 squares (rounded-[8px]) overlapping per Figma 1:741 */}
+        <div className="mt-7 flex items-center justify-center">
+          <div className="w-[640px] flex items-center justify-center bg-white border border-[#e9eae6] rounded-[10px] py-4 px-6 gap-3">
+            <div className="relative w-12 h-6">
+              <span className="absolute left-0 top-0 w-6 h-6 rounded-[8px] bg-[#818F4A] border border-white" />
+              <span className="absolute left-3 top-0 w-6 h-6 rounded-[8px] bg-[#CE78BA] border border-white" />
+              <span className="absolute left-6 top-0 w-6 h-6 rounded-[8px] bg-[#DBDBD6] border border-white" />
+            </div>
+            <span className="text-[14px] font-semibold text-[#1a1a1a]">Más roles próximamente.</span>
+          </div>
+        </div>
+
+        {/* FAQ */}
+        <div className="mt-20">
+          <h2 className="text-center text-[18px] font-bold text-[#1a1a1a] mb-6">Preguntas frecuentes</h2>
+          <div className="max-w-[560px] mx-auto flex flex-col gap-2">
+            {FIN_FAQS.map((f, i) => (
+              <FinFaqItem
+                key={i}
+                q={f.q}
+                a={f.a}
+                open={openFaq === i}
+                onToggle={() => setOpenFaq(openFaq === i ? null : i)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinRoleCard({
+  image, iconColor, iconKind, title, tagline, bullets,
+}: {
+  image: string;
+  iconColor: string;
+  iconKind: 'service' | 'sales';
+  title: string;
+  tagline: string;
+  bullets: string[];
+}) {
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden flex flex-col">
+      <div className="p-2">
+        <div className="rounded-[10px] overflow-hidden h-[166px]">
+          <img src={image} alt="" className="w-full h-full object-cover"/>
+        </div>
+      </div>
+      <div className="px-4 pt-2 pb-4 flex flex-col">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded-[8px] flex items-center justify-center" style={{ background: iconColor }}>
+            {iconKind === 'service' ? (
+              <span className="relative w-4 h-4 overflow-hidden block">
+                <img src={`${FIGMA_CDN}/d0c138c8-29c4-4ea7-9be9-7212de9d6ba1`} alt="" className="absolute" style={{ inset: '7.85%' }} />
+              </span>
+            ) : (
+              <span className="relative w-4 h-4 overflow-hidden block">
+                <img src={`${FIGMA_CDN}/be30be08-5d82-4049-a966-b734169b60e0`} alt="" className="absolute" style={{ inset: '12.5% 6.25% 9.88% 6.25%' }} />
+              </span>
+            )}
+          </span>
+          <span className="text-[18px] font-bold text-[#1a1a1a]">{title}</span>
+        </div>
+        <p className="mt-2 text-[13.5px] text-[#1a1a1a]">{tagline}</p>
+        <div className="my-3 border-t border-[#e9eae6]" />
+        <ul className="flex flex-col gap-1 list-disc pl-5 text-[13.5px] text-[#1a1a1a] leading-[21px]">
+          {bullets.map(b => <li key={b}>{b}</li>)}
+        </ul>
+        <div className="mt-4">
+          <button className="bg-[#222] text-white text-[12.5px] font-semibold rounded-full px-4 py-1.5 hover:bg-black">
+            Comenzar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function FinPlaceholderContent({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="flex-1 flex items-center justify-center min-h-0">
+      <div className="flex flex-col items-center gap-3 text-center max-w-[420px] px-8">
+        <div className="w-12 h-12 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center">
+          <img src={IMG_FIN_LOGO_MARK} alt="" className="w-6 h-6 object-contain" />
+        </div>
+        <p className="text-[18px] font-semibold text-[#1a1a1a]">{title}</p>
+        <p className="text-[13.5px] text-[#646462]">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Contenido (Figma 1:3591) ────────────────────────────────────
+// Card icons mapped to exact Figma assets (Component 13 variants 35-39):
+//   35 Artículo público (1:3442), 36 Artículo interno (1:3450),
+//   37 Fragmento de texto (1:3458), 38 Sincronización de sitio web (1:3466), 39 Ver todo (1:3474).
+type FinContenidoCardType = 'public' | 'internal' | 'snippet' | 'website' | 'all';
+const FIN_CONTENIDO_CARDS: { icon: ReactNode; label: string; type: FinContenidoCardType; color: string }[] = [
+  {
+    type: 'public',
+    label: 'Artículo público',
+    color: '#3b59f6',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="10" cy="10" r="7.5"/>
+        <path d="M10 2.5c-1.8 1.8-2.8 4.5-2.8 7.5s1 5.7 2.8 7.5M10 2.5c1.8 1.8 2.8 4.5 2.8 7.5s-1 5.7-2.8 7.5"/>
+        <path d="M2.5 10h15M3.2 6.5h13.6M3.2 13.5h13.6"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'internal',
+    label: 'Artículo interno',
+    color: '#7c3aed',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3.5" y="1.5" width="11" height="15" rx="1.5"/>
+        <path d="M6.5 6h7M6.5 9h7M6.5 12h4.5"/>
+        <circle cx="14.5" cy="15" r="3" fill="#f5f3ff" stroke="#7c3aed" strokeWidth="1.3"/>
+        <path d="M13.5 15h2M14.5 14v2" stroke="#7c3aed" strokeWidth="1.3"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'snippet',
+    label: 'Fragmento de texto',
+    color: '#059669',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#059669" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5.5 4.5L2 10l3.5 5.5M14.5 4.5L18 10l-3.5 5.5"/>
+        <path d="M8.5 15.5l3-11"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'website',
+    label: 'Sincronización de sitio web',
+    color: '#d97706',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="10" cy="10" r="7.5"/>
+        <path d="M10 2.5c-1.8 1.8-2.8 4.5-2.8 7.5s1 5.7 2.8 7.5M10 2.5c1.8 1.8 2.8 4.5 2.8 7.5s-1 5.7-2.8 7.5"/>
+        <path d="M2.5 10h15"/>
+        <path d="M15 6.5l2 1.5-2 1.5M5 11.5l-2 1.5 2 1.5" strokeWidth="1.3"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'all',
+    label: 'Ver todo',
+    color: '#646462',
+    icon: (
+      <svg viewBox="0 0 20 20" className="w-5 h-5" fill="none" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1.2"/>
+        <rect x="11" y="2.5" width="6.5" height="6.5" rx="1.2"/>
+        <rect x="2.5" y="11" width="6.5" height="6.5" rx="1.2"/>
+        <rect x="11" y="11" width="6.5" height="6.5" rx="1.2"/>
+      </svg>
+    ),
+  },
+];
+
+function FinContenidoPickerModal({
+  cardType,
+  cardLabel,
+  articles,
+  domains,
+  onConfirmSelection,
+  onWriteNew,
+  onClose,
+}: {
+  cardType: FinContenidoCardType;
+  cardLabel: string;
+  articles: any[];
+  domains: any[];
+  onConfirmSelection: (selected: any[]) => void;
+  onWriteNew: () => void;
+  onClose: () => void;
+}) {
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(() => new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [search, setSearch] = useState('');
+
+  const domainNames: Record<string, string> = {};
+  domains.forEach((d: any) => { domainNames[d.id] = d.name; });
+
+  const articlesByDomain = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const map: Record<string, any[]> = {};
+    articles.forEach((a: any) => {
+      if (q && !(a.title || '').toLowerCase().includes(q)) return;
+      const key = a.domain_id || 'root';
+      if (!map[key]) map[key] = [];
+      map[key].push(a);
+    });
+    return map;
+  }, [articles, search]);
+
+  const domainKeys = Object.keys(articlesByDomain);
+  const selectedArticles = useMemo(() => articles.filter(a => selectedIds.has(a.id)), [articles, selectedIds]);
+
+  function toggleExpand(id: string) {
+    setExpandedDomains(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleArticle(id: string) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleDomainAll(domId: string) {
+    const arts = articlesByDomain[domId] || [];
+    const allSel = arts.every(a => selectedIds.has(a.id));
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      arts.forEach(a => allSel ? n.delete(a.id) : n.add(a.id));
+      return n;
+    });
+  }
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const writeNewLabel: Record<FinContenidoCardType, string> = {
+    public:  'Escribir artículo público desde cero',
+    internal:'Escribir artículo interno desde cero',
+    snippet: 'Escribir fragmento de texto desde cero',
+    website: 'Configurar sincronización de sitio web',
+    all:     'Crear nuevo contenido desde cero',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" />
+      <div
+        className="relative w-full max-w-[1000px] h-[78vh] bg-white rounded-t-[20px] shadow-[0px_-12px_48px_rgba(20,20,20,0.2)] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Drag handle */}
+        <div className="flex-shrink-0 flex justify-center pt-3 pb-1">
+          <span className="w-10 h-1 rounded-full bg-[#e9eae6]"/>
+        </div>
+
+        {/* Header */}
+        <div className="flex-shrink-0 px-6 pb-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Seleccionar contenido</h2>
+            <span className="px-2.5 py-0.5 rounded-full bg-[#f3f3f1] border border-[#e9eae6] text-[12px] font-medium text-[#646462]">{cardLabel}</span>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-[8px] hover:bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Body: knowledge tree + selected panel */}
+        <div className="flex-1 flex min-h-0 border-t border-[#e9eae6]">
+
+          {/* Left — Knowledge folder tree */}
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6] flex items-center gap-3">
+              <div className="flex-1 h-8 rounded-[8px] border border-[#e9eae6] bg-white flex items-center px-3 gap-2 focus-within:border-[#1a1a1a] transition-colors">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar en Knowledge…"
+                  className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
+                />
+                {search && (
+                  <button onClick={() => setSearch('')}>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#a4a4a2]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-shrink-0 px-5 py-2.5 bg-[#fafaf9] border-b border-[#e9eae6]">
+              <p className="text-[12.5px] text-[#646462] leading-[18px]">
+                Selecciona las carpetas o artículos de Knowledge que Fin podrá usar como fuente de conocimiento para responder preguntas.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0 py-2">
+              {domainKeys.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 px-8 text-center">
+                  <div className="w-10 h-10 rounded-full bg-[#f3f3f1] flex items-center justify-center">
+                    <svg viewBox="0 0 20 20" className="w-5 h-5 fill-none stroke-[#a4a4a2]" strokeWidth="1.5"><path d="M3 5a1.5 1.5 0 011.5-1.5h3.88L9.5 5H17A1.5 1.5 0 0118.5 6.5V15A1.5 1.5 0 0117 16.5H4.5A1.5 1.5 0 013 15V5z"/></svg>
+                  </div>
+                  <p className="text-[13px] text-[#646462]">{search ? 'No hay resultados para tu búsqueda.' : 'No hay artículos en Knowledge todavía.'}</p>
+                </div>
+              ) : (
+                domainKeys.map(domId => {
+                  const arts = articlesByDomain[domId] || [];
+                  const name = domId === 'root' ? 'Sin carpeta' : (domainNames[domId] || domId.slice(0, 8));
+                  const expanded = expandedDomains.has(domId);
+                  const allSel = arts.length > 0 && arts.every(a => selectedIds.has(a.id));
+                  const someSel = arts.some(a => selectedIds.has(a.id));
+                  return (
+                    <div key={domId}>
+                      {/* Folder row */}
+                      <div
+                        className="flex items-center gap-2 h-9 px-4 hover:bg-[#f8f8f7] cursor-pointer select-none"
+                        onClick={() => toggleExpand(domId)}
+                      >
+                        <button
+                          className={`w-4 h-4 rounded-[4px] border flex items-center justify-center flex-shrink-0 transition-colors ${allSel ? 'bg-[#1a1a1a] border-[#1a1a1a]' : someSel ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#c8c9c4] hover:border-[#1a1a1a]'}`}
+                          onClick={e => { e.stopPropagation(); toggleDomainAll(domId); }}
+                        >
+                          {allSel && <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="1.8"><path d="M1.5 5l2.5 2.5 4.5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          {someSel && !allSel && <span className="w-2 h-[1.5px] bg-white rounded-full"/>}
+                        </button>
+                        <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#a4a4a2] flex-shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                        <svg viewBox="0 0 16 16" className="w-4 h-4 flex-shrink-0" fill="none" stroke="#646462" strokeWidth="1.3"><path d="M2 5a1.3 1.3 0 011.3-1.3H6.6L8 5.5H13.7A1.3 1.3 0 0115 6.8V12A1.3 1.3 0 0113.7 13.3H3.3A1.3 1.3 0 012 12V5z"/></svg>
+                        <span className="flex-1 text-[13px] font-medium text-[#1a1a1a] truncate">{name}</span>
+                        <span className="text-[11.5px] text-[#a4a4a2] flex-shrink-0">{arts.length}</span>
+                      </div>
+                      {/* Article rows */}
+                      {expanded && (
+                        <div className="pl-12 pr-4 pb-1 flex flex-col gap-0.5">
+                          {arts.map((a: any) => (
+                            <label
+                              key={a.id}
+                              className="flex items-center gap-2.5 h-8 px-2 rounded-[7px] hover:bg-[#f8f8f7] cursor-pointer select-none"
+                            >
+                              <span
+                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center flex-shrink-0 transition-colors ${selectedIds.has(a.id) ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#c8c9c4] hover:border-[#1a1a1a]'}`}
+                                onClick={() => toggleArticle(a.id)}
+                              >
+                                {selectedIds.has(a.id) && <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="1.8"><path d="M1.5 5l2.5 2.5 4.5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                              </span>
+                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2] flex-shrink-0" strokeWidth="1.3"><path d="M3 2.5h7l3.5 3.5V14H3z"/><path d="M10 2.5v3.5h3.5"/></svg>
+                              <span className="flex-1 text-[13px] text-[#1a1a1a] truncate">{a.title || 'Sin título'}</span>
+                              <span className={`text-[10.5px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${a.status === 'published' ? 'bg-[#dcf2e3] text-[#1f7a3a]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                                {a.status === 'published' ? 'Pub.' : 'Bor.'}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Write from scratch */}
+            <div className="flex-shrink-0 px-5 py-3 border-t border-[#e9eae6] bg-[#fafaf9] flex items-center gap-3">
+              <div className="flex-1 h-px bg-[#e9eae6]"/>
+              <span className="text-[11.5px] text-[#a4a4a2] font-medium">O</span>
+              <div className="flex-1 h-px bg-[#e9eae6]"/>
+            </div>
+            <div className="flex-shrink-0 px-5 pb-4">
+              <button
+                onClick={onWriteNew}
+                className="w-full h-9 rounded-[8px] border border-dashed border-[#c8c9c4] bg-white hover:bg-[#f8f8f7] hover:border-[#1a1a1a] text-[13px] font-medium text-[#1a1a1a] flex items-center justify-center gap-2 transition-colors"
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                {writeNewLabel[cardType]}
+              </button>
+            </div>
+          </div>
+
+          {/* Right — Selected items panel */}
+          <div className="w-[272px] flex-shrink-0 border-l border-[#e9eae6] flex flex-col min-h-0">
+            <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <p className="text-[13px] font-semibold text-[#1a1a1a]">
+                Seleccionado{' '}
+                {selectedArticles.length > 0 && (
+                  <span className="font-normal text-[#646462]">({selectedArticles.length})</span>
+                )}
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0 px-4 py-3">
+              {selectedArticles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-3">
+                  <svg viewBox="0 0 24 24" className="w-8 h-8 fill-none stroke-[#d4d4d2]" strokeWidth="1.3"><path d="M9 11l3 3 8-8M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                  <p className="text-[12px] text-[#a4a4a2] leading-[17px]">Selecciona carpetas o artículos de Knowledge para añadir a Fin.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  {selectedArticles.map((a: any) => (
+                    <div key={a.id} className="flex items-center gap-2 h-8 px-1 rounded-[7px] hover:bg-[#f8f8f7] group">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.3"><path d="M3 2.5h7l3.5 3.5V14H3z"/><path d="M10 2.5v3.5h3.5"/></svg>
+                      <span className="flex-1 text-[12.5px] text-[#1a1a1a] truncate">{a.title || 'Sin título'}</span>
+                      <button
+                        onClick={() => toggleArticle(a.id)}
+                        className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center hover:bg-[#e9eae6] flex-shrink-0 transition-opacity"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-shrink-0 px-4 py-4 border-t border-[#e9eae6] flex flex-col gap-2">
+              <button
+                disabled={selectedArticles.length === 0}
+                onClick={() => onConfirmSelection(selectedArticles)}
+                className={`w-full h-9 rounded-[8px] text-[13px] font-semibold flex items-center justify-center gap-2 transition-all ${
+                  selectedArticles.length > 0
+                    ? 'bg-[#1a1a1a] text-white hover:bg-black shadow-sm'
+                    : 'bg-[#f3f3f1] text-[#a4a4a2] cursor-not-allowed'
+                }`}
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 2.5c2.8 0 5 2.2 5 5.5a5.5 5.5 0 01-5 5.5 5.5 5.5 0 01-5-5.5C3 4.7 5.2 2.5 8 2.5z"/><path d="M5.5 8l2 2 3-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                {selectedArticles.length > 0 ? `Agregar a Fin (${selectedArticles.length})` : 'Agregar a Fin'}
+              </button>
+              <p className="text-center text-[11px] text-[#a4a4a2]">
+                Fin usará estos artículos como fuente de conocimiento
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinContenidoContent() {
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
+  const articles: any[] = Array.isArray(articlesRaw) ? articlesRaw : [];
+  const domains = Array.isArray(domainsData) ? domainsData : [];
+
+  // Counts broken down by type for the source table
+  const sourceCounts = useMemo(() => {
+    const byType: Record<string, { total: number; published: number; finService: number }> = {};
+    articles.forEach((a: any) => {
+      const t = String(a.type || 'ARTICLE').toUpperCase();
+      if (!byType[t]) byType[t] = { total: 0, published: 0, finService: 0 };
+      byType[t].total++;
+      if (String(a.status || '').toLowerCase() === 'published') byType[t].published++;
+      if (a.fin_service) byType[t].finService++;
+    });
+    return byType;
+  }, [articles]);
+
+  const [search, setSearch] = useState('');
+
+  // Picker modal: opened first when clicking article/snippet cards
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerCard, setPickerCard] = useState<{ type: FinContenidoCardType; label: string } | null>(null);
+
+  // Secondary modals (opened directly or from picker)
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorPrefill, setEditorPrefill] = useState<any>(null);
+  const [websiteSyncOpen, setWebsiteSyncOpen] = useState(false);
+  const [externalPickerOpen, setExternalPickerOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    setToast({ msg, type });
+    window.setTimeout(() => setToast(null), 2800);
+  }
+
+  function openCreateEditor(opts: { type?: string; visibility?: 'public' | 'internal' } = {}) {
+    const visibility = opts.visibility || 'public';
+    setEditorPrefill({ type: opts.type || 'ARTICLE', visibility, fin_service: true, copilot_enabled: true });
+    setEditorOpen(true);
+  }
+
+  function handleCardClick(card: typeof FIN_CONTENIDO_CARDS[number]) {
+    if (card.type === 'website') { setWebsiteSyncOpen(true); return; }
+    if (card.type === 'all')     { setLibraryOpen(true); return; }
+    // article / snippet / internal — open picker first
+    setPickerCard({ type: card.type, label: card.label });
+    setPickerOpen(true);
+  }
+
+  function handlePickerWriteNew() {
+    setPickerOpen(false);
+    const t = pickerCard?.type;
+    if (t === 'snippet')  openCreateEditor({ type: 'SNIPPET', visibility: 'internal' });
+    else if (t === 'internal') openCreateEditor({ type: 'ARTICLE', visibility: 'internal' });
+    else                  openCreateEditor({ type: 'ARTICLE', visibility: 'public' });
+  }
+
+  async function handlePickerConfirm(selected: any[]) {
+    setPickerOpen(false);
+    if (selected.length === 0) return;
+    let ok = 0;
+    for (const a of selected) {
+      try {
+        await knowledgeApi.updateArticle(a.id, { fin_service: true });
+        ok++;
+      } catch { /* skip failed */ }
+    }
+    setRefreshKey(k => k + 1);
+    showToast(ok === 1 ? '1 artículo añadido a Fin' : `${ok} artículos añadidos a Fin`);
+  }
+
+  function openExistingArticle(article: any) {
+    setLibraryOpen(false);
+    setEditorPrefill(article);
+    setEditorOpen(true);
+  }
+
+  function jumpToKnowledge() {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'knowledge');
+      window.location.href = url.toString();
+    }
+  }
+
+  // Rows for "Fuente de contenido" table
+  type SourceRow = { key: string; icon: ReactNode; label: string; sub: string; counts: { total: number; published: number; finService: number } | null; onManage?: () => void };
+  const artC = sourceCounts['ARTICLE'] ?? { total: 0, published: 0, finService: 0 };
+  const snpC = sourceCounts['SNIPPET'] ?? { total: 0, published: 0, finService: 0 };
+  const sourceRows: SourceRow[] = [
+    {
+      key: 'articles',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#3b59f6]" strokeWidth="1.3"><path d="M2.5 2.5h7.5l3.5 3.5v8H2.5z"/><path d="M10 2.5v3.5h3.5"/><path d="M5 7.5h6M5 10h6M5 5h4"/></svg>,
+      label: 'Artículos públicos',
+      sub: `${artC.total} artículo${artC.total !== 1 ? 's' : ''}`,
+      counts: artC,
+      onManage: () => setLibraryOpen(true),
+    },
+    {
+      key: 'internal',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#7c3aed]" strokeWidth="1.3"><path d="M2.5 2.5h7.5l3.5 3.5v8H2.5z"/><path d="M10 2.5v3.5h3.5"/><path d="M5 7.5h6M5 10h4"/><circle cx="12" cy="13" r="2.5" fill="#f5f3ff" stroke="#7c3aed" strokeWidth="1.2"/><path d="M11.3 13h1.4M12 12.3v1.4" stroke="#7c3aed" strokeWidth="1"/></svg>,
+      label: 'Artículos internos',
+      sub: 'Solo visibles para tu equipo',
+      counts: artC,
+      onManage: () => setLibraryOpen(true),
+    },
+    {
+      key: 'snippets',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#059669]" strokeWidth="1.3"><path d="M4.5 4l-2.5 4 2.5 4M11.5 4l2.5 4-2.5 4"/><path d="M7 13l2-10"/></svg>,
+      label: 'Fragmentos de texto',
+      sub: `${snpC.total} fragmento${snpC.total !== 1 ? 's' : ''}`,
+      counts: snpC,
+      onManage: () => setLibraryOpen(true),
+    },
+    {
+      key: 'website',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#d97706]" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 2c-1.5 1.5-2.3 3.7-2.3 6s.8 4.5 2.3 6M8 2c1.5 1.5 2.3 3.7 2.3 6s-.8 4.5-2.3 6M2 8h12"/></svg>,
+      label: 'Sincronización de sitio web',
+      sub: 'Páginas indexadas de tu web',
+      counts: null,
+      onManage: () => setWebsiteSyncOpen(true),
+    },
+    {
+      key: 'external',
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.3"><rect x="2" y="5" width="4" height="6" rx="1"/><rect x="10" y="2" width="4" height="12" rx="1"/><path d="M6 8h4" strokeLinecap="round"/></svg>,
+      label: 'Apps externas',
+      sub: 'Zendesk, Notion, Confluence…',
+      counts: null,
+      onManage: () => setExternalPickerOpen(true),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-[8px] bg-[#eef2ff] flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#3b59f6]" strokeWidth="1.4">
+                <path d="M2 3.5v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.5c-1.7-.6-3.4-.6-5.5 0C5.4 2.9 3.7 2.9 2 3.5z" strokeLinejoin="round"/>
+                <path d="M7.5 3.5v9.6"/>
+              </svg>
+            </span>
+            <h1 className="text-[18px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Contenido</h1>
+          </div>
+          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M2.5 13.5c.8-2.4 2.8-4 5.5-4s4.7 1.6 5.5 4"/></svg>
+            <span>Aprender</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+        <div className="px-6 pb-3 flex items-center gap-2.5">
+          <div className="flex-1 max-w-[400px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2 focus-within:border-[#1a1a1a] transition-colors">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') jumpToKnowledge(); }}
+              placeholder="Buscar artículos en Conocimiento…"
+              className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
+            />
+          </div>
+          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.2 13c.7-2 2.5-3.2 4.8-3.2s4.1 1.2 4.8 3.2"/></svg>
+            <span>Audiencia</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+            <span>Filtros</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 pt-5 pb-16 max-w-[860px] mx-auto">
+
+          {/* ── Agregar contenido ── */}
+          <h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-3">Agregar contenido</h3>
+          <div className="grid grid-cols-3 gap-3">
+            {FIN_CONTENIDO_CARDS.map(c => (
+              <button
+                key={c.label}
+                onClick={() => handleCardClick(c)}
+                className="group h-[100px] bg-white border border-[#e9eae6] rounded-[14px] px-4 py-4 flex flex-col items-start gap-2.5 hover:border-[#c8c9c4] hover:shadow-[0px_2px_8px_rgba(20,20,20,0.08)] transition-all"
+              >
+                <span
+                  className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors"
+                  style={{ background: `${c.color}14` }}
+                >
+                  {c.icon}
+                </span>
+                <span className="text-[13.5px] font-semibold text-[#1a1a1a] text-left leading-[18px]">{c.label}</span>
+              </button>
+            ))}
+            {/* Conectar app externa — brand logos */}
+            <button
+              onClick={() => setExternalPickerOpen(true)}
+              className="group h-[100px] bg-white border border-[#e9eae6] rounded-[14px] px-4 py-4 flex flex-col items-start gap-2.5 hover:border-[#c8c9c4] hover:shadow-[0px_2px_8px_rgba(20,20,20,0.08)] transition-all"
+            >
+              <div className="flex items-center -space-x-1.5">
+                <span className="w-8 h-8 rounded-[8px] bg-[#03363d] flex items-center justify-center text-white text-[11px] font-bold ring-[2.5px] ring-white shadow-sm">Z</span>
+                <span className="w-8 h-8 rounded-[8px] bg-[#1a1a1a] flex items-center justify-center text-white text-[11px] font-bold ring-[2.5px] ring-white shadow-sm">N</span>
+                <span className="w-8 h-8 rounded-[8px] bg-[#0052cc] flex items-center justify-center text-white text-[11px] font-bold ring-[2.5px] ring-white shadow-sm">C</span>
+                <span className="w-8 h-8 rounded-[8px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center text-[#646462] text-[12px] font-bold ring-[2.5px] ring-white shadow-sm">···</span>
+              </div>
+              <span className="text-[13.5px] font-semibold text-[#1a1a1a] text-left leading-[18px]">Conectar app externa</span>
+            </button>
+          </div>
+
+          {/* ── Fuente de contenido ── */}
+          <div className="mt-10 flex items-center justify-between mb-3">
+            <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Fuente de contenido</h3>
+            <span className="text-[12px] text-[#646462]">{articles.length} elemento{articles.length !== 1 ? 's' : ''} en total</span>
+          </div>
+
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+            {/* Table header */}
+            <div className="grid grid-cols-[1fr_160px_80px_80px_32px] gap-0 px-5 py-2.5 border-b border-[#e9eae6] bg-[#fafaf9]">
+              <span className="text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide">Fuente</span>
+              <span className="text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide">Estado</span>
+              <span className="text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide">Servicio</span>
+              <span className="text-[11.5px] font-semibold text-[#646462] uppercase tracking-wide">Ventas</span>
+              <span/>
+            </div>
+
+            {/* Table rows */}
+            {sourceRows.map((row, i) => {
+              const c = row.counts;
+              const hasContent = c ? c.total > 0 : false;
+              const serviceOn = c ? c.finService > 0 : false;
+              return (
+                <button
+                  key={row.key}
+                  onClick={row.onManage}
+                  className={`w-full grid grid-cols-[1fr_160px_80px_80px_32px] gap-0 px-5 py-3.5 items-center text-left hover:bg-[#f8f8f7] transition-colors ${i < sourceRows.length - 1 ? 'border-b border-[#e9eae6]' : ''}`}
+                >
+                  {/* Title */}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex-shrink-0">{row.icon}</span>
+                    <div className="min-w-0">
+                      <p className="text-[13.5px] font-medium text-[#1a1a1a] truncate">{row.label}</p>
+                      <p className="text-[11.5px] text-[#646462] truncate">{row.sub}</p>
+                    </div>
+                  </div>
+                  {/* Estado */}
+                  <div className="flex items-center gap-2">
+                    <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${hasContent ? 'bg-[#15803d]' : 'bg-[#d4d4d2]'}`}/>
+                    <span className="text-[12.5px] text-[#1a1a1a]">
+                      {c ? `${c.published} activo${c.published !== 1 ? 's' : ''} · ${c.total} total` : '—'}
+                    </span>
+                  </div>
+                  {/* Servicio */}
+                  <div>
+                    {serviceOn
+                      ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#dcf2e3] text-[#1f7a3a] text-[11px] font-semibold">On</span>
+                      : <span className="text-[12.5px] text-[#a4a4a2]">—</span>
+                    }
+                  </div>
+                  {/* Ventas */}
+                  <div>
+                    <span className="text-[12.5px] text-[#a4a4a2]">—</span>
+                  </div>
+                  {/* Chevron */}
+                  <div className="flex items-center justify-end">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.5"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Picker modal — Knowledge folder browser */}
+      {pickerOpen && pickerCard && (
+        <FinContenidoPickerModal
+          cardType={pickerCard.type}
+          cardLabel={pickerCard.label}
+          articles={articles}
+          domains={domains}
+          onConfirmSelection={handlePickerConfirm}
+          onWriteNew={handlePickerWriteNew}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {/* Secondary modals */}
+      {editorOpen && (
+        <KnowledgeArticleEditor
+          initial={editorPrefill}
+          domains={domains}
+          onClose={() => { setEditorOpen(false); setEditorPrefill(null); }}
+          onSaved={() => { setRefreshKey(k => k + 1); }}
+          onAction={showToast}
+        />
+      )}
+      {websiteSyncOpen && (
+        <KnowledgeWebsiteSyncWizard
+          onClose={() => setWebsiteSyncOpen(false)}
+          onSaved={() => { setRefreshKey(k => k + 1); }}
+          onAction={showToast}
+        />
+      )}
+      {externalPickerOpen && (
+        <KnowledgeExternalSourcePicker
+          onClose={() => setExternalPickerOpen(false)}
+          onAction={showToast}
+        />
+      )}
+      {libraryOpen && (
+        <KnowledgeContentLibrary
+          domains={domains}
+          onOpenArticle={openExistingArticle}
+          onClose={() => setLibraryOpen(false)}
+          onAction={showToast}
+        />
+      )}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-full shadow-lg text-[12.5px] font-medium flex items-center gap-2 ${toast.type === 'error' ? 'bg-[#fef2f2] text-[#b91c1c] border border-[#fecaca]' : 'bg-[#1a1a1a] text-white'}`}>
+          {toast.type !== 'error' && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8l3.5 3.5 6.5-7" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Capacitar > Pautas / Orientación (Figma 1:4825) ─────────────────────────
+const FIN_PAUTA_CATEGORIES: Array<{ id: string; title: string; description: string; icon: ReactNode }> = [
+  {
+    id: 'estilo_comunicacion',
+    title: 'Estilo de comunicación',
+    description: 'Crea una guía personalizada sobre el vocabulario y los términos que Fin debe utilizar.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.5h11v8h-7l-4 3v-11z" strokeLinejoin="round"/></svg>,
+  },
+  {
+    id: 'contexto_aclaraciones',
+    title: 'Contexto y aclaraciones',
+    description: 'Crea una guía personalizada sobre las preguntas de seguimiento que Fin debe hacer.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M6.2 6.4c.3-.9 1.1-1.5 2-1.5 1.1 0 2 .8 2 1.8 0 1-.8 1.5-1.7 1.7-.3 0-.5.3-.5.5v.6M8 11.2v.01" strokeLinecap="round"/></svg>,
+  },
+  {
+    id: 'contenido_fuentes',
+    title: 'Contenido y fuentes',
+    description: 'Crea una pauta personalizada sobre cuándo y cómo Fin debe utilizar artículos o fuentes específicos en las respuestas.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>,
+  },
+  {
+    id: 'correo_no_deseado',
+    title: 'Correo no deseado',
+    description: 'Cree una guía personalizada sobre cómo Fin debe identificar y manejar los mensajes potenciales de spam.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4" strokeLinejoin="round"/></svg>,
+  },
+  {
+    id: 'otros',
+    title: 'Otros',
+    description: 'Cualquier otra pauta que quieras que Fin siga.',
+    icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg>,
+  },
+];
+
+const FIN_AUDIENCE_ITEMS: DropdownItem[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'users', label: 'Usuarios' },
+  { value: 'leads', label: 'Leads' },
+  { value: 'visitors', label: 'Visitantes' },
+];
+const FIN_AUDIENCE_LABEL: Record<string, string> = {
+  all: 'Todos', users: 'Usuarios', leads: 'Leads', visitors: 'Visitantes',
+};
+const FIN_CHANNEL_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: 'chat', label: 'Chat' },
+  { id: 'email', label: 'Correo electrónico' },
+  { id: 'voice', label: 'Voz' },
+];
+
+const FIN_PAUTA_SUGGESTIONS: Array<{ label: string; text: string }> = [
+  { label: 'Usa un lenguaje sencillo', text: '\n- Usa un lenguaje sencillo en cada respuesta.' },
+  { label: 'Mantén las respuestas concisas', text: '\n- Mantén las respuestas concisas (máximo 3 frases).' },
+  { label: 'No garantices resultados', text: '\n- No garantices resultados ni hagas promesas.' },
+  { label: 'Cita siempre la fuente', text: '\n- Cita siempre la fuente del artículo cuando exista.' },
+];
+const FIN_PAUTA_SUGGESTIONS_EXTRA: Array<{ label: string; text: string }> = [
+  { label: 'Pregunta antes de actuar', text: '\n- Pregunta antes de realizar acciones irreversibles.' },
+  { label: 'Mantén tono amistoso', text: '\n- Mantén un tono amistoso y profesional.' },
+  { label: 'Reconoce limitaciones', text: '\n- Reconoce cuando no sepas la respuesta y escala.' },
+];
+
+// ─── FinPautaEditor: full-drawer create/edit modal for a single Pauta ─────────
+function FinPautaEditor({
+  initial,
+  onSave,
+  onClose,
+  onAction,
+  onToggleEnable,
+}: {
+  initial: FinPauta | null;
+  onSave: (next: FinPauta) => void;
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onToggleEnable: (next: boolean) => void;
+}) {
+  const [title, setTitle] = useState(initial?.title || '');
+  const [body, setBody] = useState(initial?.body || '');
+  const [audience, setAudience] = useState<FinPauta['audience']>(initial?.audience || 'all');
+  const [channels, setChannels] = useState<string[]>(initial?.channels || []);
+  const [enabled, setEnabled] = useState(initial?.enabled ?? false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  // Esc-to-close (skip if user is typing in title/body).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const tag = (t?.tagName || '').toUpperCase();
+      const editing = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (!editing) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function appendSuggestion(text: string) {
+    setBody(prev => prev + text);
+    bodyRef.current?.focus();
+  }
+  function toggleChannel(id: string) {
+    setChannels(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  }
+  function save() {
+    if (!initial) {
+      onAction('No se pudo guardar', 'error');
+      return;
+    }
+    const next: FinPauta = {
+      ...initial,
+      title: title.trim(),
+      body,
+      audience,
+      channels,
+      enabled,
+    };
+    onSave(next);
+    onAction('Pauta guardada');
+  }
+  function handleToggleEnabled() {
+    const next = !enabled;
+    setEnabled(next);
+    onToggleEnable(next);
+  }
+  const channelTriggerLabel = channels.length === 0
+    ? 'Todos los canales'
+    : channels.length === FIN_CHANNEL_OPTIONS.length
+      ? 'Todos los canales'
+      : `${channels.length} canal${channels.length === 1 ? '' : 'es'}`;
+  const metrics = initial?.metrics || {};
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
+          isFullscreen ? 'w-full max-w-none border-l-0 rounded-none' : 'w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]'
+        }`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Sin título"
+            className="flex-1 text-[15px] font-semibold text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent"
+          />
+          <div className="flex items-center gap-2">
+            {enabled ? (
+              <button
+                onClick={handleToggleEnabled}
+                className="h-8 px-3 rounded-full bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c] text-[13px] font-semibold hover:bg-[#fee2e2] flex items-center gap-1.5"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+                Pausar
+              </button>
+            ) : (
+              <button
+                onClick={handleToggleEnabled}
+                className="h-8 px-3 rounded-full bg-[#dcfce7] border border-[#bbf7d0] text-[#15803d] text-[13px] font-semibold hover:bg-[#bbf7d0] flex items-center gap-1.5"
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                Habilitar
+              </button>
+            )}
+            <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+            <span className="w-px h-6 bg-[#e9eae6]" />
+            <button onClick={() => setIsFullscreen(v => !v)} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              {isFullscreen
+                ? <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                : <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </button>
+            <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Filter row */}
+        <div className="flex-shrink-0 h-12 px-6 border-b border-[#e9eae6] flex items-center gap-4">
+          <span className="text-[13px] text-[#646462]">Audiencia</span>
+          <Dropdown
+            value={audience}
+            items={FIN_AUDIENCE_ITEMS}
+            onChange={v => setAudience(v as FinPauta['audience'])}
+          />
+          <span className="w-px h-5 bg-[#e9eae6]" />
+          <span className="text-[13px] text-[#646462]">Canales</span>
+          <Dropdown
+            value=""
+            items={[
+              { value: '__all', label: 'Todos los canales' },
+              ...FIN_CHANNEL_OPTIONS.map(c => ({
+                value: c.id,
+                label: `${channels.includes(c.id) ? '✓ ' : ''}${c.label}`,
+              })),
+            ]}
+            onChange={v => {
+              if (v === '__all') setChannels([]);
+              else toggleChannel(v);
+            }}
+            renderTrigger={(_, open) => (
+              <>
+                <span className="truncate">{channelTriggerLabel}</span>
+                {channels.length > 0 && channels.length < FIN_CHANNEL_OPTIONS.length && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#1a1a1a] text-white text-[10px] font-semibold">{channels.length}</span>
+                )}
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+              </>
+            )}
+          />
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-12 py-8 min-h-0">
+          <textarea
+            ref={bodyRef}
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            placeholder="Escriba aquí..."
+            className="w-full min-h-[72px] text-[16px] text-[#1a1a1a] leading-[24px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            {FIN_PAUTA_SUGGESTIONS.map(s => (
+              <button
+                key={s.label}
+                onClick={() => appendSuggestion(s.text)}
+                className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                + {s.label}
+              </button>
+            ))}
+            <div className="relative">
+              <button
+                onClick={() => setShowMore(v => !v)}
+                className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] text-[#646462] hover:bg-[#f8f8f7]"
+              >...</button>
+              {showMore && (
+                <div className="absolute top-full mt-1 left-0 z-10 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 min-w-[260px]">
+                  {FIN_PAUTA_SUGGESTIONS_EXTRA.map(s => (
+                    <button
+                      key={s.label}
+                      onClick={() => { appendSuggestion(s.text); setShowMore(false); }}
+                      className="w-full px-3 h-9 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                    >+ {s.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 h-12 border-t border-[#e9eae6] px-6 flex items-center gap-6 text-[12.5px] text-[#646462]">
+          <span>Usado · {metrics.used ?? '-'}</span>
+          <span>Resuelto · {metrics.resolved ?? '-'}</span>
+          <span>Canalizado · {metrics.routed ?? '-'}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Fin AI agent: seed data (used on first visit when localStorage is absent) ─
+const FIN_SEED_PAUTAS: FinPauta[] = [
+  {
+    id: 'seed_pauta_1', category: 'estilo_comunicacion',
+    title: 'Usa siempre un lenguaje claro y directo',
+    body: '- Usa frases cortas y directas, evita rodeos.\n- Evita jerga técnica salvo que el usuario la use primero.\n- Confirma que el usuario ha entendido la solución antes de cerrar.',
+    audience: 'all', channels: [], enabled: true, metrics: { used: 142, resolved: 98 },
+  },
+  {
+    id: 'seed_pauta_2', category: 'contexto_aclaraciones',
+    title: 'Pide contexto antes de responder preguntas ambiguas',
+    body: '- Cuando la pregunta tenga más de una posible interpretación, pregunta primero cuál es la situación específica del usuario.\n- No asumas. Pide el número de pedido o el correo si la consulta es sobre una cuenta específica.',
+    audience: 'users', channels: ['chat'], enabled: true, metrics: { used: 87, resolved: 72 },
+  },
+  {
+    id: 'seed_pauta_3', category: 'contenido_fuentes',
+    title: 'Cita los artículos relevantes de la base de conocimiento',
+    body: '- Cuando respondas usando información de un artículo, menciona su título y proporciona el enlace.\n- No inventes información que no esté en la base de conocimiento.',
+    audience: 'all', channels: [], enabled: true, metrics: { used: 201, resolved: 180 },
+  },
+  {
+    id: 'seed_pauta_4', category: 'correo_no_deseado',
+    title: 'Identifica y desestima el spam sin responder',
+    body: '- Si el mensaje parece spam, no respondas con información útil.\n- Responde con un mensaje genérico de verificación de identidad o cierra la conversación.',
+    audience: 'all', channels: [], enabled: false,
+  },
+];
+
+const FIN_SEED_ATRIBUTOS: FinAtributo[] = [
+  {
+    id: 'seed_atrib_1', name: 'Sentimiento',
+    description: 'Captura el tono emocional del cliente para priorizar la atención',
+    audience: 'all', escalationRules: 1, reDetectOnClose: true, enabled: true,
+    values: [
+      { id: 'sv1', name: 'Positivo', description: 'El cliente expresa satisfacción o agradecimiento.' },
+      { id: 'sv2', name: 'Neutral', description: 'El tono no es ni positivo ni negativo.' },
+      { id: 'sv3', name: 'Negativo', description: 'El cliente expresa frustración o enfado.' },
+    ],
+    conditions: [],
+  },
+  {
+    id: 'seed_atrib_2', name: 'Urgencia',
+    description: 'Detecta cuán urgente es la consulta para priorizar colas',
+    audience: 'all', escalationRules: 1, reDetectOnClose: false, enabled: true,
+    values: [
+      { id: 'uv1', name: 'Baja', description: 'Sin presión inmediata.' },
+      { id: 'uv2', name: 'Media', description: 'Requiere respuesta en horas.' },
+      { id: 'uv3', name: 'Alta', description: 'Requiere atención inmediata.' },
+    ],
+    conditions: [],
+  },
+  {
+    id: 'seed_atrib_3', name: 'Intención',
+    description: 'Clasifica el tipo de solicitud del usuario',
+    audience: 'all', escalationRules: 0, reDetectOnClose: false, enabled: false,
+    values: [
+      { id: 'iv1', name: 'Información', description: 'El cliente pregunta o consulta.' },
+      { id: 'iv2', name: 'Acción', description: 'El cliente pide ejecutar una operación.' },
+      { id: 'iv3', name: 'Reclamo', description: 'El cliente reporta un problema.' },
+      { id: 'iv4', name: 'Cancelación', description: 'El cliente quiere cancelar un servicio.' },
+    ],
+    conditions: [],
+  },
+];
+
+const FIN_SEED_PROCEDIMIENTOS: FinProcedimiento[] = [
+  {
+    id: 'seed_proc_1', name: 'Solicitud de reembolso',
+    description: 'Guía a Fin para gestionar reembolsos verificando elegibilidad y procesando la solicitud.',
+    prompt: 'Cuando un cliente solicite un reembolso: 1) Verifica que el pedido esté dentro del período de devolución (30 días). 2) Confirma el motivo. 3) Si procede, inicia el proceso e indica el plazo (5-7 días hábiles). 4) Si no procede, explica el motivo y ofrece alternativas.',
+    steps: [
+      { id: 'ps1', kind: 'verification', title: 'Verificar elegibilidad', body: 'Comprueba que el pedido tenga menos de 30 días y esté en estado entregado.' },
+      { id: 'ps2', kind: 'action', title: 'Registrar solicitud', body: 'Crea una incidencia de reembolso con el número de pedido y motivo.' },
+      { id: 'ps3', kind: 'condition', title: '¿Aprobado o rechazado?', body: 'Si aprobado → notifica plazo. Si rechazado → ofrece cambio o crédito.' },
+    ],
+    enabled: true, createdAt: Date.now() - 86400000 * 5,
+  },
+  {
+    id: 'seed_proc_2', name: 'Restablecimiento de acceso',
+    description: 'Ayuda al usuario a recuperar el acceso a su cuenta verificando su identidad primero.',
+    prompt: 'Cuando un cliente no pueda acceder a su cuenta: 1) Verifica su identidad solicitando el correo registrado. 2) Ofrece el flujo de restablecimiento de contraseña. 3) Si el correo no funciona, escala a soporte técnico.',
+    steps: [
+      { id: 'ps4', kind: 'verification', title: 'Verificar identidad', body: 'Solicita correo registrado y última información conocida.' },
+      { id: 'ps5', kind: 'action', title: 'Enviar enlace de restablecimiento', body: 'Usa el sistema de autenticación para enviar el enlace al correo verificado.' },
+    ],
+    enabled: true, createdAt: Date.now() - 86400000 * 12,
+  },
+];
+
+// ─── FinOrientacionContent: real CRUD over Pautas ────────────────────────────
+function FinOrientacionContent() {
+  const pautas = useFinResource<FinPauta>('pautas', FIN_SEED_PAUTAS);
+  const toast = useFinToast();
+  const [editing, setEditing] = useState<FinPauta | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [channelFilter, setChannelFilter] = useState<string>('all');
+  const [openCats, setOpenCats] = useState<Record<string, boolean>>(() => Object.fromEntries(FIN_PAUTA_CATEGORIES.map(c => [c.id, true])));
+
+  function startCreate(category: string) {
+    const created = pautas.create({
+      category,
+      title: '',
+      audience: 'all',
+      channels: [],
+      body: '',
+      enabled: false,
+    });
+    setEditing(created);
+    setEditorOpen(true);
+  }
+  function openEdit(p: FinPauta) {
+    setEditing(p);
+    setEditorOpen(true);
+  }
+  function handleSave(next: FinPauta) {
+    pautas.update(next.id, next);
+    setEditing(next);
+  }
+  function handleToggleEnable(next: boolean) {
+    if (!editing) return;
+    pautas.update(editing.id, { enabled: next });
+    setEditing({ ...editing, enabled: next });
+    toast.show(next ? 'Pauta habilitada' : 'Pauta pausada');
+  }
+  function handleDeletePauta(p: FinPauta, ev?: React.MouseEvent) {
+    ev?.stopPropagation();
+    if (!window.confirm(`¿Eliminar la pauta "${p.title.trim() || 'Sin título'}"?`)) return;
+    pautas.remove(p.id);
+    toast.show('Pauta eliminada');
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return pautas.items.filter(p => {
+      if (q && !(p.title.toLowerCase().includes(q) || p.body.toLowerCase().includes(q))) return false;
+      if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+      if (channelFilter !== 'all') {
+        if (p.channels.length > 0 && !p.channels.includes(channelFilter)) return false;
+      }
+      return true;
+    });
+  }, [pautas.items, search, categoryFilter, channelFilter]);
+
+  const filterDropdownItems: DropdownItem[] = [
+    { value: '__cat_header', label: '— Categorías —', disabled: true },
+    { value: 'cat:all', label: 'Todas las categorías' },
+    ...FIN_PAUTA_CATEGORIES.map(c => ({ value: `cat:${c.id}`, label: c.title })),
+    { value: '__ch_header', label: '— Canales —', divider: true, disabled: true },
+    { value: 'ch:all', label: 'Todos los canales' },
+    ...FIN_CHANNEL_OPTIONS.map(c => ({ value: `ch:${c.id}`, label: c.label })),
+  ];
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 py-6 flex gap-6 items-start">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[18px] font-bold text-[#1a1a1a] leading-[24px]">
+              Personalice la forma en que Fin se comunica y responde
+            </h1>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[600px]">
+              Capacite a Fin para proporcionar respuestas precisas y use su estilo de comunicación, lo que garantiza una asistencia coherente y escalable en todos los flujos de trabajo.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-[#1a1a1a]">
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/7b2ccaec-cac5-47de-99ef-0683c2d1f989`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
+                </span>
+                <span>Comenzar</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/daddb388-508e-43b0-b9d5-1adb853c5354`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
+                </span>
+                <span>Prácticas recomendadas</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/164f7485-358a-4b86-8247-fc962c6ede17`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
+                </span>
+                <span>Conceptos básicos de Fin</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/d3f6580a-ea0f-4ea4-82b2-a2412229a1aa`} alt="" className="absolute" style={{ inset: '12.5% 6.25%' }} />
+                </span>
+                <span>Más información</span>
+              </a>
+            </div>
+          </div>
+          <div className="relative w-[388px] h-[160px] rounded-[10px] overflow-hidden flex-shrink-0">
+            <img src={`${FIGMA_CDN}/b34636bd-eaf8-4d42-b0cf-c22a9b37d334`} alt="Ejemplos de orientación" className="absolute h-full top-0 left-0 w-full" />
+          </div>
+        </div>
+      </div>
+
+      {/* Pautas section header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="1.2"/><path d="M5 5.5h6M5 8h6M5 10.5h4" strokeLinecap="round"/></svg>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Pautas</h2>
+          </div>
+          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+            <span>Aprender</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-4 flex flex-col gap-3">
+          {/* Search + filtrar */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 max-w-[420px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Busca la guía por título o contenido"
+                className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+              />
+            </div>
+            <Dropdown
+              value=""
+              items={filterDropdownItems}
+              onChange={v => {
+                if (v.startsWith('cat:')) setCategoryFilter(v.slice(4));
+                else if (v.startsWith('ch:')) setChannelFilter(v.slice(3));
+              }}
+              renderTrigger={(_, open) => (
+                <>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                  <span>Filtrar</span>
+                  {(categoryFilter !== 'all' || channelFilter !== 'all') && (
+                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#1a1a1a] text-white text-[10px] font-semibold">
+                      {(categoryFilter !== 'all' ? 1 : 0) + (channelFilter !== 'all' ? 1 : 0)}
+                    </span>
+                  )}
+                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+                </>
+              )}
+            />
+          </div>
+
+          {/* Categorías */}
+          {FIN_PAUTA_CATEGORIES.map(cat => {
+            const items = filtered.filter(p => p.category === cat.id);
+            const isOpen = openCats[cat.id] !== false;
+            return (
+              <div key={cat.id} className="bg-white border border-[#e9eae6] rounded-[12px]">
+                <button
+                  onClick={() => setOpenCats(s => ({ ...s, [cat.id]: !isOpen }))}
+                  className="w-full px-4 py-3 flex items-start justify-between border-b border-[#e9eae6] hover:bg-[#f8f8f7]/40 text-left"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5">{cat.icon}</span>
+                    <div>
+                      <p className="text-[14px] font-semibold text-[#1a1a1a]">
+                        {cat.title} <span className="text-[#646462] font-normal">({items.length})</span>
+                      </p>
+                      <p className="text-[13px] text-[#646462] mt-0.5">{cat.description}</p>
+                    </div>
+                  </div>
+                  <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] mt-1.5 transition-transform ${isOpen ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {isOpen && (
+                  <>
+                    {items.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-[13px] text-[#646462] border-b border-[#e9eae6]">
+                        Aún no hay pautas. Haz clic en Nuevo para crear uno.
+                      </div>
+                    ) : (
+                      items.map(p => (
+                        <div
+                          key={p.id}
+                          onClick={() => openEdit(p)}
+                          className="group w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto_32px] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] text-left cursor-pointer"
+                        >
+                          <p className="text-[13.5px] font-medium text-[#1a1a1a] truncate">{p.title.trim() || 'Sin título'}</p>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
+                            {FIN_AUDIENCE_LABEL[p.audience] || 'Todos'}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
+                            {p.channels.length === 0 ? 'Todos los canales' : `${p.channels.length} canal${p.channels.length === 1 ? '' : 'es'}`}
+                          </span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${p.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
+                            {p.enabled ? 'Habilitado' : 'Pausado'}
+                          </span>
+                          <button
+                            onClick={(e) => handleDeletePauta(p, e)}
+                            title="Eliminar pauta"
+                            className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                        </div>
+                      ))
+                    )}
+                    <div className="px-4 py-2.5">
+                      <button
+                        onClick={() => startCreate(cat.id)}
+                        className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                        <span>Nuevo</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {editorOpen && editing && (
+        <FinPautaEditor
+          initial={editing}
+          onSave={handleSave}
+          onClose={() => setEditorOpen(false)}
+          onAction={(m, t) => toast.show(m, t)}
+          onToggleEnable={handleToggleEnable}
+        />
+      )}
+      {toast.node}
+    </div>
+  );
+}
+
+// ─── Generic Fin "Nuevo" modal (used by Atributos / Escalamiento / Procedimientos / Audiencias)
+// Matches the KnowledgeFolderModal visual style: 440px white card, h-9 inputs, h-8 rounded-full buttons.
+function FinSimpleCreateModal({
+  title,
+  description,
+  namePlaceholder,
+  descPlaceholder = 'Descripción opcional…',
+  submitLabel = 'Crear',
+  onClose,
+  onSubmit,
+}: {
+  title: string;
+  description?: string;
+  namePlaceholder?: string;
+  descPlaceholder?: string;
+  submitLabel?: string;
+  onClose: () => void;
+  onSubmit: (payload: { name: string; description: string }) => Promise<void> | void;
+}) {
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit() {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    try { await onSubmit({ name: trimmed, description: desc.trim() }); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">{title}</h3>
+        {description && <p className="text-[12.5px] text-[#646462] mb-4">{description}</p>}
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Nombre</label>
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && name.trim()) submit(); }}
+          placeholder={namePlaceholder}
+          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
+        />
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Descripción (opcional)</label>
+        <textarea
+          value={desc}
+          onChange={e => setDesc(e.target.value)}
+          placeholder={descPlaceholder}
+          className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+          <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? 'Guardando…' : submitLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Tiny inline toast used by the Fin sub-views below. Self-contained because
+// these views are mounted without an onAction prop.
+function useFinToast() {
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  function show(text: string, type: 'success' | 'error' = 'success') {
+    setMsg({ text, type });
+    window.setTimeout(() => setMsg(null), 3000);
+  }
+  const node = msg ? (
+    <div className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-lg shadow-lg text-[13px] font-medium ${msg.type === 'error' ? 'bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c]' : 'bg-[#1a1a1a] text-white'}`}>
+      {msg.text}
+    </div>
+  ) : null;
+  return { show, node };
+}
+
+// ─── Atributos: templates picker ─────────────────────────────────────────────
+const FIN_ATRIBUTO_TEMPLATES: Array<{
+  name: string;
+  description: string;
+  values: Array<{ name: string; description: string }>;
+}> = [
+  { name: 'Sentimiento', description: 'Captura el tono emocional del cliente', values: [
+    { name: 'Negative', description: 'El cliente expresa frustración o enfado.' },
+    { name: 'Neutral', description: 'El tono no es ni positivo ni negativo.' },
+    { name: 'Positive', description: 'El cliente expresa satisfacción o agradecimiento.' },
+  ]},
+  { name: 'Urgencia', description: 'Detecta cuán urgente es la consulta', values: [
+    { name: 'Baja', description: 'Sin presión inmediata.' },
+    { name: 'Media', description: 'Requiere respuesta en horas.' },
+    { name: 'Alta', description: 'Requiere atención inmediata.' },
+  ]},
+  { name: 'Complejidad', description: 'Evalúa el nivel técnico del problema', values: [
+    { name: 'Simple', description: 'Resoluble con un artículo o respuesta directa.' },
+    { name: 'Moderado', description: 'Requiere varios pasos o contexto.' },
+    { name: 'Complejo', description: 'Requiere intervención de un especialista.' },
+  ]},
+  { name: 'Intención', description: 'Tipo de petición', values: [
+    { name: 'Información', description: 'El cliente pregunta o consulta.' },
+    { name: 'Acción', description: 'El cliente pide ejecutar una operación.' },
+    { name: 'Reclamo', description: 'El cliente reporta un problema.' },
+    { name: 'Cancelación', description: 'El cliente quiere cancelar un servicio.' },
+  ]},
+  { name: 'Idioma del cliente', description: 'Idioma detectado', values: [
+    { name: 'Español', description: 'El cliente escribe en español.' },
+    { name: 'Inglés', description: 'El cliente escribe en inglés.' },
+    { name: 'Francés', description: 'El cliente escribe en francés.' },
+    { name: 'Portugués', description: 'El cliente escribe en portugués.' },
+  ]},
+  { name: 'Vencimiento de pedido', description: 'Estado de un pedido pendiente', values: [
+    { name: 'A tiempo', description: 'Llegará en la fecha prevista.' },
+    { name: 'En riesgo', description: 'Puede retrasarse.' },
+    { name: 'Vencido', description: 'Ya superó la fecha prevista.' },
+  ]},
+];
+
+function FinAtributoTemplatesPicker({
+  onPick,
+  onClose,
+}: {
+  onPick: (tpl: typeof FIN_ATRIBUTO_TEMPLATES[number]) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[760px] max-h-[80vh] rounded-[14px] bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex-shrink-0 h-[56px] px-5 border-b border-[#e9eae6] flex items-center justify-between">
+          <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Plantillas de atributos</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 grid grid-cols-2 gap-3">
+          {FIN_ATRIBUTO_TEMPLATES.map(tpl => (
+            <button
+              key={tpl.name}
+              onClick={() => onPick(tpl)}
+              className="text-left bg-white border border-[#e9eae6] rounded-[12px] p-4 hover:bg-[#f8f8f7]/40 hover:border-[#1a1a1a] transition-colors"
+            >
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">{tpl.name}</p>
+              <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">{tpl.description}</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {tpl.values.map(v => (
+                  <span key={v.name} className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11.5px] text-[#1a1a1a]">{v.name}</span>
+                ))}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FinAtributoEditor: full-drawer create/edit modal for one attribute ──────
+function FinAtributoEditor({
+  initial,
+  allAttributes,
+  onSave,
+  onDelete,
+  onClose,
+  onAction,
+  onToggleEnable,
+}: {
+  initial: FinAtributo;
+  allAttributes: FinAtributo[];
+  onSave: (next: FinAtributo) => void;
+  onDelete: () => void;
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onToggleEnable: (next: boolean) => void;
+}) {
+  // Treat as "new" when the resource has no name yet AND no values/conditions —
+  // this matches the startNewBlank() initialization in FinAtributosContent.
+  const isNew = !initial.name && initial.values.length === 0 && initial.conditions.length === 0;
+  void onDelete;
+  const [name, setName] = useState(initial.name);
+  const [description, setDescription] = useState(initial.description.slice(0, 255));
+  const [audience, setAudience] = useState<FinAtributo['audience']>(initial.audience);
+  const [reDetectOnClose, setReDetectOnClose] = useState(initial.reDetectOnClose);
+  const [values, setValues] = useState<FinAtributoValue[]>(initial.values);
+  const [conditions, setConditions] = useState<FinAtributoCondition[]>(initial.conditions);
+  const [enabled, setEnabled] = useState(initial.enabled);
+  const [visibility, setVisibility] = useState<'all' | 'admins' | 'me'>('all');
+  const [tab, setTab] = useState<'general' | 'values' | 'conditions'>('general');
+  const [valSearch, setValSearch] = useState('');
+  const [valueEditor, setValueEditor] = useState<null | { mode: 'create' } | { mode: 'edit'; id: string }>(null);
+  const [valueName, setValueName] = useState('');
+  const [valueDescription, setValueDescription] = useState('');
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const tag = (t?.tagName || '').toUpperCase();
+      const editing = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (!editing) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function save() {
+    const next: FinAtributo = {
+      ...initial,
+      name: name.trim(),
+      description,
+      audience,
+      reDetectOnClose,
+      values,
+      conditions,
+      enabled,
+    };
+    onSave(next);
+    onAction('Atributo guardado');
+  }
+  function handleToggleEnabled() {
+    const next = !enabled;
+    setEnabled(next);
+    onToggleEnable(next);
+  }
+  function openValueCreate() {
+    setValueName('');
+    setValueDescription('');
+    setValueEditor({ mode: 'create' });
+  }
+  function openValueEdit(id: string) {
+    const v = values.find(x => x.id === id);
+    if (!v) return;
+    setValueName(v.name);
+    setValueDescription(v.description);
+    setValueEditor({ mode: 'edit', id });
+  }
+  function saveValueEditor() {
+    if (!valueEditor) return;
+    if (valueEditor.mode === 'create') {
+      setValues(v => [...v, {
+        id: `val_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+        name: valueName,
+        description: valueDescription,
+      }]);
+    } else {
+      setValues(v => v.map(it => it.id === valueEditor.id ? { ...it, name: valueName, description: valueDescription } : it));
+    }
+    setValueEditor(null);
+  }
+  function removeValue(id: string) {
+    setValues(v => v.filter(it => it.id !== id));
+  }
+  function importCsv() {
+    const raw = window.prompt('Pega el CSV (formato: nombre,descripción por línea)');
+    if (!raw) return;
+    const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const next: FinAtributoValue[] = lines.map((l, i) => {
+      const idx = l.indexOf(',');
+      const n = idx >= 0 ? l.slice(0, idx).trim() : l;
+      const d = idx >= 0 ? l.slice(idx + 1).trim() : '';
+      return { id: `val_${Date.now()}_${i}`, name: n, description: d };
+    });
+    setValues(v => [...v, ...next]);
+    onAction(`${next.length} valores importados`);
+  }
+  function addCondition() {
+    setConditions(c => [...c, { id: `cond_${Date.now()}_${Math.floor(Math.random()*1000)}`, whenValue: '', thenAttributeId: '', usingValues: [] }]);
+  }
+  function updateCondition(id: string, patch: Partial<FinAtributoCondition>) {
+    setConditions(c => c.map(it => it.id === id ? { ...it, ...patch } : it));
+  }
+  function removeCondition(id: string) {
+    setConditions(c => c.filter(it => it.id !== id));
+  }
+
+  const filteredValues = useMemo(() => {
+    const q = valSearch.trim().toLowerCase();
+    if (!q) return values;
+    return values.filter(v => v.name.toLowerCase().includes(q) || v.description.toLowerCase().includes(q));
+  }, [values, valSearch]);
+  const remaining = Math.max(0, 255 - description.length);
+  const valueDescRemaining = Math.max(0, 2500 - valueDescription.length);
+  const valueNameRemaining = Math.max(0, 400 - valueName.length);
+  const otherAttributes = allAttributes.filter(a => a.id !== initial.id);
+
+  const titleText = isNew ? 'Nuevo atributo' : 'Editar atributo';
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className="absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        {valueEditor ? (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <button
+              onClick={() => setValueEditor(null)}
+              title="Volver"
+              className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 text-[13px]">
+              <span className="text-[#646462]">{titleText}</span>
+              <span className="text-[#a4a4a2]">›</span>
+              <span className="font-semibold text-[#1a1a1a] truncate">
+                {valueEditor.mode === 'create' ? 'Nuevo valor' : (valueName || 'Editar valor')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={saveValueEditor} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">{titleText}</h2>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                {enabled ? 'Habilitado' : 'Deshabilitado'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] flex items-center gap-2 hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                Prácticas recomendadas
+              </button>
+              {enabled ? (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#b91c1c] hover:bg-[#991b1b] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+                  Pausar
+                </button>
+              ) : (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#15803d] hover:bg-[#166534] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                  Habilitar
+                </button>
+              )}
+              <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Value editor sub-view (replaces tabs + body when active) */}
+        {valueEditor ? (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+            <div className="w-full px-8 py-8 flex flex-col gap-4">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Elige un nombre corto y claro que indique a Fin exactamente lo que representa este valor.</p>
+                <input
+                  value={valueName}
+                  onChange={e => { if (e.target.value.length <= 400) setValueName(e.target.value); }}
+                  placeholder="Ingresa un nombre, por ejemplo, Negativo"
+                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="mt-1.5 text-[11.5px] text-[#646462]">{valueNameRemaining} caracteres restantes</p>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describe qué representa este valor y cuándo Fin debería elegirlo. Incluye los temas de conversación a los que se aplica, las palabras clave comunes de los clientes o preguntas, y cuándo debe elegirse en lugar de otros valores en el atributo.</p>
+                <textarea
+                  value={valueDescription}
+                  onChange={e => { if (e.target.value.length <= 2500) setValueDescription(e.target.value); }}
+                  placeholder={'Ingrese una descripción, por ejemplo,\n\nEste valor cubre todas las conversaciones en las que un cliente expresa un sentimiento negativo. Ejemplos comunes incluyen:\n• Opinión negativa sobre un producto\n• Frustración con el servicio a clientes recibido\n\nPalabras clave: infeliz, frustrado, reembolso, devolución, decepcionado'}
+                  className="w-full min-h-[420px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="mt-1.5 text-[11.5px] text-[#646462]">{valueDescRemaining.toLocaleString('es-ES')} caracteres restantes</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+        <>
+        {/* Tab strip */}
+        <div className="flex-shrink-0 h-11 border-b border-[#e9eae6] px-5 flex items-end gap-2">
+          {([
+            { id: 'general', label: 'General' },
+            { id: 'values', label: `Valores (${values.length})` },
+            { id: 'conditions', label: `Condiciones (${conditions.length})` },
+          ] as const).map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`h-10 px-3 text-[13px] font-medium border-b-2 transition-colors ${
+                tab === t.id
+                  ? 'text-[#1a1a1a] border-[#1a1a1a]'
+                  : 'text-[#646462] border-transparent hover:text-[#1a1a1a]'
+              }`}
+            >{t.label}</button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+          {tab === 'general' && (
+            <div className="w-full px-8 py-8 flex flex-col gap-4">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Elige un nombre claro y descriptivo que indique a Fin el propósito de este atributo. Por ejemplo, si es para detectar la confianza del cliente, llámalo "Confianza".</p>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Introduzca un nombre..."
+                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describa brevemente el propósito de este atributo y cómo debe usarlo Fin.</p>
+                <textarea
+                  value={description}
+                  onChange={e => { if (e.target.value.length <= 255) setDescription(e.target.value); }}
+                  placeholder={'Ingrese una descripción, por ejemplo,\n\nEste atributo capta el tono emocional general que expresa un cliente en una conversación.'}
+                  className="w-full min-h-[140px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="mt-1.5 text-[11.5px] text-[#646462]">{remaining} caracteres restantes</p>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <div className="flex items-center gap-1.5 mb-4">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Ajustes de Fin</h3>
+                  <span className="w-4 h-4 rounded-full bg-[#1a1a1a] text-white text-[10px] flex items-center justify-center cursor-help" title="Configuración usada por Fin al detectar este atributo">?</span>
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Audiencia</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Elige para qué audiencias debe Fin detectar este atributo</p>
+                  </div>
+                  <Dropdown
+                    value={audience}
+                    items={FIN_AUDIENCE_ITEMS}
+                    onChange={v => setAudience(v as FinAtributo['audience'])}
+                  />
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2 border-t border-[#f1f1ee] mt-2 pt-3 relative">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Reglas de escalamiento</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Usa este atributo para activar el escalamiento</p>
+                  </div>
+                  {!isNew ? (
+                    <a href="#" className="text-[13px] font-medium text-[#1a1a1a] hover:underline flex items-center gap-1 whitespace-nowrap">
+                      {initial.escalationRules} reglas
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M5 4l6 4-6 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center text-[12px] bg-[#1a1a1a]/90 text-white px-2.5 py-1 rounded-md whitespace-nowrap">El atributo debe ser guardado</span>
+                  )}
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2 border-t border-[#f1f1ee] mt-2 pt-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Volver a detectar al cerrar</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5 leading-[16px]">Vuelva a ejecutar la detección cuando un miembro del equipo<br/>o un flujo de trabajo cierre la conversación</p>
+                  </div>
+                  <button
+                    onClick={() => setReDetectOnClose(v => !v)}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${reDetectOnClose ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${reDetectOnClose ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <div className="flex items-center gap-1.5 mb-4">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Ajustes de compañeros de equipo</h3>
+                  <span className="w-4 h-4 rounded-full bg-[#1a1a1a] text-white text-[10px] flex items-center justify-center cursor-help" title="Cómo ven los compañeros de equipo este atributo en Inbox">?</span>
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Visibilidad de datos</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Quién puede ver este atributo en Inbox</p>
+                  </div>
+                  <Dropdown
+                    value={visibility}
+                    items={[
+                      { value: 'all', label: 'Todos' },
+                      { value: 'admins', label: 'Solo administradores' },
+                      { value: 'me', label: 'Sólo yo' },
+                    ]}
+                    onChange={v => setVisibility(v as 'all' | 'admins' | 'me')}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'values' && (
+            values.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center">
+                <h3 className="text-[18px] font-semibold text-[#1a1a1a]">Agregar valores</h3>
+                <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[520px]">
+                  Define los valores que Fin debe seleccionar al detectar este atributo. Por ejemplo, para detectar la confianza, asigna el atributo "Confianza" y crea 3 valores: Positivo, Neutral y Negativo.
+                </p>
+                <div className="mt-6 mb-6 w-[260px] h-[140px] rounded-[12px] border border-[#e9eae6] bg-white shadow-sm relative overflow-hidden">
+                  <div className="absolute inset-3 flex flex-col gap-1.5">
+                    <div className="h-2 bg-[#f1f1ee] rounded w-full"/>
+                    <div className="h-2 bg-[#f1f1ee] rounded w-3/4"/>
+                  </div>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 w-[140px] bg-white border border-[#e9eae6] rounded-[8px] shadow-md p-2 text-left">
+                    <p className="text-[10px] font-bold text-[#1a1a1a]">Fin detected Sentiment as Positive</p>
+                    <p className="text-[9px] text-[#646462] mt-0.5 leading-[12px]">The user shared appreciation for a quick resolution.</p>
+                  </div>
+                  <span className="absolute left-3 bottom-3 w-2 h-2 rounded-full bg-[#0fb87f]"/>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={openValueCreate} className="h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Nuevo valor
+                  </button>
+                  <button onClick={importCsv} className="h-9 px-4 rounded-full bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-2 hover:bg-[#f8f8f7]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 3v8M5 6l3-3 3 3M3 13h10"/></svg>
+                    Cargar CSV
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full px-8 py-6 flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 max-w-[360px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+                    <input
+                      type="text"
+                      value={valSearch}
+                      onChange={e => setValSearch(e.target.value)}
+                      placeholder="Buscar valor"
+                      className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+                    />
+                  </div>
+                  <button title="Ordenar" className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 3v10M4 13l-2-2M4 13l2-2M11 13V3M11 3l2 2M11 3l-2 2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                  <div className="flex-1" />
+                  <button onClick={importCsv} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Cargar CSV
+                  </button>
+                  <button onClick={openValueCreate} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Nuevo valor
+                  </button>
+                </div>
+                <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                  <div className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] bg-[#f8f8f7]/40 text-[12px] font-semibold text-[#646462]">
+                    <div></div>
+                    <div>Nombre</div>
+                    <div>Descripción</div>
+                    <div></div>
+                  </div>
+                  {filteredValues.length === 0 ? (
+                    <div className="px-4 py-10 text-center text-[13px] text-[#646462]">Sin coincidencias para «{valSearch}».</div>
+                  ) : filteredValues.map(v => (
+                    <div
+                      key={v.id}
+                      className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] last:border-b-0 items-center group hover:bg-[#f8f8f7]/30 cursor-pointer"
+                      onClick={() => openValueEdit(v.id)}
+                    >
+                      <span className="text-[#a4a4a2] cursor-grab" title="Arrastrar" onClick={e => e.stopPropagation()}>⋮⋮</span>
+                      <span className="text-[13px] text-[#1a1a1a] truncate">{v.name || <span className="text-[#a4a4a2]">Sin nombre</span>}</span>
+                      <span className="text-[13px] text-[#646462] truncate">{v.description}</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); removeValue(v.id); }}
+                        title="Eliminar"
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          )}
+
+          {tab === 'conditions' && (
+            <div className="w-full px-8 py-6 flex flex-col gap-4">
+              <p className="text-[13px] text-[#646462] leading-[20px] max-w-[760px]">
+                Configura reglas condicionales para controlar cuándo Fin detecta un atributo. Una vez que se han definido las condiciones, Fin espera a que se cumplan antes de intentar la detección.
+              </p>
+              {conditions.length === 0 ? (
+                <div className="bg-white border border-dashed border-[#e9eae6] rounded-[12px] px-4 py-10 text-center text-[13px] text-[#646462]">
+                  Aún no hay condiciones. Pulsa «Añadir condición» para crear una.
+                </div>
+              ) : conditions.map(cond => {
+                const thenAttr = otherAttributes.find(a => a.id === cond.thenAttributeId);
+                const thenValueItems: DropdownItem[] = thenAttr
+                  ? [
+                      { value: '__all', label: 'Todos los valores' },
+                      ...thenAttr.values.map(v => ({ value: v.id, label: `${cond.usingValues.includes(v.id) ? '✓ ' : ''}${v.name || 'Sin nombre'}` })),
+                    ]
+                  : [{ value: '__none', label: 'Selecciona primero un atributo', disabled: true }];
+                const thenValueLabel = cond.usingValues.length === 0
+                  ? 'Todos los valores'
+                  : `${cond.usingValues.length} valor${cond.usingValues.length === 1 ? '' : 'es'}`;
+                return (
+                  <div key={cond.id} className="bg-white border border-[#e9eae6] rounded-[12px] p-4 grid grid-cols-[1fr_1fr_1fr_32px] gap-3 items-end">
+                    <div>
+                      <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Si el atributo se detecta como...</label>
+                      <Dropdown
+                        value={cond.whenValue}
+                        items={values.length === 0
+                          ? [{ value: '__none', label: 'Añade valores primero', disabled: true }]
+                          : values.map(v => ({ value: v.id, label: v.name || 'Sin nombre' }))}
+                        onChange={v => updateCondition(cond.id, { whenValue: v })}
+                        triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Fin también detectará...</label>
+                      <Dropdown
+                        value={cond.thenAttributeId}
+                        items={otherAttributes.length === 0
+                          ? [{ value: '__none', label: 'No hay otros atributos', disabled: true }]
+                          : otherAttributes.map(a => ({ value: a.id, label: a.name || 'Sin nombre' }))}
+                        onChange={v => updateCondition(cond.id, { thenAttributeId: v, usingValues: [] })}
+                        triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Utilizando valores...</label>
+                      <Dropdown
+                        value=""
+                        items={thenValueItems}
+                        onChange={v => {
+                          if (v === '__all') updateCondition(cond.id, { usingValues: [] });
+                          else if (v !== '__none') {
+                            const cur = cond.usingValues;
+                            updateCondition(cond.id, {
+                              usingValues: cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v],
+                            });
+                          }
+                        }}
+                        triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                        renderTrigger={(_, open) => (
+                          <>
+                            <span className="truncate">{thenValueLabel}</span>
+                            <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+                          </>
+                        )}
+                      />
+                    </div>
+                    <button
+                      onClick={() => removeCondition(cond.id)}
+                      title="Eliminar"
+                      className="w-9 h-9 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  </div>
+                );
+              })}
+              <div>
+                <button onClick={addCondition} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                  Añadir condición
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Atributos (Figma 1:5966) ────────────────────────────────────
+function FinAtributosContent() {
+  const atributos = useFinResource<FinAtributo>('atributos', FIN_SEED_ATRIBUTOS);
+  const toast = useFinToast();
+  const [editing, setEditing] = useState<FinAtributo | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  function openEdit(a: FinAtributo) {
+    setEditing(a);
+    setEditorOpen(true);
+  }
+  function startNewBlank() {
+    const created = atributos.create({
+      name: '',
+      description: '',
+      audience: 'all',
+      escalationRules: 0,
+      reDetectOnClose: false,
+      values: [],
+      conditions: [],
+      enabled: false,
+    });
+    setEditing(created);
+    setEditorOpen(true);
+  }
+  function startNewFromTemplate(tpl: typeof FIN_ATRIBUTO_TEMPLATES[number]) {
+    const created = atributos.create({
+      name: tpl.name,
+      description: tpl.description,
+      audience: 'all',
+      escalationRules: 0,
+      reDetectOnClose: false,
+      values: tpl.values.map((v, i) => ({
+        id: `val_${Date.now()}_${i}`,
+        name: v.name,
+        description: v.description,
+      })),
+      conditions: [],
+      enabled: false,
+    });
+    setShowTemplates(false);
+    setEditing(created);
+    setEditorOpen(true);
+  }
+  function handleSave(next: FinAtributo) {
+    atributos.update(next.id, next);
+    setEditing(next);
+  }
+  function handleToggleEnable(next: boolean) {
+    if (!editing) return;
+    atributos.update(editing.id, { enabled: next });
+    setEditing({ ...editing, enabled: next });
+    toast.show(next ? 'Atributo habilitado' : 'Atributo pausado');
+  }
+  function handleDelete() {
+    if (!editing) return;
+    if (!window.confirm('¿Eliminar este atributo?')) return;
+    atributos.remove(editing.id);
+    setEditorOpen(false);
+    setEditing(null);
+    toast.show('Atributo eliminado');
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero card */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 py-6 flex gap-6 items-start">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a] leading-[28px] tracking-[-0.2px] max-w-[440px]">
+              Entrena a Fin para detectar atributos clave en cada conversación
+            </h1>
+            <p className="mt-3 text-[13px] text-[#646462] leading-[20px] max-w-[560px]">
+              Fin puede detectar los atributos que tú defines, como el tipo de problema, la actitud o la urgencia, en cada conversación. Estos atributos potencian el enrutamiento, el escalamiento y los informes, ayudan a los clientes a llegar al equipo adecuado más rápido y proporcionan a tu equipo datos fiables y estructurados sin etiquetas manuales ni flujos de trabajo rígidos.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-[#1a1a1a]">
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Creación de atributos de Fin</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Cómo usar los atributos Fin</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 2.5h8v11l-4-2-4 2v-11z"/></svg>
+                <span>Prácticas recomendadas</span>
+              </a>
+            </div>
+          </div>
+          <div className="relative w-[300px] h-[144px] rounded-[12px] overflow-hidden border border-[#e9eae6] flex-shrink-0">
+            <img src={`${FIGMA_CDN}/5daaa7c8-1f85-48bc-ae11-1d0568784bcf`} alt="Categorías de Fin" className="absolute h-[103.89%] left-0 max-w-none top-[-1.95%] w-full" />
+          </div>
+        </div>
+      </div>
+
+      {/* Atributos section header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11"/></svg>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Atributos</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+              <span>Aprender</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <button onClick={() => setShowTemplates(true)} title="Plantillas" className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
+            </button>
+            <button onClick={startNewBlank} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+              <span>Nuevo</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Hierarchical attribute list */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 pt-4 pb-8">
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-4 px-2 pb-3 border-b border-[#e9eae6] text-[13px] text-[#646462]">
+            <div>Atributo</div>
+            <div>Estado</div>
+            <div>Audiencia</div>
+            <div>Valores</div>
+            <div></div>
+          </div>
+          {atributos.items.length === 0 ? (
+            <div className="px-2 py-10 text-center text-[13px] text-[#646462]">Aún no hay atributos. Pulsa «Nuevo» para crear uno.</div>
+          ) : atributos.items.map(a => {
+            const open = !!expanded[a.id];
+            return (
+              <Fragment key={a.id}>
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-4 px-2 py-3 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]/40 cursor-pointer" onClick={() => openEdit(a)}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <button
+                      onClick={e => { e.stopPropagation(); setExpanded(s => ({ ...s, [a.id]: !open })); }}
+                      className="w-5 h-5 rounded hover:bg-[#ededea] flex items-center justify-center flex-shrink-0"
+                    >
+                      <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${open ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                    </button>
+                    <span className="font-medium truncate">{a.name.trim() || 'Sin nombre'}</span>
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462] flex-shrink-0">{a.values.length}</span>
+                  </div>
+                  <div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${a.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
+                      {a.enabled ? 'Habilitado' : 'Deshabilitado'}
+                    </span>
+                  </div>
+                  <div className="text-[#646462]">{FIN_AUDIENCE_LABEL[a.audience] || 'Todos'}</div>
+                  <div className="text-[#646462]">{a.values.length}</div>
+                  <div className="flex justify-end">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+                  </div>
+                </div>
+                {open && a.values.map(v => (
+                  <div key={v.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-4 px-2 py-2.5 border-b border-[#e9eae6] items-center text-[13px] text-[#646462] bg-[#fafafa]">
+                    <div className="flex items-center gap-2 pl-7">
+                      <span className="text-[#a4a4a2]">↳</span>
+                      <span>{v.name || 'Sin nombre'}</span>
+                    </div>
+                    <div className="text-[#a4a4a2]">—</div>
+                    <div className="text-[#a4a4a2] truncate">{v.description || '—'}</div>
+                    <div className="text-[#a4a4a2]">—</div>
+                    <div></div>
+                  </div>
+                ))}
+                {open && a.values.length === 0 && (
+                  <div className="px-2 py-3 pl-9 border-b border-[#e9eae6] text-[12.5px] text-[#a4a4a2] bg-[#fafafa]">
+                    Aún no hay valores. Edita el atributo para añadir alguno.
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      {showTemplates && (
+        <FinAtributoTemplatesPicker
+          onPick={startNewFromTemplate}
+          onClose={() => setShowTemplates(false)}
+        />
+      )}
+      {editorOpen && editing && (
+        <FinAtributoEditor
+          initial={editing}
+          allAttributes={atributos.items}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onClose={() => setEditorOpen(false)}
+          onAction={(m, t) => toast.show(m, t)}
+          onToggleEnable={handleToggleEnable}
+        />
+      )}
+      {toast.node}
+    </div>
+  );
+}
+
+// ─── Escalation rule types + field/operator catalog ─────────────────────────
+type FinEscalationOperator =
+  | 'is' | 'is_not' | 'starts_with' | 'ends_with' | 'contains'
+  | 'contains_exact_word' | 'does_not_contain' | 'is_unknown' | 'has_any_value';
+
+type FinEscalationCondition = {
+  id: string;
+  field: string;
+  operator: FinEscalationOperator;
+  value: string;
+};
+
+type FinEscalationRule = {
+  id: string;
+  title: string;
+  enabled: boolean;
+  audience: 'all' | 'users' | 'leads' | 'visitors';
+  channels: string[];
+  conditions: FinEscalationCondition[];
+  metrics?: { used?: number; resolved?: number; routed?: number };
+};
+
+const FIN_SEED_ESCALATION_RULES: FinEscalationRule[] = [
+  {
+    id: 'seed_esc_1', title: 'Escalar cuando el cliente está muy frustrado',
+    enabled: true, audience: 'all', channels: [],
+    conditions: [{ id: 'c1', field: 'finAttribute.Sentimiento', operator: 'is', value: 'Negativo' }],
+    metrics: { used: 23, routed: 21 },
+  },
+  {
+    id: 'seed_esc_2', title: 'Escalar disputas de facturación a Finanzas',
+    enabled: true, audience: 'users', channels: ['chat', 'email'],
+    conditions: [{ id: 'c2', field: 'conversation.category', operator: 'is', value: 'billing' }],
+    metrics: { used: 11, routed: 11 },
+  },
+  {
+    id: 'seed_esc_3', title: 'Escalar urgencias críticas al equipo de guardia',
+    enabled: false, audience: 'all', channels: [],
+    conditions: [{ id: 'c3', field: 'finAttribute.Urgencia', operator: 'is', value: 'Alta' }],
+    metrics: { used: 0, routed: 0 },
+  },
+];
+
+const FIN_ESC_FIELD_ICON_PERSON = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13c1-2.5 3-3.5 5-3.5s4 1 5 3.5"/></svg>
+);
+const FIN_ESC_FIELD_ICON_PEOPLE = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><circle cx="11.5" cy="6.5" r="1.8"/><path d="M2 13c.7-2 2.3-3 4-3s3.3 1 4 3M9.5 13c.4-1.5 1.5-2.3 3-2.3s2.6.8 3 2.3"/></svg>
+);
+const FIN_ESC_FIELD_ICON_ATTR = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M3 8h10M3 11.5h6" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_DATA = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M3 8h10M8 3c1.5 1.5 2.3 3.2 2.3 5S9.5 11.5 8 13c-1.5-1.5-2.3-3.2-2.3-5S6.5 4.5 8 3z"/></svg>
+);
+const FIN_ESC_FIELD_ICON_TRANSFER = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 6h9M9 3l3 3-3 3M13 10H4M7 13l-3-3 3-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_TAG = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 7.5L8 2h5.5V7.5L8 13l-5.5-5.5z" strokeLinejoin="round"/><circle cx="10.5" cy="5" r="0.8" fill="currentColor"/></svg>
+);
+const FIN_ESC_FIELD_ICON_CAL = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.2"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_MAIL = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4.5 5.5-4.5"/></svg>
+);
+const FIN_ESC_FIELD_ICON_LINK = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M6 9.5L9.5 6M5.5 10.5l-1 1a2.1 2.1 0 11-3-3l2.5-2.5M10.5 5.5l1-1a2.1 2.1 0 113 3l-2.5 2.5" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_PAPERCLIP = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M11 5l-5 5a2 2 0 102.8 2.8l5-5a3.5 3.5 0 10-5-5l-5.4 5.4" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_GLOBE = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M2.5 8h11M8 2.5a8 8 0 010 11M8 2.5a8 8 0 000 11"/></svg>
+);
+const FIN_ESC_FIELD_ICON_PHONE = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M5 2.5h6a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1zM7 12h2" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_FIN = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 1l1.5 3.7L13 6l-3 2.6L11 13 8 11 5 13l1-4.4L3 6l3.5-1.3z"/></svg>
+);
+const FIN_ESC_FIELD_ICON_CHAT = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 4.5a1.5 1.5 0 011.5-1.5h8a1.5 1.5 0 011.5 1.5v5a1.5 1.5 0 01-1.5 1.5H6l-3 2.5V4.5z"/></svg>
+);
+const FIN_ESC_FIELD_ICON_BOOK = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+);
+const FIN_ESC_FIELD_ICON_BUILDING = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="0.6"/><path d="M5.5 5h2M8.5 5h2M5.5 7.5h2M8.5 7.5h2M5.5 10h2M8.5 10h2"/></svg>
+);
+
+type FinEscField = { key: string; label: string; status?: string; icon: ReactNode };
+
+const FIN_ESCALATION_FIELDS: { conversation: FinEscField[]; finAttributes: FinEscField[]; personData: FinEscField[]; companyData: FinEscField[]; messageData: FinEscField[]; conversationData: FinEscField[] } = {
+  conversation: [
+    { key: 'teammate_assigned', label: 'Teammate assigned', icon: FIN_ESC_FIELD_ICON_PERSON },
+    { key: 'team_assigned',     label: 'Team assigned',     icon: FIN_ESC_FIELD_ICON_PEOPLE },
+  ],
+  finAttributes: [
+    { key: 'attr_complexity', label: 'Complexity', status: 'Deshabilitado', icon: FIN_ESC_FIELD_ICON_ATTR },
+    { key: 'attr_sentiment',  label: 'Sentiment',  status: 'Deshabilitado', icon: FIN_ESC_FIELD_ICON_ATTR },
+    { key: 'attr_urgency',    label: 'Urgency',    status: 'Deshabilitado', icon: FIN_ESC_FIELD_ICON_ATTR },
+  ],
+  personData: [
+    { key: 'pd_current_channel',      label: 'Current channel',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_initial_channel',      label: 'Initial channel',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_name',                 label: 'Name',                     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_account',              label: 'Account',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_owner',                label: 'Owner',                    icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_lead_category',        label: 'Lead category',            icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_qualification_status', label: 'Qualification status',     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_conversation_rating',  label: 'Conversation Rating',      icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_email',                label: 'Email',                    icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_email_domain',         label: 'Email domain',             icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_phone',                label: 'Phone',                    icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_user_id',              label: 'User ID',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_first_seen',           label: 'First Seen',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_signed_up',            label: 'Signed up',                icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_seen',            label: 'Last seen',                icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_contacted',       label: 'Last contacted',           icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_heard_from',      label: 'Last heard from',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_opened_email',    label: 'Last opened email',        icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_clicked_link',    label: 'Last clicked on link in email', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_web_sessions',         label: 'Web sessions',             icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_country',              label: 'Country',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_region',               label: 'Region',                   icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_city',                 label: 'City',                     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_timezone',             label: 'Timezone',                 icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_continent_code',       label: 'Continent code',           icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_browser_language',     label: 'Browser Language',         icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_language_override',    label: 'Language Override',        icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_browser',              label: 'Browser',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_browser_version',      label: 'Browser Version',          icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_os',                   label: 'OS',                       icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_segment',              label: 'Segment',                  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_person_tag',           label: 'Person tag',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_unsubscribed',         label: 'Unsubscribed from Emails', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_marked_spam',          label: 'Marked email as spam',     icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_hard_bounced',         label: 'Has hard bounced',         icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_campaign',         label: 'UTM Campaign',             icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_content',          label: 'UTM Content',              icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_medium',           label: 'UTM Medium',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_source',           label: 'UTM Source',               icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_utm_term',             label: 'UTM Term',                 icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_referral_url',         label: 'Referral URL',             icon: FIN_ESC_FIELD_ICON_GLOBE },
+    { key: 'pd_sub_optouts',          label: 'Subscription type opt-outs', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_sub_optins',           label: 'Subscription type opt-ins',  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_survey',          label: 'Last Survey received',     icon: FIN_ESC_FIELD_ICON_CAL },
+    { key: 'pd_whatsapp_number',      label: 'WhatsApp number',          icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'pd_slack_email',          label: 'Slack Email',              icon: FIN_ESC_FIELD_ICON_TRANSFER },
+  ],
+  companyData: [
+    { key: 'co_name',           label: 'Company name',         icon: FIN_ESC_FIELD_ICON_BUILDING },
+    { key: 'co_id',             label: 'Company ID',           icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'co_last_seen',      label: 'Company last seen',    icon: FIN_ESC_FIELD_ICON_CAL },
+    { key: 'co_created_at',     label: 'Company created at',   icon: FIN_ESC_FIELD_ICON_CAL },
+    { key: 'co_people',         label: 'People',               icon: FIN_ESC_FIELD_ICON_PEOPLE },
+    { key: 'co_web_sessions',   label: 'Company web sessions', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'co_plan',           label: 'Plan',                 icon: FIN_ESC_FIELD_ICON_TAG },
+    { key: 'co_monthly_spend',  label: 'Monthly Spend',        icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'co_segment',        label: 'Company Segment',      icon: FIN_ESC_FIELD_ICON_TAG },
+    { key: 'co_tag',            label: 'Company tag',          icon: FIN_ESC_FIELD_ICON_TAG },
+    { key: 'co_size',           label: 'Company size',         icon: FIN_ESC_FIELD_ICON_PEOPLE },
+    { key: 'co_industry',       label: 'Company industry',     icon: FIN_ESC_FIELD_ICON_BUILDING },
+    { key: 'co_website',        label: 'Company website',      icon: FIN_ESC_FIELD_ICON_LINK },
+  ],
+  messageData: [
+    { key: 'msg_detected_lang',     label: 'Idioma detectado',                    icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_content',           label: 'Contenido del mensaje',               icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_has_attachments',   label: 'El mensaje tiene archivos adjuntos',  icon: FIN_ESC_FIELD_ICON_PAPERCLIP },
+    { key: 'msg_page_url',          label: 'URL de la página',                    icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_subject',     label: 'Asunto del correo electrónico',       icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_recipient',   label: 'Destinatario del correo electrónico', icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_to',          label: 'Correo electrónico para',             icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_cc',          label: 'Copia del correo electrónico',        icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_bcc',         label: 'Correo electrónico Cco',              icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_from_android',      label: 'Desde Android',                       icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_from_ios',          label: 'Desde iOS',                           icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_from_email',        label: 'Desde el correo electrónico',         icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_from_facebook',     label: 'Desde Facebook',                      icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_whatsapp',     label: 'Desde WhatsApp',                      icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_twitter',      label: 'Desde Twitter',                       icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_instagram',    label: 'Desde Instagram',                     icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_phoneswitch',  label: 'Desde Phone Switch',                  icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_from_sms',          label: 'Desde SMS',                           icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_whatsapp_business', label: 'Número de WhatsApp Business',         icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_instagram_account', label: 'Cuenta de Instagram para empresas',   icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_started_via_inbox', label: 'Started via Inbox',                   icon: FIN_ESC_FIELD_ICON_CHAT },
+  ],
+  conversationData: [
+    { key: 'cd_smart_suggestion',     label: 'Smart Suggestion Group',           icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_sdr_success',          label: 'SDR Success Counted',              icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_imported_standalone',  label: 'Imported via standalone',          icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_language',             label: 'Language',                         icon: FIN_ESC_FIELD_ICON_GLOBE },
+    { key: 'cd_auto_translated',      label: 'Auto-translated',                  icon: FIN_ESC_FIELD_ICON_GLOBE },
+    { key: 'cd_external_id',          label: 'External ID',                      icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_fin_preview',          label: 'Fin AI Agent: Preview',            icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_preview_admin',        label: 'Preview Admin ID',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_tone',              label: 'AI Tone of Voice',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_answer_length',     label: 'AI Answer Length',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_pronoun',           label: 'AI Pronoun Formality',             icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_title',             label: 'AI Title',                         icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_workflow_preview',     label: 'Workflow: Preview',                icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_fin_resolution',       label: 'Fin AI Agent resolution state',    icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_pending_reason',   label: 'Fin AI Agent: Pending reason',     icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_sales_outcome',    label: 'Fin Sales outcome',                icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_awaiting_team',    label: 'Fin awaiting teammate input',      icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_activated',        label: 'Fin AI Agent activated',           icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_last_outbound_call',   label: 'Last outbound call state',         icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_workspace_phone',      label: 'Workspace phone number',           icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_workspace_sms',        label: 'Workspace SMS phone number',       icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_recording_consent',    label: 'Recording consent',                icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_merged',               label: 'Merged',                           icon: FIN_ESC_FIELD_ICON_PEOPLE },
+    { key: 'cd_fin_action_used',      label: 'Fin AI Agent: Action used in resolution',     icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_image_used',       label: 'Fin AI Agent: Image used in resolution',      icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_procedure_used',   label: 'Fin AI Agent: Procedure or task used',        icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_issue_summary',     label: 'AI Issue summary',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_query_type',           label: 'Query Type',                       icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_escalation_reason',label: 'Fin Escalation Reason',            icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_configuration',    label: 'Fin AI Agent: Configuration used', icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_ecom_involved',    label: 'Fin for Ecommerce involved',       icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_ecom_product_a',   label: 'Fin for Ecommerce: Product asked', icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_ecom_product_b',   label: 'Fin for Ecommerce: Product issue', icon: FIN_ESC_FIELD_ICON_FIN },
+  ],
+};
+
+const FIN_ESCALATION_OPERATORS: Array<{ value: FinEscalationOperator; label: string; takesValue: boolean }> = [
+  { value: 'is',                    label: 'is',                    takesValue: true  },
+  { value: 'is_not',                label: 'is not',                takesValue: true  },
+  { value: 'starts_with',           label: 'starts with',           takesValue: true  },
+  { value: 'ends_with',             label: 'ends with',             takesValue: true  },
+  { value: 'contains',              label: 'contains',              takesValue: true  },
+  { value: 'contains_exact_word',   label: 'contains exact word',   takesValue: true  },
+  { value: 'does_not_contain',      label: 'does not contain',      takesValue: true  },
+  { value: 'is_unknown',            label: 'is unknown',            takesValue: false },
+  { value: 'has_any_value',         label: 'has any value',         takesValue: false },
+];
+
+function findFinEscField(key: string): FinEscField | undefined {
+  return (
+    FIN_ESCALATION_FIELDS.conversation.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.finAttributes.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.personData.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.companyData.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.messageData.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.conversationData.find(f => f.key === key)
+  );
+}
+
+function FinFieldPickerPopover({
+  onPick,
+  onClose,
+}: {
+  onPick: (key: string) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState('');
+  const popRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    function onClick(e: MouseEvent) {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClick);
+    };
+  }, [onClose]);
+  const lower = q.trim().toLowerCase();
+  const filt = (list: FinEscField[]) =>
+    !lower ? list : list.filter(f => f.label.toLowerCase().includes(lower));
+  const conversation = filt(FIN_ESCALATION_FIELDS.conversation);
+  const finAttributes = filt(FIN_ESCALATION_FIELDS.finAttributes);
+  const personData = filt(FIN_ESCALATION_FIELDS.personData);
+  const companyData = filt(FIN_ESCALATION_FIELDS.companyData);
+  const messageData = filt(FIN_ESCALATION_FIELDS.messageData);
+  const conversationData = filt(FIN_ESCALATION_FIELDS.conversationData);
+  return (
+    <div
+      ref={popRef}
+      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[340px] max-h-[420px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] flex flex-col overflow-hidden"
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="flex-shrink-0 p-2 border-b border-[#e9eae6]">
+        <div className="h-8 rounded-[6px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-2.5 gap-2">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+          <input
+            autoFocus
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search data..."
+            className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+          />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto py-1">
+        {conversation.length > 0 && (
+          <div className="py-1">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Conversation</div>
+            {conversation.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {finAttributes.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Fin Attributes</div>
+            {finAttributes.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+                {f.status && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462] flex-shrink-0">{f.status}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+        {personData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Person data</div>
+            {personData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {companyData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Company data</div>
+            {companyData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {messageData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Message data</div>
+            {messageData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {conversationData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Conversation data</div>
+            {conversationData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {conversation.length === 0 && finAttributes.length === 0 && personData.length === 0 && companyData.length === 0 && messageData.length === 0 && conversationData.length === 0 && (
+          <div className="px-3 py-6 text-center text-[12.5px] text-[#646462]">No hay coincidencias</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FinOperatorPickerPopover({
+  value,
+  onPick,
+  onClose,
+}: {
+  value: FinEscalationOperator;
+  onPick: (op: FinEscalationOperator) => void;
+  onClose: () => void;
+}) {
+  const popRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    function onClick(e: MouseEvent) {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onClick);
+    };
+  }, [onClose]);
+  return (
+    <div
+      ref={popRef}
+      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[220px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1.5"
+      onClick={e => e.stopPropagation()}
+    >
+      {FIN_ESCALATION_OPERATORS.map(op => {
+        const selected = op.value === value;
+        return (
+          <button
+            key={op.value}
+            onClick={() => { onPick(op.value); }}
+            className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          >
+            <span className={`w-3.5 h-3.5 rounded-full border flex-shrink-0 flex items-center justify-center ${selected ? 'border-[#1a1a1a]' : 'border-[#a4a4a2]'}`}>
+              {selected && <span className="w-2 h-2 rounded-full bg-[#1a1a1a]" />}
+            </span>
+            <span className="flex-1 truncate">{op.label}</span>
+          </button>
+        );
+      })}
+      <div className="border-t border-[#f1f1ee] mt-1 pt-1 px-3 pb-1 text-right">
+        <button onClick={onClose} className="text-[12.5px] font-semibold text-[#ed621d] hover:underline">Done</button>
+      </div>
+    </div>
+  );
+}
+
+function FinEscalationChannelsDropdown({
+  channels,
+  onChange,
+}: {
+  channels: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const isAll = channels.length === 0;
+  const label = isAll ? 'Todos los canales' : channels.map(c => {
+    if (c === 'chat') return 'Chat';
+    if (c === 'email') return 'Correo electrónico';
+    if (c === 'voice') return 'Voz';
+    return c;
+  }).join(', ');
+  const items: DropdownItem[] = [
+    { value: 'all',   label: `${isAll ? '✓ ' : ''}Todos los canales` },
+    { value: 'chat',  label: `${channels.includes('chat') ? '✓ ' : ''}Chat` },
+    { value: 'email', label: `${channels.includes('email') ? '✓ ' : ''}Correo electrónico` },
+    { value: 'voice', label: `${channels.includes('voice') ? '✓ ' : ''}Voz` },
+  ];
+  return (
+    <Dropdown
+      value=""
+      items={items}
+      onChange={v => {
+        if (v === 'all') onChange([]);
+        else onChange(channels.includes(v) ? channels.filter(c => c !== v) : [...channels, v]);
+      }}
+      renderTrigger={(_, open) => (
+        <>
+          <span className="truncate">{label}</span>
+          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+        </>
+      )}
+      triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+    />
+  );
+}
+
+function FinEscalationRuleRow({
+  rule,
+  startExpanded,
+  onSave,
+  onDelete,
+  onToggleEnabled,
+}: {
+  rule: FinEscalationRule;
+  startExpanded?: boolean;
+  onSave: (next: FinEscalationRule) => void;
+  onDelete: () => void;
+  onToggleEnabled: () => void;
+}) {
+  const [expanded, setExpanded] = useState<boolean>(!!startExpanded);
+  const [draft, setDraft] = useState<FinEscalationRule>(rule);
+  const [fieldPickerFor, setFieldPickerFor] = useState<string | null>(null);
+  const [opPickerFor, setOpPickerFor] = useState<string | null>(null);
+
+  useEffect(() => { if (!expanded) setDraft(rule); }, [rule, expanded]);
+
+  function patchCondition(id: string, patch: Partial<FinEscalationCondition>) {
+    setDraft(d => ({ ...d, conditions: d.conditions.map(c => c.id === id ? { ...c, ...patch } : c) }));
+  }
+  function addCondition() {
+    setDraft(d => ({
+      ...d,
+      conditions: [...d.conditions, { id: `cond_${Date.now()}_${Math.floor(Math.random()*1000)}`, field: '', operator: 'is', value: '' }],
+    }));
+  }
+  function removeCondition(id: string) {
+    setDraft(d => ({ ...d, conditions: d.conditions.filter(c => c.id !== id) }));
+  }
+  function save() { onSave(draft); setExpanded(false); }
+  function cancel() { setDraft(rule); setExpanded(false); }
+
+  const audienceLabel = FIN_AUDIENCE_LABEL[rule.audience] || 'Todos';
+  const channelsLabel = rule.channels.length === 0 ? 'Todos los canales' : `${rule.channels.length} canal${rule.channels.length === 1 ? '' : 'es'}`;
+  const used = rule.metrics?.used ?? 0;
+  const resolved = rule.metrics?.resolved;
+  const routed = rule.metrics?.routed;
+
+  if (!expanded) {
+    return (
+      <div className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] last:border-b-0 cursor-pointer" onClick={() => setExpanded(true)}>
+        <div className="text-left min-w-0">
+          <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate">{rule.title || 'Ingresa un título'}</p>
+          <p className="text-[12px] text-[#646462] mt-0.5 truncate">
+            Usado: {used} · Resuelto: {resolved ?? '–'} · Escalado: {routed ?? '–'}
+          </p>
+        </div>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${rule.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{rule.enabled ? 'Habilitado' : 'No habilitado'}</span>
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">{audienceLabel} en {channelsLabel}</span>
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4-4 4z"/></svg>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full px-4 py-4 border-b border-[#e9eae6] last:border-b-0 bg-white">
+      <div className="flex items-center gap-3 mb-4">
+        <input
+          value={draft.title}
+          onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+          placeholder="Ingresa un título"
+          className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[14px] font-semibold focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] flex-shrink-0 ${draft.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{draft.enabled ? 'Habilitado' : 'No habilitado'}</span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {draft.conditions.length === 0 && (
+          <p className="text-[12.5px] text-[#646462]">Sin condiciones todavía. Añade una para comenzar.</p>
+        )}
+        {draft.conditions.map(cond => {
+          const f = findFinEscField(cond.field);
+          const op = FIN_ESCALATION_OPERATORS.find(o => o.value === cond.operator) || FIN_ESCALATION_OPERATORS[0];
+          return (
+            <div key={cond.id} className="flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <button
+                  onClick={() => { setFieldPickerFor(cond.id); setOpPickerFor(null); }}
+                  className={`h-8 px-3 rounded-[8px] border bg-white flex items-center gap-2 text-[13px] hover:bg-[#f8f8f7] ${fieldPickerFor === cond.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'} ${f ? 'text-[#1a1a1a]' : 'text-[#646462]'}`}
+                >
+                  {f ? (
+                    <>
+                      <span className="w-4 h-4 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                      <span className="truncate">{f.label}</span>
+                    </>
+                  ) : (
+                    <span>Selecciona un campo</span>
+                  )}
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {fieldPickerFor === cond.id && (
+                  <FinFieldPickerPopover
+                    onPick={(key) => patchCondition(cond.id, { field: key })}
+                    onClose={() => setFieldPickerFor(null)}
+                  />
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  onClick={() => { setOpPickerFor(cond.id); setFieldPickerFor(null); }}
+                  className={`h-8 px-3 rounded-[8px] border bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${opPickerFor === cond.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}
+                >
+                  <span>{op.label}</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                {opPickerFor === cond.id && (
+                  <FinOperatorPickerPopover
+                    value={cond.operator}
+                    onPick={(o) => { patchCondition(cond.id, { operator: o, value: FIN_ESCALATION_OPERATORS.find(x => x.value === o)?.takesValue ? cond.value : '' }); }}
+                    onClose={() => setOpPickerFor(null)}
+                  />
+                )}
+              </div>
+
+              {op.takesValue ? (
+                <input
+                  value={cond.value}
+                  onChange={e => patchCondition(cond.id, { value: e.target.value })}
+                  placeholder="Valor"
+                  className="h-8 rounded-[8px] border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] min-w-[160px] flex-1"
+                />
+              ) : (
+                <input
+                  value=""
+                  disabled
+                  placeholder="—"
+                  className="h-8 rounded-[8px] border border-[#e9eae6] px-3 text-[13px] bg-[#f8f8f7] text-[#a4a4a2] min-w-[160px] flex-1 cursor-not-allowed"
+                />
+              )}
+
+              <button
+                onClick={() => removeCondition(cond.id)}
+                title="Eliminar condición"
+                className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0"
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          );
+        })}
+        <div>
+          <button onClick={addCondition} className="text-[13px] font-semibold text-[#ed621d] hover:underline flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+            <span>Añadir condición</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-[#e9eae6] flex items-center gap-2 flex-wrap">
+        <Dropdown
+          value={draft.audience}
+          items={FIN_AUDIENCE_ITEMS}
+          onChange={v => setDraft(d => ({ ...d, audience: v as FinEscalationRule['audience'] }))}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+        />
+        <FinEscalationChannelsDropdown
+          channels={draft.channels}
+          onChange={ch => setDraft(d => ({ ...d, channels: ch }))}
+        />
+        <div className="flex-1" />
+        <button
+          onClick={onDelete}
+          title="Eliminar regla"
+          className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        {draft.enabled ? (
+          <button
+            onClick={onToggleEnabled}
+            className="h-8 px-3 rounded-[8px] bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c] text-[13px] font-semibold hover:bg-[#fee2e2] flex items-center gap-1.5"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+            Pausar
+          </button>
+        ) : (
+          <button
+            onClick={onToggleEnabled}
+            className="h-8 px-3 rounded-[8px] bg-[#dcfce7] border border-[#bbf7d0] text-[#15803d] text-[13px] font-semibold hover:bg-[#bbf7d0] flex items-center gap-1.5"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+            Habilitar
+          </button>
+        )}
+        <button onClick={cancel} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Cancelar</button>
+        <button onClick={save} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="2"><path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span>Guardar</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Escalamiento (Figma 1:7382) ─────────────────────────────────
+function FinEscalamientoContent() {
+  const IMG_ESCALATION_BANNER = `${FIGMA_CDN}/60cc0b0b-a88a-4cb7-9e9a-8459e11b535e`;
+  const IMG_ESCALATION_LINK_BOOK = `${FIGMA_CDN}/34e259b7-ba78-42e5-9f7a-f48a3961b433`;
+  const IMG_ESCALATION_CLOSE = `${FIGMA_CDN}/34dfc6d2-2f3f-4639-aa68-6573e7f751a7`;
+  const { data: rulesData, refetch } = useApi<any[]>(
+    () => policyRulesApi.list({ entity_type: 'fin_escalation' }),
+    [],
+    [],
+  );
+  const escalationRules = useFinResource<FinEscalationRule>('escalation_rules', FIN_SEED_ESCALATION_RULES);
+  const [search, setSearch] = useState('');
+  const [modal, setModal] = useState<null | 'rule' | 'guideline'>(null);
+  const [justCreated, setJustCreated] = useState<string | null>(null);
+  const toast = useFinToast();
+  const all = useMemo(() => Array.isArray(rulesData) ? rulesData : [], [rulesData]);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? all.filter((r: any) => String(r.name || r.title || '').toLowerCase().includes(q)) : all;
+  }, [all, search]);
+  const pautas = filtered.filter((r: any) => (r.category || r.subtype) === 'guideline');
+  const filteredRules = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? escalationRules.items.filter(r => r.title.toLowerCase().includes(q)) : escalationRules.items;
+  }, [escalationRules.items, search]);
+  function createBlankRule() {
+    const created = escalationRules.create({
+      title: '',
+      enabled: false,
+      audience: 'all',
+      channels: [],
+      conditions: [],
+      metrics: { used: 0 },
+    });
+    setJustCreated(created.id);
+  }
+  async function createEscalation(category: 'rule' | 'guideline', payload: { name: string; description: string }) {
+    try {
+      await policyRulesApi.create({
+        entityType: 'fin_escalation',
+        category,
+        name: payload.name,
+        description: payload.description || undefined,
+        isActive: true,
+      });
+      toast.show(category === 'rule' ? 'Regla creada' : 'Pauta creada');
+      setModal(null);
+      refetch();
+    } catch (err: any) {
+      toast.show(err?.message || 'No se pudo crear', 'error');
+    }
+  }
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero card */}
+      <div className="flex-shrink-0 px-4 pt-4">
+        <div className="relative bg-white rounded-[16px] shadow-[0px_1px_2px_rgba(20,20,20,0.15)] px-6 py-5 flex gap-6 items-start">
+          <div className="flex-1 min-w-0 max-w-[640px] flex flex-col gap-4">
+            <h2 className="text-[20px] font-semibold text-[#1a1a1a] leading-[24px] tracking-[-0.4px]">
+              Indique a Fin cuándo debe escalar
+            </h2>
+            <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
+              Controle cuándo Fin transfiere las conversaciones a su equipo definiendo reglas de escalada deterministas utilizando atributos y datos de los clientes, o creando guías de escalada en lenguaje natural para escenarios más flexibles.
+            </p>
+            <div className="flex flex-wrap gap-x-1 gap-y-2 text-[14px] font-semibold text-[#1a1a1a]">
+              <a className="inline-flex items-center gap-2 px-3 py-[7px] rounded-full hover:bg-[#f8f8f7]" href="#">
+                <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_ESCALATION_LINK_BOOK})`, backgroundSize: 'cover' }} />
+                <span className="leading-[16px]">Cómo configurar escalaciones automáticas</span>
+              </a>
+              <a className="inline-flex items-center gap-2 px-3 py-[7px] rounded-full hover:bg-[#f8f8f7]" href="#">
+                <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_ESCALATION_LINK_BOOK})`, backgroundSize: 'cover' }} />
+                <span className="leading-[16px]">Prácticas recomendadas de pautas</span>
+              </a>
+            </div>
+          </div>
+          <div className="relative w-[388px] h-[192px] rounded-[12px] overflow-hidden flex-shrink-0">
+            <img src={IMG_ESCALATION_BANNER} alt="Escalation examples" className="absolute inset-0 w-full h-full object-cover" />
+          </div>
+          <button aria-label="Cerrar" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+            <span className="w-4 h-4" style={{ backgroundImage: `url(${IMG_ESCALATION_CLOSE})`, backgroundSize: 'cover' }} />
+          </button>
+        </div>
+      </div>
+
+      {/* Escalamiento section header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M5 7l3 3 3-3" strokeLinecap="round"/></svg>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Escalamiento</h2>
+          </div>
+          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+            <span>Aprender</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-4 flex flex-col gap-5">
+          {/* Search + filters */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 max-w-[440px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar escalaciones por título o contenido"
+                className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+              />
+            </div>
+            <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+              <span>Filtros</span>
+            </button>
+          </div>
+
+          {/* Reglas de escalamiento */}
+          <div>
+            <div className="flex items-start gap-2.5">
+              <span className="w-7 h-7 rounded-full bg-white border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M5 4l-3 4 3 4M11 4l3 4-3 4" strokeLinecap="round"/></svg>
+              </span>
+              <div>
+                <button className="flex items-center gap-1 text-[14px] font-semibold text-[#1a1a1a] hover:opacity-80">
+                  <span>Reglas de escalamiento</span>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                <p className="mt-0.5 text-[13px] text-[#646462] leading-[18px] max-w-[600px]">
+                  Utilice <a href="#" className="text-[#1a1a1a] underline">atributos</a> y otros datos de los clientes para definir de manera determinista las condiciones de escalamiento.
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 ml-9 bg-white border border-[#e9eae6] rounded-[12px]">
+              {filteredRules.length === 0 ? (
+                <div className="w-full px-4 py-6 text-center text-[13px] text-[#646462]">Aún no hay reglas. Pulsa «Nuevo» para crear una.</div>
+              ) : filteredRules.map(rule => (
+                <FinEscalationRuleRow
+                  key={rule.id}
+                  rule={rule}
+                  startExpanded={justCreated === rule.id}
+                  onSave={(next) => { escalationRules.update(rule.id, next); if (justCreated === rule.id) setJustCreated(null); toast.show('Regla guardada'); }}
+                  onDelete={() => { escalationRules.remove(rule.id); toast.show('Regla eliminada'); }}
+                  onToggleEnabled={() => { escalationRules.update(rule.id, { enabled: !rule.enabled }); toast.show(rule.enabled ? 'Regla pausada' : 'Regla habilitada'); }}
+                />
+              ))}
+              <div className="px-4 py-2.5 border-t border-[#e9eae6]">
+                <button onClick={createBlankRule} className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                  <span>Nuevo</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Pautas de escalamiento */}
+          <div>
+            <div className="flex items-start gap-2.5">
+              <span className="w-7 h-7 rounded-full bg-white border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5L10 10" strokeLinecap="round"/></svg>
+              </span>
+              <div>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">Pautas de escalamiento</p>
+                <p className="mt-0.5 text-[13px] text-[#646462] leading-[18px] max-w-[600px]">
+                  Ajuste el comportamiento de escalamiento de Fin en escenarios específicos que no capturan las Reglas de escalamiento.
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 ml-9 flex items-center gap-2 flex-wrap">
+              <button onClick={() => setModal('guideline')} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                <span>Nuevo</span>
+              </button>
+              {pautas.length === 0 ? (
+                <span className="text-[12.5px] text-[#646462]">Aún no hay pautas.</span>
+              ) : pautas.map((p: any) => (
+                <span key={p.id} className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px]">
+                  {p.name || p.title || 'Pauta'}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      {modal && (
+        <FinSimpleCreateModal
+          title={modal === 'rule' ? 'Nueva regla de escalamiento' : 'Nueva pauta de escalamiento'}
+          description={modal === 'rule'
+            ? 'Define una condición determinista (atributos + datos del cliente) que dispare un escalamiento.'
+            : 'Describe en lenguaje natural cuándo Fin debe transferir la conversación.'}
+          namePlaceholder={modal === 'rule' ? 'Escalar pagos > $1000' : 'Transfiere solicitudes de VPN…'}
+          submitLabel={modal === 'rule' ? 'Crear regla' : 'Crear pauta'}
+          onClose={() => setModal(null)}
+          onSubmit={(payload) => createEscalation(modal, payload)}
+        />
+      )}
+      {toast.node}
+    </div>
+  );
+}
+
+// ─── Capacitar > Procedimientos (Figma 1:9083) ───────────────────────────────
+// ─── FinProcedimientoEditor: full-drawer create/edit modal for one procedure ─
+function FinProcedimientoEditor({
+  initial,
+  onSave,
+  onClose,
+  onAction,
+  onToggleEnable,
+}: {
+  initial: FinProcedimiento;
+  onSave: (next: FinProcedimiento) => void;
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onToggleEnable: (next: boolean) => void;
+}) {
+  const isNew = !initial.name && initial.steps.length === 0 && !initial.prompt;
+  const [name, setName] = useState(initial.name);
+  const [description, setDescription] = useState(initial.description);
+  const [prompt, setPrompt] = useState(initial.prompt);
+  const [steps, setSteps] = useState<FinProcedimientoStep[]>(initial.steps);
+  const [enabled, setEnabled] = useState(initial.enabled);
+  const [aiView, setAiView] = useState<null | { running: boolean; produced: FinProcedimientoStep[] }>(null);
+  const aiCancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const tag = (t?.tagName || '').toUpperCase();
+      const editing = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (!editing) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function save() {
+    const next: FinProcedimiento = {
+      ...initial,
+      name: name.trim(),
+      description,
+      prompt,
+      steps,
+      enabled,
+    };
+    onSave(next);
+    onAction('Procedimiento guardado');
+  }
+  function handleToggleEnabled() {
+    const next = !enabled;
+    setEnabled(next);
+    onToggleEnable(next);
+  }
+  function addStep(kind: FinProcedimientoStep['kind']) {
+    setSteps(s => [...s, {
+      id: `step_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      kind,
+      title: '',
+      body: '',
+    }]);
+  }
+  function updateStep(id: string, patch: Partial<FinProcedimientoStep>) {
+    setSteps(s => s.map(it => it.id === id ? { ...it, ...patch } : it));
+  }
+  function removeStep(id: string) {
+    setSteps(s => s.filter(it => it.id !== id));
+  }
+
+  function fallbackStepsFromPrompt(text: string): FinProcedimientoStep[] {
+    const sentences = text.split(/[\.!?\n]+/).map(s => s.trim()).filter(s => s.length > 4).slice(0, 4);
+    const arr: FinProcedimientoStep[] = (sentences.length ? sentences : [text]).slice(0, 4).map((s, i) => ({
+      id: `step_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
+      kind: 'verification',
+      title: `Verificación ${i + 1}`,
+      body: s,
+    }));
+    while (arr.length < 4) {
+      arr.push({
+        id: `step_${Date.now()}_${arr.length}_${Math.floor(Math.random() * 1000)}`,
+        kind: 'verification',
+        title: `Verificación ${arr.length + 1}`,
+        body: 'Define una comprobación adicional necesaria para completar el procedimiento.',
+      });
+    }
+    return arr;
+  }
+
+  async function startAiGeneration() {
+    if (prompt.trim().length < 10) {
+      onAction('Describe primero qué debe hacer el procedimiento', 'error');
+      return;
+    }
+    aiCancelRef.current = { cancelled: false };
+    setAiView({ running: true, produced: [] });
+    let generated: FinProcedimientoStep[] = [];
+    try {
+      const aiPrompt = `Eres un experto en automatización de soporte. A partir de la siguiente descripción de un procedimiento, devuelve un JSON con la forma {"steps":[{"kind":"verification|action|condition","title":"...","body":"..."}]}. Cada paso debe ser una verificación clara y accionable. Devuelve entre 3 y 7 pasos. Sólo JSON, sin markdown.\n\nDescripción: ${prompt.trim()}`;
+      const response: any = await aiApi.copilot('procedure-generator', aiPrompt, []);
+      const raw = String(response?.answer || response?.message || response?.content || '').trim();
+      const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const arr = Array.isArray(parsed?.steps) ? parsed.steps : [];
+      generated = arr.slice(0, 7).map((it: any, i: number): FinProcedimientoStep => {
+        const k = String(it?.kind || 'verification').toLowerCase();
+        const kind: FinProcedimientoStep['kind'] = k === 'action' ? 'action' : k === 'condition' ? 'condition' : 'verification';
+        return {
+          id: `step_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
+          kind,
+          title: String(it?.title || `Paso ${i + 1}`).slice(0, 200),
+          body: String(it?.body || '').slice(0, 1200),
+        };
+      });
+      if (generated.length === 0) generated = fallbackStepsFromPrompt(prompt);
+    } catch {
+      generated = fallbackStepsFromPrompt(prompt);
+    }
+
+    // Animate insertion
+    let i = 0;
+    function appendNext() {
+      if (aiCancelRef.current.cancelled) return;
+      if (i >= generated.length) {
+        setSteps(prev => [...prev, ...generated]);
+        setAiView(null);
+        onAction('Pasos generados con IA');
+        return;
+      }
+      setAiView(v => v ? { ...v, produced: [...v.produced, generated[i]] } : v);
+      i += 1;
+      window.setTimeout(appendNext, 600);
+    }
+    window.setTimeout(appendNext, 400);
+  }
+
+  function cancelAi() {
+    aiCancelRef.current.cancelled = true;
+    setAiView(null);
+  }
+
+  const titleText = isNew ? 'Nuevo procedimiento' : 'Editar procedimiento';
+
+  function kindBadgeClass(kind: FinProcedimientoStep['kind']) {
+    if (kind === 'action') return 'bg-[#ede9fe] text-[#6d28d9]';
+    if (kind === 'condition') return 'bg-[#fef3c7] text-[#92400e]';
+    return 'bg-[#dbeafe] text-[#1e40af]';
+  }
+  function kindLabel(kind: FinProcedimientoStep['kind']) {
+    if (kind === 'action') return 'Acción';
+    if (kind === 'condition') return 'Condición';
+    return 'Verificación';
+  }
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className="absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]"
+        onClick={e => e.stopPropagation()}
+      >
+        {aiView ? (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <button
+              onClick={cancelAi}
+              title="Volver"
+              className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 text-[13px]">
+              <span className="text-[#646462]">Procedimiento</span>
+              <span className="text-[#a4a4a2]">›</span>
+              <span className="font-semibold text-[#1a1a1a] truncate">Generación con IA</span>
+            </div>
+            <button onClick={cancelAi} className="h-8 px-4 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Cancelar</button>
+            <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        ) : (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">{titleText}</h2>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                {enabled ? 'Habilitado' : 'Deshabilitado'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {enabled ? (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#b91c1c] hover:bg-[#991b1b] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+                  Pausar
+                </button>
+              ) : (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#15803d] hover:bg-[#166534] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                  Habilitar
+                </button>
+              )}
+              <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {aiView ? (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+            <div className="w-full px-8 py-12 flex flex-col items-center gap-6">
+              <div className="bg-white border border-[#e9eae6] rounded-[14px] p-8 w-full max-w-[640px] flex flex-col items-center gap-5">
+                <div className="w-12 h-12 rounded-full border-2 border-[#e9eae6] border-t-[#ed621d] animate-spin" />
+                <div className="text-center">
+                  <h3 className="text-[18px] font-bold text-[#1a1a1a]">Generando pasos…</h3>
+                  <p className="mt-1 text-[13px] text-[#646462]">La IA está analizando tu instrucción y dividiéndola en verificaciones.</p>
+                </div>
+                <div className="w-full flex flex-col gap-2 mt-2">
+                  {aiView.produced.map((step, idx) => (
+                    <div key={step.id} className="flex items-start gap-3 p-3 bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] animate-in fade-in" style={{ animation: 'fadeIn 0.3s ease' }}>
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#15803d] text-white text-[11px] font-bold flex-shrink-0">✓</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a]">Paso {idx + 1}: {step.title}</p>
+                        <p className="text-[12px] text-[#646462] mt-0.5 line-clamp-2">{step.body}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {aiView.produced.length === 0 && (
+                    <p className="text-center text-[12.5px] text-[#a4a4a2]">Esperando primer paso…</p>
+                  )}
+                </div>
+                <button
+                  onClick={cancelAi}
+                  className="mt-2 h-9 px-4 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+            <div className="w-full px-8 py-8 flex flex-col gap-4">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Da un nombre claro al procedimiento. Por ejemplo, "Reembolso por daños".</p>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Reembolso por daños, Validación de cuenta…"
+                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Resume brevemente cuándo Fin debe ejecutar este procedimiento.</p>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Por ejemplo, cuando el cliente reporte un producto recibido en mal estado…"
+                  className="w-full min-h-[100px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Instrucciones para Fin</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describe qué debe hacer Fin paso a paso. Si lo prefieres, deja que la IA lo redacte por ti.</p>
+                <textarea
+                  value={prompt}
+                  onChange={e => setPrompt(e.target.value)}
+                  placeholder="Por ejemplo: Si el cliente reporta un producto dañado, primero pídele el número de pedido, luego una foto del daño, comprueba si está dentro del plazo de devolución y si todo es correcto, ofrece un reembolso o un reemplazo."
+                  className="w-full min-h-[160px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-[11.5px] text-[#646462]">{prompt.length} caracteres</p>
+                  <button
+                    onClick={startAiGeneration}
+                    className="h-9 px-4 rounded-full bg-[#ed621d] hover:bg-[#d4541a] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                  >
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
+                    Escribir con IA
+                  </button>
+                </div>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Pasos de verificación</h3>
+                    <p className="text-[12.5px] text-[#646462] leading-[18px]">Define cada comprobación o acción que Fin debe ejecutar en orden.</p>
+                  </div>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11.5px] text-[#646462]">{steps.length} {steps.length === 1 ? 'paso' : 'pasos'}</span>
+                </div>
+                {steps.length === 0 ? (
+                  <div className="border border-dashed border-[#e9eae6] rounded-[10px] px-4 py-6 text-center text-[12.5px] text-[#646462] bg-[#fafaf8]">
+                    Aún no hay pasos. Escribe instrucciones y pulsa "Escribir con IA", o agrega un paso manualmente.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {steps.map((step, idx) => (
+                      <div key={step.id} className="bg-white border border-[#e9eae6] rounded-[10px] p-3 flex items-start gap-3 hover:border-[#1a1a1a]/30 transition-colors">
+                        <span className="text-[#a4a4a2] text-[14px] mt-1 cursor-grab select-none" title="Arrastrar">⋮⋮</span>
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#1a1a1a] text-white text-[11px] font-bold flex-shrink-0 mt-1">{idx + 1}</span>
+                        <div className="flex-1 min-w-0 flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${kindBadgeClass(step.kind)}`}>{kindLabel(step.kind)}</span>
+                            <Dropdown
+                              value={step.kind}
+                              items={[
+                                { value: 'verification', label: 'Verificación' },
+                                { value: 'action', label: 'Acción' },
+                                { value: 'condition', label: 'Condición' },
+                              ]}
+                              onChange={v => updateStep(step.id, { kind: v as FinProcedimientoStep['kind'] })}
+                              triggerClassName="h-7 px-2 rounded-md border border-[#e9eae6] bg-white flex items-center gap-1 text-[12px] text-[#646462] hover:bg-[#f8f8f7]"
+                            />
+                          </div>
+                          <input
+                            value={step.title}
+                            onChange={e => updateStep(step.id, { title: e.target.value })}
+                            placeholder="Título del paso (ej. Verificar número de pedido)"
+                            className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] font-medium focus:outline-none focus:border-[#1a1a1a]"
+                          />
+                          <textarea
+                            value={step.body}
+                            onChange={e => updateStep(step.id, { body: e.target.value })}
+                            placeholder="Describe qué debe verificar o ejecutar Fin en este paso."
+                            className="w-full min-h-[64px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                          />
+                        </div>
+                        <button
+                          onClick={() => removeStep(step.id)}
+                          title="Eliminar paso"
+                          className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  <Dropdown
+                    value=""
+                    items={[
+                      { value: 'verification', label: 'Verificación' },
+                      { value: 'action', label: 'Acción' },
+                      { value: 'condition', label: 'Condición' },
+                    ]}
+                    onChange={v => addStep(v as FinProcedimientoStep['kind'])}
+                    triggerLabel="+ Nuevo paso"
+                    triggerClassName="h-9 px-4 rounded-full border border-dashed border-[#1a1a1a]/40 bg-white flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Procedimientos (Figma 1:9083) ───────────────────────────────
+function FinProcedimientosContent() {
+  const IMG_PROCEDURES_BANNER = `${FIGMA_CDN}/17cbcd75-6a44-4157-8602-12c092c5eb8f`;
+  const IMG_PROCEDURES_LINK_BOOK = `${FIGMA_CDN}/4c9f4d1c-6469-49d8-bb4c-5e6a7ec27a9c`;
+  const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
+  const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
+  const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
+  const procedimientos = useFinResource<FinProcedimiento>('procedimientos', FIN_SEED_PROCEDIMIENTOS);
+  const [search, setSearch] = useState('');
+  const toast = useFinToast();
+  const [editing, setEditing] = useState<FinProcedimiento | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const procedures = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return procedimientos.items;
+    return procedimientos.items.filter(p => p.name.toLowerCase().includes(q));
+  }, [procedimientos.items, search]);
+  function startNewBlank() {
+    const created = procedimientos.create({
+      name: '',
+      description: '',
+      prompt: '',
+      steps: [],
+      enabled: false,
+      createdAt: Date.now(),
+    });
+    setEditing(created);
+    setEditorOpen(true);
+  }
+  function openEdit(p: FinProcedimiento) {
+    setEditing(p);
+    setEditorOpen(true);
+  }
+  function handleSave(next: FinProcedimiento) {
+    procedimientos.update(next.id, next);
+    setEditing(next);
+  }
+  function handleToggleEnable(next: boolean) {
+    if (!editing) return;
+    procedimientos.update(editing.id, { enabled: next });
+    setEditing({ ...editing, enabled: next });
+    toast.show(next ? 'Procedimiento habilitado' : 'Procedimiento pausado');
+  }
+  function handleDelete(p: FinProcedimiento, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!window.confirm(`¿Eliminar el procedimiento "${p.name || 'Sin nombre'}"?`)) return;
+    procedimientos.remove(p.id);
+    toast.show('Procedimiento eliminado');
+  }
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M5 6h6M5 8.5h6M5 11h4" strokeLinecap="round"/></svg>
+            <h1 className="text-[20px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Procedimientos</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+              <span>Aprender</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <button onClick={startNewBlank} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+              <span>Nuevo procedimiento</span>
+            </button>
+          </div>
+        </div>
+        <div className="px-6 h-14 flex items-center gap-2">
+          <div className="flex-1 max-w-[280px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar..."
+              className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+            />
+          </div>
+          {(['State is any', 'Primero los activos', 'Etiquetas'] as const).map(label => (
+            <button key={label} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <span>{label}</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-5 flex flex-col gap-5">
+          {/* Hero card peach */}
+          <div className="relative bg-[#ffccb2] rounded-[16px] px-8 pt-[54px] pb-12 flex gap-8 items-start overflow-hidden">
+            <div className="flex-1 min-w-0 max-w-[605px] flex flex-col gap-[15.4px]">
+              <h2 className="text-[40px] text-[#1a1a1a] leading-[40px] tracking-[-1.2px]" style={{ fontFamily: "'Segoe UI', sans-serif" }}>
+                Comience con los procedimientos
+              </h2>
+              <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
+                Los procedimientos le permiten entrenar a Fin para gestionar procesos complejos de varios pasos, como reclamaciones por pedidos dañados o la resolución de problemas de cuentas. Equilibre las instrucciones en lenguaje natural con controles deterministas para que Fin sea adaptable y preciso a la hora de tomar decisiones críticas. Permita que Fin interactúe con sus sistemas empresariales externos, lea datos y tome medidas para resolver las conversaciones de principio a fin.
+              </p>
+              <p className="pt-2 text-[14px] text-[#1a1a1a] leading-[20px]">
+                ¿No sabe por dónde empezar? Utilice IA para generar un procedimiento a partir de una descripción de su proceso.
+              </p>
+              <div className="pt-[8.59px] flex flex-wrap items-center gap-x-4 gap-y-2 text-[14px] font-semibold text-[#1a1a1a]">
+                <a className="inline-flex items-center gap-2 hover:underline" href="#">
+                  <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_PROCEDURES_LINK_BOOK})`, backgroundSize: 'cover' }} />
+                  <span className="leading-[20px]">Más información</span>
+                </a>
+                <a className="inline-flex items-center gap-2 hover:underline" href="#">
+                  <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_PROCEDURES_LINK_PRICING})`, backgroundSize: 'cover' }} />
+                  <span className="leading-[20px]">Precios basados en resultados</span>
+                </a>
+                <a className="inline-flex items-center gap-2 hover:underline" href="#">
+                  <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_PROCEDURES_LINK_CHAT})`, backgroundSize: 'cover' }} />
+                  <span className="leading-[20px]">Chatea con nosotros</span>
+                </a>
+              </div>
+            </div>
+            <div className="relative w-[400px] h-[264px] rounded-[8px] overflow-hidden flex-shrink-0">
+              <img src={IMG_PROCEDURES_BANNER} alt="Procedimientos" className="absolute inset-0 w-full h-full object-cover" />
+            </div>
+            <button aria-label="Cerrar" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+              <span className="w-4 h-4" style={{ backgroundImage: `url(${IMG_PROCEDURES_CLOSE})`, backgroundSize: 'cover' }} />
+            </button>
+          </div>
+
+          {/* Procedimientos list */}
+          <div>
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Procedimientos</h3>
+            <p className="mt-0.5 text-[13px] text-[#646462]">Automatice las consultas complejas con instrucciones paso a paso para Fin.</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {procedures.length === 0 ? (
+                <div className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-6 text-center text-[13px] text-[#646462]">
+                  {search ? 'Ningún procedimiento coincide con la búsqueda.' : 'Aún no hay procedimientos. Pulsa «Nuevo procedimiento» para crear uno.'}
+                </div>
+              ) : procedures.map(p => {
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => openEdit(p)}
+                    className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40 cursor-pointer"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.name.trim() || 'Sin nombre'}</p>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f1f1ee] border border-[#e9eae6] text-[#646462]'}`}>
+                          {p.enabled ? 'Habilitado' : 'Deshabilitado'}
+                        </span>
+                      </div>
+                      <p className="text-[12.5px] text-[#646462] mt-0.5">{p.description || 'No se ha añadido ninguna descripción.'}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-[#646462]">
+                        <span>{p.steps.length} {p.steps.length === 1 ? 'paso' : 'pasos'}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={e => handleDelete(p, e)}
+                      title="Eliminar"
+                      className="w-8 h-8 rounded-[7px] flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Conectar con sistemas externos */}
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-semibold text-[#1a1a1a]">Conectar con sistemas externos</p>
+              <p className="text-[12.5px] text-[#646462] mt-0.5 max-w-[680px]">
+                Fin puede encontrar datos y hacer actualizaciones sencillas en sistemas externos, para que tus clientes obtengan asistencia personalizada.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex items-center -space-x-1.5">
+                <span className="w-6 h-6 rounded-[6px] bg-[#0fb87f] flex items-center justify-center text-white text-[10px] font-bold ring-2 ring-white">S</span>
+                <span className="w-6 h-6 rounded-[6px] bg-[#1a1a1a] flex items-center justify-center text-white text-[10px] font-bold ring-2 ring-white">a</span>
+                <span className="w-6 h-6 rounded-[6px] bg-[#3b9dff] flex items-center justify-center text-white text-[10px] font-bold ring-2 ring-white">T</span>
+                <span className="w-6 h-6 rounded-[6px] bg-[#f1f1ee] border border-[#e9eae6] flex items-center justify-center text-[#646462] text-[10px] font-bold ring-2 ring-white">+</span>
+              </div>
+              <a href="#" className="text-[13px] font-semibold text-[#1a1a1a] hover:underline whitespace-nowrap">Administrar conectores de datos →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      {editorOpen && editing && (
+        <FinProcedimientoEditor
+          initial={editing}
+          onSave={handleSave}
+          onClose={() => setEditorOpen(false)}
+          onAction={(m, t) => toast.show(m, t)}
+          onToggleEnable={handleToggleEnable}
+        />
+      )}
+      {toast.node}
+    </div>
+  );
+}
+
+// ─── buildFinAgentContext: assembles system prompt + stats from all sub-views ──
+function buildFinAgentContext(articles: any[]): {
+  systemPrompt: string;
+  stats: { content: number; pautas: number; atributos: number; escalations: number; procedures: number };
+  activePautas: FinPauta[];
+  activeAtributos: FinAtributo[];
+  activeRules: FinEscalationRule[];
+  activeProcs: FinProcedimiento[];
+} {
+  function readLS<T>(lsKey: string): T[] {
+    try { const raw = window.localStorage.getItem(lsKey); if (raw) return JSON.parse(raw) as T[]; } catch { /* ignore */ }
+    return [];
+  }
+  const pautas = readLS<FinPauta>('clain.fin.pautas');
+  const atributos = readLS<FinAtributo>('clain.fin.atributos');
+  const escRules = readLS<FinEscalationRule>('clain.fin.escalation_rules');
+  const procs = readLS<FinProcedimiento>('clain.fin.procedimientos');
+
+  const finArticles = articles.filter((a: any) => a.fin_service);
+  const activePautas = pautas.filter(p => p.enabled);
+  const activeAtributos = atributos.filter(a => a.enabled);
+  const activeRules = escRules.filter(r => r.enabled);
+  const activeProcs = procs.filter(p => p.enabled);
+
+  const lines: string[] = [];
+  lines.push('Eres Fin, un agente de IA de atención al cliente de Clain.');
+  lines.push('Responde siempre de manera precisa, empática y profesional en el idioma del usuario.');
+
+  if (finArticles.length > 0) {
+    lines.push('', '## Base de conocimiento');
+    lines.push(`Tienes acceso a ${finArticles.length} artículo${finArticles.length !== 1 ? 's' : ''} de la base de conocimiento:`);
+    finArticles.slice(0, 12).forEach((a: any) => lines.push(`- ${a.title || '(sin título)'}`));
+    if (finArticles.length > 12) lines.push(`... y ${finArticles.length - 12} artículos más`);
+    lines.push('Basa tus respuestas en este contenido. Si no tienes información suficiente, dilo claramente.');
+  }
+
+  if (activePautas.length > 0) {
+    lines.push('', '## Directrices de comunicación');
+    activePautas.forEach(p => { lines.push(`### ${p.title}`, p.body.trim()); });
+  }
+
+  if (activeAtributos.length > 0) {
+    lines.push('', '## Atributos a detectar en la conversación');
+    lines.push('Identifica y registra los siguientes atributos en cada conversación:');
+    activeAtributos.forEach(a => {
+      lines.push(`- **${a.name}** — ${a.description}. Valores posibles: ${a.values.map(v => v.name).join(', ')}.`);
+    });
+  }
+
+  if (activeRules.length > 0) {
+    lines.push('', '## Cuándo escalar a un agente humano');
+    lines.push('Escala la conversación en los siguientes casos:');
+    activeRules.forEach(r => {
+      lines.push(`- ${r.title}${r.conditions.length > 0 ? ` (${r.conditions.length} condición${r.conditions.length > 1 ? 'es' : ''} definida${r.conditions.length > 1 ? 's' : ''})` : ''}`);
+    });
+  }
+
+  if (activeProcs.length > 0) {
+    lines.push('', '## Procedimientos');
+    activeProcs.forEach(p => {
+      lines.push(`### ${p.name}`);
+      if (p.description) lines.push(p.description);
+      if (p.prompt) { lines.push('', p.prompt.trim()); }
+    });
+  }
+
+  return {
+    systemPrompt: lines.join('\n'),
+    stats: { content: finArticles.length, pautas: activePautas.length, atributos: activeAtributos.length, escalations: activeRules.length, procedures: activeProcs.length },
+    activePautas, activeAtributos, activeRules, activeProcs,
+  };
+}
+
+// ─── Probar / Pruebas (Figma 1:10409) ───────────────────────────────────────
+function FinPruebasContent() {
+  type TestQ = { id: string; q: string; rating?: 'good' | 'ok' | 'bad' | null; result?: any; status?: 'idle' | 'running' | 'done' | 'error'; error?: string };
+  const [questions, setQuestions] = useState<TestQ[]>([
+    { id: 'q1', q: '¿Cómo puedo actualizar mi plan de suscripción?', status: 'idle', rating: null },
+    { id: 'q2', q: '¿Cuál es la política de reembolsos?', status: 'idle', rating: null },
+    { id: 'q3', q: 'No puedo acceder a mi cuenta, ¿qué hago?', status: 'idle', rating: null },
+  ]);
+  const [selectedId, setSelectedId] = useState<string>('q1');
+  const [newQ, setNewQ] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [note, setNote] = useState('');
+  const [rightTab, setRightTab] = useState<'response' | 'config' | 'prompt'>('response');
+  const [promptCopied, setPromptCopied] = useState(false);
+
+  const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
+  const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const articles: any[] = Array.isArray(articlesRaw) ? articlesRaw : [];
+
+  const finAgent = useMemo(() => {
+    const list = Array.isArray(agentsData) ? agentsData : [];
+    return list.find((a: any) => String(a.slug || a.id || '').toLowerCase().includes('fin')) || list[0] || null;
+  }, [agentsData]);
+
+  // Build system prompt + stats from all Capacitar sub-views (reads localStorage)
+  const agentCtx = useMemo(() => buildFinAgentContext(articles), [articles]);
+
+  const selected = questions.find(q => q.id === selectedId) || questions[0];
+
+  async function runOne(id: string) {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'running', error: undefined } : q));
+    const target = questions.find(q => q.id === id);
+    if (!target) return;
+    try {
+      const result = await knowledgeApi.test({
+        question: target.q,
+        agent_id: finAgent?.id,
+        agent_slug: finAgent?.slug,
+        system_prompt: agentCtx.systemPrompt || undefined,
+      });
+      setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'done', result } : q));
+    } catch (err: any) {
+      setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'error', error: err?.message || 'Error' } : q));
+    }
+  }
+  async function runBatch() {
+    if (batchRunning) return;
+    setBatchRunning(true);
+    try {
+      for (const q of questions) await runOne(q.id);
+    } finally { setBatchRunning(false); }
+  }
+  function addQuestion() {
+    const q = newQ.trim();
+    if (!q) return;
+    const id = `q${Date.now()}`;
+    setQuestions(prev => [...prev, { id, q, status: 'idle', rating: null }]);
+    setNewQ(''); setShowAdd(false); setSelectedId(id);
+  }
+  function removeQuestion(id: string) {
+    setQuestions(prev => {
+      const next = prev.filter(q => q.id !== id);
+      if (id === selectedId && next.length > 0) setSelectedId(next[0].id);
+      return next;
+    });
+  }
+  function rate(id: string, rating: 'good' | 'ok' | 'bad') {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, rating } : q));
+  }
+  const ratingLabel = (r?: 'good' | 'ok' | 'bad' | null) =>
+    r === 'good' ? { txt: 'Buena',     dot: '#0fb87f' } :
+    r === 'ok'   ? { txt: 'Aceptable', dot: '#f4d35e' } :
+    r === 'bad'  ? { txt: 'Malo',      dot: '#ff5f3f' } :
+    null;
+
+  function copyPrompt() {
+    navigator.clipboard.writeText(agentCtx.systemPrompt).catch(() => {});
+    setPromptCopied(true);
+    window.setTimeout(() => setPromptCopied(false), 2000);
+  }
+
+  const configPills = [
+    { key: 'content',    count: agentCtx.stats.content,    label: 'artículos', color: '#3b59f6', bg: '#eef2ff' },
+    { key: 'pautas',     count: agentCtx.stats.pautas,     label: 'pautas',    color: '#059669', bg: '#e8faf3' },
+    { key: 'atributos',  count: agentCtx.stats.atributos,  label: 'atributos', color: '#7c3aed', bg: '#f3e8ff' },
+    { key: 'escalations',count: agentCtx.stats.escalations,label: 'escaladas', color: '#d97706', bg: '#fff3e8' },
+    { key: 'procedures', count: agentCtx.stats.procedures, label: 'procs',     color: '#b91c1c', bg: '#fef2f2' },
+  ];
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Top bar */}
+      <div className="flex-shrink-0 h-[50px] px-6 flex items-center justify-between border-b border-[#e9eae6]">
+        <h2 className="text-[14px] font-semibold text-[#1a1a1a]">
+          Prueba por lotes las respuestas de Fin para activarlas con confianza
+        </h2>
+        <button
+          onClick={runBatch}
+          disabled={batchRunning || questions.length === 0}
+          className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:bg-[#a4a4a2]"
+        >
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M5 3l8 5-8 5z"/></svg>
+          {batchRunning ? 'Ejecutando…' : `Probar todas (${questions.length})`}
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left column */}
+        <div className="flex-1 min-w-0 flex flex-col border-r border-[#e9eae6] overflow-hidden">
+
+          {/* ── Config summary bar ── */}
+          <div className="flex-shrink-0 px-6 py-2.5 border-b border-[#e9eae6] bg-[#fafafa]">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11.5px] font-medium text-[#646462]">Config activa:</span>
+              {configPills.map(p => (
+                <span key={p.key} className="inline-flex items-center h-[22px] px-2.5 rounded-full text-[11px] font-semibold"
+                  style={p.count > 0 ? { background: p.bg, color: p.color } : { background: '#f1f1ee', color: '#9a9a98' }}>
+                  {p.count} {p.label}
+                </span>
+              ))}
+              {(agentCtx.stats.content + agentCtx.stats.pautas + agentCtx.stats.atributos + agentCtx.stats.escalations + agentCtx.stats.procedures) === 0 && (
+                <span className="text-[11px] text-[#b91c1c]">⚠ Sin configuración activa — ve a Capacitar para añadir contenido</span>
+              )}
+            </div>
+          </div>
+
+          {/* Test name + actions */}
+          <div className="flex-shrink-0 px-6 pt-5 pb-2">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <button className="flex items-center gap-2 text-[22px] font-bold text-[#1a1a1a] tracking-[-0.2px] hover:bg-[#f8f8f7] -mx-1 px-1 rounded">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4">
+                    <rect x="2.5" y="2.5" width="11" height="11" rx="1.4" />
+                    <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" strokeLinecap="round" />
+                  </svg>
+                  <span className="truncate">Creado mediante entrada manual</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z" /></svg>
+                </button>
+                <div className="mt-2 flex items-center gap-1.5 text-[12.5px] text-[#646462]">
+                  <span>Actualizado hace hace 10 horas por</span>
+                  <span className="w-4 h-4 rounded-full bg-[#f1c5a8] flex items-center justify-center text-[8px] font-bold text-[#1a1a1a]">H</span>
+                  <span>Hector Vidal Sanchez</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                  <span>{finAgent?.name || finAgent?.slug || 'Fin'}</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
+                </button>
+                <button onClick={() => setShowAdd(s => !s)} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                  <span>Agregar preguntas</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z" /></svg>
+                </button>
+              </div>
+            </div>
+            {showAdd && (
+              <div className="mt-3 flex gap-2">
+                <input
+                  autoFocus
+                  value={newQ}
+                  onChange={e => setNewQ(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && newQ.trim()) addQuestion(); if (e.key === 'Escape') { setShowAdd(false); setNewQ(''); } }}
+                  placeholder="Escribe una pregunta para probar Fin…"
+                  className="flex-1 h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] outline-none focus:border-[#1a1a1a]"
+                />
+                <button onClick={addQuestion} disabled={!newQ.trim()} className="h-9 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#a4a4a2]">Añadir</button>
+              </div>
+            )}
+          </div>
+
+          {/* Probando como + filter pills */}
+          <div className="flex-shrink-0 px-6 pt-4 pb-3 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[13px] text-[#1a1a1a]">Probando como</span>
+              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.5 13c.6-2 2.3-3.2 4.5-3.2S12 11 12.6 13" strokeLinecap="round"/></svg>
+                <span>Vista previa del usuario</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white border border-[#e9eae6] text-[12.5px] text-[#1a1a1a]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5" strokeLinecap="round"/></svg>
+                <span>El estado de la respuesta es <span className="font-semibold">Cualquiera</span></span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white border border-[#e9eae6] text-[12.5px] text-[#1a1a1a]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 2.5l1.7 3.5 3.8.5-2.7 2.6.6 3.7L8 11.1l-3.4 1.7.6-3.7L2.5 6.5l3.8-.5z" strokeLinejoin="round"/></svg>
+                <span>La calificación de la respuesta es <span className="font-semibold">Cualquiera</span></span>
+              </span>
+            </div>
+          </div>
+
+          {/* Question count */}
+          <div className="flex-shrink-0 px-6 py-3 text-[13px] text-[#646462]">{questions.length} {questions.length === 1 ? 'pregunta' : 'preguntas'}</div>
+
+          {/* Table */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <table className="w-full text-[13px]">
+              <thead className="sticky top-0 bg-white">
+                <tr className="border-b border-[#e9eae6] text-[12px] text-[#646462]">
+                  <th className="w-10 pl-6 py-3 text-left"></th>
+                  <th className="py-3 pr-3 text-left font-medium">Pregunta</th>
+                  <th className="py-3 pr-3 text-left font-medium">Estado de la respuesta</th>
+                  <th className="py-3 pr-6 text-left font-medium">Calificación de respuesta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {questions.map(q => {
+                  const rl = ratingLabel(q.rating);
+                  const isSel = q.id === selectedId;
+                  return (
+                    <tr
+                      key={q.id}
+                      onClick={() => setSelectedId(q.id)}
+                      className={`border-b border-[#e9eae6] cursor-pointer ${isSel ? 'bg-[#f8f8f7]' : 'hover:bg-[#fafafa]'}`}
+                    >
+                      <td className="w-10 pl-6 py-4 align-top">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); runOne(q.id); }}
+                          title="Probar de nuevo"
+                          className="w-5 h-5 rounded hover:bg-[#e9eae6] flex items-center justify-center"
+                        >
+                          {q.status === 'running'
+                            ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462] animate-spin" strokeWidth="1.6"><path d="M8 2a6 6 0 0 1 6 6" strokeLinecap="round"/></svg>
+                            : <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M5 3l8 5-8 5z"/></svg>}
+                        </button>
+                      </td>
+                      <td className="py-4 pr-3 text-[#1a1a1a]">{q.q}</td>
+                      <td className="py-4 pr-3 text-[#646462]">
+                        {q.status === 'done' && <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0fb87f]"/>Respondida</span>}
+                        {q.status === 'running' && <span className="text-[12px]">Ejecutando…</span>}
+                        {q.status === 'error' && <span className="inline-flex items-center gap-1.5 text-[#b91c1c]"><span className="w-2 h-2 rounded-full bg-[#b91c1c]"/>Error</span>}
+                        {(!q.status || q.status === 'idle') && <span className="text-[12px]">Pendiente</span>}
+                      </td>
+                      <td className="py-4 pr-6">
+                        {rl
+                          ? <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]"><span className="w-2 h-2 rounded-full" style={{ background: rl.dot }}/>{rl.txt}</span>
+                          : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]">Sin calificación</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div className="w-[456px] flex-shrink-0 flex flex-col bg-[#fbfbfa] overflow-hidden">
+
+          {/* Tabs header */}
+          <div className="flex-shrink-0 border-b border-[#e9eae6] px-4">
+            <div className="flex items-center">
+              {([
+                { id: 'response' as const, label: 'Respuesta' },
+                { id: 'config'   as const, label: 'Config activa' },
+                { id: 'prompt'   as const, label: 'Prompt del sistema' },
+              ]).map(t => (
+                <button key={t.id} onClick={() => setRightTab(t.id)}
+                  className={`h-11 px-3 text-[12.5px] font-semibold border-b-2 transition-colors whitespace-nowrap ${rightTab === t.id ? 'text-[#1a1a1a] border-[#1a1a1a]' : 'text-[#646462] border-transparent hover:text-[#1a1a1a]'}`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tab: Respuesta */}
+          {rightTab === 'response' && (<>
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
+              {selected ? (<>
+                <div className="flex justify-end">
+                  <div className="max-w-[78%] bg-[#1a1a1a] text-white text-[13px] leading-[18px] px-3.5 py-2.5 rounded-[14px] rounded-tr-[4px]">{selected.q}</div>
+                </div>
+                {selected.status === 'running' && (
+                  <div className="flex items-start">
+                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462] flex items-center gap-1.5">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462] animate-spin flex-shrink-0" strokeWidth="1.6"><path d="M8 2a6 6 0 0 1 6 6" strokeLinecap="round"/></svg>
+                      Ejecutando con configuración activa…
+                    </div>
+                  </div>
+                )}
+                {selected.status === 'error' && (
+                  <div className="flex items-start">
+                    <div className="max-w-[88%] bg-[#fef2f2] border border-[#fecaca] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#b91c1c]">{selected.error}</div>
+                  </div>
+                )}
+                {selected.status === 'done' && selected.result && (
+                  <div className="flex items-start">
+                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3">
+                      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#1a1a1a]">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+                        <span>Fin</span><span className="text-[#646462] font-normal">· AI Agent</span>
+                      </div>
+                      <p className="mt-1.5 text-[13px] leading-[18px] text-[#1a1a1a] whitespace-pre-wrap">
+                        {selected.result.answer || selected.result.message || selected.result.content || JSON.stringify(selected.result, null, 2)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {(!selected.status || selected.status === 'idle') && (
+                  <div className="flex items-start">
+                    <div className="max-w-[88%] bg-[#f8f8f7] border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462]">
+                      Pulsa ▶ en la fila o «Probar todas» para evaluar la respuesta de Fin.
+                    </div>
+                  </div>
+                )}
+                {selected.status === 'done' && selected.result?.sources?.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-[12px] text-[#646462] mb-2">Esta respuesta utiliza:</p>
+                    <div className="flex flex-col gap-1.5">
+                      {selected.result.sources.map((s: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between px-3.5 py-2 bg-white border border-[#e9eae6] rounded-[10px]">
+                          <span className="text-[13px] font-medium text-[#1a1a1a] truncate">{s.title || s.id || 'Fuente'}</span>
+                          {typeof s.score === 'number' && <span className="text-[11px] text-[#646462]">{Math.round(s.score * 100)}%</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>) : (
+                <p className="text-[13px] text-[#646462]">Añade preguntas para empezar a probar Fin.</p>
+              )}
+            </div>
+            <div className="flex-shrink-0 border-t border-[#e9eae6] px-5 pt-4 pb-5">
+              <h4 className="text-[14px] font-bold text-[#1a1a1a]">Califica la respuesta de Fin</h4>
+              <div className="mt-3 flex gap-2">
+                {([
+                  { id: 'good' as const, label: 'Buena',     color: '#0fb87f', key: 'G' },
+                  { id: 'ok'   as const, label: 'Aceptable', color: '#f4d35e', key: 'A' },
+                  { id: 'bad'  as const, label: 'Malo',      color: '#ff5f3f', key: 'P' },
+                ]).map(r => {
+                  const active = selected?.rating === r.id;
+                  return (
+                    <button key={r.id} onClick={() => selected && rate(selected.id, r.id)}
+                      className={`h-8 px-3 rounded-[8px] border flex items-center gap-1.5 text-[13px] text-[#1a1a1a] ${active ? 'bg-[#f8f8f7] border-[#1a1a1a]' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}>
+                      <span className="w-3.5 h-3.5 rounded-full" style={{ background: r.color }} />
+                      <span>{r.label}</span>
+                      <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">{r.key}</span>
+                    </button>
+                  );
+                })}
+                {selected && (
+                  <button onClick={() => removeQuestion(selected.id)} className="ml-auto h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#b91c1c] hover:bg-[#fef2f2]">Eliminar</button>
+                )}
+              </div>
+              <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Agregar nota interna"
+                className="mt-3 w-full h-9 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] placeholder:text-[#646462] outline-none focus:border-[#1a1a1a]" />
+            </div>
+          </>)}
+
+          {/* Tab: Config activa */}
+          {rightTab === 'config' && (
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-5">
+              {([
+                { label: 'Contenido', items: agentCtx.stats.content > 0 ? [{ title: `${agentCtx.stats.content} artículos habilitados para Fin`, sub: '' }] : [], empty: 'Sin artículos habilitados. Ve a Capacitar → Contenido.' },
+                { label: 'Orientación', items: agentCtx.activePautas.map(p => ({ title: p.title, sub: p.body.split('\n')[0] })), empty: 'Sin pautas activas. Ve a Capacitar → Orientación.' },
+                { label: 'Atributos', items: agentCtx.activeAtributos.map(a => ({ title: a.name, sub: a.values.map(v => v.name).join(' · ') })), empty: 'Sin atributos activos. Ve a Capacitar → Atributos.' },
+                { label: 'Escalada', items: agentCtx.activeRules.map(r => ({ title: r.title, sub: r.conditions.length > 0 ? `${r.conditions.length} condición${r.conditions.length > 1 ? 'es' : ''}` : 'Sin condiciones' })), empty: 'Sin reglas de escalada activas. Ve a Capacitar → Escalada.' },
+                { label: 'Procedimientos', items: agentCtx.activeProcs.map(p => ({ title: p.name, sub: p.description })), empty: 'Sin procedimientos activos. Ve a Capacitar → Procedimientos.' },
+              ]).map((section, si) => (
+                <div key={si}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-[0.6px]">{section.label}</span>
+                    {section.items.length > 0 && <span className="text-[11px] text-[#0fb87f] font-medium">{section.items.length} activo{section.items.length > 1 ? 's' : ''}</span>}
+                  </div>
+                  {section.items.length === 0
+                    ? <p className="text-[12px] text-[#9a9a98] italic">{section.empty}</p>
+                    : section.items.map((item, ii) => (
+                      <div key={ii} className="mb-2 px-3 py-2.5 bg-white border border-[#e9eae6] rounded-[10px]">
+                        <p className="text-[12.5px] font-semibold text-[#1a1a1a]">{item.title}</p>
+                        {item.sub && <p className="text-[11.5px] text-[#646462] mt-0.5 line-clamp-2">{item.sub}</p>}
+                      </div>
+                    ))
+                  }
+                  {si < 4 && <div className="mt-1 h-px bg-[#e9eae6]" />}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Tab: Prompt del sistema */}
+          {rightTab === 'prompt' && (
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-[12px] text-[#646462] leading-[17px]">
+                  Este prompt se envía automáticamente con cada pregunta. Se construye a partir de tu configuración en Capacitar.
+                </p>
+                <button onClick={copyPrompt}
+                  className="flex-shrink-0 h-7 px-3 rounded-[7px] bg-white border border-[#e9eae6] text-[11.5px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                  {promptCopied ? '✓ Copiado' : 'Copiar'}
+                </button>
+              </div>
+              {agentCtx.systemPrompt
+                ? <pre className="text-[10.5px] text-[#1a1a1a] whitespace-pre-wrap font-mono bg-white border border-[#e9eae6] rounded-[10px] p-4 leading-[15px]">
+                    {agentCtx.systemPrompt}
+                  </pre>
+                : <div className="bg-[#fef2f2] border border-[#fecaca] rounded-[10px] p-4">
+                    <p className="text-[12.5px] text-[#b91c1c]">Sin configuración activa. Activa pautas, atributos o procedimientos en las secciones de Capacitar para que Fin use tu configuración al responder.</p>
+                  </div>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Desplegar / Chat (Figma 1:12035) ────────────────────────────────────────
+// Helper used by Despliegue* views: read connectors and pick the freshest one
+// matching a set of channel keywords. Returns a status string for the pill.
+function useChannelDeploymentStatus(matchKeywords: string[]) {
+  const { data } = useApi<any[]>(() => connectorsApi.list(), [], []);
+  return useMemo(() => {
+    const list = Array.isArray(data) ? data : [];
+    const matches = list.filter((c: any) => {
+      const blob = `${c.kind || ''} ${c.type || ''} ${c.provider || ''} ${c.channel || ''} ${c.name || ''}`.toLowerCase();
+      return matchKeywords.some(k => blob.includes(k));
+    });
+    if (matches.length === 0) return { label: 'No establecer en vivo', live: false, count: 0 };
+    const live = matches.find((c: any) => {
+      const status = String(c.status || c.connectionStatus || '').toLowerCase();
+      return status === 'connected' || status === 'live' || status === 'active' || c.isActive === true;
+    });
+    if (live) {
+      const updated = live.updatedAt || live.updated_at || live.lastSyncedAt || live.last_synced_at;
+      const updatedTxt = updated ? new Date(updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : null;
+      return {
+        label: updatedTxt ? `Conectado · actualizado ${updatedTxt}` : 'Conectado',
+        live: true,
+        count: matches.length,
+      };
+    }
+    return { label: 'No establecer en vivo', live: false, count: matches.length };
+  }, [data, matchKeywords]);
+}
+
+// Step-section header (icon polygon/square + text)
+function DeployStepHeader({ kind, label }: { kind: 'polygon' | 'dark' | 'green'; label: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      {kind === 'polygon' && (
+        <div className="relative w-9 h-9 flex-shrink-0">
+          <svg viewBox="0 0 32 36" className="absolute inset-0 w-8 h-9" preserveAspectRatio="none">
+            <path d="M16 0 L32 9 L32 27 L16 36 L0 27 L0 9 Z" fill="#FFCF33" />
+          </svg>
+          <svg viewBox="0 0 16 16" className="absolute left-[10px] top-[10px] w-4 h-4 fill-[#1a1a1a]">
+            <path d="M3 8c0-2.8 2.2-5 5-5s5 2.2 5 5h-1.5c0-1.9-1.6-3.5-3.5-3.5S4.5 6.1 4.5 8H3zm0 0c0 1.4.6 2.7 1.5 3.5l-1 1.5c.7.4 1.5.6 2.3.6.6 0 1.2-.1 1.7-.3l-.5-1.4c-.4.2-.8.2-1.2.2-.5 0-1-.1-1.4-.4l.7-1.1c.3.2.7.3 1 .3v-1.5c-.6 0-1.1-.5-1.1-1.4z"/>
+          </svg>
+        </div>
+      )}
+      {kind === 'dark' && (
+        <div className="w-8 h-8 rounded-[7px] bg-[#222] flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#FFCF33]">
+            <path d="M8 1.6l1.7 4.7 4.7 1.7-4.7 1.7L8 14.4l-1.7-4.7L1.6 8l4.7-1.7z"/>
+          </svg>
+        </div>
+      )}
+      {kind === 'green' && (
+        <div className="w-8 h-8 rounded-[7px] bg-[#b1e7d0] flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+            <path d="M3 8c1.5-3 4-4.5 5-4.5s3.5 1.5 5 4.5c-1.5 3-4 4.5-5 4.5S4.5 11 3 8z" strokeLinejoin="round"/>
+            <circle cx="8" cy="8" r="1.5" fill="#1a1a1a" stroke="none"/>
+          </svg>
+        </div>
+      )}
+      <span className="text-[14px] text-[#1a1a1a] leading-[20px] mt-[8px]">{label}</span>
+    </div>
+  );
+}
+
+// Dashed vertical connector between rows
+function DeployConnector() {
+  return <div className="ml-[31px] h-4 border-l border-dashed border-[#e9eae6]" />;
+}
+
+// Configurable row card (label + optional sub-value or pill + chevron)
+function DeployRow({ label, value, pill }: { label: string; value?: string; pill?: { text: string; bg?: string; icon?: 'warn' } }) {
+  return (
+    <button className="w-full bg-white border border-[#e9eae6] rounded-[16px] px-4 h-12 flex items-center justify-between hover:bg-[#fbfbf9] text-left">
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] flex-shrink-0">{label}</span>
+        {value && <span className="text-[13px] text-[#81817e] leading-[20px] truncate">{value}</span>}
+        {pill && (
+          <span className={`inline-flex items-center gap-1.5 px-2 h-[22px] rounded-full text-[13px] text-[#1a1a1a] ${pill.bg ?? 'bg-[#feecaf]'}`}>
+            {pill.icon === 'warn' && (
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="8" cy="8" r="6.5" stroke="#1a1a1a" strokeWidth="1.2" fill="none"/><path d="M8 4.5v4M8 11v.1" stroke="#1a1a1a" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            )}
+            <span>{pill.text}</span>
+          </span>
+        )}
+      </div>
+      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    </button>
+  );
+}
+
+function FinDespliegueChatContent() {
+  const status = useChannelDeploymentStatus(['chat', 'messenger', 'slack', 'whatsapp', 'sms', 'facebook', 'instagram']);
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero card */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-3">
+        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
+          <div className="flex-1 min-w-0 pr-2">
+            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
+              Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales
+            </h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
+              Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Activar Fin para chat</span>
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Usa Fin en los flujos de trabajo</span>
+              </a>
+            </div>
+          </div>
+          <img src={IMG_FIN_DEPLOY_CHAT} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
+          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Section divider with title */}
+      <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.5h11v8h-7l-4 3v-11z" strokeLinejoin="round"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">Chat</h3>
+      </div>
+
+      {/* Body: accordion */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-8 py-6 max-w-[720px]">
+          {/* Accordion 1 — Implementación sencilla (expanded) */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-3 pb-2">
+              <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[20px]">Implementación sencilla</h4>
+              <button className={`h-[20px] px-[7px] rounded-full border flex items-center gap-1.5 text-[13px] font-medium ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f8f8f7] border-[#e9eae6] text-[#1a1a1a]'}`}>
+                {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
+                <span>{status.live ? status.label : 'No establecer en vivo'}</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+              </button>
+            </div>
+            <p className="text-[14px] text-[#646462] leading-[20px] pb-8">
+              Comienza rápidamente: Elige cómo se comportará Fin en Messenger, Slack, WhatsApp, Facebook e Instagram.
+            </p>
+
+            {/* Section 1: cuando inicia conversación */}
+            <DeployStepHeader kind="polygon" label="Cuando un cliente inicia una conversación" />
+            <DeployConnector />
+            <DeployRow label="Los clientes ven a Fin" value="Users, Leads, and Visitors" />
+            <DeployConnector />
+            <DeployRow label="En los canales seleccionados" value="Web, iOS y Android" />
+            <DeployConnector />
+            <DeployRow label="Fin se presenta" value="Activadas (Todos los idiomas compatibles)" />
+            <DeployConnector />
+
+            {/* Section 2: Fin responde */}
+            <DeployStepHeader kind="dark" label="Fin responde al cliente" />
+            <DeployConnector />
+            <DeployRow label="Usando contenido de asistencia" pill={{ text: 'Se requiere más contenido', icon: 'warn' }} />
+            <DeployConnector />
+            <DeployRow label="Siguiendo la guía" />
+            <DeployConnector />
+
+            {/* Section 3: Si no puede resolver */}
+            <DeployStepHeader kind="green" label="Si Fin no puede resolver la conversación" />
+            <DeployConnector />
+            <DeployRow label="Transferencia o escala" value="Asignar a" />
+            <DeployConnector />
+            <DeployRow label="Solicita una calificación de conversación (CSAT)" value="Deshabilitado" />
+            <DeployConnector />
+
+            {/* Section 4: Si se vuelve inactivo */}
+            <DeployStepHeader kind="green" label="Si el cliente se vuelve inactivo" />
+            <DeployConnector />
+            <DeployRow label="Da seguimiento" value="Fin confirmará si el usuario aún necesita asistencia." />
+            <DeployConnector />
+            <DeployRow label="Cierra automáticamente los chats abandonados" value="3 minutos" />
+
+            {/* Yellow callout: Instala Messenger */}
+            <div className="mt-6 bg-[#feecaf] rounded-[6px] p-4 flex items-start gap-2">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0 mt-0.5" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
+              <div className="flex-1 min-w-0">
+                <h5 className="text-[14px] font-semibold text-[#1a1a1a] leading-[24px]">Instala Messenger para empezar a chatear con Fin</h5>
+                <p className="text-[14px] text-[#1a1a1a] leading-[20px] font-medium mb-4">Con nuestros ejemplos e integraciones sin código, solo te tomará unos minutos</p>
+                <button className="bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] px-3 h-8 rounded-full">
+                  Instalar Messenger
+                </button>
+              </div>
+            </div>
+
+            {/* Grey rounded module: Tus clientes verán */}
+            <div className="mt-6 bg-[#fbfbf9] border border-[#e9eae6] rounded-[16px] p-6 flex flex-col items-center">
+              <button className="bg-[#f8f8f7] rounded-full px-3 h-8 flex items-center gap-2 text-[14px] font-semibold text-[#1a1a1a] mb-4">
+                <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                <span>Establecer en vivo</span>
+              </button>
+              <p className="text-[14px] text-[#646462] leading-[20px] text-center">
+                Tus clientes verán a Fin cuando se pongan en contacto contigo para chatear.<br/>
+                Puedes pausar Fin en cualquier momento.
+              </p>
+            </div>
+
+            {/* Footnote */}
+            <div className="mt-4 flex items-start justify-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0 mt-1" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
+              <div className="text-[13px] text-[#646462] leading-[20px]">
+                Puede ser necesario informar a las personas que están interactuando con un AI Agent.
+                <a href="https://www.intercom.com/help/en/articles/11712008-ai-agent-disclosure" target="_blank" rel="noreferrer" className="block text-[14px] underline hover:no-underline mt-0.5">Más información</a>
+              </div>
+            </div>
+          </div>
+
+          {/* Accordion 2 — Implementación avanzada (collapsed) */}
+          <div className="pt-6">
+            <div className="flex items-center justify-between gap-3 pb-2">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[20px]">Implementación avanzada con flujos de trabajo</h4>
+                <button className="h-[20px] px-[7px] rounded-full border bg-[#f8f8f7] border-[#e9eae6] text-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-medium">
+                  <span>No establecer en vivo</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+              </div>
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <p className="text-[14px] text-[#646462] leading-[20px]">
+              Personalízalo: automatiza con precisión lo que Fin debe hacer y cuándo.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Desplegar / Correo electrónico (Figma 1:13680) ──────────────────────────
+function FinDespliegueEmailContent() {
+  const status = useChannelDeploymentStatus(['email', 'mail', 'gmail', 'outlook', 'imap', 'smtp']);
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero card */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-3">
+        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
+          <div className="flex-1 min-w-0 pr-2">
+            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
+              Implementa Fin por correo electrónico para obtener respuestas precisas al instante
+            </h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
+              Fin AI Agent interpreta los correos electrónicos entrantes, proporciona respuestas utilizando tu contenido de asistencia y escala los problemas complejos cuando es necesario, ampliando la asistencia más allá del chat en vivo.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Aprende cómo Fin responde a los correos electrónicos</span>
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Usa Fin en los flujos de trabajo</span>
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
+                <span>Desplegar Fin por correo electrónico</span>
+              </a>
+            </div>
+          </div>
+          <img src={IMG_FIN_DEPLOY_EMAIL} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
+          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Section divider with title */}
+      <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">Correo electrónico</h3>
+      </div>
+
+      {/* Body: accordion */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-8 py-6 max-w-[720px]">
+          {/* Accordion 1 — Implementación sencilla (expanded) */}
+          <div className="pb-6 border-b border-[#e9eae6]">
+            <div className="flex items-center gap-3 pb-2">
+              <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[20px]">Implementación sencilla</h4>
+              <button className={`h-[20px] px-[7px] rounded-full border flex items-center gap-1.5 text-[13px] font-medium ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f8f8f7] border-[#e9eae6] text-[#1a1a1a]'}`}>
+                {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
+                <span>{status.live ? status.label : 'No establecer en vivo'}</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+              </button>
+            </div>
+            <p className="text-[14px] text-[#646462] leading-[20px] pb-8">
+              Comienza rápidamente: elige cómo se comportará Fin por correo electrónico.
+            </p>
+
+            {/* Section 1: cuando envía primer mensaje (polygon yellow) */}
+            <DeployStepHeader kind="polygon" label="Cuando un cliente envía su primer mensaje" />
+            <DeployConnector />
+            <DeployRow label="Fin responderá a" value="Users, Leads, and Visitors" />
+            <DeployConnector />
+            <DeployRow label="A través del canal de correo electrónico" />
+            <DeployConnector />
+
+            {/* Section 2: Fin responde (dark) */}
+            <DeployStepHeader kind="dark" label="Fin responde al cliente" />
+            <DeployConnector />
+            <DeployRow label="Fin se presenta" value="Activadas (Todos los idiomas compatibles)" />
+            <DeployConnector />
+            <DeployRow label="Usando contenido de asistencia" pill={{ text: 'Se requiere más contenido', icon: 'warn' }} />
+            <DeployConnector />
+            <DeployRow label="Siguiendo la guía" />
+            <DeployConnector />
+
+            {/* Section 3: Si no puede resolver (green) */}
+            <DeployStepHeader kind="green" label="Si Fin no puede resolver la conversación" />
+            <DeployConnector />
+            <DeployRow label="Transferencia o escala" value="Asignar a" />
+            <DeployConnector />
+            <DeployRow label="Solicita una calificación de conversación (CSAT)" value="Deshabilitado" />
+            <DeployConnector />
+
+            {/* Section 4: Si el cliente se vuelve inactivo (green) — Figma 1:13560 */}
+            <DeployStepHeader kind="green" label="Si el cliente se vuelve inactivo" />
+            <DeployConnector />
+            <DeployRow label="Da seguimiento a los clientes inactivos" value="Fin hará un seguimiento" />
+            <DeployConnector />
+            <DeployRow label="Cierre automáticamente las conversaciones abandonadas" value="6 horas" />
+
+            {/* Yellow callout: Configurar dirección de correo — Figma 1:13609 */}
+            <div className="mt-6 bg-[#feecaf] rounded-[6px] p-4 flex items-start gap-2">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0 mt-0.5" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
+              <div className="flex-1 min-w-0 pl-2">
+                <h5 className="text-[14px] font-semibold text-[#1a1a1a] leading-[24px]">Configurar tu dirección de correo electrónico para que Fin responda desde esta</h5>
+                <p className="text-[14px] text-[#1a1a1a] leading-[20px] font-medium mt-1 mb-4">Se debe agregar un dominio de correo electrónico personalizado y verificar el correo electrónico de Fin, con el reenvío automático habilitado, para que los correos electrónicos enviados a esta dirección se canalicen a Intercom, donde Fin pueda leerlos y responderlos.</p>
+                <a
+                  href="https://www.intercom.com/help/en/articles/6288581-mapping-email-replies-to-inbound-address-using-custom-domains"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] px-3 h-8 rounded-full items-center"
+                >
+                  Mostrarme cómo
+                </a>
+              </div>
+            </div>
+
+            {/* Grey rounded module — Figma 1:13601 */}
+            <div className="mt-6 bg-[#fbfbf9] border border-[#e9eae6] rounded-[16px] p-6 flex flex-col items-center">
+              <button className="bg-[#f8f8f7] rounded-full px-3 h-8 flex items-center gap-2 text-[14px] font-semibold text-[#1a1a1a] mb-4">
+                <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                <span>Establecer en vivo</span>
+              </button>
+              <p className="text-[14px] text-[#646462] leading-[20px] text-center">
+                Tus clientes interactuarán con Fin cuando se comuniquen contigo por correo electrónico.<br/>
+                Puedes pausar Fin en cualquier momento.
+              </p>
+            </div>
+
+            {/* Footnote */}
+            <div className="mt-4 flex items-start justify-center gap-2">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0 mt-1" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
+              <div className="text-[13px] text-[#646462] leading-[20px]">
+                Puede ser necesario informar a las personas que están interactuando con un AI Agent.
+                <a href="https://www.intercom.com/help/en/articles/11712008-ai-agent-disclosure" target="_blank" rel="noreferrer" className="block text-[14px] underline hover:no-underline mt-0.5">Más información</a>
+              </div>
+            </div>
+          </div>
+
+          {/* Accordion 2 — Implementación avanzada (collapsed) */}
+          <div className="pt-6">
+            <div className="flex items-center justify-between gap-3 pb-2">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[20px]">Implementación avanzada con flujos de trabajo</h4>
+                <button className="h-[20px] px-[7px] rounded-full border bg-[#f8f8f7] border-[#e9eae6] text-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-medium">
+                  <span>No establecer en vivo</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+              </div>
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <p className="text-[14px] text-[#646462] leading-[20px]">
+              Personalízalo: automatiza con precisión lo que Fin debe hacer y cuándo.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Desplegar / Teléfono (Figma 1:14559) ────────────────────────────────────
+function FinDespliegueTelefonoContent() {
+  const status = useChannelDeploymentStatus(['phone', 'voice', 'aircall', 'twilio', 'telnyx', 'voip']);
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Top section header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Teléfono</h2>
+        </div>
+        <button className={`h-7 px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[12px] ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-white border-[#e9eae6] text-[#1a1a1a]'}`}>
+          {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
+          <span>{status.label}</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-6">
+          {/* Green hero */}
+          <div className="bg-[#a3df9a] rounded-[16px] px-7 py-7 flex items-center gap-6 overflow-hidden">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.6px] text-[#1a1a1a] uppercase">
+                <span className="w-2 h-2 bg-[#1a1a1a]" />
+                <span>Disponibilidad gestionada</span>
+              </div>
+              <h2 className="mt-3 text-[26px] font-bold text-[#1a1a1a] leading-[32px] tracking-[-0.4px] max-w-[420px]">
+                Usa Fin Voice para manejar las llamadas de asistencia
+              </h2>
+              <p className="mt-3 text-[13px] text-[#1a1a1a]/85 leading-[20px] max-w-[480px]">
+                Fin responde las llamadas al instante, contesta con precisión y mantiene las conversaciones fluidas con seguimientos relevantes, lo que le ayuda a resolver más problemas en más canales, 24 horas al día, los 7 días de la semana.<br/>
+                La voz de Fin está en <a href="#" className="underline">disponibilidad gestionada.</a>
+              </p>
+              <div className="mt-5 flex items-center gap-4">
+                <button className="h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">
+                  Registre su interés
+                </button>
+                <a href="#" className="text-[13px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                  <span>Más información</span>
+                </a>
+              </div>
+            </div>
+            <img src={IMG_FIN_VOICE_BANNER} alt="" className="flex-shrink-0 rounded-[8px] object-cover" style={{ width: 400, height: 260 }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Analizar / Comenzar (1:2082) ───────────────────────────────────────────
+function FinComenzarSectionHeader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <span className="w-2 h-2 bg-[#ed621d]" />
+      <span className="text-[11px] font-bold tracking-[1.4px] text-[#646462] uppercase font-mono">{label}</span>
+    </div>
+  );
+}
+
+// Industry tabs — exact Figma assets + insets per node 1:1795/1801/1807/1813/1819
+// (URLs re-fetched 2026-05-27 via cloud Figma MCP since prior 7-day TTL had expired).
+const FIN_INDUSTRY_TABS: { label: string; iconAsset: string; iconInset: string; active?: boolean }[] = [
+  { label: 'Generalidades',         iconAsset: 'f394d9d7-617a-4571-bffd-ca575bc6153a', iconInset: '7.82% 7.75% 7.75% 7.82%', active: true },
+  { label: 'Software y Tecnología', iconAsset: 'bd696a18-99cb-4049-b1de-83c6fd2c8b25', iconInset: '12.5% 0' },
+  { label: 'Juegos y apuestas',     iconAsset: '70afe97e-8d26-4921-81e5-f9cf954aec52', iconInset: '0 9.94% -0.06% 8.81%' },
+  { label: 'Comercio electrónico',  iconAsset: '5fde427e-6f5a-4b09-9c9a-4363afc9d7a1', iconInset: '6.25% 7.81% 6.25% 6.06%' },
+  { label: 'Servicios financieros', iconAsset: 'c708bdd9-f366-425d-a856-c527a4333c83', iconInset: '18.75% 0' },
+];
+
+function FinComenzarContent() {
+  const [previewTab, setPreviewTab] = useState<'persoTareas' | 'transferencia'>('persoTareas');
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="max-w-[920px] mx-auto px-10 py-10">
+          {/* Hero */}
+          <div className="flex items-start gap-10 mb-10">
+            <div className="flex-1 min-w-0 max-w-[560px]">
+              <img src={IMG_FIN_LOGO_MARK} alt="" className="w-9 h-9 mb-4" />
+              <h1 className="text-[36px] font-serif text-[#1a1a1a] leading-[40px] tracking-[-0.5px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>
+                Fin ofrece soporte inmediato a los clientes.
+              </h1>
+              <p className="mt-4 text-[14px] text-[#646462] leading-[20px]">
+                Responde a las consultas de los clientes y lleva a cabo acciones complejas para resolver incluso los problemas más difíciles.
+              </p>
+              <button className="mt-6 h-8 px-3 rounded-full bg-[#222] text-[#f8f8f7] text-[14px] font-semibold inline-flex items-center gap-2 hover:bg-black leading-[16px]">
+                <img src={IMG_FIN_LOGO_MARK} alt="" className="w-3 h-3 invert" />
+                <span>Guía de configuración</span>
+              </button>
+            </div>
+            <div className="w-[350px] flex-shrink-0">
+              {/* Figma 1:1778 — fin-service-agent-video-thumbnail (real image, includes its own play button) */}
+              <div className="relative w-full h-[197px] rounded-[12px] overflow-hidden">
+                <img
+                  src={`${FIGMA_CDN}/10ee71e0-a1b1-4842-82cf-99c5be3fe022`}
+                  alt="Fin Service Agent preview"
+                  className="absolute h-full top-0 max-w-none"
+                  style={{ left: '-0.75%', width: '101.5%' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Seleccione su industria */}
+          <div className="mb-10">
+            <h3 className="text-[20px] font-serif text-[#1a1a1a]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>Seleccione su industria</h3>
+            <p className="mt-2 text-[14px] text-[#646462]">Vea cómo empresas como la suya automatizan con Fin y qué tipo de impacto podría lograr.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {FIN_INDUSTRY_TABS.map(t => (
+                <button
+                  key={t.label}
+                  className={`pt-[6.87px] pb-[7.98px] px-[12px] rounded-full font-['Inter'] font-semibold text-[14px] leading-[16px] inline-flex items-center gap-2 ${
+                    t.active
+                      ? 'bg-[#222] text-[#f8f8f7]'
+                      : 'bg-[#f8f8f7] text-[#1a1a1a] hover:bg-[#ededea]'
+                  }`}
+                >
+                  <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                    <img src={`${FIGMA_CDN}/${t.iconAsset}`} alt="" className="absolute" style={{ inset: t.iconInset }} />
+                  </span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Oportunidad de automatización */}
+          <div className="mb-10">
+            <FinComenzarSectionHeader label="OPORTUNIDAD DE AUTOMATIZACIÓN" />
+            <p className="text-[20px] font-serif text-[#1a1a1a] leading-[28px] mb-6 max-w-[660px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>
+              Según los puntos de referencia de los clientes, Fin puede automatizar hasta el 89 % de las conversaciones.
+            </p>
+            {/* Stacked horizontal bar */}
+            <div className="flex h-8 gap-[2px] overflow-hidden">
+              <div className="bg-[#7c52d8]" style={{ width: '38.7%' }} />
+              <div className="bg-[#9b7be0]" style={{ width: '29.8%' }} />
+              <div className="bg-[#b9a3e8]" style={{ width: '19.9%' }} />
+              <div className="bg-[#a4c34f]" style={{ width: '11%' }} />
+            </div>
+            <div className="mt-3 flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-2 h-2 bg-[#7c52d8]" />
+                    <span className="w-2 h-2 bg-[#9b7be0]" />
+                    <span className="w-2 h-2 bg-[#b9a3e8]" />
+                    <span className="text-[12px] font-mono tracking-[1px] uppercase text-[#1a1a1a]">89 % DE FIN</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                    <span className="w-1.5 h-1.5 bg-[#7c52d8]" /> informativo
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                    <span className="w-1.5 h-1.5 bg-[#9b7be0]" /> personalizado
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                    <span className="w-1.5 h-1.5 bg-[#b9a3e8]" /> tareas
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[12px] text-[#646462]">Conversaciones que Fin podría automatizar</p>
+              </div>
+              <div className="w-[330px] flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 bg-[#a4c34f]" />
+                  <span className="text-[12px] font-mono tracking-[1px] uppercase text-[#1a1a1a]">11% HUMANO/COMPLEJO</span>
+                </div>
+                <p className="mt-1.5 text-[12px] text-[#646462]">Conversaciones que aún requieren un miembro del equipo</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Dónde comenzar */}
+          <div className="mb-10">
+            <FinComenzarSectionHeader label="DÓNDE COMENZAR" />
+            <div className="flex gap-6">
+              <div className="w-[320px] flex-shrink-0">
+                <h3 className="text-[20px] font-serif text-[#1a1a1a] leading-[28px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>
+                  Configure Fin para que gestione primero las preguntas frecuentes
+                </h3>
+                <p className="mt-3 text-[13px] text-[#1a1a1a] leading-[20px]">
+                  Proporcione a Fin contenido de su centro de ayuda y responderá preguntas frecuentes al instante. Comience poco a poco con algunas consultas informativas, como sus preguntas frecuentes principales. Visite Fin Studio para ver cómo se hace.
+                </p>
+                <button className="mt-5 h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+                  <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4" />
+                  <span>Guía de configuración</span>
+                </button>
+              </div>
+              <div className="flex-1 grid grid-cols-2 border border-[#e9eae6] rounded-[12px] overflow-hidden bg-white">
+                {/* Header row */}
+                <div className="px-4 py-3 border-b border-[#e9eae6] border-r">
+                  <span className="text-[11px] font-mono tracking-[1px] uppercase text-[#646462]">consultas informativas</span>
+                </div>
+                <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+                  <span className="text-[11px] font-mono tracking-[1px] uppercase text-[#646462]">cantidad ahorrada usando Fin</span>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 6v4M8 4v.01" strokeLinecap="round"/></svg>
+                </div>
+                <div className="px-4 py-5 border-r border-[#e9eae6]">
+                  <p className="text-[36px] font-mono font-bold text-[#1a1a1a] leading-none">39%</p>
+                  <p className="mt-3 text-[12px] text-[#646462] leading-[16px]">En promedio, las empresas automatizan esta proporción de conversaciones únicamente con acceso al contenido del Centro de Ayuda.</p>
+                </div>
+                <div className="px-4 py-5">
+                  <p className="text-[36px] font-mono font-bold text-[#1a1a1a] leading-none">USD 6,176</p>
+                  <p className="mt-3 text-[12px] text-[#646462] leading-[16px]">En promedio, las empresas ahorran esta cantidad en costos de personal cada mes solo al automatizar consultas informativas.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Vista previa */}
+          <div className="mb-10">
+            <FinComenzarSectionHeader label="VISTA PREVIA" />
+            <p className="text-[14px] text-[#1a1a1a] leading-[20px] mb-6 max-w-[600px]">
+              Esta es una vista previa de cómo Fin respondería a las preguntas reales de los clientes, y cómo hace transferencias a un ser humano cuando es necesario.
+            </p>
+            {/* Figma 1:1972/1:1977 — only 2 tabs, no color dots, regular 400 #646462 */}
+            <div className="flex gap-2 mb-6">
+              <button onClick={() => setPreviewTab('persoTareas')} className={`px-[13.111px] py-[7.111px] rounded-full border border-transparent font-['Inter'] text-[14px] leading-[16px] inline-flex items-center justify-center ${
+                previewTab === 'persoTareas' ? 'bg-[#f8f8f7] text-[#1a1a1a] font-semibold' : 'bg-transparent text-[#646462] font-normal hover:bg-[#f8f8f7]/50'
+              }`}>
+                Personalizado y tareas
+              </button>
+              <button onClick={() => setPreviewTab('transferencia')} className={`px-[13.111px] py-[7.111px] rounded-full border border-transparent font-['Inter'] text-[14px] leading-[16px] inline-flex items-center justify-center ${
+                previewTab === 'transferencia' ? 'bg-[#f8f8f7] text-[#1a1a1a] font-semibold' : 'bg-transparent text-[#646462] font-normal hover:bg-[#f8f8f7]/50'
+              }`}>
+                Transferencia
+              </button>
+            </div>
+            {/* Figma 1:1968 — playground: questions list + messenger preview side-by-side */}
+            <div className="flex gap-4 items-start">
+              {/* Questions list (left) */}
+              <div className="w-[260px] flex-shrink-0 bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[#e9eae6]">
+                  <p className="text-[11px] font-mono tracking-[1px] uppercase text-[#646462]">Preguntas frecuentes</p>
+                </div>
+                {[
+                  '¿Cuál es el horario de su equipo de asistencia?',
+                  '¿Pueden mejorar mis ofertas de tarjetas de crédito?',
+                  '¿Tienen una aplicación móvil?',
+                ].map((q, i) => (
+                  <button key={q} className={`w-full text-left px-4 py-3 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${i < 2 ? 'border-b border-[#e9eae6]' : ''}`}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+              {/* Messenger preview (right) - Figma 1:2007 */}
+              <div className="flex-1 max-w-[400px] bg-white border border-[#f5f5f5] rounded-[15px] overflow-hidden flex flex-col" style={{ boxShadow: '0px 5px 40px 0px rgba(9,14,21,0.16)' }}>
+                {/* Header */}
+                <div className="border-b border-[#f5f5f5] px-[60px] pr-[8px] flex items-center h-[64px]">
+                  <div className="w-8 h-8 rounded-[5.34px] bg-gradient-to-br from-[#222] to-[#1a1a1a] flex items-center justify-center flex-shrink-0">
+                    <img src={IMG_FIN_LOGO_MARK} alt="" className="w-5 h-5" />
+                  </div>
+                  <p className="ml-3 text-[16px] font-semibold text-[#14161a] leading-[20px]">Fin</p>
+                </div>
+                {/* Messages */}
+                <div className="flex-1 px-4 py-2 flex flex-col gap-2 min-h-[400px]">
+                  {/* Intro bubble (light) */}
+                  <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[16px] px-[13px] pt-[16px] pb-[23px] w-[281px]">
+                    <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
+                      Esta es una vista previa de cómo Fin respondería a las preguntas de los clientes que necesitan <span className="font-semibold">contenido de asistencia al cliente.</span>
+                    </p>
+                  </div>
+                  {/* User question (dark, right) */}
+                  <div className="self-end bg-[#222] border border-[#e9eae6] rounded-[16px] px-[13px] pt-[16px] pb-[23px] w-[281px]">
+                    <p className="text-[14px] text-[#f8f8f7] leading-[20px]">Tengo problemas para contactar con alguien, ¿cuándo está disponible su equipo de asistencia?</p>
+                  </div>
+                  {/* Fin response */}
+                  <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[16px] px-[13px] py-[17px] w-[281px]">
+                    <div className="flex items-center gap-2 mb-3">
+                      <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4" />
+                      <span className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px]">Fin • AI Agent</span>
+                    </div>
+                    <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
+                      Nuestra asistencia por chat está disponible las 24 hrs./7 días a la semana. La asistencia telefónica y por correo electrónico está disponible de lunes a viernes durante el horario laboral, por lo que siempre hay alguien disponible cuando necesitas ayuda.
+                    </p>
+                  </div>
+                </div>
+                {/* Composer */}
+                <div className="px-4 pb-4 pt-2 flex justify-center">
+                  <div className="bg-white border border-[#f5f5f5] rounded-[28px] h-[50px] px-[17px] flex items-center w-full max-w-[362px]" style={{ filter: 'drop-shadow(0px 0px 2px rgba(9,14,21,0.16))' }}>
+                    <p className="text-[14px] text-[#646462] leading-[20px]">Seleccione una pregunta a la izquierda</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Analizar / Desempeño (1:16070) ─────────────────────────────────────────
+function FinDesempenoContent() {
+  // Live numbers — pull stats + cases so we can compute Fin-specific KPIs
+  // (automation %, engagement %, resolution %) without faking anything.
+  const { data: stats } = useApi(() => aiApi.stats(), [], null);
+  const { data: cases } = useApi(() => casesApi.list(), [], []);
+  const { data: overview } = useApi(() => reportsApi.overview('30d', 'all'), [], null);
+  const totals = useMemo(() => {
+    const list = Array.isArray(cases) ? cases : [];
+    const total = list.length;
+    const finResolved = list.filter((c: any) => {
+      const ai = (c.assignedAgent || c.assigned_agent || c.handler || '').toString().toLowerCase();
+      const resolved = String(c.status || '').toLowerCase() === 'resolved';
+      return resolved && ai.includes('fin');
+    }).length;
+    const finTouched = list.filter((c: any) => {
+      const ai = (c.assignedAgent || c.assigned_agent || c.handler || '').toString().toLowerCase();
+      return ai.includes('fin') || (c.aiInvolved ?? c.ai_involved);
+    }).length;
+    const resolved = list.filter((c: any) => String(c.status || '').toLowerCase() === 'resolved').length;
+    const automation = total > 0 ? Math.round((finResolved / total) * 100) : 0;
+    const engagement = total > 0 ? Math.round((finTouched / total) * 100) : 0;
+    const resolutionRate = finTouched > 0 ? Math.round((finResolved / finTouched) * 100) : 0;
+    // Backend stats / report overview can override these when available.
+    const sBlock: any = stats || {};
+    const oBlock: any = overview || {};
+    return {
+      total,
+      finResolved,
+      finTouched,
+      resolved,
+      automation: typeof sBlock.automationRate === 'number' ? Math.round(sBlock.automationRate * 100) : (typeof oBlock.automationPct === 'number' ? Math.round(oBlock.automationPct) : automation),
+      engagement: typeof sBlock.engagementRate === 'number' ? Math.round(sBlock.engagementRate * 100) : engagement,
+      resolutionRate: typeof sBlock.resolutionRate === 'number' ? Math.round(sBlock.resolutionRate * 100) : resolutionRate,
+      cxScore: typeof sBlock.cxScore === 'number' ? sBlock.cxScore : (typeof oBlock.cxScore === 'number' ? oBlock.cxScore : null),
+    };
+  }, [cases, stats, overview]);
+  const periodLabel = useMemo(() => {
+    const end = new Date();
+    const start = new Date(); start.setDate(start.getDate() - 30);
+    const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+    return `${fmt(start)} – ${fmt(end)}`;
+  }, []);
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 py-4 flex items-start justify-between">
+        <div>
+          <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">Rendimiento de Support</h2>
+          <div className="mt-2 flex items-center gap-3">
+            <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg>
+              <span>{periodLabel}</span>
+            </button>
+            <button className="h-7 px-2 text-[12px] inline-flex items-center gap-1.5 text-[#646462] hover:text-[#1a1a1a]">
+              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+              <span>Añadir filtro</span>
+            </button>
+          </div>
+        </div>
+        <button className="h-7 px-2.5 text-[12px] inline-flex items-center gap-1.5 text-[#0070c0] hover:underline">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 3h10v8H8l-3 3v-3H3z"/></svg>
+          <span>Dar opinión</span>
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0 p-6">
+        {/* Pro trial banner */}
+        <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5 flex items-center gap-5 mb-5 relative">
+          <div className="flex-shrink-0 rounded-[8px] overflow-hidden relative" style={{ width: 300, height: 144 }}>
+            <img src={IMG_FIN_PRO_TRIAL_BANNER} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-[18px] font-bold text-[#1a1a1a]">Su acceso gratis a Pro termina en 14 días</h3>
+            <p className="mt-1.5 text-[13px] text-[#646462]">Esto incluye Optimize, Topics Explorer, Trends y Monitors, impulsados por la puntuación de CX y los temas de IA.</p>
+            <a href="#" className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#0070c0] hover:underline">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+              <span>Más información</span>
+            </a>
+          </div>
+          <button className="absolute top-3 right-3 w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Top KPI row */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          {/* Tasa de automatización */}
+          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de automatización</h3>
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+                </div>
+                <p className="mt-1 text-[12px] text-[#646462]">{totals.finResolved} conversaciones resueltas por Fin de un volumen total de asistencia de {totals.total}</p>
+              </div>
+              <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7] flex-shrink-0">
+                <span>Recomendaciones</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.automation}%</p>
+            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+              <div className="h-2 bg-[#a4c34f] rounded-full" style={{ width: `${Math.min(100, totals.automation)}%` }} />
+            </div>
+            <div className="mt-3 flex items-center gap-4">
+              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                <span className="w-2 h-2 bg-[#a4c34f]" /> RESUELTO
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                <span className="w-2 h-2 bg-[#e9eae6]" /> VOLUMEN TOTAL
+              </span>
+            </div>
+          </div>
+
+          {/* Puntuación CX */}
+          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-[14px] font-bold text-[#1a1a1a]">Puntuación de la experiencia del cliente (CX)</h3>
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+                </div>
+              </div>
+              <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7] flex-shrink-0">
+                <span>Punto de referencia</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+            <div className="flex items-center justify-center py-6">
+              {totals.cxScore != null ? (
+                <div className="text-center">
+                  <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{Math.round(totals.cxScore)}</p>
+                  <p className="mt-2 text-[12px] text-[#646462]">Puntuación CX agregada</p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <svg viewBox="0 0 24 16" className="w-8 h-6 mx-auto fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                  <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-2 pt-4 border-t border-[#e9eae6]">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-[12px] font-bold text-[#1a1a1a]">Razones para un puntaje CX positivo</h4>
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+                </div>
+                <div className="mt-3 flex flex-col items-center justify-center py-3">
+                  <svg viewBox="0 0 24 16" className="w-6 h-4 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                  <p className="mt-1 text-[11px] text-[#646462]">No hay datos para mostrar</p>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-[12px] font-bold text-[#1a1a1a]">Razones para un puntaje CX negativo</h4>
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+                </div>
+                <div className="mt-3 flex flex-col items-center justify-center py-3">
+                  <svg viewBox="0 0 24 16" className="w-6 h-4 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                  <p className="mt-1 text-[11px] text-[#646462]">No hay datos para mostrar</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom KPI row */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de participación</h3>
+              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+            </div>
+            <p className="text-[12px] text-[#646462] mb-3">Fin participó en {totals.finTouched} conversaciones de un volumen total de {totals.total}</p>
+            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.engagement}%</p>
+            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+              <div className="h-2 bg-[#7c52d8] rounded-full" style={{ width: `${Math.min(100, totals.engagement)}%` }} />
+            </div>
+            <div className="mt-3 flex items-center gap-4">
+              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                <span className="w-2 h-2 bg-[#7c52d8]" /> PARTICIPACIÓN
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                <span className="w-2 h-2 bg-[#e9eae6]" /> VOLUMEN TOTAL
+              </span>
+            </div>
+          </div>
+          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de resolución</h3>
+              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+            </div>
+            {totals.finTouched > 0 ? (
+              <div className="py-3">
+                <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.resolutionRate}%</p>
+                <p className="mt-2 text-[12px] text-[#646462]">{totals.finResolved} resueltas de {totals.finTouched} conversaciones donde Fin participó</p>
+                <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+                  <div className="h-2 bg-[#a4c34f] rounded-full" style={{ width: `${Math.min(100, totals.resolutionRate)}%` }} />
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10">
+                <svg viewBox="0 0 24 16" className="w-8 h-6 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Embudo de desempeño */}
+        <div className="border-t border-[#e9eae6] pt-5">
+          <h3 className="text-[16px] font-bold text-[#1a1a1a]">Embudo de desempeño</h3>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Analizar / Tendencias (1:16962) ────────────────────────────────────────
+function FinTendenciasContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2 12l4-5 3 3 5-6M11 4h2v2"/></svg>
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tendencias</h2>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 flex items-start justify-center py-12 px-6">
+        <div className="max-w-[640px] w-full text-center">
+          <h3 className="text-[28px] font-serif text-[#1a1a1a] leading-[34px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>
+            Buscando tendencias…
+          </h3>
+          <p className="mt-4 text-[13px] text-[#646462] leading-[20px]">
+            Detectar cambios en el volumen de conversaciones, la calidad y la distribución de temas. <span className="font-semibold text-[#1a1a1a]">Tenga en cuenta que esto puede tardar un par de semanas.</span>
+            <br />
+            Trends está incluido en tu complemento Pro, junto con <a href="#" className="text-[#0070c0] underline">Puntuación de la experiencia del cliente (CX)</a>, <a href="#" className="text-[#0070c0] underline">Recomendaciones</a>, <a href="#" className="text-[#0070c0] underline">Explorador de Temas</a> y <a href="#" className="text-[#0070c0] underline">Monitorear</a>.
+          </p>
+          {/* Trends preview — real Figma asset (1:16935 "Ilustración de tendencias") */}
+          <div className="mt-8 mx-auto rounded-[10px] overflow-hidden" style={{ width: 520, maxWidth: '100%', aspectRatio: '520 / 287' }}>
+            <img
+              src={`${FIGMA_CDN}/f8633c48-0a1d-4188-86d7-37d38c7a1314`}
+              alt="Vista previa de tendencias"
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <button className="mt-6 h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+            <span>Más información</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Analizar / Monitores (1:18192) ─────────────────────────────────────────
+function FinMonitoresContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="1.5" y="3" width="13" height="9" rx="1.5"/><path d="M5 14h6M8 12v2"/></svg>
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Monitores</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="h-8 px-3 rounded-[8px] text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>
+            <span>Tarjetas de puntuación</span>
+          </button>
+          <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+            <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.6"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+            <span>Monitorear</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {/* Hero card — Figma 1:18069 (white bg-base-module with bottom border, 192px tall) */}
+        <div className="bg-white border-b border-[#e9eae6] py-6 px-6 flex items-center gap-6 relative">
+          {/* Score conversation interface for QA review — Figma 1:18072 (real asset) */}
+          <div className="w-[300px] h-[144px] flex-shrink-0 rounded-[10px] overflow-hidden">
+            <img
+              src={`${FIGMA_CDN}/625db3da-b0aa-49bb-b2f5-812bc1251d29`}
+              alt="Score conversation interface"
+              className="w-full h-full object-cover object-top"
+            />
+          </div>
+          <div className="flex-1 max-w-[682px]">
+            <h2 className="text-[22px] font-serif text-[#1a1a1a] leading-[32px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>Supervise y mejore Fin a gran escala</h2>
+            <p className="mt-3 text-[14px] text-[#646462] leading-[20px]">Marque automáticamente las conversaciones de interés y envíelas a revisores de IA o humanos para el control de calidad.</p>
+            <a href="#" className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#1a1a1a] hover:underline">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+              <span>Más información</span>
+            </a>
+          </div>
+          <button className="absolute top-6 right-6 w-8 h-8 rounded-full hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        <div className="p-6">
+          {/* Filters */}
+          <div className="flex items-center gap-2 mb-6">
+            <button className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[14px] inline-flex items-center gap-2 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <span>Mostrar actividad en los últimos 7 días</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <button className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[14px] inline-flex items-center gap-2 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <span>Monitores activos</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+          </div>
+
+          {/* Revisiones de Fin */}
+          <h3 className="text-[14px] text-[#1a1a1a] mb-3">Revisiones de Fin</h3>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            {/* Conversaciones sin revisión — Figma 1:18113 */}
+            <a href="#" className="bg-white rounded-[8px] border border-[#e9eae6] py-[13px] px-[17px] flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
+              <span className="w-6 h-6 rounded-[6px] bg-[#feecaf] flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </span>
+              <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a] leading-[19.5px]">Conversaciones sin revisión</span>
+              <span className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[13px] text-[#1a1a1a] leading-[13px]">0</span>
+            </a>
+            {/* Correcciones necesarias — Figma 1:18124 */}
+            <a href="#" className="bg-white rounded-[8px] border border-[#e9eae6] py-[13px] px-[17px] flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
+              <span className="w-6 h-6 rounded-[6px] bg-[#feecaf] flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M9 1L2 9h5l-1 6 7-8h-5l1-6z"/></svg>
+              </span>
+              <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a] leading-[19.5px]">Correcciones necesarias</span>
+              <span className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[13px] text-[#1a1a1a] leading-[13px]">0</span>
+            </a>
+            <div />
+          </div>
+
+          {/* Todas las conversaciones de Fin — Figma 1:18136 */}
+          <div className="grid grid-cols-3 gap-4">
+            <a href="#" className="bg-white rounded-[16px] border border-[#e9eae6] p-[25px] relative block hover:bg-[#fbfbf9]">
+              <div className="mb-6">
+                <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[24px]">Todas las conversaciones de Fin</h4>
+                <p className="mt-0.5 text-[12px] text-[#81817e] leading-[16.2px]">Continuo</p>
+              </div>
+              {/* Bar chart — 7 narrow bars at #c6c9ec (Periwinkle Gray) */}
+              <div className="flex items-end justify-center gap-3 h-[80px] w-full mb-6">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <span key={i} className="bg-[#c6c9ec] h-[2px] flex-1" />
+                ))}
+              </div>
+              <div className="pt-[15px] border-t border-[#e9eae6]">
+                <p className="text-[12px] text-[#81817e] leading-[16.2px]">Conversaciones</p>
+                <p className="mt-[7px] text-[12px] font-mono text-[#1a1a1a] leading-[16.2px]">0</p>
+              </div>
+              <button className="absolute bottom-3 right-3 w-8 h-8 rounded-full hover:bg-[#f8f8f7] flex items-center justify-center">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
+              </button>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Fin AI · Settings page (Intercom-style accordion) ───────────────────────
+export function FinAiSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  // Settings state
+  const [finName, setFinName] = useState('Fin');
+  const [showAiLabel, setShowAiLabel] = useState(false);
+  const [resolutionBtn, setResolutionBtn] = useState<'helped' | 'answered' | 'thats_it' | 'emoji'>('helped');
+  const [realTimeTrans, setRealTimeTrans] = useState(true);
+  const [defaultLang, setDefaultLang] = useState('English');
+  const [showDraftedByAi, setShowDraftedByAi] = useState(true);
+  const [preventDmarc, setPreventDmarc] = useState(true);
+  const [pronounFormality, setPronounFormality] = useState<'auto' | 'informal' | 'formal'>('auto');
+  const [pronounOpen, setPronounOpen] = useState(false);
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function toggleSection(id: string) {
+    setExpanded(s => s === id ? null : id);
+  }
+
+  const LANGUAGES = ['English', 'Español', 'Français', 'Deutsch', 'Português', 'Italiano', 'Nederlands'];
+  const PRONOUNS: { value: 'auto' | 'informal' | 'formal'; label: string }[] = [
+    { value: 'auto', label: 'Dejar que Fin decida' },
+    { value: 'informal', label: 'Informal' },
+    { value: 'formal', label: 'Formal' },
+  ];
+
+  // Inline toggle helper
+  function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
+    return (
+      <button
+        type="button"
+        onClick={onChange}
+        className={`mt-0.5 w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${on ? 'bg-[#f97316]' : 'bg-[#d4d4d2]'}`}
+      >
+        <span className={`absolute top-0.5 left-0 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
+      </button>
+    );
+  }
+
+  // Accordion row
+  function AccRow({
+    id, icon, title, desc, rightAction, children,
+  }: {
+    id: string;
+    icon: React.ReactNode;
+    title: string;
+    desc: string;
+    rightAction?: React.ReactNode;
+    children?: React.ReactNode;
+  }) {
+    const isExp = expanded === id && !!children;
+    return (
+      <div className={`rounded-[8px] border overflow-hidden transition-all ${isExp ? 'border-[#f97316]' : 'border-[#e9eae6]'}`}>
+        <button
+          type="button"
+          className="w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-[#fafaf8] transition-colors"
+          onClick={() => { if (children) toggleSection(id); }}
+        >
+          <span className="w-5 h-5 flex items-center justify-center mt-0.5 flex-shrink-0 text-[#646462]">{icon}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-0.5">{title}</p>
+            <p className="text-[12.5px] text-[#646462] leading-[1.5]">{desc}</p>
+          </div>
+          {rightAction && <div className="flex-shrink-0 ml-2">{rightAction}</div>}
+          {children && (
+            <svg viewBox="0 0 16 16" className={`w-4 h-4 mt-1 flex-shrink-0 ml-1 transition-transform ${isExp ? 'rotate-180' : ''}`}>
+              <path d="M4 6l4 4 4-4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
+          )}
+        </button>
+        {isExp && (
+          <div className="border-t border-[#f0f0ee] px-5 py-5">
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden relative">
+
+          {/* Toast */}
+          {toast && (
+            <div className={`absolute top-4 right-4 z-50 px-4 py-2.5 rounded-[8px] text-[13px] font-medium shadow-lg transition-all ${toast.ok ? 'bg-[#1a1a1a] text-white' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              {toast.msg}
+            </div>
+          )}
+
+          {/* Header */}
+          <div className="flex items-center gap-2.5 px-6 h-14 border-b border-[#e9eae6] flex-shrink-0">
+            <svg viewBox="0 0 20 20" className="w-5 h-5 flex-shrink-0">
+              <rect x="2" y="2" width="16" height="16" rx="3" fill="#1a1a1a"/>
+              <path d="M10 6.5a3.5 3.5 0 00-3.5 3.5v.5a3.5 3.5 0 007 0V10A3.5 3.5 0 0010 6.5z" fill="white"/>
+            </svg>
+            <h1 className="text-[16px] font-bold text-[#1a1a1a]">Fin AI Agent</h1>
+          </div>
+
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto min-h-0 px-8 py-6 flex flex-col gap-7">
+
+            {/* ── USO ── */}
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-3">Uso</p>
+              <div className="flex flex-col gap-2">
+                {/* Alertas y límites */}
+                <AccRow
+                  id="alertas"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M8.982 1.566a1.13 1.13 0 00-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5a.905.905 0 01.9.995l-.35 3.507a.552.552 0 01-1.1 0L7.1 5.995A.905.905 0 018 5zm.002 6a1 1 0 110 2 1 1 0 010-2z"/></svg>}
+                  title="Alertas y límites"
+                  desc="Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto."
+                >
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[8px] p-4">
+                      <p className="text-[13px] font-semibold text-[#92400e] mb-1">En período de prueba</p>
+                      <p className="text-[12.5px] text-[#b45309]">Fin es gratuito durante los 14 días de prueba. Al finalizar, podrás configurar alertas de uso y límites de gasto desde esta sección.</p>
+                    </div>
+                    <button type="button" onClick={() => toggleSection('alertas')} className="w-fit text-[12.5px] text-[#646462] hover:text-[#1a1a1a] font-medium">Cerrar</button>
+                  </div>
+                </AccRow>
+
+                {/* Supervisar el uso */}
+                <div className="rounded-[8px] border border-[#e9eae6] flex items-center gap-3 px-5 py-4">
+                  <span className="w-5 h-5 flex items-center justify-center flex-shrink-0 text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M1.5 13.5v-3h2v3h-2zm3.5 0V8h2v5.5H5zm3.5 0V5h2v8.5H8.5zm3.5 0V2h2v11.5H12z"/></svg>
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-0.5">Supervisar el uso</p>
+                    <p className="text-[12.5px] text-[#646462]">Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo.</p>
+                  </div>
+                  <button type="button" onClick={() => showToast('Redirigiendo a uso y facturación…')} className="flex items-center gap-1 text-[13px] text-[#646462] hover:text-[#1a1a1a] font-medium whitespace-nowrap flex-shrink-0">
+                    Ver uso
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M6.72 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L10.44 8 6.72 4.28a.75.75 0 010-1.06z"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ── PERSONALIZACIÓN ── */}
+            <div>
+              <p className="text-[12px] font-semibold text-[#646462] mb-3">Personalización</p>
+              <div className="flex flex-col gap-2">
+
+                {/* La identidad de Fin */}
+                <AccRow
+                  id="identidad"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><circle cx="8" cy="5.5" r="2.5"/><path d="M2.5 13.5c0-3.04 2.46-5.5 5.5-5.5s5.5 2.46 5.5 5.5H2.5z"/></svg>}
+                  title="La identidad de Fin"
+                  desc="Administra el nombre y avatar que verán tus clientes."
+                >
+                  <div className="flex flex-col gap-4">
+                    {/* Gestionar marcas */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-[12.5px] text-[#646462]">Establezca la identidad del agente de IA para cada marca</p>
+                      <button type="button" onClick={() => onNavigate('workspaceBrands')} className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#1a1a1a] hover:underline flex-shrink-0">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M9.5 3.5H3a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h9a.5.5 0 00.5-.5V6.5h-1.5v5.5H3.5v-8H9.5V3.5zm1 0v-1H13a.5.5 0 01.5.5v2.5H12V4.56l-4.72 4.72-1.06-1.06L10.94 3.5H10.5z"/></svg>
+                        Gestionar marcas
+                      </button>
+                    </div>
+                    {/* Brand card */}
+                    <div className="border border-[#e9eae6] rounded-[8px] p-4 flex items-center gap-4">
+                      <div>
+                        <p className="text-[11px] font-semibold text-[#646462] mb-2">Acme</p>
+                        <div className="flex items-start gap-3">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-[10px] text-[#646462]">☀ Claro</span>
+                            <div className="w-12 h-12 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-center">
+                              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#1a1a1a]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                            </div>
+                            <button type="button" className="text-[10px] text-[#646462] hover:text-[#1a1a1a]">✏</button>
+                          </div>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-[10px] text-[#646462]">☾ Oscuro</span>
+                            <div className="w-12 h-12 rounded-[8px] border border-[#e9eae6] bg-[#1a1a1a] flex items-center justify-center">
+                              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                            </div>
+                            <button type="button" className="text-[10px] text-[#646462] hover:text-[#1a1a1a]">✏</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex-1 flex items-center gap-3">
+                        <label className="text-[12.5px] font-medium text-[#1a1a1a] whitespace-nowrap">Nombre</label>
+                        <input
+                          value={finName}
+                          onChange={e => setFinName(e.target.value)}
+                          className="flex-1 border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                        />
+                      </div>
+                      <span className="text-[12px] text-[#646462] font-medium whitespace-nowrap">Predeterminado</span>
+                    </div>
+                    {/* Show AI label toggle */}
+                    <div className="flex items-start gap-3">
+                      <Toggle on={showAiLabel} onChange={() => setShowAiLabel(s => !s)} />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a]">Mostrar la etiqueta de AI Agent en Messenger</p>
+                        <p className="text-[12px] text-[#646462]">Se muestra después del nombre de Fin para cada marca.</p>
+                      </div>
+                    </div>
+                    {/* Save / Cancel */}
+                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#f0f0ee]">
+                      <button type="button" onClick={() => toggleSection('identidad')} className="text-[12.5px] text-[#646462] hover:text-[#1a1a1a] font-medium px-3 py-1.5">Cancelar</button>
+                      <button
+                        type="button"
+                        onClick={() => { showToast('Identidad de Fin guardada.'); toggleSection('identidad'); }}
+                        className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#1a1a1a] px-3 py-1.5 border border-[#e9eae6] rounded-[6px] hover:bg-[#f8f8f7]"
+                      >
+                        <svg viewBox="0 0 12 12" className="w-3 h-3 fill-current"><path d="M1 6l3.5 3.5 7-7" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Guardar
+                      </button>
+                    </div>
+                  </div>
+                </AccRow>
+
+                {/* Botones de respuesta de Fin */}
+                <AccRow
+                  id="botones"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M14.5 2h-13A1.5 1.5 0 000 3.5v7A1.5 1.5 0 001.5 12H5v2.5l3-2.5h6.5A1.5 1.5 0 0016 10.5v-7A1.5 1.5 0 0014.5 2zM2 6.5h4v1H2v-1zm0-2h8v1H2v-1zm10 5H2v-1h10v1z"/></svg>}
+                  title="Botones de respuesta de Fin"
+                  desc="Elija cómo Fin formula las opciones que les presenta a sus clientes. Disponible en SMS."
+                >
+                  <div className="flex gap-6">
+                    {/* Options */}
+                    <div className="flex-1 flex flex-col gap-3">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a]">Texto del botón de resolución</p>
+                      <p className="text-[12px] text-[#646462]">Elige el texto para el botón que finaliza una conversación cuando se ha respondido a la pregunta de un cliente.</p>
+                      {([
+                        { val: 'helped', label: 'That helped 🔥', pill: true },
+                        { val: 'answered', label: 'That answered my question', pill: true },
+                        { val: 'thats_it', label: "That's it", pill: true },
+                        { val: 'emoji', label: '🔥', pill: false },
+                      ] as const).map(opt => (
+                        <label key={opt.val} className="flex items-center gap-2.5 cursor-pointer" onClick={() => setResolutionBtn(opt.val)}>
+                          <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${resolutionBtn === opt.val ? 'border-[#f97316]' : 'border-[#d4d4d2]'}`}>
+                            {resolutionBtn === opt.val && <div className="w-2 h-2 rounded-full bg-[#f97316]" />}
+                          </div>
+                          <span className={`px-3 py-1 text-[13px] text-[#1a1a1a] border border-[#e9eae6] ${opt.pill ? 'rounded-full' : 'rounded-[6px]'}`}>{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {/* Live preview */}
+                    <div className="w-[220px] flex-shrink-0 bg-[#f3f3f1] rounded-[10px] p-3 flex flex-col gap-2">
+                      <div className="flex items-center gap-2 bg-white rounded-[8px] px-3 py-2 shadow-sm">
+                        <div className="w-6 h-6 rounded-full bg-[#1a1a1a] flex items-center justify-center flex-shrink-0">
+                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium text-[#1a1a1a]">Hi 👋 How can I help you?</p>
+                          <p className="text-[9px] text-[#9a9a96]">Fin · 1 sem</p>
+                        </div>
+                      </div>
+                      <button type="button" className="text-left border border-[#e9eae6] bg-white rounded-[6px] px-3 py-1.5 text-[10px] text-[#1a1a1a]">
+                        {resolutionBtn === 'helped' ? 'That helped 🔥' : resolutionBtn === 'answered' ? 'That answered my question' : resolutionBtn === 'thats_it' ? "That's it" : '🔥'}
+                      </button>
+                      <button type="button" className="text-left border border-[#e9eae6] bg-white rounded-[6px] px-3 py-1.5 text-[10px] text-[#1a1a1a]">Chat with a product expert</button>
+                      <button type="button" className="text-left border border-[#e9eae6] bg-white rounded-[6px] px-3 py-1.5 text-[10px] text-[#1a1a1a]">Learn more about Intercom</button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 pt-3 mt-2 border-t border-[#f0f0ee]">
+                    <button type="button" onClick={() => toggleSection('botones')} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                  </div>
+                </AccRow>
+
+                {/* Soporte multilingüe de Fin */}
+                <AccRow
+                  id="multilingual"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M2 5h7V4H2v1zm0 2.5h7v-1H2v1zM0 13l3-3h4.5A1.5 1.5 0 009 8.5v-5A1.5 1.5 0 007.5 2h-6A1.5 1.5 0 000 3.5v9.5zm10.5-9.5A1.5 1.5 0 0112 2h4.5A1.5 1.5 0 0118 3.5v5A1.5 1.5 0 0116.5 10H13l-2 2.5V10H12V3.5z" clipRule="evenodd" fillRule="evenodd"/></svg>}
+                  title="Soporte multilingüe de Fin"
+                  desc="Controla los idiomas en los que responderá Fin."
+                >
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1.5">Idiomas compatibles</p>
+                      <p className="text-[12.5px] text-[#646462] leading-relaxed">
+                        Fin detectará y responderá automáticamente a los clientes en todos los idiomas admitidos.{' '}
+                        <a href="#" className="text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Consulta la lista completa de idiomas compatibles</a>
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <Toggle on={realTimeTrans} onChange={() => setRealTimeTrans(s => !s)} />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">Traducción en tiempo real</p>
+                        <p className="text-[12px] text-[#646462] mb-2">Si Fin no encuentra contenido de asistencia relevante en el idioma del cliente, traducirá el contenido del idioma seleccionado a continuación:</p>
+                        {realTimeTrans && (
+                          <select
+                            value={defaultLang}
+                            onChange={e => setDefaultLang(e.target.value)}
+                            className="border border-[#e9eae6] rounded-[6px] px-3 py-1.5 text-[12.5px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] bg-white"
+                          >
+                            {LANGUAGES.map(l => <option key={l}>{l}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 pt-3 border-t border-[#f0f0ee]">
+                      <button type="button" onClick={() => toggleSection('multilingual')} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                      <a href="#" className="flex items-center gap-1 text-[12.5px] text-[#3b59f6] hover:underline font-medium" onClick={e => e.preventDefault()}>📖 Fin multilingüe</a>
+                      <a href="#" className="flex items-center gap-1 text-[12.5px] text-[#3b59f6] hover:underline font-medium" onClick={e => e.preventDefault()}>💡 Dar opinión</a>
+                    </div>
+                  </div>
+                </AccRow>
+
+                {/* Respuestas de correo electrónico de Fin */}
+                <AccRow
+                  id="email"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm2-1a1 1 0 00-1 1v.217l7 4.2 7-4.2V4a1 1 0 00-1-1H2zm13 2.383l-4.758 2.855L15 11.114V5.383zm-.034 6.878L9.271 8.82 8 9.583 6.728 8.82l-5.694 3.44A1 1 0 002 13h12a1 1 0 00.966-.739zM1 11.114l4.758-2.876L1 5.383v5.731z"/></svg>}
+                  title="Respuestas de correo electrónico de Fin"
+                  desc="Controla cómo Fin responde a los correos electrónicos de tus clientes"
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-start gap-3">
+                      <Toggle on={showDraftedByAi} onChange={() => setShowDraftedByAi(s => !s)} />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Mostrar "Redactado por IA" en el pie de página del correo electrónico</p>
+                        <p className="text-[12px] text-[#646462] leading-relaxed">
+                          Agrega un mensaje sutil en el pie de página como, "Redactado por IA", para informar a los clientes que Fin escribió el correo electrónico. Algunas leyes establecen este requisito.{' '}
+                          <a href="#" className="text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Más información.</a>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <Toggle on={preventDmarc} onChange={() => setPreventDmarc(s => !s)} />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Evita que Fin procese correos electrónicos que no pasen la autenticación (DMARC)</p>
+                        <p className="text-[12px] text-[#646462] leading-relaxed">
+                          Fin no se involucrará en conversaciones donde el remitente no pueda autenticarse.{' '}
+                          <a href="#" className="text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Más información.</a>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 pt-3 border-t border-[#f0f0ee]">
+                      <button type="button" onClick={() => { showToast('Guardado correctamente.'); toggleSection('email'); }} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                    </div>
+                  </div>
+                </AccRow>
+
+                {/* Formalidad de los pronombres en Fin */}
+                <AccRow
+                  id="pronouns"
+                  icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M14 1H2a1 1 0 00-1 1v11.5L4 11h10a1 1 0 001-1V2a1 1 0 00-1-1zM4.5 6h7v1h-7V6zm0-2h7v1h-7V4zm3.5 4h3.5v1H8v-1z"/></svg>}
+                  title="Formalidad de los pronombres en Fin"
+                  desc="Elige pronombres formales o informales (para todos los idiomas que correspondan)"
+                >
+                  <div className="flex flex-col gap-4">
+                    {/* Dropdown */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setPronounOpen(s => !s)}
+                        className="flex items-center gap-2 border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[13px] text-[#1a1a1a] hover:border-[#1a1a1a] min-w-[220px]"
+                      >
+                        <span className="flex-1 text-left">{PRONOUNS.find(p => p.value === pronounFormality)?.label}</span>
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none flex-shrink-0">
+                          <path d="M4 6l4 4 4-4" stroke="#646462" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                      {pronounOpen && (
+                        <div className="absolute top-full left-0 mt-1 bg-white border border-[#e9eae6] rounded-[8px] shadow-lg z-20 min-w-[220px] py-1">
+                          {PRONOUNS.map(p => (
+                            <button
+                              key={p.value}
+                              type="button"
+                              onClick={() => { setPronounFormality(p.value); setPronounOpen(false); }}
+                              className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] text-left"
+                            >
+                              {p.label}
+                              {pronounFormality === p.value && (
+                                <svg viewBox="0 0 12 12" className="w-3 h-3 flex-shrink-0 fill-none">
+                                  <path d="M1 6l3 3 7-7" stroke="#3b59f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[12.5px] text-[#646462] leading-relaxed">
+                      Fin seguirá el mismo registro lingüístico del usuario, de modo que si éste utiliza "du" o "tú", Fin responderá con pronombres informales. Si el usuario utiliza "Sie" o "usted", Fin responde en consecuencia.{' '}
+                      <a href="#" className="text-[#3b59f6] hover:underline" onClick={e => e.preventDefault()}>Los pronombres en Fin</a>
+                    </p>
+                    <div className="flex items-center gap-3 pt-3 border-t border-[#f0f0ee]">
+                      <button type="button" onClick={() => { showToast('Guardado correctamente.'); toggleSection('pronouns'); }} className="text-[12.5px] font-medium text-[#646462] hover:text-[#1a1a1a]">Cerrar</button>
+                    </div>
+                  </div>
+                </AccRow>
+              </div>
+            </div>
+
+            {/* ── AJUSTES DE AUTOMATIZACIÓN ADICIONALES ── */}
+            <div>
+              <p className="text-[11px] font-semibold text-[#9a9a96] uppercase tracking-wider mb-3">Ajustes de automatización adicionales</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => showToast('Abriendo configuración de personalidad de Fin…')}
+                  className="text-left border border-[#e9eae6] rounded-[10px] p-4 hover:border-[#1a1a1a] transition-colors group"
+                >
+                  <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-1">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#646462] inline mr-1.5 -mt-0.5"><path d="M12.5 1a1 1 0 011 1v1h1a.5.5 0 010 1h-1v1a1 1 0 01-2 0V4h-1a.5.5 0 010-1h1V2a1 1 0 011-1zm-8 2a2 2 0 100 4 2 2 0 000-4zm0 1a1 1 0 110 2 1 1 0 010-2zM1.5 9h11a.5.5 0 01.5.5v1a.5.5 0 01-.5.5H12v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2H1.5a.5.5 0 01-.5-.5v-1A.5.5 0 011.5 9z"/></svg>
+                    Personaliza la personalidad de Fin →
+                  </p>
+                  <p className="text-[12px] text-[#646462]">Elige la identidad, el tono de voz y la longitud de la respuesta de Fin</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => showToast('Abriendo Inbox del bot…')}
+                  className="text-left border border-[#e9eae6] rounded-[10px] p-4 hover:border-[#1a1a1a] transition-colors group"
+                >
+                  <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-1">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current text-[#646462] inline mr-1.5 -mt-0.5"><path d="M0 4.5A1.5 1.5 0 011.5 3h13A1.5 1.5 0 0116 4.5v7A1.5 1.5 0 0114.5 13h-13A1.5 1.5 0 010 11.5v-7zm1.5-.5a.5.5 0 00-.5.5v6.5h4V10h5v1h4V4.5a.5.5 0 00-.5-.5H1.5z"/></svg>
+                    Activar el Inbox del bot →
+                  </p>
+                  <p className="text-[12px] text-[#646462]">Mantén las conversaciones de Fin en un buzón independiente para una experiencia más enfocada para los compañeros de equipo</p>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Fin · Ajustes generales ────────────────────────────────────────────────
+// ─── Fin · Ajustes (Figma 1:20145) ───────────────────────────────────────────
+// Layout: H1 "Ajustes" + 2 sections (Uso, Personalización)
+//   Uso section: 2 cards — "Alertas y límites" + "Supervisar el uso" (with CTA)
+//   Personalización section: 5 accordion-style cards
+function FinSettingsCard({ icon, title, body, action }: { icon: React.ReactNode; title: string; body?: string; action?: React.ReactNode }) {
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[12px] px-6 py-6 flex items-start gap-3">
+      <div className="flex-shrink-0 w-5 h-5 mt-0.5 text-[#1a1a1a]">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] leading-[24px]">{title}</h3>
+        {body && <p className="mt-1.5 text-[13px] text-[#646462] leading-[20px]">{body}</p>}
+      </div>
+      {action && <div className="flex-shrink-0 ml-2">{action}</div>}
+    </div>
+  );
+}
+
+function FinSettingsAccordionCard({ icon, title, body }: { icon: React.ReactNode; title: string; body?: string }) {
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[12px] px-6 py-6 flex items-center gap-3 cursor-pointer hover:bg-[#fbfbf9]">
+      <div className="flex-shrink-0 w-5 h-5 text-[#1a1a1a]">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] leading-[24px]">{title}</h3>
+        {body && <p className="mt-1 text-[13px] text-[#646462] leading-[20px]">{body}</p>}
+      </div>
+      <svg viewBox="0 0 16 16" className="flex-shrink-0 w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4">
+        <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  );
+}
+
+function FinSettingsContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* H1 header */}
+      <div className="flex-shrink-0 px-6 pt-4 pb-4 flex items-center gap-3">
+        <button className="w-8 h-8 rounded-[8px] hover:bg-[#f3f3f1] flex items-center justify-center">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+            <circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M11.4 3.2l-1.4 1.4M4.6 11.4l-1.4 1.4" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <h1 className="text-[20px] font-bold text-[#1a1a1a] leading-[24px]">Ajustes</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-6 max-w-[1100px] space-y-8">
+          {/* Uso section */}
+          <section>
+            <h2 className="text-[18px] font-semibold text-[#1a1a1a] leading-[24px] mb-4">Uso</h2>
+            <div className="space-y-3">
+              <FinSettingsCard
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1l1.5 4.5h4.5l-3.7 2.7L11.7 13 8 10.3 4.3 13l1.4-4.8L2 5.5h4.5L8 1z" strokeLinejoin="round"/></svg>}
+                title="Alertas y límites"
+                body="Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto."
+              />
+              <FinSettingsCard
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 11V7M8 11V5M11 11V9"/></svg>}
+                title="Supervisar el uso"
+                body="Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo."
+                action={
+                  <a href="#" className="inline-flex h-8 px-3 rounded-full bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] items-center">
+                    Ver el uso
+                  </a>
+                }
+              />
+            </div>
+          </section>
+
+          {/* Personalización section */}
+          <section>
+            <h2 className="text-[18px] font-semibold text-[#1a1a1a] leading-[24px] mb-4">Personalización</h2>
+            <div className="space-y-3">
+              <FinSettingsAccordionCard
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="5.5" r="2.5"/><path d="M2.5 13.5c0-2.8 2.5-5 5.5-5s5.5 2.2 5.5 5"/></svg>}
+                title="La identidad de Fin"
+                body="Administra el nombre y avatar que verán tus clientes."
+              />
+              <FinSettingsAccordionCard
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="3.5" rx="1.5"/><rect x="2" y="9.5" width="12" height="3.5" rx="1.5"/></svg>}
+                title="Botones de respuesta de Fin"
+                body="Elija cómo Fin formula las opciones que les presenta a sus clientes. Disponible en SMS."
+              />
+              <FinSettingsAccordionCard
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13"/></svg>}
+                title="Soporte multilingüe de Fin"
+                body="Controla los idiomas en los que responderá Fin."
+              />
+              <FinSettingsAccordionCard
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>}
+                title="Respuestas de correo electrónico de Fin"
+                body="Controla cómo Fin responde a los correos electrónicos de tus clientes"
+              />
+              <FinSettingsAccordionCard
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 11c0-2.5 2-4.5 5-4.5s5 2 5 4.5"/><circle cx="8" cy="4.5" r="2.5"/></svg>}
+                title="Formalidad de los pronombres en Fin"
+              />
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Fin · Audiencias (Figma 1:21030) ────────────────────────────────────────
+// Layout: standard settings header (icon + H1 "Audiencias" + "Crear" CTA on right)
+//         + empty-state hero card with title/body/CTA
+function FinAudiencesContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Standard header row */}
+      <div className="flex-shrink-0 px-4 pt-4 pb-4 flex items-center gap-2">
+        <button className="w-8 h-8 rounded-[8px] hover:bg-[#f3f3f1] flex items-center justify-center">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+            <circle cx="6" cy="5" r="2.5"/><circle cx="11" cy="5" r="2"/><path d="M1 13c0-2.2 2.2-4 5-4s5 1.8 5 4"/><path d="M13 13c0-1.7-1.3-3-3-3"/>
+          </svg>
+        </button>
+        <h1 className="text-[20px] font-bold text-[#1a1a1a] leading-[24px] flex-1">Audiencias</h1>
+        <a href="#" className="inline-flex h-8 px-3 rounded-full bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] items-center">
+          Crear audiencia
+        </a>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-8 pt-11">
+          {/* Hero empty-state card (bg-neutral-container) */}
+          <div className="bg-[#fbfbf9] border border-[#e9eae6] rounded-[16px] px-11 py-9 max-w-[1100px]">
+            <h2 className="text-[22px] font-semibold text-[#1a1a1a] leading-[32px] tracking-[-0.2px] max-w-[640px]">
+              Segmenta tu contenido y pautas de Fin para usuarios específicos
+            </h2>
+            <p className="mt-2 text-[14px] text-[#646462] leading-[20px] max-w-[835px]">
+              Crea y administra audiencias personalizadas para controlar qué conocimientos utiliza Fin y qué pauta aplica, asegurando que los usuarios obtengan respuestas que siempre sean relevantes.
+            </p>
+            <div className="mt-6">
+              <a href="#" className="inline-flex h-8 px-3 rounded-full bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] items-center">
+                Crear tu primera audiencia
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Registro de cambios (1:19066) ──────────────────────────────────────────
+function FinChangelogContent() {
+  const { data: auditData, loading } = useApi<any[]>(() => auditApi.workspaceAll(), [], []);
+  const [search, setSearch] = useState('');
+  const entries = useMemo(() => {
+    const list = Array.isArray(auditData) ? auditData : [];
+    const q = search.trim().toLowerCase();
+    return q
+      ? list.filter((e: any) => `${e.action || ''} ${e.entityType || e.entity_type || ''} ${e.actorName || e.actor_name || ''} ${JSON.stringify(e.payload || {})}`.toLowerCase().includes(q))
+      : list;
+  }, [auditData, search]);
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* H1 header — Figma 1:19015 */}
+      <div className="flex-shrink-0 px-6 pt-4 pb-4 flex items-center gap-3">
+        <button className="w-8 h-8 rounded-[8px] hover:bg-[#f3f3f1] flex items-center justify-center">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+            <path d="M3 2.5h7.5L13 5v8.5H3z"/><path d="M10 2.5V5h2.5"/><path d="M5 8h6M5 10.5h4"/>
+          </svg>
+        </button>
+        <h1 className="text-[20px] font-bold text-[#1a1a1a] leading-[24px]">Registro de cambios</h1>
+      </div>
+      <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3 border-b border-[#e9eae6]">
+        <div className="relative flex-1 max-w-[320px]">
+          <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar elementos..."
+            className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
+          />
+        </div>
+        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+          <span>Cualquier cambio</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {loading ? (
+          <div className="flex items-start justify-center pt-24 px-6">
+            <p className="text-[13px] text-[#646462]">Cargando…</p>
+          </div>
+        ) : entries.length === 0 ? (
+          // Figma 1:19041 — centered empty state
+          <div className="flex flex-col items-center justify-start pt-24 text-center px-6">
+            <h2 className="text-[20px] font-semibold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h2>
+            <p className="mt-2 text-[14px] text-[#646462] leading-[21px]">Aún no se han realizado cambios en su agente de IA Fin</p>
+          </div>
+        ) : (
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr className="border-b border-[#e9eae6]">
+                <th className="text-left px-6 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acción</th>
+                <th className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Entidad</th>
+                <th className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Actor</th>
+                <th className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e: any, i: number) => (
+                <tr key={e.id || i} className="border-b border-[#f5f5f4] hover:bg-[#f8f8f7]">
+                  <td className="px-6 py-2.5 text-[#1a1a1a]">{e.action || '—'}</td>
+                  <td className="px-4 py-2.5 text-[#646462]">{e.entityType || e.entity_type || '—'}</td>
+                  <td className="px-4 py-2.5 text-[#646462]">{e.actorName || e.actor_name || '—'}</td>
+                  <td className="px-4 py-2.5 text-[#646462]">{e.createdAt || e.created_at ? new Date(e.createdAt || e.created_at).toLocaleString('es-ES') : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Category badge colours for template cards
+const TEMPLATE_CAT_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  'Payments & risk':      { bg: 'bg-[#fff7ed]', text: 'text-[#b45309]', dot: 'bg-[#f59e0b]' },
+  'Orders & fulfillment': { bg: 'bg-[#eff6ff]', text: 'text-[#1d4ed8]', dot: 'bg-[#3b82f6]' },
+  'Support operations':   { bg: 'bg-[#f5f3ff]', text: 'text-[#6d28d9]', dot: 'bg-[#8b5cf6]' },
+  'Returns & recovery':   { bg: 'bg-[#f0fdf4]', text: 'text-[#15803d]', dot: 'bg-[#22c55e]' },
+  'AI & knowledge':       { bg: 'bg-[#eef2ff]', text: 'text-[#4338ca]', dot: 'bg-[#6366f1]' },
+  'Orchestration & data': { bg: 'bg-[#f8fafc]', text: 'text-[#475569]', dot: 'bg-[#94a3b8]' },
+};
+
+// ─── Ajustes de Fin · Flujos de trabajo (Figma 1:22652) ─────────────────────
+function FinFlujosTrabajoContent() {
+  const [builderId, setBuilderId]                 = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [dropdownOpen, setDropdownOpen]           = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+
+  // ── Builder overlay ──────────────────────────────────────────────────────
+  if (builderId !== null) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* Back bar */}
+        <div className="flex-shrink-0 px-4 h-11 border-b border-[#e9eae6] flex items-center gap-2">
+          <button
+            onClick={() => { setBuilderId(null); setSelectedTemplateId(null); }}
+            className="inline-flex items-center gap-1.5 text-[13px] text-[#646462] hover:text-[#1a1a1a]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6">
+              <path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span>Flujos de trabajo</span>
+          </button>
+        </div>
+        {/* Full-height Workflows builder */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <Workflows createNewOnMount={true} startTemplateId={selectedTemplateId ?? undefined} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Template picker modal ────────────────────────────────────────────────
+  const templateModal = templateModalOpen ? (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={() => setTemplateModalOpen(false)} />
+      <div className="relative w-full max-w-[900px] mx-4 bg-white rounded-[16px] shadow-2xl flex flex-col max-h-[80vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#e9eae6] flex-shrink-0">
+          <div>
+            <h2 className="text-[18px] font-bold text-[#1a1a1a]">Plantillas de flujos de trabajo</h2>
+            <p className="text-[13px] text-[#646462] mt-0.5">Elige una plantilla para comenzar rápidamente</p>
+          </div>
+          <button onClick={() => setTemplateModalOpen(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f3f3f1]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        {/* Grid */}
+        <div className="overflow-y-auto flex-1 p-6">
+          <div className="grid grid-cols-3 gap-4">
+            {(WORKFLOW_TEMPLATES as readonly any[]).map((tpl: any) => {
+              const cat = TEMPLATE_CAT_COLORS[tpl.category as string] ?? { bg: 'bg-[#f3f3f1]', text: 'text-[#646462]', dot: 'bg-[#a4a4a2]' };
+              return (
+                <div
+                  key={tpl.id}
+                  className="border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-3 hover:border-[#1a1a1a] hover:shadow-md transition-all cursor-pointer group"
+                  onClick={() => { setSelectedTemplateId(tpl.id as string); setTemplateModalOpen(false); setBuilderId('template'); }}
+                >
+                  <span className={`inline-flex items-center gap-1.5 self-start px-2 py-0.5 rounded-[6px] text-[11px] font-semibold ${cat.bg} ${cat.text}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${cat.dot}`} />
+                    {tpl.category}
+                  </span>
+                  <h3 className="text-[14px] font-bold text-[#1a1a1a] leading-[20px]">{tpl.label}</h3>
+                  <p className="text-[12.5px] text-[#646462] leading-[18px] flex-1">{tpl.description}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(tpl.nodes as any[]).slice(0, 4).map((n: any, i: number) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded bg-[#f3f3f1] text-[10.5px] text-[#646462]">{n.label}</span>
+                    ))}
+                    {(tpl.nodes as any[]).length > 4 && (
+                      <span className="px-1.5 py-0.5 rounded bg-[#f3f3f1] text-[10.5px] text-[#646462]">+{(tpl.nodes as any[]).length - 4}</span>
+                    )}
+                  </div>
+                  <button className="mt-1 h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[12.5px] font-semibold inline-flex items-center gap-1.5 self-start group-hover:bg-black">
+                    <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+                    Usar plantilla
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const filterChips = [
+    {
+      label: 'Visitantes, leads o usuarios',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/>
+        </svg>
+      ),
+    },
+    {
+      label: 'State is any',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11M5 9h6M5 11h4"/>
+        </svg>
+      ),
+    },
+    {
+      label: 'Cualquier canal',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <path d="M2.5 6.5C2.5 4 4.5 2.5 8 2.5s5.5 1.5 5.5 4-2 4-5.5 4c-.7 0-1.4-.1-2-.2L3 11.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/>
+        </svg>
+      ),
+    },
+    {
+      label: 'El tipo es cualquiera',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>
+        </svg>
+      ),
+    },
+  ];
+
+  const rows = [
+    {
+      title: 'Use Fin AI Agent over Messenger',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+      ),
+    },
+    {
+      title: 'Triage customer conversations before Fin replies',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+      ),
+    },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Hero promo card */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-4">
+        <div className="relative bg-white border border-[#e9eae6] rounded-[12px] px-5 py-4 flex gap-5">
+          <button className="absolute top-3 right-3 w-6 h-6 rounded-md flex items-center justify-center hover:bg-[#f3f3f1]" aria-label="Cerrar">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+          <div className="flex-1 min-w-0 max-w-[640px]">
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] leading-[24px]">Crea flujos de trabajo para automatizar la asistencia a clientes a escala</h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">
+              Automatiza más procesos para tus clientes y compañeros de equipo con nuestro generador visual de arrastrar y soltar. Clasifica, etiqueta y canaliza las conversaciones al instante, y añade Fin AI Agent a tus flujos de trabajo para crear una experiencia personalizada para el cliente.
+            </p>
+            <button className="mt-3 h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
+              <span>Explicación de los flujos de trabajo</span>
+            </button>
+          </div>
+          <div className="hidden md:block w-[260px] flex-shrink-0">
+            <div className="relative w-full h-[140px] rounded-[8px] overflow-hidden border border-[#e9eae6]" style={{
+              background: 'linear-gradient(135deg, #d6e1ef 0%, #f3e8d6 100%)',
+            }}>
+              <div className="absolute inset-3 grid grid-cols-2 gap-2">
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1.5 rounded bg-[#1a1a1a]/15 w-3/4 mb-1"/>
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-full"/>
+                </div>
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1.5 rounded bg-[#ed621d]/30 w-1/2 mb-1"/>
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-full"/>
+                </div>
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-2/3"/>
+                </div>
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-3/5"/>
+                </div>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M5 3.5l7 4.5-7 4.5z"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section header */}
+      <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2">
+        <h3 className="text-[15px] font-bold text-[#1a1a1a] flex-1">Flujos de trabajo</h3>
+        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M9.5 2l-1.5 4 4 1-5 7 1-4-4-1z" strokeLinejoin="round"/></svg>
+          <span>Solucionar problemas</span>
+        </button>
+        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+          <span>Aprender</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        {/* Dropdown trigger */}
+        <div className="relative">
+          <button
+            onClick={() => setDropdownOpen(o => !o)}
+            className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black"
+          >
+            <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+            <span>Nuevo flujo de trabajo</span>
+            <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white" style={{ transform: dropdownOpen ? 'rotate(180deg)' : undefined }}><path d="M3 4.5l3 3 3-3z"/></svg>
+          </button>
+          {dropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-[100]" onClick={() => setDropdownOpen(false)} />
+              <div className="absolute right-0 top-full mt-1.5 z-[101] w-52 bg-white rounded-[10px] border border-[#e9eae6] shadow-lg overflow-hidden">
+                <button
+                  className="w-full px-4 py-2.5 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-2.5"
+                  onClick={() => { setDropdownOpen(false); setSelectedTemplateId(null); setBuilderId('new'); }}
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M8 5.5v5M5.5 8h5" strokeLinecap="round"/></svg>
+                  <span>Empezar desde cero</span>
+                </button>
+                <div className="border-t border-[#f0f0ee]" />
+                <button
+                  className="w-full px-4 py-2.5 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-2.5"
+                  onClick={() => { setDropdownOpen(false); setTemplateModalOpen(true); }}
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
+                  <span>Usar una plantilla</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Template modal portal */}
+      {templateModal}
+
+      {/* Filters row */}
+      <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2 flex-wrap">
+        <div className="relative w-[220px]">
+          <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
+          <input type="text" placeholder="Buscar..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"/>
+        </div>
+        {filterChips.map(c => (
+          <button key={c.label} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            {c.icon}<span>{c.label}</span>
+          </button>
+        ))}
+        <button className="h-8 px-2 text-[12.5px] font-semibold text-[#ed621d] hover:underline inline-flex items-center gap-1">
+          <span>+</span><span>Agregar filtro</span>
+        </button>
+      </div>
+
+      {/* Workflow list */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+        <p className="text-[13px] text-[#646462] mb-3">2 flujo de trabajos</p>
+
+        {/* Group header pill */}
+        <button className="h-8 px-3 mb-3 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] inline-flex items-center gap-2 text-[12.5px] text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm.7 3.2v3.6l2.5 1.5-.6 1L7.5 9V4.7z"/></svg>
+          <span className="font-semibold">Cuando el cliente abre una nueva conversación en Messenger (2)</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+
+        {/* Info bar */}
+        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[8px] px-4 py-3 mb-4 flex items-start gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0 mt-0.5" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+          <p className="text-[12.5px] text-[#646462] leading-[18px]">
+            Cuando un usuario coincide con varios flujos de trabajo dirigidos al cliente, solo se ejecuta el flujo de trabajo principal que coincida. Se ejecutan todos los flujos de trabajo en segundo plano que coincidan. Más información <a href="#" className="text-[#3b59f6] hover:underline">aquí</a>.
+          </p>
+        </div>
+
+        {/* Highlighted Fin row */}
+        <div className="border-2 border-[#ed621d] rounded-[10px] p-3 flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-md bg-[#fef5ed] flex items-center justify-center flex-shrink-0">
+            <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4 object-contain"/>
+          </div>
+          <span className="flex-1 text-[13px] text-[#1a1a1a]">Permitir que Fin responda automáticamente a la pregunta del cliente</span>
+          <button className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1.5 hover:underline">
+            <span>Configuración simple</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M5 3l5 5-5 5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Workflow table */}
+        <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <div className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-9 border-b border-[#e9eae6] text-[11.5px] uppercase tracking-wide text-[#a4a4a2]">
+            <span className="text-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#a4a4a2] mx-auto" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+            </span>
+            <span><input type="checkbox" className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
+            <span>Título</span>
+            <span>Estado</span>
+            <span>Fecha/hora de actualización</span>
+            <span>Actualizado por</span>
+            <span>Enviado</span>
+            <span>Objetivo</span>
+          </div>
+          {rows.map(r => (
+            <div key={r.title} onClick={() => setBuilderId('edit')} className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-12 border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafafa] cursor-pointer">
+              <span className="text-[#a4a4a2] text-center select-none">⋮⋮</span>
+              <span><input type="checkbox" className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
+              <span className="flex items-center gap-2 min-w-0">
+                {r.icon}
+                <span className="text-[13px] text-[#1a1a1a] truncate">{r.title}</span>
+              </span>
+              <span><span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-[#f3f3f1] text-[11.5px] font-semibold text-[#646462]">Draft</span></span>
+              <span className="text-[12.5px] text-[#646462]">10 hours ago</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white text-[10px] font-semibold flex items-center justify-center">H</span>
+                <span className="text-[12.5px] text-[#1a1a1a] truncate">Hector Vidal Sanchez</span>
+              </span>
+              <span className="text-[12.5px] text-[#3b59f6]">0</span>
+              <span className="text-[12.5px] text-[#646462]">—</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Ajustes de Fin · Automatizaciones simples (Figma 1:23926) ──────────────
+function FinAutomatizacionesSimplesContent() {
+  const trigger1Items = [
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 5h11M2.5 8h11M2.5 11h11" strokeLinecap="round"/></svg>,
+      label: 'Obtén el contexto de los problemas por adelantado',
+      state: 'Off' as const,
+    },
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5" strokeLinecap="round"/></svg>,
+      label: 'Comparte tu tiempo de respuesta habitual',
+      state: 'On' as const,
+    },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Hero promo card */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-4">
+        <div className="relative bg-white border border-[#e9eae6] rounded-[12px] px-5 py-4 flex gap-5">
+          <button className="absolute top-3 right-3 w-6 h-6 rounded-md flex items-center justify-center hover:bg-[#f3f3f1]" aria-label="Cerrar">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+          <div className="flex-1 min-w-0 max-w-[640px]">
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] leading-[24px]">Crea automatizaciones sencillas para trabajos básicos</h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">
+              Simplifica los trabajos comunes como la clasificación y la asignación de nuevas conversaciones. Las automatizaciones sencillas te ayudan a aprender los conceptos básicos de la automatización y a dar el primer paso hacia flujos de trabajo más inteligentes y personalizados.
+            </p>
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+                <span>Comenzar con automatizaciones sencillas</span>
+              </button>
+              <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+                <span>Clientes potenciales vs. usuarios</span>
+              </button>
+              <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 12 12" className="w-3 h-3 fill-[#1a1a1a]"><path d="M3 1.5l7 4.5-7 4.5z"/></svg>
+                <span>Ve más allá con los flujos de trabajo</span>
+              </button>
+            </div>
+          </div>
+          <div className="hidden md:block w-[260px] flex-shrink-0">
+            <div className="relative w-full h-[140px] rounded-[8px] overflow-hidden" style={{
+              background: 'linear-gradient(135deg, #ed621d 0%, #f4a261 100%)',
+            }}>
+              <div className="absolute right-3 top-3 w-[150px] bg-white rounded-[8px] shadow-lg overflow-hidden border border-white/40">
+                <div className="px-2 py-1.5 bg-[#ed621d] flex items-center gap-1.5">
+                  <div className="w-5 h-5 rounded-full bg-white/30"/>
+                  <span className="text-white text-[10px] font-semibold">Examply Air</span>
+                </div>
+                <div className="p-2">
+                  <div className="bg-[#f3f3f1] rounded-[4px] px-1.5 py-1 text-[8.5px] text-[#1a1a1a] inline-block">Hi, I have a question</div>
+                </div>
+                <div className="px-2 pb-2">
+                  <div className="bg-[#ed621d] text-white rounded-[4px] px-1.5 py-1 text-[8.5px]">Hey, thanks for the help.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section header */}
+      <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">Automatizaciones simples</h3>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+        {/* Audience cards */}
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <div className="bg-white border border-[#e9eae6] rounded-[10px] p-4">
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">Usuarios</p>
+            <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">Cualquier persona que se haya registrado e iniciado sesión.</p>
+          </div>
+          <div className="bg-white border border-[#e9eae6] rounded-[10px] p-4">
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">Leads</p>
+            <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">Cualquier persona que inicie una conversación contigo o que responda a un mensaje saliente.</p>
+          </div>
+        </div>
+
+        {/* Group 1: primer mensaje */}
+        <button className="h-8 px-3 mb-3 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] inline-flex items-center gap-2 text-[12.5px] text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+          <span className="font-semibold">Cuando los usuarios envían su primer mensaje (2)</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+
+        {/* Delay toggle row */}
+        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] px-4 py-3 mb-3 flex items-center gap-3">
+          <button className="relative w-7 h-4 rounded-full bg-[#d8d8d4] flex-shrink-0" aria-pressed="false">
+            <span className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow"/>
+          </button>
+          <p className="text-[12.5px] text-[#1a1a1a] leading-[18px]">
+            Deja un retraso de 2 minutos antes de activar lo siguiente durante el <a href="#" className="text-[#3b59f6] hover:underline">horario de atención</a>
+          </p>
+        </div>
+
+        {/* Action items */}
+        <div className="flex flex-col gap-2 mb-6">
+          {trigger1Items.map(item => (
+            <button key={item.label} className="w-full bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 flex items-center gap-3 hover:bg-[#fafafa] text-left">
+              <span className="w-7 h-7 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">{item.icon}</span>
+              <span className="flex-1 text-[13px] text-[#1a1a1a]">{item.label}</span>
+              {item.state === 'On' ? (
+                <span className="px-2 py-0.5 rounded-full bg-[#dcf2e3] text-[#1f7a3a] text-[11.5px] font-semibold">On</span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-[#f3f3f1] text-[#646462] text-[11.5px] font-semibold">Off</span>
+              )}
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
+            </button>
+          ))}
+        </div>
+
+        {/* Group 2: cierre conversación */}
+        <button className="h-8 px-3 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] inline-flex items-center gap-2 text-[12.5px] text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+          <span className="font-semibold">Cuando se cierra una conversación con un usuario (1)</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Vista previa side panel (used by Contenido / Orientación / Atributos / Escalamiento) ───
+function FinVistaPreviaPanel() {
+  return (
+    <div className="w-[360px] flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-[#e9eae6]">
+        <h2 className="text-[16px] font-bold text-[#1a1a1a]">Vista previa</h2>
+        <button className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f8f8f7]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+      <div className="flex-1 relative flex items-center justify-center p-10">
+        <p className="text-center text-[13px] text-[#646462] max-w-[260px] leading-[20px]">
+          Agrega contenido para probar Fin. Luego hazle preguntas para obtener una vista previa de sus respuestas.
+        </p>
+        <div className="absolute bottom-4 right-4 w-12 h-12 rounded-full bg-[#1a1a1a] flex items-center justify-center shadow-lg">
+          <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-white" strokeWidth="1.4"><path d="M2.5 7.5C2.5 4.5 4.5 3 8 3s5.5 1.5 5.5 4.5S11.5 12 8 12c-.7 0-1.4-.1-2-.2L3 13l.6-2.3c-.7-.8-1.1-1.8-1.1-3z"/></svg>
+          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#ed621d] ring-2 ring-[#1a1a1a]"/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Read ?sub= once at mount so deep-links land on the right Fin sub-view.
+function readInitialFinSubFromUrl(): FinSubView {
+  if (typeof window === 'undefined') return 'allRoles';
+  const s = new URLSearchParams(window.location.search).get('sub');
+  const known: FinSubView[] = [
+    'allRoles','anaGetStarted',
+    'capacitar','capContent','capGuidance','capAttributes','capEscalation','capProcedures',
+    'probar','pruebaTesting',
+    'desplegar','depChat','depEmail','depPhone',
+    'analizar','anaPerformance','anaRecommendations','anaTopicExplorer','anaTopicTrends','anaMonitor',
+    'changelog','settings','settingsAudiences',
+    'finWorkflows','finSimpleAutomations',
+    'studio','studioOverview','studioAgents','studioConnections','studioPermissions','studioKnowledge','studioReasoning','studioSafety','studioSuperAgent',
+  ];
+  return s && (known as string[]).includes(s) ? (s as FinSubView) : 'allRoles';
+}
+
+export function FinAiView() {
+  const [sub, setSub] = useState<FinSubView>(() => readInitialFinSubFromUrl());
+  const showVistaPrevia = sub === 'capContent' || sub === 'capGuidance' || sub === 'capAttributes' || sub === 'capEscalation' || sub === 'desplegar' || sub === 'depChat' || sub === 'depEmail';
+  const isStudio = sub === 'studio' || sub === 'studioOverview' || sub === 'studioAgents' || sub === 'studioConnections' || sub === 'studioPermissions' || sub === 'studioKnowledge' || sub === 'studioReasoning' || sub === 'studioSafety' || sub === 'studioSuperAgent';
+
+  // Persist sidebar collapse state per-Fin module (Inbox-style rail).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const raw = window.localStorage.getItem('clain.fin.panels');
+      return raw ? Boolean(JSON.parse(raw).sidebar) : false;
+    } catch { return false; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem('clain.fin.panels', JSON.stringify({ sidebar: sidebarCollapsed })); } catch { /* storage may be disabled */ }
+  }, [sidebarCollapsed]);
+
+  // Sync ?sub= with current state so back/forward + reload work.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('sub') !== sub) {
+      url.searchParams.set('sub', sub);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [sub]);
+
+  // When AIStudio's own internal links flip its activeTab, mirror that to the
+  // Fin sub-view so the URL stays accurate and the sidebar selection updates.
+  function onStudioTabChange(tab: 'Overview' | 'Agents' | 'Connections' | 'Permissions' | 'Knowledge' | 'Reasoning' | 'Safety') {
+    const map: Record<typeof tab, FinSubView> = {
+      Overview:    'studioOverview',
+      Agents:      'studioAgents',
+      Connections: 'studioConnections',
+      Permissions: 'studioPermissions',
+      Knowledge:   'studioKnowledge',
+      Reasoning:   'studioReasoning',
+      Safety:      'studioSafety',
+    };
+    setSub(map[tab]);
+  }
+
+  // Keyboard shortcuts inside the Fin shell, mirroring the Inbox pattern.
+  // j/k cycle through the Studio sub-views (when one is active). Esc blurs
+  // the focused input. ? toggles a small help overlay. All shortcuts are
+  // suppressed when the user is typing in an input/textarea/contenteditable.
+  const [showHelp, setShowHelp] = useState(false);
+  useEffect(() => {
+    const STUDIO_ORDER: FinSubView[] = [
+      'studioOverview','studioAgents','studioConnections','studioPermissions','studioKnowledge','studioReasoning','studioSafety','studioSuperAgent',
+    ];
+    function inEditable(el: EventTarget | null): boolean {
+      const node = el as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable === true;
+    }
+    function onKey(e: KeyboardEvent) {
+      if (inEditable(e.target)) {
+        if (e.key === 'Escape') (e.target as HTMLElement).blur();
+        return;
+      }
+      if (e.key === 'Escape') { setShowHelp(false); return; }
+      if (e.key === '?') { e.preventDefault(); setShowHelp(s => !s); return; }
+      if (e.key === 'j' || e.key === 'k') {
+        if (!isStudio) return;
+        const idx = STUDIO_ORDER.indexOf(sub);
+        if (idx < 0) return;
+        const next = e.key === 'j' ? (idx + 1) % STUDIO_ORDER.length : (idx - 1 + STUDIO_ORDER.length) % STUDIO_ORDER.length;
+        e.preventDefault();
+        setSub(STUDIO_ORDER[next]);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sub, isStudio]);
+
+  function renderSub() {
+    switch (sub) {
+      case 'allRoles':       return <FinAllRolesContent />;
+      case 'capacitar':      return <FinPlaceholderContent title="Capacitar"   subtitle="Configura el contenido, las atribuciones y los procedimientos que entrenan a Fin." />;
+      case 'capContent':     return <FinContenidoContent />;
+      case 'capGuidance':    return <FinOrientacionContent />;
+      case 'capAttributes':  return <FinAtributosContent />;
+      case 'capEscalation':  return <FinEscalamientoContent />;
+      case 'capProcedures':  return <FinProcedimientosContent />;
+      case 'probar':
+      case 'pruebaTesting':  return <FinPruebasContent />;
+      case 'desplegar':
+      case 'depChat':        return <FinDespliegueChatContent />;
+      case 'depEmail':       return <FinDespliegueEmailContent />;
+      case 'depPhone':       return <FinDespliegueTelefonoContent />;
+      case 'anaGetStarted':  return <FinComenzarContent />;
+      case 'analizar':
+      case 'anaPerformance': return <FinDesempenoContent />;
+      case 'anaRecommendations': return <FinPlaceholderContent title="Recomendaciones" subtitle="Sugerencias de Fin para mejorar la cobertura, el tono y la resolución." />;
+      case 'anaTopicExplorer':   return <FinPlaceholderContent title="Explorador de Temas" subtitle="Explora los temas más frecuentes en las conversaciones gestionadas por Fin." />;
+      case 'anaTopicTrends': return <FinTendenciasContent />;
+      case 'anaMonitor':     return <FinMonitoresContent />;
+      case 'changelog':      return <FinChangelogContent />;
+      case 'settings':       return <FinSettingsContent />;
+      case 'settingsAudiences': return <FinAudiencesContent />;
+      case 'finWorkflows':   return <FinFlujosTrabajoContent />;
+      case 'finSimpleAutomations': return <FinAutomatizacionesSimplesContent />;
+      // Studio — embed legacy AIStudio with the requested tab so the policy/agent/
+      // knowledge/reasoning/safety surface is fully functional inside the Fin shell.
+      // The onTabChange callback keeps the URL ?sub= in sync when AIStudio's
+      // own internal cross-links flip the tab (e.g. "Open agents" inside Overview).
+      case 'studio':
+      case 'studioOverview':    return <AIStudio embedded initialTab="Overview"    onTabChange={onStudioTabChange} />;
+      case 'studioAgents':      return <AIStudio embedded initialTab="Agents"      onTabChange={onStudioTabChange} />;
+      case 'studioConnections': return <AIStudio embedded initialTab="Connections" onTabChange={onStudioTabChange} />;
+      case 'studioPermissions': return <AIStudio embedded initialTab="Permissions" onTabChange={onStudioTabChange} />;
+      case 'studioKnowledge':   return <AIStudio embedded initialTab="Knowledge"   onTabChange={onStudioTabChange} />;
+      case 'studioReasoning':   return <AIStudio embedded initialTab="Reasoning"   onTabChange={onStudioTabChange} />;
+      case 'studioSafety':      return <AIStudio embedded initialTab="Safety"      onTabChange={onStudioTabChange} />;
+      case 'studioSuperAgent':  return <SuperAgent embedded />;
+    }
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        {sidebarCollapsed ? (
+          <FinSidebarRail onExpand={() => setSidebarCollapsed(false)} />
+        ) : (
+          <FinSidebar sub={sub} onSelect={setSub} onCollapse={() => setSidebarCollapsed(true)} />
+        )}
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {renderSub()}
+        </div>
+        {showVistaPrevia && <FinVistaPreviaPanel />}
+      </div>
+      {showHelp && (
+        <div className="absolute inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowHelp(false)}>
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-6 w-[360px]" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">Atajos de teclado</h3>
+            <ul className="text-[13px] text-[#1a1a1a] space-y-1.5">
+              <li className="flex items-center justify-between"><span>Siguiente sección Studio</span><kbd className="px-1.5 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded text-[11px] font-mono">j</kbd></li>
+              <li className="flex items-center justify-between"><span>Sección anterior</span><kbd className="px-1.5 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded text-[11px] font-mono">k</kbd></li>
+              <li className="flex items-center justify-between"><span>Cerrar / quitar foco</span><kbd className="px-1.5 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded text-[11px] font-mono">Esc</kbd></li>
+              <li className="flex items-center justify-between"><span>Mostrar / ocultar ayuda</span><kbd className="px-1.5 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded text-[11px] font-mono">?</kbd></li>
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Collapsed-sidebar 28-px rail, matches Inbox panel-collapse pattern.
+function FinSidebarRail({ onExpand }: { onExpand: () => void }) {
+  return (
+    <button
+      onClick={onExpand}
+      title="Expandir barra lateral"
+      className="w-7 flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] flex flex-col items-center justify-start py-3 hover:bg-[#ededea]"
+    >
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+    </button>
+  );
+}
