@@ -16,7 +16,11 @@
  *   const flags = await posthog.featureFlags.list()
  */
 
-const POSTHOG_HOST = (import.meta.env.VITE_POSTHOG_HOST as string) ?? ''
+// In dev, route through Vite proxy (/_ph) to bypass CORS.
+// In prod builds, use the real PostHog host directly (CORS must be configured server-side).
+const POSTHOG_HOST = import.meta.env.DEV
+  ? '/_ph'
+  : ((import.meta.env.VITE_POSTHOG_HOST as string) ?? '')
 const POSTHOG_KEY  = (import.meta.env.VITE_POSTHOG_PERSONAL_API_KEY as string) ?? ''
 
 // ── Internal state ────────────────────────────────────────────────────────────
@@ -64,7 +68,12 @@ export async function phGet<T = any>(
   path: string,
   params?: Record<string, any>,
 ): Promise<T> {
-  const url = new URL(`${POSTHOG_HOST}${path}`)
+  const full = `${POSTHOG_HOST}${path}`
+  // Support both absolute (https://...) and relative (/...) URLs.
+  // In dev we use a relative '/_ph' prefix that Vite proxies to PostHog.
+  const url = full.startsWith('http')
+    ? new URL(full)
+    : new URL(full, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
@@ -444,15 +453,18 @@ export const posthog = {
   },
 
   // ── Event definitions ─────────────────────────────────────────────────────
+  // These live under /projects/ (not /environments/) on every PostHog
+  // version we target. Older OSS deployments only have /projects/, and
+  // newer ones still support it for backwards compatibility.
   eventDefinitions: {
     list: (params?: any) =>
-      phGet(`/api/environments/${_teamId}/event_definitions/`, params),
+      phGet(`/api/projects/${_projectId ?? _teamId}/event_definitions/`, params),
   },
 
   // ── Property definitions ──────────────────────────────────────────────────
   propertyDefinitions: {
     list: (params?: any) =>
-      phGet(`/api/environments/${_teamId}/property_definitions/`, params),
+      phGet(`/api/projects/${_projectId ?? _teamId}/property_definitions/`, params),
   },
 
   // ── Raw events (live tail + classic API) ──────────────────────────────────

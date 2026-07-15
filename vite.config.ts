@@ -19,6 +19,14 @@ export default defineConfig(({mode}) => {
       port: 3005,
       hmr: process.env.DISABLE_HMR !== 'true',
       proxy: {
+        // PostHog proxy — avoids CORS issues in dev by routing browser → vite → PostHog
+        // The frontend uses '/_ph' as a prefix in dev (see src/api/posthog.ts)
+        '/_ph': {
+          target: env.VITE_POSTHOG_HOST || 'https://app.posthog.com',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (p) => p.replace(/^\/_ph/, ''),
+        },
         '/api': {
           target: 'http://localhost:3006',
           changeOrigin: true,
