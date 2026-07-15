@@ -817,14 +817,10 @@ export const iamApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
-  // The server exposes no DELETE /iam/roles/:id route, so a role is
-  // "deleted" by soft-archiving it: rename with an [Eliminado] prefix and
-  // clear its permissions. Centralised here so every call site behaves the same.
-  deleteRole: (id: string, name?: string) =>
-    request<any>(`/iam/roles/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ name: `[Eliminado] ${name ?? 'rol'}`, permissions: [] }),
-    }),
+  // Real DELETE /iam/roles/:id (server refuses system roles and roles still
+  // assigned to members with a 409). Replaces the old soft-archive PATCH hack.
+  deleteRole: (id: string) =>
+    request<any>(`/iam/roles/${id}`, { method: 'DELETE' }),
   updateMe: (payload: Record<string, any>) =>
     request<any>('/iam/me', {
       method: 'PATCH',
@@ -1507,6 +1503,86 @@ export const mentionsApi = {
   },
   markRead: (id: string) =>
     request<any>(`/mentions/${id}/read`, { method: 'PATCH' }),
+};
+
+// ── GitHub integration (per-tenant, used by AccountIntegrationsPage) ──
+// Backend lives at /api/integrations/github/* (real endpoints, configured via
+// GITHUB_CLIENT_ID/SECRET env vars). All operations go through these endpoints.
+export interface GitHubIntegrationStatus {
+  connected:           boolean;
+  user_id?:            number | null;
+  login?:              string | null;
+  name?:               string | null;
+  email?:              string | null;
+  avatar_url?:         string | null;
+  scope?:              string | null;
+  webhooks?:           Array<{ hook_id: number; scope: 'repo' | 'org'; owner: string; repo?: string; events: string[]; url: string }>;
+  capabilities?:       { reads?: string[]; writes?: string[]; events?: string[] } | null;
+  last_health_check_at?: string | null;
+  updated_at?:         string | null;
+}
+
+// ── Personal API keys (per-user, per-tenant) ─────────────────
+// Backed by /api/personal-api-keys/* on our Express backend. Plaintext token
+// value is returned ONCE at create/regenerate and never again.
+export interface PersonalApiKey {
+  id:                    string;
+  label:                 string;
+  token_prefix:          string;
+  mask_value:            string;
+  scopes:                string[];
+  scoped_organizations:  string[];
+  scoped_teams:          number[];
+  last_used_at?:         string | null;
+  expires_at?:           string | null;
+  created_at:            string;
+  updated_at:            string;
+}
+
+export const personalApiKeysApi = {
+  list: () => request<any>('/personal-api-keys').then(unwrapList) as Promise<PersonalApiKey[]>,
+  get:  (id: string) => request<PersonalApiKey>(`/personal-api-keys/${id}`),
+  create: (payload: {
+    label: string;
+    scopes: string[];
+    scoped_organizations?: string[];
+    scoped_teams?: number[];
+    expires_at?: string | null;
+  }) => request<PersonalApiKey & { value: string }>('/personal-api-keys', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+  update: (id: string, payload: {
+    label?: string;
+    scopes?: string[];
+    scoped_organizations?: string[];
+    scoped_teams?: number[];
+    expires_at?: string | null;
+  }) => request<PersonalApiKey>(`/personal-api-keys/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }),
+  remove: (id: string) =>
+    request<any>(`/personal-api-keys/${id}`, { method: 'DELETE' }),
+  regenerate: (id: string) =>
+    request<PersonalApiKey & { value: string }>(`/personal-api-keys/${id}/regenerate`, {
+      method: 'POST',
+    }),
+};
+
+export const githubIntegrationApi = {
+  status: () => request<GitHubIntegrationStatus>('/integrations/github/status'),
+  install: () => request<{ url: string; state: string }>('/integrations/github/install', {
+    headers: { Accept: 'application/json' },
+  }),
+  disconnect: () => request<{ ok: boolean }>('/integrations/github/disconnect', { method: 'POST' }),
+  repos: () => request<{ ok: boolean; repos: Array<{ id: number; full_name: string; private: boolean; description: string | null; html_url: string; default_branch: string }> }>(
+    '/integrations/github/repos',
+  ),
+  sync: () => request<{ ok: boolean; total: number; sample: Array<{ number: number; title: string; state: string; url: string }> }>(
+    '/integrations/github/sync',
+    { method: 'POST' },
+  ),
 };
 
 // ── Visual Flows ──────────────────────────────────────────

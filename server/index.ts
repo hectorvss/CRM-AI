@@ -147,6 +147,7 @@ import emailTemplatesRouter from './routes/emailTemplates.js';
 import visualFlowsRouter from './routes/visualFlows.js';
 import dataImportsRouter from './routes/dataImports.js';
 import customRolesRouter from './routes/customRoles.js';
+import personalApiKeysRouter from './routes/personalApiKeys.js';
 import callsApiRouter from './routes/callsApi.js';
 import agentApiRouter from './routes/agentApi.js';
 
@@ -312,6 +313,7 @@ app.use('/api/automation-rules', automationRulesRouter);
 app.use('/api/custom-filters', customFiltersRouter);
 app.use('/api/email-templates', emailTemplatesRouter);
 app.use('/api/custom-roles', customRolesRouter);
+app.use('/api/personal-api-keys', personalApiKeysRouter);
 app.use('/api/visual-flows', visualFlowsRouter);
 app.use('/api/data-imports', dataImportsRouter);
 app.use('/api/mcp-servers', mcpServersRouter);

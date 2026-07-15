@@ -12,20 +12,26 @@
  *  - IP-only limiters use the express-rate-limit default key.
  */
 
-import rateLimit, { type Options, ipKeyGenerator } from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator, type Options } from 'express-rate-limit';
 import type { Request } from 'express';
 import { sendError } from '../http/errors.js';
 
-function userOrIpKey(req: Request): string {
+function userOrIpKey(req: Request, res: any): string {
   const userId = (req as any).userId as string | undefined;
   if (userId && userId !== 'system') return `u:${userId}`;
-  // Use the official ipKeyGenerator helper to handle IPv6 properly.
-  return `ip:${ipKeyGenerator(req)}`;
+  // Use the lib's IPv6-aware helper to derive a key from req.ip.
+  // NOTE: in express-rate-limit v8 the helper takes the IP *string*, not the
+  // request object.
+  return `ip:${ipKeyGenerator(req.ip || 'unknown')}`;
 }
 
 const baseOptions: Partial<Options> = {
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  // The IPv6 heuristic inspects keyGenerator.toString() looking for the literal
+  // "ipKeyGenerator" identifier; bundlers may rename the imported binding, so
+  // disable this specific check — we DO call the helper from `userOrIpKey`.
+  validate: { keyGeneratorIpFallback: false },
   handler: (_req, res) => {
     return sendError(
       res,

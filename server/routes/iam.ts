@@ -710,6 +710,46 @@ router.post('/roles', requirePermission('settings.write'), async (req: MultiTena
   }
 });
 
+// Delete custom role
+router.delete('/roles/:id', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+  if (!req.tenantId || !req.workspaceId) {
+    return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  }
+
+  try {
+    const role = await iamRepository.getRoleById(req.params.id, req.tenantId, req.workspaceId);
+    if (!role) return sendError(res, 404, 'ROLE_NOT_FOUND', 'Role not found');
+    if (role.is_system === 1) {
+      return sendError(res, 403, 'SYSTEM_ROLE_DELETE_FORBIDDEN', 'System roles cannot be deleted');
+    }
+
+    // Refuse deletion if any member still has this role assigned — surface a clear error
+    const members = await iamRepository.listWorkspaceMembers(req.tenantId, req.workspaceId);
+    const inUse = members.filter((m: any) => m.role_id === req.params.id);
+    if (inUse.length > 0) {
+      return sendError(res, 409, 'ROLE_IN_USE',
+        `Cannot delete role: ${inUse.length} member${inUse.length > 1 ? 's are' : ' is'} still assigned to it. Reassign them first.`,
+        { members_using: inUse.map((m: any) => ({ id: m.id, email: m.email, name: m.name })) }
+      );
+    }
+
+    const supabase = getSupabaseAdmin();
+    await supabase.from('role_permissions').delete().eq('role_id', req.params.id);
+    const { error } = await supabase
+      .from('roles')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('tenant_id', req.tenantId)
+      .eq('workspace_id', req.workspaceId);
+    if (error) throw error;
+
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting role:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
 // Update role permissions
 router.patch('/roles/:id', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
