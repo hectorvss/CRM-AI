@@ -10,6 +10,10 @@ tmp-*.err
 !.env.example
 .vercel
 
+# Claude Code worktrees — never track these (they were once committed as
+# bogus gitlinks; keep them out of the index for good)
+.claude/worktrees/
+
 # Local-only working folders (kept out of build & Tailwind content scan)
 .figma-extract/
 tmp-figma/
