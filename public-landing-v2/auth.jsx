@@ -20,6 +20,35 @@
     return client;
   }
 
+  // The app lives on its own origin (app.clain.app). Supabase sessions are
+  // stored per-origin in localStorage, so after signing in on the landing we
+  // hand the tokens over via the URL fragment — the SPA's Supabase client
+  // (detectSessionInUrl: true) consumes and persists them on arrival. The
+  // fragment never reaches the server. On localhost/previews we stay
+  // same-origin at /app so dev flows keep working without the subdomain.
+  const APP_ORIGIN = 'https://app.clain.app';
+  function isProdClain() {
+    return /(^|\.)clain\.app$/.test(window.location.hostname);
+  }
+  function appRedirectTo() {
+    return isProdClain() ? APP_ORIGIN : window.location.origin + '/app';
+  }
+  async function gotoApp(supa) {
+    try {
+      if (isProdClain() && supa) {
+        const { data } = await supa.auth.getSession();
+        const s = data?.session;
+        if (s?.access_token && s?.refresh_token) {
+          window.location.href = `${APP_ORIGIN}/#access_token=${encodeURIComponent(s.access_token)}` +
+            `&refresh_token=${encodeURIComponent(s.refresh_token)}` +
+            `&expires_in=${s.expires_in || 3600}&token_type=bearer`;
+          return;
+        }
+      }
+    } catch (_) { /* fall through to plain navigation */ }
+    window.location.href = isProdClain() ? APP_ORIGIN : '/app';
+  }
+
   function authErr(err) {
     if (!err) return '';
     const msg = err.message ? String(err.message) : String(err);
@@ -142,7 +171,7 @@
         if (!data.session) { setError('Confirm your email before signing in.'); return; }
         const { data: fd } = await supa.auth.mfa.listFactors();
         const totp = fd?.totp?.find(f => f.status === 'verified');
-        if (!totp) { window.location.href = '/app'; return; }
+        if (!totp) { await gotoApp(supa); return; }
         const { data: cd, error: ce } = await supa.auth.mfa.challenge({ factorId: totp.id });
         if (ce) throw ce;
         setFactorId(totp.id); setChalId(cd.id); setStage('mfa');
@@ -157,7 +186,7 @@
       try {
         const { error: err } = await supa.auth.mfa.verify({ factorId, challengeId: chalId, code: otp.trim() });
         if (err) throw err;
-        window.location.href = '/app';
+        await gotoApp(supa);
       } catch (err) { setError(authErr(err)); }
       finally { setLoading(false); }
     };
@@ -166,7 +195,7 @@
       setError('');
       if (!provider) { setError('SAML SSO is available on the Business plan. Contact sales.'); return; }
       if (!supa) { setError('Auth unavailable.'); return; }
-      try { await supa.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin + '/app' } }); }
+      try { await supa.auth.signInWithOAuth({ provider, options: { redirectTo: appRedirectTo() } }); }
       catch (err) { setError(authErr(err)); }
     };
 
@@ -319,7 +348,7 @@
     const onSso = async (provider) => {
       setError('');
       if (!supa) { setError('Auth unavailable.'); return; }
-      try { await supa.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin + '/app' } }); }
+      try { await supa.auth.signInWithOAuth({ provider, options: { redirectTo: appRedirectTo() } }); }
       catch (err) { setError(authErr(err)); }
     };
 
@@ -333,7 +362,7 @@
         const { data, error: err } = await supa.auth.signUp({
           email, password: pwd,
           options: {
-            emailRedirectTo: window.location.origin + '/app',
+            emailRedirectTo: appRedirectTo(),
             data: {
               full_name: name, company_name: company,
               ...(planFromUrl ? { plan_intent: planFromUrl, plan_interval: intervalFromUrl } : {}),
@@ -344,7 +373,7 @@
         if (planFromUrl) {
           try { localStorage.setItem('clain_pending_plan', JSON.stringify({ plan: planFromUrl, interval: intervalFromUrl })); } catch (_) {}
         }
-        if (data?.session) { window.location.href = '/app'; return; }
+        if (data?.session) { await gotoApp(supa); return; }
         setStage('confirm');
       } catch (err) { setError(authErr(err)); }
       finally { setLoading(false); }
