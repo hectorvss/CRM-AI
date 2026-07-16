@@ -6,6 +6,7 @@
   "trailingSlash": false,
   "functions": {
     "api/index.ts": {
+      "maxDuration": 60,
       "excludeFiles": "{dist/**,public-landing-v2/**,landing-v2/**,src/**,tmp-figma/**,.figma-extract/**,tests/**,scripts/**,docs/**,*.md,*.png,*.jpg,*.jpeg,*.gif,*.webp,*.svg,*.ico,**/*.test.ts,**/*.spec.ts}"
     }
   },

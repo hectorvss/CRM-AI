@@ -75,6 +75,8 @@ export class OpenAIChatProvider implements ChatLLMProvider {
     maxTokens?: number;
     signal?: AbortSignal;
     onTextDelta: (text: string) => void;
+    onThinkingDelta?: (text: string) => void; // ignored: gpt-4.1 exposes no reasoning stream
+    thinkingEffort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; // ignored by gpt-4.1
   }): Promise<StreamChatResult> {
     const client = await getClient();
     const model = DEFAULT_PRIMARY_MODEL;

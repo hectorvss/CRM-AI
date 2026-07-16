@@ -1,6 +1,8 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "crm-ai-vite", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3005 }
+    { "name": "crm-ai-vite", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3005 },
+    { "name": "crm-ai-full", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev:all"], "port": 3005 },
+    { "name": "crm-ai-alt", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--port", "3012", "--host", "0.0.0.0", "--strictPort"], "port": 3012 }
   ]
 }

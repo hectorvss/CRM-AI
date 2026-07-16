@@ -20,7 +20,19 @@ export interface ProviderToolCall {
 
 export type ProviderMessage =
   | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string; toolCalls?: ProviderToolCall[] }
+  | {
+      role: 'assistant';
+      content: string;
+      toolCalls?: ProviderToolCall[];
+      /**
+       * Opaque, provider-specific raw content blocks for THIS assistant turn.
+       * Anthropic requires extended-thinking blocks (with their signatures) to
+       * be passed back verbatim within a tool-use sequence; when present, the
+       * provider uses these instead of reconstructing from text+toolCalls.
+       * Only carried within the live loop — never persisted across turns.
+       */
+      _providerContent?: unknown;
+    }
   | { role: 'tool_result'; toolCallId: string; content: string; isError?: boolean };
 
 export interface ProviderTool {
@@ -37,6 +49,10 @@ export interface StreamChatResult {
   usage: { inputTokens: number; outputTokens: number };
   stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'other';
   model: string;
+  /** The model's extended-thinking text for this turn (visible to the operator). */
+  thinking?: string;
+  /** Raw provider content blocks for this turn (fed back verbatim next iteration). */
+  rawContent?: unknown;
 }
 
 export interface ChatLLMProvider {
@@ -50,6 +66,10 @@ export interface ChatLLMProvider {
     maxTokens?: number;
     signal?: AbortSignal;
     onTextDelta: (text: string) => void;
+    /** Live extended-thinking deltas (the operator sees the "why" in real time). */
+    onThinkingDelta?: (text: string) => void;
+    /** Thinking effort (Claude 5 adaptive). 'low' = snappier; higher = deeper. */
+    thinkingEffort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   }): Promise<StreamChatResult>;
 
   /** Cheap non-streaming completion for titles / classifications. */

@@ -7,7 +7,6 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useApi } from '../api/hooks';
 import { parsePath, pushRoute, currentHeadSegment } from './router';
 import { iamApi, workspacesApi } from '../api/client';
-import SuperAgent from '../components/SuperAgent';
 import { AgentChatView } from './views/AgentViews';
 import { IMG_FACEBOOK_BANNER, IMG_INSTAGRAM_BANNER } from './assets';
 import { AllChannelsView, DiscordView, EmailView, MessengerView, PhoneView, SmsView, WhatsAppView } from './views/ChannelsViews';
@@ -790,7 +789,7 @@ function PrototypeApp() {
 
   function renderView() {
     switch (view) {
-      case 'superAgent': return <SuperAgent />;
+      case 'superAgent': return <AgentChatView view={view} onNavigate={setView} currentCrmView="superAgent" />;
       case 'inbox':    return <InboxView />;
       case 'allLeads': return <AllLeadsView view={view} onNavigate={setView} onBack={() => setView('contacts')} />;
       case 'contacts': return <ContactsView view={view} onNavigate={setView} onBack={() => setView('inbox')} />;

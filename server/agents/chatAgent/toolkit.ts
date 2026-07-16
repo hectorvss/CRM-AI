@@ -37,6 +37,15 @@ export interface SelectToolkitOptions {
   allow?: string[];
   /** Explicit block-list of canonical tool names. */
   block?: string[];
+  /**
+   * Include third-party integration connectors (category 'integration':
+   * linear/jira/github/asana/front/…). Default false — they are ~half the
+   * catalog (~77 tools, ~9k prompt tokens per turn) and rarely relevant to a
+   * given conversation, so we drop them unless a view opts in via `allow` or
+   * this flag. Core external actions (message.send_to_customer, workflow.*)
+   * are NOT integrations and always stay.
+   */
+  includeIntegrations?: boolean;
 }
 
 export function selectToolkit(opts: SelectToolkitOptions): CatalogEntry[] {
@@ -53,7 +62,15 @@ export function selectToolkit(opts: SelectToolkitOptions): CatalogEntry[] {
 
   catalog = catalog.filter((t) => RISK_ORDER[t.risk] <= maxRisk);
 
-  if (allow) catalog = catalog.filter((t) => allow.has(t.name));
+  if (allow) {
+    // An explicit relevant-tools list wins: narrow to exactly those.
+    catalog = catalog.filter((t) => allow.has(t.name));
+  } else if (!opts.includeIntegrations) {
+    // Default: drop the third-party integration connectors to keep the prompt
+    // lean and the agent focused on core CRM tools.
+    catalog = catalog.filter((t) => t.category !== 'integration');
+  }
+
   if (block) catalog = catalog.filter((t) => !block.has(t.name));
 
   return catalog;

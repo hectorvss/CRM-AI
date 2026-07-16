@@ -23,6 +23,8 @@ import { randomUUID } from 'crypto';
 import { logger } from '../../utils/logger.js';
 import { invokeTool } from '../planEngine/invokeTool.js';
 import { toolRegistry } from '../planEngine/registry.js';
+import { persistTrace } from '../planEngine/traceRepository.js';
+import type { ExecutionSpan, ExecutionStatus, RiskLevel } from '../planEngine/types.js';
 import {
   assertCanUseAI,
   chargeCredits,
@@ -41,6 +43,8 @@ import {
   type CheckpointMessage,
 } from '../../data/agentConversations.js';
 import { getCoreMemory, appendCoreMemory } from '../../data/agentCoreMemory.js';
+import { assembleSituation, formatSituationForPrompt, loadOpenEntity } from './situation.js';
+import { wrapExternal } from './fencing.js';
 import type { CatalogEntry } from '../planEngine/registry.js';
 import { getPrimaryProvider, getUtilityProvider } from './providers/index.js';
 import type { ProviderMessage, ProviderToolCall } from './providers/types.js';
@@ -60,9 +64,14 @@ import type { AgentSSEEmitter } from './sse.js';
 // PostHog caps at MAX_TOOL_CALLS=24 LLM iterations; we start tighter and
 // keep a wall-clock budget so serverless SSE responses end cleanly.
 const MAX_ITERATIONS = 8;
-const TIME_BUDGET_MS = 55_000;
-/** Max chars of a tool result fed back to the model per call. */
-const TOOL_RESULT_MODEL_LIMIT = 16_000;
+// Below the Vercel function maxDuration (60s, see vercel.json), leaving margin
+// for the final flush + done event. The durable-queue rewrite (for runs that
+// would exceed this) is deferred — the operator waits synchronously.
+const TIME_BUDGET_MS = 50_000;
+/** Max chars of a tool result fed back to the model per call (the trace keeps
+ *  the full result). Trimmed from 16k → 8k: big case/order bundles bloated the
+ *  context and cost without improving answers. */
+const TOOL_RESULT_MODEL_LIMIT = 8_000;
 /** Conversations with fewer messages than this get a generated title. */
 const TITLE_THRESHOLD = 3;
 const TITLE_TIMEOUT_MS = 3_000;
@@ -97,6 +106,8 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
     userId: input.userId,
   };
   const startedAt = Date.now();
+  // Unique per turn (super_agent_traces.plan_id is a PK); session = conversation.
+  const turnId = `chat-${randomUUID()}`;
   let conversationId = input.conversationId;
 
   try {
@@ -138,13 +149,27 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
     }
 
     // ── Toolkit + prompt (maxRisk critical; high/critical gated below) ─────
-    const [coreMemory, catalog] = await Promise.all([
+    const surface = input.surface ?? 'operator';
+    const situationScope = { tenantId: input.tenantId, workspaceId: input.workspaceId ?? 'ws_default', userId: input.userId };
+    const relevantTools = Array.isArray(input.uiContext?.relevantTools) ? input.uiContext!.relevantTools : undefined;
+    const [coreMemory, catalog, situationText, openEntity] = await Promise.all([
       getCoreMemory(input.tenantId).catch(() => null),
       Promise.resolve(selectToolkit({
         hasPermission: input.hasPermission,
-        surface: input.surface ?? 'operator',
+        surface,
         maxRisk: 'critical',
+        // Contextual tool scoping: when the view declares relevant tools, narrow
+        // the catalog to reduce prompt size and misfires (keeps memory/situational).
+        allow: relevantTools?.length ? [...relevantTools, 'memory.get', 'memory.append', 'switch_mode'] : undefined,
       })),
+      // Situational awareness — only for the operator (not the read-only surface).
+      surface === 'operator'
+        ? assembleSituation(situationScope, { compact: true }).then(formatSituationForPrompt).catch(() => null)
+        : Promise.resolve(null),
+      // Open-entity snapshot when the operator has a case/customer open.
+      surface === 'operator' && (input.uiContext?.caseId || input.uiContext?.customerId)
+        ? loadOpenEntity(situationScope, { caseId: input.uiContext?.caseId, customerId: input.uiContext?.customerId }).catch(() => null)
+        : Promise.resolve(null),
     ]);
     const { tools, resolveToolName } = adaptToolkit(catalog);
     const catalogByName = new Map(catalog.map((entry) => [entry.name, entry]));
@@ -152,6 +177,8 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
       uiContext: input.uiContext,
       coreMemory,
       toolCount: tools.length,
+      situation: situationText,
+      openEntity,
     });
     const provider = getPrimaryProvider();
 
@@ -210,7 +237,8 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
         messages.push({
           role: 'tool_result',
           toolCallId: stored.toolCallId,
-          content: serializeForModel(stored.result),
+          // Fenced: tool results carry untrusted (customer-authored) content.
+          content: wrapExternal('tool_result', serializeForModel(stored.result)),
           isError: !stored.ok,
         });
       }
@@ -240,6 +268,12 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
         tools: outOfBudget ? [] : tools,
         resolveToolName,
         onTextDelta: (text) => emitter.emit('text_chunk', { text }),
+        // Live reasoning — the operator sees the "why" as it happens.
+        onThinkingDelta: (text) => emitter.emit('reasoning_chunk', { text }),
+        // Interactive copilot: prefer snappy responses. Claude 5 keeps its
+        // adaptive thinking internal anyway (not surfaced), so higher effort is
+        // pure latency here. Override with AGENT_THINKING_EFFORT if needed.
+        thinkingEffort: (process.env.AGENT_THINKING_EFFORT as any) ?? 'low',
       });
 
       totalTokens += result.usage.inputTokens + result.usage.outputTokens;
@@ -248,7 +282,10 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
       if (result.text) assistantText += (assistantText ? '\n\n' : '') + result.text;
       if (!result.toolCalls.length || outOfBudget) break;
 
-      messages.push({ role: 'assistant', content: result.text, toolCalls: result.toolCalls });
+      // Carry the provider's raw content (incl. thinking blocks with signatures)
+      // so the next iteration replays it verbatim — required for extended
+      // thinking within a tool-use sequence.
+      messages.push({ role: 'assistant', content: result.text, toolCalls: result.toolCalls, _providerContent: result.rawContent });
 
       // ── Approval gate ────────────────────────────────────────────────────
       const risky = result.toolCalls.filter(
@@ -297,6 +334,10 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
         if (!input.resume && (isNewConversation || (conversation.message_count ?? 0) < TITLE_THRESHOLD)) {
           await generateTitle(scope, conversationId, input.message, assistantText, emitter).catch(() => {});
         }
+        await persistTurnTrace({
+          turnId, conversationId, scope, startedAtMs: startedAt, executed: executedToolCalls, catalogByName,
+          status: 'pending_approval', summary: `Aprobación pendiente: ${primary.toolName}`, approvalIds: [proposalId],
+        });
         emitter.emit('done', { conversationId, finishReason: 'approval_pending', tokensUsed: totalTokens });
         return;
       }
@@ -308,7 +349,8 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
         messages.push({
           role: 'tool_result',
           toolCallId: stored.toolCallId,
-          content: serializeForModel(stored.result),
+          // Fenced: tool results carry untrusted (customer-authored) content.
+          content: wrapExternal('tool_result', serializeForModel(stored.result)),
           isError: !stored.ok,
         });
       }
@@ -327,6 +369,15 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
       await generateTitle(scope, conversationId, input.message, assistantText, emitter)
         .catch((err) => logger.warn('chatAgent: title generation failed', { error: err?.message }));
     }
+
+    // Audit trace for the whole turn (untruncated spans).
+    const anyFail = executedToolCalls.some((t) => !t.ok);
+    const traceStatus: ExecutionStatus =
+      finishReason === 'max_iterations' ? 'partial' : anyFail ? 'partial' : 'success';
+    await persistTurnTrace({
+      turnId, conversationId, scope, startedAtMs: startedAt, executed: executedToolCalls, catalogByName,
+      status: traceStatus, summary: assistantText || `Turno completado (${finishReason})`,
+    });
 
     emitter.emit('done', { conversationId, finishReason, tokensUsed: totalTokens, text: assistantText });
   } catch (err) {
@@ -456,6 +507,7 @@ async function resolveGatedToolCalls(
 
 const SLASH_HELP = [
   'Comandos disponibles:',
+  '- `/status` — resumen de lo que está pasando ahora (colas, aprobaciones, riesgo, SLA, sin leer).',
   '- `/remember <información>` — guarda un dato en la memoria del equipo, disponible en todas las conversaciones futuras.',
   '- `/help` — muestra esta ayuda.',
   '- `/clear` — empieza una conversación nueva.',
@@ -490,6 +542,19 @@ async function handleSlashCommand(opts: {
     return true;
   }
 
+  if (trimmed === '/status') {
+    // Deterministic snapshot, no LLM spend.
+    const situation = await assembleSituation(
+      { tenantId: opts.tenantId, workspaceId: opts.scope.workspaceId ?? 'ws_default', userId: opts.scope.userId },
+      { compact: true },
+    ).catch(() => null);
+    const reply = situation
+      ? `**Estado del workspace ahora**\n\n${formatSituationForPrompt(situation)}`
+      : 'No he podido reunir el estado del workspace ahora mismo.';
+    await respond(reply, 'Estado del workspace');
+    return true;
+  }
+
   if (trimmed.startsWith('/remember')) {
     const fact = trimmed.slice('/remember'.length).trim();
     if (!fact) {
@@ -505,6 +570,54 @@ async function handleSlashCommand(opts: {
 
   // Unknown slash command → let the model handle it conversationally.
   return false;
+}
+
+// ── Observability: per-turn execution trace (reuses super_agent_traces) ───────
+
+function buildSpans(executed: StoredToolCall[], catalogByName: Map<string, CatalogEntry>): ExecutionSpan[] {
+  const endBase = Date.now();
+  return executed.map((tc) => ({
+    stepId: tc.toolCallId,
+    tool: tc.toolName,
+    version: '1.0.0',
+    startedAt: new Date(endBase - tc.durationMs).toISOString(),
+    endedAt: new Date(endBase).toISOString(),
+    latencyMs: tc.durationMs,
+    args: tc.args,
+    // Spans keep the UNTRUNCATED result (faithful audit), unlike the persisted
+    // message (4KB) and the model-facing content (16KB).
+    result: tc.ok
+      ? { ok: true, value: tc.result }
+      : { ok: false, error: (tc.result as any)?.error, errorCode: (tc.result as any)?.errorCode },
+    riskLevel: (catalogByName.get(tc.toolName)?.risk ?? 'none') as RiskLevel,
+    dryRun: false,
+  }));
+}
+
+async function persistTurnTrace(opts: {
+  turnId: string;
+  conversationId: string;
+  scope: AgentScope;
+  startedAtMs: number;
+  executed: StoredToolCall[];
+  catalogByName: Map<string, CatalogEntry>;
+  status: ExecutionStatus;
+  summary: string;
+  approvalIds?: string[];
+}): Promise<void> {
+  await persistTrace({
+    planId: opts.turnId,
+    sessionId: opts.conversationId,
+    tenantId: opts.scope.tenantId,
+    workspaceId: opts.scope.workspaceId,
+    userId: opts.scope.userId,
+    startedAt: new Date(opts.startedAtMs).toISOString(),
+    endedAt: new Date().toISOString(),
+    status: opts.status,
+    spans: buildSpans(opts.executed, opts.catalogByName),
+    summary: opts.summary.slice(0, 500),
+    approvalIds: opts.approvalIds,
+  });
 }
 
 // ── Approval preview (deterministic, no LLM) ──────────────────────────────────
@@ -547,6 +660,10 @@ function providerToCheckpointMessages(messages: ProviderMessage[]): CheckpointMe
         role: 'assistant',
         content: m.content,
         toolCalls: (m.toolCalls ?? []).map((tc) => ({ id: tc.id, toolName: tc.toolName, args: tc.args })),
+        // Preserve raw content (extended-thinking blocks with signatures) so the
+        // resumed turn replays it verbatim — Anthropic rejects a tool_use turn
+        // that dropped its thinking block.
+        _providerContent: m._providerContent,
       };
     }
     if (m.role === 'tool_result') {
@@ -559,7 +676,7 @@ function providerToCheckpointMessages(messages: ProviderMessage[]): CheckpointMe
 function checkpointToProviderMessages(messages: CheckpointMessage[]): ProviderMessage[] {
   return messages.map((m) => {
     if (m.role === 'assistant') {
-      return { role: 'assistant', content: m.content, toolCalls: m.toolCalls };
+      return { role: 'assistant', content: m.content, toolCalls: m.toolCalls, _providerContent: m._providerContent };
     }
     if (m.role === 'tool_result') {
       return { role: 'tool_result', content: m.content, toolCallId: m.toolCallId ?? '', isError: m.isError };

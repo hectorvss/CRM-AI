@@ -38,6 +38,15 @@ interface ApiState<T> {
 /** Event name dispatched on `window` when an authenticated request returns 401. */
 export const UNAUTHORIZED_EVENT = 'crmai:unauthorized';
 
+/**
+ * Event name dispatched on `window` after a write that may have changed data the
+ * UI is showing — chiefly the AI agent, which fires it (via a tool_result
+ * `uiHint`) when a write tool succeeds. Every `useApi` hook listens and refetches
+ * so open views reflect the change without a manual reload.
+ * Detail (optional): `{ entityType?, entityId? }`.
+ */
+export const DATA_CHANGED_EVENT = 'crm-data-changed';
+
 /** Build a user-facing error message that never resolves to "undefined". */
 function describeError(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
@@ -84,6 +93,15 @@ export function useApi<T>(
   const [attempt, setAttempt] = useState(0);
 
   const refetch = useCallback(() => setTick(t => t + 1), []);
+
+  // Global data-change refresh. Fires rarely (on a successful agent write), so a
+  // blanket refetch of mounted read hooks is cheap and keeps every view honest.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => setTick(t => t + 1);
+    window.addEventListener(DATA_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, handler);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

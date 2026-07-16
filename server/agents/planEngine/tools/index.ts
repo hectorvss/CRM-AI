@@ -98,6 +98,16 @@ import {
 } from './scheduledActions.js';
 // ── Feedback / decision capture
 import { feedbackRecordDecisionTool, feedbackListTool } from './feedback.js';
+// ── Agent long-term memory
+import { memoryAppendTool, memoryGetTool } from './memory.js';
+// ── Situational awareness (read-only)
+import {
+  notificationListTool,
+  mentionListTool,
+  auditRecentTool,
+  inboxCountsTool,
+  slaAtRiskTool,
+} from './situational.js';
 // ── Per-integration action tools (Linear, Jira, GitHub, Asana, Confluence, GDrive, Front, Aircall, GCal, Zoom, Pipedrive, Mailchimp)
 import { ALL_INTEGRATION_ACTION_TOOLS } from './integrationActions.js';
 
@@ -218,6 +228,17 @@ export function registerAllTools(): void {
   // Feedback / decision capture
   toolRegistry.register(feedbackRecordDecisionTool);
   toolRegistry.register(feedbackListTool);
+
+  // Agent long-term memory
+  toolRegistry.register(memoryAppendTool);
+  toolRegistry.register(memoryGetTool);
+
+  // Situational awareness (read-only)
+  toolRegistry.register(notificationListTool);
+  toolRegistry.register(mentionListTool);
+  toolRegistry.register(auditRecentTool);
+  toolRegistry.register(inboxCountsTool);
+  toolRegistry.register(slaAtRiskTool);
 
   // Per-integration action tools (one ToolSpec per high-impact action across
   // Linear/Jira/GitHub/Asana/Confluence/GDrive/Front/Aircall/GCalendar/Zoom/

@@ -90,6 +90,7 @@ export class AnthropicChatProvider implements ChatLLMProvider {
     signal?: AbortSignal;
     onTextDelta: (text: string) => void;
     onThinkingDelta?: (text: string) => void;
+    thinkingEffort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   }): Promise<StreamChatResult> {
     const client = await getClient();
     const model = DEFAULT_PRIMARY_MODEL;
@@ -106,7 +107,7 @@ export class AnthropicChatProvider implements ChatLLMProvider {
     let maxTokens = opts.maxTokens ?? DEFAULT_MAX_TOKENS;
     let thinkingParams: Record<string, unknown> = {};
     if (!thinkingOff && adaptiveEra) {
-      const effort = process.env.AGENT_THINKING_EFFORT ?? 'medium';
+      const effort = opts.thinkingEffort ?? process.env.AGENT_THINKING_EFFORT ?? 'medium';
       thinkingParams = { thinking: { type: 'adaptive' }, output_config: { effort } };
     } else if (!thinkingOff) {
       const budget = Number(process.env.AGENT_THINKING_BUDGET ?? 2048);

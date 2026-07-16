@@ -232,3 +232,50 @@ export async function listSlaEvents(
   if (error) throw error;
   return data ?? [];
 }
+
+// ── SLA at risk (imminent breach) ─────────────────────────────────────────────
+
+export interface SlaAtRiskItem {
+  id: string;
+  conversation_id: string;
+  kind: 'resolution' | 'first_response';
+  deadline: string;
+}
+
+/**
+ * Applied SLAs whose deadline falls within `withinMins` from now and is NOT yet
+ * breached. Fills the gap the reporting layer had — deadlines exist on
+ * applied_slas but nobody queried them "about to breach".
+ */
+export async function listSlaAtRisk(
+  scope: SlaScope,
+  withinMins = 60,
+  limit = 20,
+): Promise<SlaAtRiskItem[]> {
+  const supabase = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+  const soon = new Date(Date.now() + withinMins * 60_000).toISOString();
+  const { data, error } = await supabase
+    .from('applied_slas')
+    .select('id, conversation_id, resolution_deadline, first_response_deadline, resolution_breached, first_response_breached')
+    .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId)
+    .or(
+      `and(resolution_breached.eq.false,resolution_deadline.gte.${nowIso},resolution_deadline.lte.${soon}),` +
+      `and(first_response_breached.eq.false,first_response_deadline.gte.${nowIso},first_response_deadline.lte.${soon})`,
+    )
+    .limit(limit);
+  if (error) {
+    if ((error as { code?: string }).code === '42P01') return [];
+    throw error;
+  }
+  return (data ?? []).map((r: any): SlaAtRiskItem => {
+    const resolutionAtRisk = r.resolution_deadline && !r.resolution_breached && r.resolution_deadline <= soon && r.resolution_deadline >= nowIso;
+    return {
+      id: String(r.id),
+      conversation_id: String(r.conversation_id),
+      kind: resolutionAtRisk ? 'resolution' : 'first_response',
+      deadline: resolutionAtRisk ? r.resolution_deadline : r.first_response_deadline,
+    };
+  });
+}

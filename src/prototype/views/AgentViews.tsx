@@ -62,6 +62,8 @@ const TOOL_LABELS: Record<string, { icon: string; label: string }> = {
   switch_mode:                { icon: '🔄', label: 'Cambiando modo' },
   remember_fact:              { icon: '🧠', label: 'Guardando en memoria' },
   recall_memory:              { icon: '🧠', label: 'Consultando memoria' },
+  'memory.append':            { icon: '🧠', label: 'Guardando en memoria' },
+  'memory.get':               { icon: '🧠', label: 'Consultando memoria' },
   get_current_context:        { icon: '📍', label: 'Obteniendo contexto' },
 };
 
@@ -77,8 +79,9 @@ type AgentMsg = {
   role: 'user' | 'assistant' | 'approval';
   content: string;
   toolCalls?: { toolName: string; args: any; result: any; durationMs: number }[];
+  reasoning?: string;
   proposalId?: string;
-  approvalPayload?: { toolName: string; preview: string; payload: any };
+  approvalPayload?: { toolName: string; preview: string; args?: any; risk?: string };
   approvalStatus?: 'pending' | 'approved' | 'rejected';
   createdAt: string;
 };
@@ -175,6 +178,185 @@ function inlineFormat(text: string): ReactNode {
   );
 }
 
+// ── SituationBriefing ─────────────────────────────────────────────────────────
+// Always-visible "control room": what's happening in the workspace right now.
+// Fed by GET /agent/situation; refreshes on crm-data-changed and on an interval.
+
+type SituationData = {
+  generatedAt: string;
+  queues: { open: number; unassigned: number; mine: number; mentions: number; escalated: number };
+  pendingApprovals: { count: number; items: any[] };
+  riskyCases: { count: number; items: any[] };
+  slaAtRisk: { count: number; items: any[] };
+  unread: { count: number; notifications: number; mentions: number; items: any[] };
+  kpi: { resolutionRate?: number; slaCompliance?: number; highRisk?: number; totalCases?: number } | null;
+};
+
+const SEV_DOT: Record<string, string> = {
+  critical: 'bg-[#ef4444]', high: 'bg-[#f97316]', warn: 'bg-[#f59e0b]', info: 'bg-[#9a9a98]',
+};
+
+function SituationBriefing({ onNavigate }: { onNavigate: (v: View) => void }) {
+  const [data, setData] = useState<SituationData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
+
+  const load = useCallbackRef(async () => {
+    try {
+      const r = await agentApi.getSituation();
+      setData(r.situation ?? null);
+    } catch { /* keep last snapshot */ }
+    finally { setLoading(false); }
+  });
+
+  useEffect(() => {
+    load();
+    const onChange = () => load();
+    window.addEventListener('crm-data-changed', onChange);
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60_000);
+    return () => { window.removeEventListener('crm-data-changed', onChange); clearInterval(timer); };
+  }, []);
+
+  function go(item: any) {
+    window.dispatchEvent(new CustomEvent('app-navigate', {
+      detail: { view: item.view, entityType: item.entityType, entityId: item.entityId },
+    }));
+    if (item.view) onNavigate(item.view as View);
+  }
+
+  const groups: Array<{ key: string; title: string; count: number; items: any[] }> = data ? [
+    { key: 'appr', title: 'Aprobaciones pendientes', count: data.pendingApprovals.count, items: data.pendingApprovals.items },
+    { key: 'risk', title: 'Casos de alto riesgo', count: data.riskyCases.count, items: data.riskyCases.items },
+    { key: 'sla', title: 'SLA a punto de incumplir', count: data.slaAtRisk.count, items: data.slaAtRisk.items },
+    { key: 'unread', title: 'Sin leer', count: data.unread.count, items: data.unread.items },
+  ] : [];
+
+  if (collapsed) {
+    return (
+      <button
+        onClick={() => setCollapsed(false)}
+        title="Mostrar qué está pasando"
+        className="w-9 flex-shrink-0 rounded-[12px] border border-[#e9eae6] bg-white flex items-center justify-center text-[#6b6b68] hover:bg-[#f5f5f3]"
+      >
+        <span className="[writing-mode:vertical-rl] rotate-180 text-[11px] font-semibold tracking-wide">Qué está pasando</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="w-[300px] flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6] flex-shrink-0">
+        <span className="text-[15px]">📡</span>
+        <p className="text-[13px] font-semibold text-[#1a1a1a] flex-1">Qué está pasando</p>
+        <button onClick={() => load()} title="Refrescar" className="text-[#9a9a98] hover:text-[#1a1a1a] text-[13px]">↻</button>
+        <button onClick={() => setCollapsed(true)} title="Ocultar" className="text-[#9a9a98] hover:text-[#1a1a1a] text-[13px]">✕</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-2">
+        {loading && !data && <p className="text-[12px] text-[#9a9a98] px-1 py-2">Cargando…</p>}
+
+        {data && (
+          <>
+            {/* Queues strip */}
+            <div className="grid grid-cols-2 gap-1.5 mb-3">
+              {[
+                { l: 'Abiertas', v: data.queues.open },
+                { l: 'Sin asignar', v: data.queues.unassigned },
+                { l: 'Menciones', v: data.queues.mentions },
+                { l: 'Escaladas', v: data.queues.escalated },
+              ].map((q) => (
+                <div key={q.l} className="rounded-lg bg-[#f7f7f5] px-2.5 py-1.5">
+                  <div className="text-[15px] font-semibold text-[#1a1a1a] leading-none">{q.v}</div>
+                  <div className="text-[10.5px] text-[#9a9a98] mt-0.5">{q.l}</div>
+                </div>
+              ))}
+            </div>
+
+            {groups.map((g) => (
+              <div key={g.key} className="mb-3">
+                <div className="flex items-center gap-1.5 mb-1 px-1">
+                  <p className="text-[11px] font-semibold text-[#6b6b68] uppercase tracking-wide flex-1">{g.title}</p>
+                  <span className={`text-[11px] font-semibold px-1.5 rounded-full ${g.count ? 'bg-[#fef2f2] text-[#b91c1c]' : 'bg-[#f0f0ee] text-[#9a9a98]'}`}>{g.count}</span>
+                </div>
+                {g.items.length === 0 ? (
+                  <p className="text-[11.5px] text-[#b4b4b0] px-1">—</p>
+                ) : (
+                  g.items.map((it) => (
+                    <button
+                      key={it.id}
+                      onClick={() => go(it)}
+                      className="w-full text-left flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-[#f5f5f3] transition-colors"
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${SEV_DOT[it.severity] ?? SEV_DOT.info}`} />
+                      <span className="min-w-0">
+                        <span className="block text-[12px] text-[#1a1a1a] truncate">{it.label}</span>
+                        {it.sub && <span className="block text-[11px] text-[#9a9a98] truncate">{it.sub}</span>}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            ))}
+
+            {data.kpi && (
+              <div className="mt-1 pt-2 border-t border-[#f0f0ee] px-1">
+                <p className="text-[11px] font-semibold text-[#6b6b68] uppercase tracking-wide mb-1">KPIs (7d)</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-[#6b6b68]">
+                  {data.kpi.resolutionRate != null && <span>Resolución <b className="text-[#1a1a1a]">{data.kpi.resolutionRate}%</b></span>}
+                  {data.kpi.slaCompliance != null && <span>SLA <b className="text-[#1a1a1a]">{data.kpi.slaCompliance}%</b></span>}
+                  {data.kpi.totalCases != null && <span>Casos <b className="text-[#1a1a1a]">{data.kpi.totalCases}</b></span>}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Stable callback wrapper (avoids re-subscribing effects on each render). */
+function useCallbackRef<T extends (...args: any[]) => any>(fn: T): T {
+  const ref = useRef(fn);
+  ref.current = fn;
+  return useRef(((...args: any[]) => ref.current(...args)) as T).current;
+}
+
+// ── Max-style primitives ──────────────────────────────────────────────────────
+
+/** Animated shimmer gradient over text — Max's "thinking"/in-progress signal. */
+function ShimmerText({ children }: { children: ReactNode }) {
+  return (
+    <span
+      className="bg-clip-text text-transparent"
+      style={{
+        backgroundImage: 'linear-gradient(90deg,#303030,rgba(48,48,48,0.42),rgba(48,48,48,0.25),rgba(48,48,48,0.42),#303030)',
+        backgroundSize: '200% 100%',
+        animation: 'max-shimmer 3s linear infinite',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Collapsible reasoning row ("Pensamiento") — Max renders thinking as an activity. */
+function ReasoningRow({ content }: { content: string; id?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="w-full text-xs">
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-1.5 text-[#5f5f5f] hover:text-[#0d0d0d] select-none">
+        <svg viewBox="0 0 20 20" className="w-4 h-4 fill-current"><path d="M10 2a5 5 0 0 0-3 9v2a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-2a5 5 0 0 0-3-9z"/></svg>
+        <span>Pensamiento</span>
+        <span className={`transition-transform text-[13px] ${open ? 'rotate-90' : ''}`}>›</span>
+      </button>
+      {open && (
+        <div className="mt-1 border-l-2 border-[#e3e3e3] pl-3.5 ml-2 text-[#5f5f5f] whitespace-pre-wrap">{content}</div>
+      )}
+    </div>
+  );
+}
+
 export function AgentChatView({
   view,
   onNavigate,
@@ -191,7 +373,9 @@ export function AgentChatView({
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState('');
-  const [activeToolCalls, setActiveToolCalls] = useState<{ toolName: string; args: any; result?: any; durationMs?: number; done: boolean }[]>([]);
+  const [reasoning, setReasoning] = useState('');
+  const [reasoningOpen, setReasoningOpen] = useState(true);
+  const [activeToolCalls, setActiveToolCalls] = useState<{ toolCallId?: string; toolName: string; args: any; result?: any; durationMs?: number; done: boolean }[]>([]);
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [currentMode, setCurrentMode] = useState<CrmAgentMode | null>(null);
@@ -200,7 +384,8 @@ export function AgentChatView({
   const [memoryCount, setMemoryCount] = useState(0);
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
   const [pendingApproval, setPendingApproval] = useState(false);
-  const [lastSentMessage, setLastSentMessage] = useState<string>('');
+  const [trace, setTrace] = useState<{ traces: any[]; metrics: any } | null>(null);
+  const [traceLoading, setTraceLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -233,16 +418,46 @@ export function AgentChatView({
     memoryToastTimerRef.current = setTimeout(() => setMemoryToast(null), 3000);
   }
 
+  // ── Audit trace (per-turn timeline) ───────────────────────────────────────
+  async function openTrace() {
+    if (!activeConversationId) return;
+    setTraceLoading(true);
+    setTrace({ traces: [], metrics: null });
+    try {
+      const r = await agentApi.getTrace(activeConversationId);
+      setTrace({ traces: r.traces ?? [], metrics: r.metrics ?? null });
+    } catch {
+      setTrace({ traces: [], metrics: null });
+    } finally {
+      setTraceLoading(false);
+    }
+  }
+
   // ── Load a past conversation ──────────────────────────────────────────────
   async function openConversation(id: string) {
     if (activeConversationId === id) return;
     try {
-      const r = await agentApi.getConversation(id);
+      const r = await agentApi.getConversation(id) as any;
       setActiveConversationId(id);
-      setMessages(r.messages ?? []);
+      const loaded: AgentMsg[] = r.messages ?? [];
+      // If the thread was parked on an approval, rebuild the card so the user
+      // can still decide after a reload (otherwise the pending action orphans).
+      const pending = r.pendingApproval;
+      if (pending?.proposalId) {
+        loaded.push({
+          id: `approval-${pending.proposalId}`,
+          role: 'approval',
+          content: pending.preview ?? `La herramienta ${pending.toolName} requiere aprobación`,
+          proposalId: pending.proposalId,
+          approvalPayload: { toolName: pending.toolName, preview: pending.preview, args: pending.args, risk: pending.risk },
+          approvalStatus: 'pending',
+          createdAt: new Date().toISOString(),
+        });
+      }
+      setMessages(loaded);
       setStreamingText('');
       setActiveToolCalls([]);
-      setPendingApproval(false);
+      setPendingApproval(Boolean(pending?.proposalId));
     } catch (e) {
       console.error('load conversation error', e);
     }
@@ -270,151 +485,132 @@ export function AgentChatView({
     inputRef.current?.focus();
   }
 
-  // ── Send message ──────────────────────────────────────────────────────────
-  async function sendMessage(text?: string) {
-    const msg = (text ?? input).trim();
-    if (!msg || streaming || pendingApproval) return;
-    setInput('');
-    setShowSlashMenu(false);
-    setLastSentMessage(msg);
-
-    const tempId = `tmp-${Date.now()}`;
-    const userMsg: AgentMsg = { id: tempId, role: 'user', content: msg, createdAt: new Date().toISOString() };
-    setMessages(prev => [...prev, userMsg]);
-
+  // ── Shared SSE consumer ─────────────────────────────────────────────────────
+  // Both a fresh message and an approval resume stream the same event taxonomy,
+  // so the switch lives here once. `streamFn` is the endpoint call (chat or
+  // approve); buffers are local to each run.
+  async function consumeAgentStream(
+    streamFn: (onEvent: (event: string, data: any) => void, signal: AbortSignal) => Promise<void>,
+  ) {
     setStreaming(true);
     setStreamingText('');
+    setReasoning('');
+    setReasoningOpen(true);
     setActiveToolCalls([]);
 
     let convId = activeConversationId;
     let assistantText = '';
-    const toolCallsBuffer: { toolName: string; args: any; result?: any; durationMs?: number; done: boolean }[] = [];
+    let reasoningText = '';
+    let gated = false;
+    const toolCallsBuffer: { toolCallId?: string; toolName: string; args: any; result?: any; durationMs?: number; done: boolean }[] = [];
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
     try {
-      await agentApi.chat(
-        {
-          message: msg,
-          conversationId: convId ?? undefined,
-          context: { currentView: currentCrmView, mode: currentMode },
-        },
-        (event, data: any) => {
-          switch (event) {
-            case 'conversation_created':
-            case 'conversation_id': {
-              if (!convId && data.conversationId) {
-                convId = data.conversationId;
+      await streamFn((event, data: any) => {
+        switch (event) {
+          case 'conversation_created':
+          case 'conversation_id': {
+            if (data.conversationId) {
+              convId = data.conversationId;
+              if (!activeConversationId) {
                 setActiveConversationId(data.conversationId);
-                agentApi.listConversations()
-                  .then(r => setConversations(r.conversations ?? []))
-                  .catch(() => {});
+                agentApi.listConversations().then(r => setConversations(r.conversations ?? [])).catch(() => {});
               }
-              break;
             }
-            case 'title_generated': {
-              if (data.title) {
-                setConversations(cs => cs.map(c => c.id === convId ? { ...c, title: data.title } : c));
-              }
-              break;
+            break;
+          }
+          case 'title_generated': {
+            if (data.title) setConversations(cs => cs.map(c => c.id === convId ? { ...c, title: data.title } : c));
+            break;
+          }
+          case 'reasoning_chunk': {
+            reasoningText += data.text ?? '';
+            setReasoning(reasoningText);
+            break;
+          }
+          case 'text_chunk': {
+            assistantText += data.text ?? '';
+            setStreamingText(assistantText);
+            break;
+          }
+          case 'tool_start': {
+            toolCallsBuffer.push({ toolCallId: data.toolCallId, toolName: data.toolName, args: data.args, done: false });
+            setActiveToolCalls([...toolCallsBuffer]);
+            break;
+          }
+          case 'tool_result': {
+            const idx = data.toolCallId
+              ? toolCallsBuffer.findIndex(t => t.toolCallId === data.toolCallId)
+              : toolCallsBuffer.map((t, i) => (!t.done && t.toolName === data.toolName ? i : -1)).filter(i => i !== -1).pop() ?? -1;
+            if (idx !== -1) {
+              toolCallsBuffer[idx] = { ...toolCallsBuffer[idx], result: data.data ?? data.result, durationMs: data.durationMs ?? 0, done: true };
             }
-            case 'text_chunk': {
-              assistantText += data.text ?? '';
-              setStreamingText(assistantText);
-              break;
+            setActiveToolCalls([...toolCallsBuffer]);
+            // Let the CRM views react to what the agent just changed.
+            if (data.uiHint) applyUiHint(data.uiHint);
+            break;
+          }
+          case 'approval_request': {
+            gated = true;
+            // Preserve the agent's narration ("Voy a reembolsar…") as a bubble.
+            if (assistantText.trim()) {
+              setMessages(prev => [...prev, { id: `asst-${Date.now()}`, role: 'assistant', content: assistantText, createdAt: new Date().toISOString() }]);
             }
-            case 'tool_start': {
-              toolCallsBuffer.push({ toolName: data.toolName, args: data.args, done: false });
-              setActiveToolCalls([...toolCallsBuffer]);
-              break;
-            }
-            case 'tool_result': {
-              const idx = toolCallsBuffer.map((t, i) => (!t.done && t.toolName === data.toolName ? i : -1)).filter(i => i !== -1).pop() ?? -1;
-              if (idx !== -1) {
-                toolCallsBuffer[idx] = { ...toolCallsBuffer[idx], result: data.data ?? data.result, durationMs: data.durationMs ?? 0, done: true };
-              }
-              setActiveToolCalls([...toolCallsBuffer]);
-              break;
-            }
-            case 'approval_request': {
-              const approvalMsg: AgentMsg = {
-                id: `approval-${Date.now()}`,
-                role: 'approval',
-                content: data.preview ?? `La herramienta **${data.toolName}** requiere aprobación`,
-                proposalId: data.proposalId,
-                approvalPayload: { toolName: data.toolName, preview: data.preview, payload: data.payload },
-                approvalStatus: 'pending',
-                createdAt: new Date().toISOString(),
-              };
-              setMessages(prev => [...prev, approvalMsg]);
-              setPendingApproval(true);
-              setStreaming(false);
-              setStreamingText('');
-              break;
-            }
-            case 'memory_updated': {
-              setMemoryCount(prev => prev + 1);
-              showMemToast(data.fact ?? 'Hecho guardado');
-              break;
-            }
-            case 'mode_switched': {
-              if (data.newMode && Object.keys(MODE_CONFIG).includes(data.newMode)) {
-                setCurrentMode(data.newMode as CrmAgentMode);
-              }
-              break;
-            }
-            case 'slash_handled': {
-              if (data.command === 'clear') {
-                setMessages([]);
-                setActiveConversationId(null);
-              }
-              break;
-            }
-            case 'done': {
-              const finalText = data.text || assistantText || '';
-              const assistantMsg: AgentMsg = {
+            setMessages(prev => [...prev, {
+              id: `approval-${Date.now()}`,
+              role: 'approval',
+              content: data.preview ?? `La herramienta **${data.toolName}** requiere aprobación`,
+              proposalId: data.proposalId,
+              approvalPayload: { toolName: data.toolName, preview: data.preview, args: data.args, risk: data.risk },
+              approvalStatus: 'pending',
+              createdAt: new Date().toISOString(),
+            }]);
+            setPendingApproval(true);
+            setStreamingText('');
+            break;
+          }
+          case 'memory_updated': {
+            setMemoryCount(prev => prev + 1);
+            showMemToast(data.fact ?? 'Hecho guardado');
+            break;
+          }
+          case 'done': {
+            // The approval pause already emitted its bubbles; don't duplicate.
+            if (data.finishReason === 'approval_pending' || gated) { setStreamingText(''); setReasoning(''); setActiveToolCalls([]); break; }
+            const finalText = data.text || assistantText || '';
+            const doneMsg: AgentMsg[] = [];
+            if (data.finishReason === 'credit_exhausted') {
+              doneMsg.push({ id: `credit-${Date.now()}`, role: 'assistant', content: data.message ?? 'Créditos de IA agotados.', createdAt: new Date().toISOString() });
+            } else if (finalText || toolCallsBuffer.some(t => t.done)) {
+              doneMsg.push({
                 id: `asst-${Date.now()}`,
                 role: 'assistant',
                 content: finalText,
-                toolCalls: toolCallsBuffer.filter(t => t.done).map(t => ({
-                  toolName: t.toolName,
-                  args: t.args,
-                  result: t.result,
-                  durationMs: t.durationMs ?? 0,
-                })),
+                toolCalls: toolCallsBuffer.filter(t => t.done).map(t => ({ toolName: t.toolName, args: t.args, result: t.result, durationMs: t.durationMs ?? 0 })),
+                reasoning: reasoningText || undefined,
                 createdAt: new Date().toISOString(),
-              };
-              setMessages(prev => [...prev, assistantMsg]);
-              setStreamingText('');
-              setActiveToolCalls([]);
-              break;
+              });
             }
-            case 'error': {
-              const errMsg: AgentMsg = {
-                id: `err-${Date.now()}`,
-                role: 'assistant',
-                content: `Error: ${data.message ?? 'Algo fue mal. Inténtalo de nuevo.'}`,
-                createdAt: new Date().toISOString(),
-              };
-              setMessages(prev => [...prev, errMsg]);
-              setStreamingText('');
-              setActiveToolCalls([]);
-              break;
-            }
+            if (doneMsg.length) setMessages(prev => [...prev, ...doneMsg]);
+            setStreamingText('');
+            setReasoning('');
+            setActiveToolCalls([]);
+            break;
           }
-        },
-        ctrl.signal,
-      );
+          case 'error': {
+            setMessages(prev => [...prev, { id: `err-${Date.now()}`, role: 'assistant', content: `Error: ${data.message ?? 'Algo fue mal. Inténtalo de nuevo.'}`, createdAt: new Date().toISOString() }]);
+            setStreamingText('');
+            setReasoning('');
+            setActiveToolCalls([]);
+            break;
+          }
+        }
+      }, ctrl.signal);
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        const errMsg: AgentMsg = {
-          id: `err-${Date.now()}`,
-          role: 'assistant',
-          content: 'Lo siento, algo fue mal. Por favor inténtalo de nuevo.',
-          createdAt: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, errMsg]);
+        setMessages(prev => [...prev, { id: `err-${Date.now()}`, role: 'assistant', content: 'Lo siento, algo fue mal. Por favor inténtalo de nuevo.', createdAt: new Date().toISOString() }]);
       }
     } finally {
       setStreaming(false);
@@ -422,21 +618,46 @@ export function AgentChatView({
     }
   }
 
+  // ── Send message ──────────────────────────────────────────────────────────
+  async function sendMessage(text?: string) {
+    const msg = (text ?? input).trim();
+    if (!msg || streaming || pendingApproval) return;
+    setInput('');
+    setShowSlashMenu(false);
+
+    // /clear is a pure UI action — start a fresh conversation, no round-trip.
+    if (msg === '/clear') { newConversation(); return; }
+
+    setMessages(prev => [...prev, { id: `tmp-${Date.now()}`, role: 'user', content: msg, createdAt: new Date().toISOString() }]);
+
+    const convId = activeConversationId;
+    await consumeAgentStream((onEvent, signal) =>
+      agentApi.chat({ message: msg, conversationId: convId ?? undefined, context: { view: currentCrmView, mode: currentMode } }, onEvent, signal),
+    );
+  }
+
   // ── Handle approval ───────────────────────────────────────────────────────
+  // Consume the resumed SSE stream directly — the backend continues the loop
+  // from its checkpoint, so we must NOT re-send the user's last message.
   async function handleApproval(proposalId: string, action: 'approve' | 'reject', feedback?: string) {
-    if (!activeConversationId) return;
+    if (!activeConversationId || streaming) return;
     setMessages(prev => prev.map(m =>
       m.proposalId === proposalId ? { ...m, approvalStatus: action === 'approve' ? 'approved' : 'rejected' } : m
     ));
     setPendingApproval(false);
-    try {
-      await agentApi.approve({ proposalId, action, feedback, conversationId: activeConversationId });
-      if (action === 'approve') {
-        // Re-send last message to continue the flow
-        await sendMessage(lastSentMessage || 'continuar');
-      }
-    } catch (e) {
-      console.error('approval error', e);
+    const convId = activeConversationId;
+    await consumeAgentStream((onEvent, signal) =>
+      agentApi.approve({ proposalId, action, feedback, conversationId: convId }, onEvent, signal),
+    );
+  }
+
+  // ── Apply a UI hint from a tool result (refetch / navigate) ─────────────────
+  function applyUiHint(hint: { kind: string; entityType?: string; entityId?: string; view?: string }) {
+    if (!hint || !hint.kind) return;
+    if (hint.kind === 'navigate' && hint.view) {
+      window.dispatchEvent(new CustomEvent('app-navigate', { detail: { view: hint.view } }));
+    } else if (hint.kind === 'refetch') {
+      window.dispatchEvent(new CustomEvent('crm-data-changed', { detail: { entityType: hint.entityType, entityId: hint.entityId } }));
     }
   }
 
@@ -465,7 +686,7 @@ export function AgentChatView({
     sendMessage(`/mode ${mode}`);
   }
 
-  // ── Tool call card (rich version) ─────────────────────────────────────────
+  // ── Tool call — Max "activity" row ────────────────────────────────────────
   function ToolCallCard({
     tc,
     cardKey,
@@ -479,47 +700,42 @@ export function AgentChatView({
     const expanded = expandedTools.has(cardKey);
     const meta = TOOL_LABELS[tc.toolName] ?? { icon: '⚙️', label: tc.toolName };
     const result = tc.result;
+    const running = live && !tc.done;
+    const failed = tc.done && result && typeof result === 'object' && (result.error != null || result.ok === false || result.errorCode != null);
 
-    // Detect array results for mini-table
     const arrayResult: any[] | null = (() => {
-      if (!result) return null;
+      if (!result || typeof result !== 'object') return null;
       if (Array.isArray(result)) return result.slice(0, 5);
-      const keys = Object.keys(result ?? {});
-      for (const k of keys) {
+      for (const k of Object.keys(result)) {
         if (Array.isArray(result[k]) && result[k].length > 0) return result[k].slice(0, 5);
       }
       return null;
     })();
-
-    // SQL results
     const isSql = tc.toolName === 'run_sql_query';
     const sqlRows: any[] = isSql && result?.rows ? result.rows.slice(0, 10) : [];
     const sqlCols: string[] = isSql && result?.columns ? result.columns : (sqlRows.length > 0 ? Object.keys(sqlRows[0]) : []);
+    const hasDetails = (tc.args && Object.keys(tc.args).length > 0) || result != null;
 
     return (
-      <div className="my-1 border border-[#e9eae6] rounded-lg overflow-hidden bg-[#f9f9f7] text-[12px]">
+      <div className="w-full text-xs">
         <button
-          onClick={() => toggleToolExpand(cardKey)}
-          className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-[#f3f3f1] transition-colors"
+          onClick={() => hasDetails && toggleToolExpand(cardKey)}
+          className={`group/act flex items-center gap-1.5 w-full text-left rounded px-1 -mx-1 transition-colors ${hasDetails ? 'cursor-pointer hover:bg-[#f3f3f1]' : 'cursor-default'} ${expanded ? 'bg-[#f3f3f1]' : ''} ${failed ? 'text-[#b91c1c]' : running ? 'text-[#5f5f5f]' : 'text-[#0d0d0d]'}`}
         >
-          {live && !tc.done ? (
-            <span className="inline-block w-2 h-2 rounded-full bg-[#6366f1] animate-pulse flex-shrink-0" />
-          ) : (
-            <span className="text-[#10b981] flex-shrink-0 text-[11px]">✓</span>
-          )}
-          <span className="flex-shrink-0">{meta.icon}</span>
-          <span className="font-medium text-[#1a1a1a] flex-1 truncate">{meta.label}</span>
-          {tc.durationMs != null && tc.done && (
-            <span className="text-[#9a9a98] text-[10px] flex-shrink-0">{tc.durationMs}ms</span>
-          )}
-          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#9a9a98] flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}>
-            <path d="M6 4l4 4-4 4z"/>
-          </svg>
+          <span className="relative flex items-center justify-center w-5 h-5 shrink-0 text-[13px]">
+            <span className={hasDetails ? 'transition-opacity group-hover/act:opacity-0' : ''}>{failed ? '⚠️' : meta.icon}</span>
+            {hasDetails && (
+              <svg viewBox="0 0 16 16" className={`absolute w-3 h-3 fill-[#5f5f5f] opacity-0 transition-transform group-hover/act:opacity-100 ${expanded ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+            )}
+          </span>
+          <span className="flex-1 truncate">
+            {running ? <ShimmerText>{meta.label}…</ShimmerText> : meta.label}
+          </span>
+          {tc.durationMs != null && tc.done && <span className="text-[#9a9a98] text-[10px] shrink-0">{tc.durationMs}ms</span>}
         </button>
 
-        {expanded && (
-          <div className="border-t border-[#e9eae6] px-3 py-2 space-y-2">
-            {/* Args */}
+        {expanded && hasDetails && (
+          <div className="mt-1 space-y-2 border-l-2 border-[#e3e3e3] pl-3.5 ml-2">
             {tc.args && Object.keys(tc.args).length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-1">Argumentos</p>
@@ -527,26 +743,22 @@ export function AgentChatView({
                   {Object.entries(tc.args).map(([k, v]) => (
                     <div key={k} className="flex gap-2">
                       <span className="text-[#9a9a98] font-mono min-w-[80px]">{k}:</span>
-                      <span className="text-[#1a1a1a] font-mono break-all">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+                      <span className="text-[#0d0d0d] font-mono break-all">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-
-            {/* SQL table result */}
             {isSql && sqlRows.length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-1">Resultado SQL ({result?.rowCount ?? sqlRows.length} filas)</p>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-[11px]">
-                    <thead>
-                      <tr>{sqlCols.map(c => <th key={c} className="px-2 py-1 bg-[#f0f0ef] border border-[#e9eae6] text-left font-semibold text-[#646462]">{c}</th>)}</tr>
-                    </thead>
+                    <thead><tr>{sqlCols.map(c => <th key={c} className="px-2 py-1 bg-[#f7f7f5] border border-[#e3e3e3] text-left font-semibold text-[#404040]">{c}</th>)}</tr></thead>
                     <tbody>
                       {sqlRows.map((row, ri) => (
                         <tr key={ri} className={ri % 2 === 0 ? '' : 'bg-[#fafaf9]'}>
-                          {sqlCols.map(c => <td key={c} className="px-2 py-0.5 border border-[#e9eae6] text-[#1a1a1a] max-w-[120px] truncate">{String(row[c] ?? '')}</td>)}
+                          {sqlCols.map(c => <td key={c} className="px-2 py-0.5 border border-[#e3e3e3] text-[#0d0d0d] max-w-[120px] truncate">{String(row[c] ?? '')}</td>)}
                         </tr>
                       ))}
                     </tbody>
@@ -554,21 +766,17 @@ export function AgentChatView({
                 </div>
               </div>
             )}
-
-            {/* Array mini-table for non-SQL tools */}
             {!isSql && arrayResult && arrayResult.length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-1">Resultados ({arrayResult.length})</p>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-[11px]">
-                    <thead>
-                      <tr>{Object.keys(arrayResult[0]).slice(0, 3).map(k => <th key={k} className="px-2 py-1 bg-[#f0f0ef] border border-[#e9eae6] text-left font-semibold text-[#646462]">{k}</th>)}</tr>
-                    </thead>
+                    <thead><tr>{Object.keys(arrayResult[0]).slice(0, 3).map(k => <th key={k} className="px-2 py-1 bg-[#f7f7f5] border border-[#e3e3e3] text-left font-semibold text-[#404040]">{k}</th>)}</tr></thead>
                     <tbody>
                       {arrayResult.map((row, ri) => (
                         <tr key={ri} className={ri % 2 === 0 ? '' : 'bg-[#fafaf9]'}>
                           {Object.values(row).slice(0, 3).map((v: any, ci) => (
-                            <td key={ci} className="px-2 py-0.5 border border-[#e9eae6] text-[#1a1a1a] max-w-[120px] truncate">{String(v ?? '')}</td>
+                            <td key={ci} className="px-2 py-0.5 border border-[#e3e3e3] text-[#0d0d0d] max-w-[120px] truncate">{String(v ?? '')}</td>
                           ))}
                         </tr>
                       ))}
@@ -577,12 +785,10 @@ export function AgentChatView({
                 </div>
               </div>
             )}
-
-            {/* Generic JSON fallback for non-array, non-SQL results */}
-            {!isSql && !arrayResult && result && (
+            {!isSql && !arrayResult && result != null && (
               <div>
                 <p className="text-[10px] font-semibold text-[#9a9a98] uppercase tracking-wide mb-1">Resultado</p>
-                <pre className="font-mono text-[10px] text-[#646462] whitespace-pre-wrap break-all max-h-32 overflow-y-auto bg-[#f3f3f1] rounded p-2">{JSON.stringify(result, null, 2)}</pre>
+                <pre className="font-mono text-[10px] text-[#5f5f5f] whitespace-pre-wrap break-all max-h-32 overflow-y-auto bg-[#f7f7f5] border border-[#e3e3e3] rounded p-2">{typeof result === 'string' ? result : JSON.stringify(result, null, 2)}</pre>
               </div>
             )}
           </div>
@@ -660,49 +866,36 @@ export function AgentChatView({
     if (msg.role === 'approval') return <ApprovalCard msg={msg} />;
     const isUser = msg.role === 'user';
 
+    // Max layout: user pushed right, assistant left; the SAME bordered box for
+    // both (no colored bubbles, no avatars, no timestamps).
     return (
-      <div className={`flex gap-2 ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
-        {!isUser && (
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center flex-shrink-0 mt-0.5">
-            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white">
-              <path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/>
-            </svg>
-          </div>
-        )}
-        <div className={`max-w-[78%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
+      <div className={isUser ? 'flex flex-row-reverse ml-4 @md/thread:ml-10' : 'flex mr-4 @md/thread:mr-10'}>
+        <div className={`flex flex-col w-full min-w-0 gap-1.5 ${isUser ? 'items-end' : 'items-start'}`}>
+          {!isUser && msg.reasoning && <ReasoningRow content={msg.reasoning} id={`msg-${msg.id}`} />}
           {!isUser && msg.toolCalls && msg.toolCalls.length > 0 && (
-            <div className="mb-2 w-full">
+            <div className="w-full flex flex-col gap-1">
               {msg.toolCalls.map((tc, i) => (
-                <ToolCallCard
-                  key={i}
-                  tc={{ ...tc, done: true }}
-                  cardKey={`msg-${msg.id}-tc-${i}`}
-                />
+                <ToolCallCard key={i} tc={{ ...tc, done: true }} cardKey={`msg-${msg.id}-tc-${i}`} />
               ))}
             </div>
           )}
           {msg.content && (
-            <div
-              className={`px-3.5 py-2.5 rounded-2xl text-[13.5px] leading-relaxed break-words ${
-                isUser
-                  ? 'bg-[#1a1a1a] text-white rounded-tr-sm'
-                  : 'bg-white border border-[#e9eae6] text-[#1a1a1a] rounded-tl-sm shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-              }`}
-            >
+            <div className={`border border-[#e3e3e3] rounded-lg bg-white py-2 px-3 break-words text-[14px] leading-relaxed text-[#0d0d0d] max-w-full ${isUser ? 'font-medium' : ''}`}>
               {isUser ? msg.content : renderMarkdown(msg.content)}
             </div>
           )}
-          <span className="text-[11px] text-[#b4b4b0] mt-1 px-1">
-            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
+          {!isUser && msg.content && (
+            <div className="flex items-center gap-0.5 -mt-0.5">
+              <button
+                onClick={() => { try { navigator.clipboard.writeText(msg.content); } catch { /* noop */ } }}
+                title="Copiar"
+                className="text-[#666666] hover:text-[#0d0d0d] hover:bg-[#f3f3f1] rounded p-1 transition-colors"
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="5" y="5" width="8" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H10"/></svg>
+              </button>
+            </div>
+          )}
         </div>
-        {isUser && (
-          <div className="w-7 h-7 rounded-full bg-[#e9eae6] flex items-center justify-center flex-shrink-0 mt-0.5">
-            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]">
-              <circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6H2z"/>
-            </svg>
-          </div>
-        )}
       </div>
     );
   }
@@ -711,28 +904,26 @@ export function AgentChatView({
   function WelcomeScreen() {
     const suggestions = currentMode ? MODE_SUGGESTIONS[currentMode] : DEFAULT_SUGGESTIONS;
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-6 px-8 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center shadow-lg">
-          <svg viewBox="0 0 24 24" className="w-8 h-8 fill-white">
+      <div className="flex flex-col items-center justify-center h-full gap-4 px-4 text-center w-full max-w-[720px] mx-auto">
+        <div className="p-2" style={{ animation: 'max-bob 2.4s ease-in-out infinite' }}>
+          <svg viewBox="0 0 24 24" className="w-12 h-12" style={{ fill: '#8b30ff' }}>
             <path d="M12 2l2.4 6.6H21l-5.4 3.9 2.1 6.6L12 14.7l-5.7 3.9 2.1-6.6L3 7.6h6.6L12 2z"/>
           </svg>
         </div>
-        <div>
-          <h2 className="text-[22px] font-bold text-[#1a1a1a] mb-2">
-            {currentMode ? `Max — ${MODE_CONFIG[currentMode].icon} ${MODE_CONFIG[currentMode].label}` : 'Hola, soy Max'}
+        <div className="mb-1">
+          <h2 className="text-xl font-bold mb-2 text-[#0d0d0d]">
+            {currentMode ? `Max — ${MODE_CONFIG[currentMode].icon} ${MODE_CONFIG[currentMode].label}` : '¿En qué te ayudo?'}
           </h2>
-          <p className="text-[14px] text-[#646462] max-w-[360px] leading-relaxed">
-            {currentMode
-              ? MODE_CONFIG[currentMode].description
-              : 'Tu asistente IA para CRM-AI. Puedo buscar contactos, revisar conversaciones, generar informes y mucho más.'}
-          </p>
+          <div className="text-sm italic text-[#666666]">
+            {currentMode ? MODE_CONFIG[currentMode].description : 'Tu copiloto de CRM. Pregúntame por casos, clientes, aprobaciones o informes.'}
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 w-full max-w-[480px]">
+        <div className="grid grid-cols-2 gap-1.5 w-full max-w-[520px]">
           {suggestions.map((s, i) => (
             <button
               key={i}
               onClick={() => sendMessage(s)}
-              className="text-left px-3.5 py-2.5 rounded-xl border border-[#e9eae6] bg-white hover:bg-[#f9f9f7] hover:border-[#6366f1]/30 transition-all text-[12.5px] text-[#1a1a1a] font-medium shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+              className="text-left px-3 py-2 rounded-lg border border-[#e3e3e3] bg-white hover:border-[#8b30ff]/40 hover:bg-[#faf7ff] transition-colors text-[13px] text-[#0d0d0d]"
             >
               {s}
             </button>
@@ -744,32 +935,37 @@ export function AgentChatView({
 
   // ── Typing indicator ──────────────────────────────────────────────────────
   function TypingIndicator() {
+    // Renders as an in-progress assistant turn (left-aligned, no avatar).
     return (
-      <div className="flex gap-2 justify-start mb-3">
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center flex-shrink-0 mt-0.5">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white">
-            <path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/>
-          </svg>
-        </div>
-        <div className="bg-white border border-[#e9eae6] rounded-2xl rounded-tl-sm px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-          {activeToolCalls.length > 0 ? (
-            <div className="min-w-[220px]">
+      <div className="flex mr-4 @md/thread:mr-10">
+        <div className="flex flex-col w-full min-w-0 gap-1.5 items-start">
+          {reasoning && (
+            <div className="w-full text-xs">
+              <button onClick={() => setReasoningOpen(o => !o)} className="flex items-center gap-1.5 select-none">
+                <svg viewBox="0 0 20 20" className="w-4 h-4 fill-[#5f5f5f]"><path d="M10 2a5 5 0 0 0-3 9v2a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-2a5 5 0 0 0-3-9z"/></svg>
+                <ShimmerText>Pensando</ShimmerText>
+                <span className={`text-[13px] text-[#5f5f5f] transition-transform ${reasoningOpen ? 'rotate-90' : ''}`}>›</span>
+              </button>
+              {reasoningOpen && (
+                <div className="mt-1 border-l-2 border-[#e3e3e3] pl-3.5 ml-2 text-[#5f5f5f] whitespace-pre-wrap max-h-40 overflow-y-auto">{reasoning}</div>
+              )}
+            </div>
+          )}
+          {activeToolCalls.length > 0 && (
+            <div className="w-full flex flex-col gap-1">
               {activeToolCalls.map((tc, i) => (
                 <ToolCallCard key={i} tc={tc} cardKey={`live-${i}`} live />
               ))}
             </div>
-          ) : streamingText ? (
-            <div className="text-[13.5px] leading-relaxed text-[#1a1a1a] max-w-[500px]">
-              {renderMarkdown(streamingText)}
-              <span className="inline-block w-2 h-4 bg-[#6366f1] ml-0.5 animate-pulse rounded-sm" />
-            </div>
-          ) : (
-            <div className="flex gap-1.5 items-center h-5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#9a9a98] animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-[#9a9a98] animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-[#9a9a98] animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
           )}
+          {streamingText ? (
+            <div className="border border-[#e3e3e3] rounded-lg bg-white py-2 px-3 break-words text-[14px] leading-relaxed text-[#0d0d0d] max-w-full">
+              {renderMarkdown(streamingText)}
+              <span className="inline-block w-[3px] h-[15px] align-middle ml-0.5 rounded-sm" style={{ background: '#8b30ff', animation: 'max-blink 1s steps(2) infinite' }} />
+            </div>
+          ) : (activeToolCalls.length === 0 && !reasoning) ? (
+            <div className="text-[13px]"><ShimmerText>Pensando…</ShimmerText></div>
+          ) : null}
         </div>
       </div>
     );
@@ -778,6 +974,12 @@ export function AgentChatView({
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      {/* Max-style animations */}
+      <style>{`
+        @keyframes max-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        @keyframes max-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+        @keyframes max-blink { 0%,100%{opacity:1} 50%{opacity:0} }
+      `}</style>
       {/* Memory toast */}
       {memoryToast && (
         <div
@@ -820,7 +1022,7 @@ export function AgentChatView({
                   <div
                     key={c.id}
                     onClick={() => openConversation(c.id)}
-                    className={`group flex items-start gap-1 px-3 py-2 cursor-pointer hover:bg-[#f3f3f1] transition-colors ${
+                    className={`group relative flex items-start px-3 py-2 pr-8 cursor-pointer hover:bg-[#f3f3f1] transition-colors ${
                       activeConversationId === c.id ? 'bg-[#f0f0ef]' : ''
                     }`}
                   >
@@ -833,13 +1035,16 @@ export function AgentChatView({
                         ) : null}
                       </div>
                     </div>
+                    {/* Delete: absolute top-right so it never covers the time; small
+                        icon with a comfortable 24px hit area; visible on hover/focus. */}
                     <button
                       onClick={e => deleteConv(c.id, e)}
-                      className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center hover:bg-[#e9eae6] text-[#9a9a98] hover:text-[#ef4444] transition-all flex-shrink-0 mt-0.5"
-                      title="Eliminar"
+                      className="absolute top-1 right-1 w-6 h-6 rounded-md flex items-center justify-center text-[#9a9a98] hover:text-[#ef4444] hover:bg-[#e9eae6] opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ef4444]/40 transition-opacity"
+                      title="Eliminar conversación"
+                      aria-label="Eliminar conversación"
                     >
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current">
-                        <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.5 8.5h5l.5-8.5" />
                       </svg>
                     </button>
                   </div>
@@ -862,6 +1067,17 @@ export function AgentChatView({
                 <p className="text-[14px] font-semibold text-[#1a1a1a]">Max</p>
                 <p className="text-[11px] text-[#9a9a98]">Asistente IA · CRM-AI</p>
               </div>
+
+              {/* Audit trace */}
+              {activeConversationId && (
+                <button
+                  onClick={openTrace}
+                  title="Ver traza / auditoría de esta conversación"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#e9eae6] bg-white text-[11px] font-medium text-[#646462] hover:bg-[#f3f3f1] transition-colors"
+                >
+                  <span>🔎</span><span>Traza</span>
+                </button>
+              )}
 
               {/* Mode badge */}
               <div className="relative">
@@ -918,112 +1134,171 @@ export function AgentChatView({
               )}
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4" onClick={() => setShowModeDropdown(false)}>
+            {/* Messages — centered Max thread */}
+            <div className="flex-1 overflow-y-auto min-h-0 px-4 py-5" onClick={() => setShowModeDropdown(false)}>
               {messages.length === 0 && !streaming ? (
                 <WelcomeScreen />
               ) : (
-                <>
+                <div className="@container/thread flex flex-col w-full max-w-[720px] mx-auto gap-1.5">
                   {messages.map(m => <MessageBubble key={m.id} msg={m} />)}
                   {streaming && <TypingIndicator />}
                   <div ref={messagesEndRef} />
-                </>
+                </div>
               )}
             </div>
 
-            {/* Input area */}
-            <div className="flex-shrink-0 border-t border-[#e9eae6] px-4 pt-3 pb-2">
-              {/* Mode selector bar */}
-              <div className="flex gap-1 mb-2 overflow-x-auto pb-0.5">
-                {(Object.entries(MODE_CONFIG) as [CrmAgentMode, typeof MODE_CONFIG[CrmAgentMode]][]).map(([key, cfg]) => (
-                  <button
-                    key={key}
-                    onClick={() => { setCurrentMode(currentMode === key ? null : key); }}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium transition-all whitespace-nowrap flex-shrink-0 border"
-                    style={currentMode === key
-                      ? { background: cfg.color, color: '#fff', borderColor: cfg.color }
-                      : { background: 'transparent', color: '#9a9a98', borderColor: '#e9eae6' }}
-                  >
-                    <span>{cfg.icon}</span>
-                    <span>{cfg.label}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Suggestion chips */}
-              {messages.length === 0 && !streaming && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {(currentMode ? MODE_SUGGESTIONS[currentMode] : DEFAULT_SUGGESTIONS).slice(0, 3).map((s, i) => (
+            {/* Composer — Max style */}
+            <div className="flex-shrink-0 px-4 pb-3 pt-1">
+              <div className="w-full max-w-[720px] mx-auto">
+                {/* Mode selector (subtle) */}
+                <div className="flex gap-1 mb-1.5 overflow-x-auto pb-0.5">
+                  {(Object.entries(MODE_CONFIG) as [CrmAgentMode, typeof MODE_CONFIG[CrmAgentMode]][]).map(([key, cfg]) => (
                     <button
-                      key={i}
-                      onClick={() => sendMessage(s)}
-                      className="px-3 py-1 text-[11.5px] text-[#646462] border border-[#e9eae6] rounded-full hover:bg-[#f3f3f1] hover:border-[#6366f1]/30 transition-all truncate max-w-[200px]"
+                      key={key}
+                      onClick={() => { setCurrentMode(currentMode === key ? null : key); }}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium transition-colors whitespace-nowrap flex-shrink-0 border"
+                      style={currentMode === key
+                        ? { background: cfg.color + '18', color: cfg.color, borderColor: cfg.color + '55' }
+                        : { background: 'transparent', color: '#666666', borderColor: '#e3e3e3' }}
                     >
-                      {s}
+                      <span>{cfg.icon}</span>
+                      <span>{cfg.label}</span>
                     </button>
                   ))}
                 </div>
-              )}
 
-              {/* Slash command autocomplete */}
-              <div className="relative">
-                {showSlashMenu && (
-                  <div className="absolute bottom-full left-0 mb-1 w-full bg-white border border-[#e9eae6] rounded-xl shadow-lg z-20 overflow-hidden py-1">
-                    {SLASH_COMMANDS.filter(sc => sc.cmd.startsWith(input) || input === '/').map((sc, i) => (
+                <div className="relative">
+                  {/* Slash command autocomplete */}
+                  {showSlashMenu && (
+                    <div className="absolute bottom-full left-0 mb-1 w-full bg-white border border-[#e3e3e3] rounded-lg shadow-lg z-20 overflow-hidden py-1">
+                      {SLASH_COMMANDS.filter(sc => sc.cmd.startsWith(input) || input === '/').map((sc, i) => (
+                        <button
+                          key={i}
+                          onClick={() => { setInput(sc.cmd); inputRef.current?.focus(); }}
+                          className="flex items-center gap-2 w-full px-3 py-2 hover:bg-[#f3f3f1] transition-colors text-left"
+                        >
+                          <code className="text-[12px] font-mono font-semibold text-[#8b30ff] min-w-[120px]">{sc.cmd.trim()}</code>
+                          <span className="text-[11.5px] text-[#666666]">{sc.hint}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Input box with AI focus ring */}
+                  <label className="relative flex flex-col cursor-text border border-[#e3e3e3] rounded-lg bg-white/90 backdrop-blur-sm transition-shadow focus-within:border-[#8b30ff] focus-within:ring-2 focus-within:ring-[#8b30ff]/30">
+                    {!input && (
+                      <div className="pointer-events-none absolute top-3 left-3 text-[14px] text-[#404040]">
+                        {pendingApproval
+                          ? 'Esperando aprobación…'
+                          : streaming
+                            ? 'Pensando…'
+                            : <>Pregunta lo que quieras <span className="text-[#666666] opacity-80">o / para comandos</span></>}
+                      </div>
+                    )}
+                    <textarea
+                      ref={inputRef}
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={handleKey}
+                      rows={1}
+                      className="w-full resize-none bg-transparent border-none outline-none px-3 pt-3 pb-10 text-[14px] text-[#0d0d0d] leading-relaxed min-h-[64px] max-h-40 overflow-y-auto"
+                      disabled={pendingApproval}
+                    />
+                    <button
+                      onClick={() => streaming ? abortRef.current?.abort() : sendMessage()}
+                      className={`absolute bottom-[7px] right-[7px] w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                        streaming
+                          ? 'bg-white border border-[#e3e3e3] text-[#0d0d0d] hover:bg-[#f3f3f1]'
+                          : (input.trim() && !pendingApproval)
+                            ? 'bg-[#1d1d1d] hover:bg-[#000] text-white'
+                            : 'bg-[#f0f0ee] text-[#999999] cursor-default'
+                      }`}
+                      disabled={(!input.trim() && !streaming) || pendingApproval}
+                    >
+                      {streaming ? (
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><rect x="4" y="4" width="8" height="8" rx="1.5"/></svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 13V3M4 7l4-4 4 4"/></svg>
+                      )}
+                    </button>
+                  </label>
+                </div>
+
+                {/* Suggestion pills (empty state) */}
+                {messages.length === 0 && !streaming && (
+                  <div className="flex flex-wrap gap-1.5 mt-2 justify-center">
+                    {(currentMode ? MODE_SUGGESTIONS[currentMode] : DEFAULT_SUGGESTIONS).slice(0, 3).map((s, i) => (
                       <button
                         key={i}
-                        onClick={() => { setInput(sc.cmd); inputRef.current?.focus(); }}
-                        className="flex items-center gap-2 w-full px-3 py-2 hover:bg-[#f3f3f1] transition-colors text-left"
+                        onClick={() => sendMessage(s)}
+                        className="px-3 py-1 text-[12px] text-[#404040] border border-[#e3e3e3] rounded-full hover:border-[#8b30ff]/40 hover:bg-[#faf7ff] transition-colors truncate max-w-[220px]"
                       >
-                        <code className="text-[12px] font-mono font-semibold text-[#6366f1] min-w-[120px]">{sc.cmd.trim()}</code>
-                        <span className="text-[11.5px] text-[#9a9a98]">{sc.hint}</span>
+                        {s}
                       </button>
                     ))}
                   </div>
                 )}
 
-                <div className="flex items-end gap-2">
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={handleKey}
-                    placeholder={pendingApproval ? 'Esperando aprobación…' : 'Pregunta a Max sobre tu CRM… (/ para comandos)'}
-                    rows={1}
-                    className="flex-1 resize-none border border-[#e9eae6] rounded-xl px-3.5 py-2.5 text-[13.5px] text-[#1a1a1a] placeholder:text-[#b4b4b0] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/20 focus:border-[#6366f1]/50 transition-all leading-relaxed max-h-32 overflow-y-auto"
-                    style={{ minHeight: '42px' }}
-                    disabled={streaming || pendingApproval}
-                  />
-                  <button
-                    onClick={() => streaming ? abortRef.current?.abort() : sendMessage()}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
-                      streaming
-                        ? 'bg-[#ef4444] hover:bg-[#dc2626] text-white'
-                        : (input.trim() && !pendingApproval)
-                          ? 'bg-[#1a1a1a] hover:bg-[#333] text-white'
-                          : 'bg-[#e9eae6] text-[#9a9a98] cursor-default'
-                    }`}
-                    disabled={(!input.trim() && !streaming) || pendingApproval}
-                  >
-                    {streaming ? (
-                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current">
-                        <rect x="4" y="4" width="8" height="8" rx="1"/>
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current">
-                        <path d="M2 14L8 2l6 12-6-3-6 3z"/>
-                      </svg>
-                    )}
-                  </button>
-                </div>
+                <p className="text-[11px] text-[#666666] mt-1.5 text-center">
+                  Max puede cometer errores. Verifica la información importante.
+                </p>
               </div>
-              <p className="text-[11px] text-[#b4b4b0] mt-1.5 text-center">
-                Max puede cometer errores. Verifica la información importante.
-              </p>
             </div>
           </div>
         </div>
+
+        {/* Right: always-on situational briefing */}
+        <SituationBriefing onNavigate={onNavigate} />
       </div>
+
+      {/* Audit trace modal */}
+      {trace && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-6" onClick={() => setTrace(null)}>
+          <div className="bg-white rounded-2xl border border-[#e9eae6] shadow-xl w-full max-w-[640px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-[#e9eae6]">
+              <span>🔎</span>
+              <p className="text-[14px] font-semibold flex-1">Traza de auditoría</p>
+              {trace.metrics && (
+                <span className="text-[11px] text-[#9a9a98]">
+                  {trace.metrics.total} turnos · {trace.metrics.averageSpanCount} acciones/turno · {trace.metrics.averageLatencyMs}ms
+                </span>
+              )}
+              <button onClick={() => setTrace(null)} className="text-[#9a9a98] hover:text-[#1a1a1a] ml-2">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {traceLoading ? (
+                <p className="text-[12px] text-[#9a9a98]">Cargando…</p>
+              ) : trace.traces.length === 0 ? (
+                <p className="text-[12px] text-[#9a9a98]">Aún no hay trazas para esta conversación.</p>
+              ) : (
+                trace.traces.map((t: any, ti: number) => (
+                  <div key={ti} className="mb-4">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full ${
+                        t.status === 'success' ? 'bg-[#d1fae5] text-[#065f46]'
+                        : t.status === 'pending_approval' ? 'bg-[#fef3c7] text-[#92400e]'
+                        : t.status === 'failed' ? 'bg-[#fee2e2] text-[#991b1b]' : 'bg-[#f0f0ee] text-[#6b6b68]'
+                      }`}>{t.status}</span>
+                      <span className="text-[11px] text-[#9a9a98]">{new Date(t.startedAt).toLocaleString('es-ES')}</span>
+                    </div>
+                    {t.summary && <p className="text-[12px] text-[#1a1a1a] mb-1.5">{t.summary}</p>}
+                    {(t.spans ?? []).map((s: any, si: number) => (
+                      <div key={si} className="flex items-start gap-2 pl-2 border-l-2 border-[#e9eae6] py-1">
+                        <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${s.result?.ok ? 'bg-[#10b981]' : 'bg-[#ef4444]'}`} />
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[12px] font-medium text-[#1a1a1a]">{s.tool}</span>
+                          <span className="text-[11px] text-[#9a9a98] ml-2">{s.latencyMs}ms · {s.riskLevel}</span>
+                          <pre className="text-[10.5px] text-[#6b6b68] bg-[#faf9f7] rounded px-2 py-1 mt-0.5 overflow-x-auto max-h-24">{JSON.stringify(s.result?.ok ? s.result.value : s.result, null, 1)?.slice(0, 800)}</pre>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

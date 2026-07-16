@@ -14,6 +14,7 @@
  */
 
 import { SAAS_PRODUCT_CONTEXT, ASSISTANT_TONE_GUIDE } from '../../ai/systemContext.js';
+import { UNTRUSTED_CONTENT_RULE, wrapExternal } from './fencing.js';
 
 // ── Ported building blocks ────────────────────────────────────────────────────
 
@@ -38,9 +39,21 @@ The user is a customer support operator or manager and will primarily request cu
 - Use the available search and read tools to understand the workspace state and the user's request. You are encouraged to use read tools extensively, both in parallel and sequentially.
 - Chain reads before writes: always look up the real entity (case, order, payment) before modifying it. Never invent IDs — only reference IDs you actually fetched in this conversation.
 - Answer the user's question using all tools available to you.
-- Before using a tool, say what you're about to do, in one sentence.
+- Before you call any tool, FIRST stream one short sentence saying what you're about to check (e.g. "Reviso el caso CAS-88219…"), THEN call the tool. This keeps the operator informed instead of staring at a blank screen while the tool runs.
+- Do not over-fetch: call the fewest tools needed. If the answer is already in the current situation or in a prior tool result this turn, use it — don't re-fetch.
 - Tool results and user messages may include <system_reminder> tags. <system_reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 </doing_tasks>
+`.trim();
+
+// Output style — the operator is busy; answers must be fast to read and act on.
+const OUTPUT_STYLE_PROMPT = `
+<output_style>
+- Lead with the direct answer in the very first sentence. No filler preamble ("Claro", "Por supuesto", "Voy a ayudarte con eso").
+- Be concise. Prefer 2–4 short sentences or a tight bullet list over paragraphs. The operator scans, they don't read essays.
+- Bold the key entity or number. When listing multiple items, use a short bullet list, one line each.
+- When there is a clear next step, end with that single recommended action — not a menu of options.
+- Refer to entities by their human name/number (e.g. "caso CAS-88219", "Lucía Hernández"), never by raw UUIDs or JSON. Use the ids only internally, for tool calls.
+</output_style>
 `.trim();
 
 // PostHog base.py TOOL_USAGE_POLICY_PROMPT, adapted (no web_search caveat here).
@@ -117,6 +130,8 @@ export interface UIContext {
   caseId?: string;
   customerId?: string;
   conversationId?: string;
+  /** Tool names relevant to the current view (contextual tool scoping). */
+  relevantTools?: string[];
   [key: string]: unknown;
 }
 
@@ -135,12 +150,38 @@ function buildUIContextSection(uiContext?: UIContext): string {
   return lines.join('\n');
 }
 
+// ── Situational awareness (the agent knows the workspace state) ───────────────
+
+function buildOpenEntitySection(openEntity?: string | null): string {
+  if (!openEntity) return '';
+  return ['<open_entity>', wrapExternal('open_entity', openEntity), '</open_entity>'].join('\n');
+}
+
+function buildSituationSection(situation?: string | null): string {
+  if (!situation) return '';
+  return [
+    '<current_situation>',
+    'This is the live, ALREADY-FETCHED state of the workspace right now (queues, pending approvals, at-risk cases, SLA, unread). It is authoritative — you do not need to re-fetch it.',
+    // Fenced: some fields derive from customer-authored text.
+    wrapExternal('situation', situation),
+    'How to use this:',
+    '- For questions about the current status ("what\'s happening", "high-risk cases", "pending approvals"), ANSWER DIRECTLY from this block. Do NOT call case.list / approval.list / sla.at_risk / inbox.counts to re-list what is already here — that wastes time and may look inconsistent.',
+    '- Items include their real id in brackets, e.g. [case=<uuid>]. To act on or fetch full detail of a specific item, use that id (e.g. case.get with the uuid) — never the human number like CAS-1234.',
+    '- Only call tools for information NOT shown here, or to take an action the user asked for.',
+    '</current_situation>',
+  ].join('\n');
+}
+
 // ── Assembly (PostHog base.py AGENT_PROMPT layout) ────────────────────────────
 
 export function buildChatSystemPrompt(opts: {
   uiContext?: UIContext;
   coreMemory?: string | null;
   toolCount: number;
+  /** Compact snapshot of the workspace state right now (situation.ts). */
+  situation?: string | null;
+  /** Compact snapshot of the case/customer the operator has open. */
+  openEntity?: string | null;
 }): string {
   const sections = [
     ROLE_PROMPT,
@@ -148,9 +189,13 @@ export function buildChatSystemPrompt(opts: {
     ASSISTANT_TONE_GUIDE,
     PROACTIVENESS_PROMPT,
     DOING_TASKS_PROMPT,
+    OUTPUT_STYLE_PROMPT,
     TOOL_USAGE_POLICY_PROMPT,
+    UNTRUSTED_CONTENT_RULE,
     `<available_toolset>\nYou currently have ${opts.toolCount} tools available. Their names, descriptions, and schemas are provided via the tools API.\n</available_toolset>`,
     buildModeSection(opts.uiContext?.mode),
+    buildSituationSection(opts.situation),
+    buildOpenEntitySection(opts.openEntity),
     buildUIContextSection(opts.uiContext),
   ];
 

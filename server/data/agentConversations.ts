@@ -67,6 +67,8 @@ export interface CheckpointMessage {
   toolCallId?: string;
   isError?: boolean;
   toolCalls?: Array<{ id: string; toolName: string; args: Record<string, unknown> }>;
+  /** Raw provider content blocks (extended-thinking preservation across an approval pause). */
+  _providerContent?: unknown;
 }
 
 /**
