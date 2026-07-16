@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { type Dispatch, type ReactNode, type SetStateAction, type UIEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { aiApi, attachmentsApi, casesApi, customersApi, iamApi, inboxesApi, macrosApi } from '../../api/client';
+import { aiApi, attachmentsApi, casesApi, customersApi, finApi, iamApi, inboxesApi, macrosApi } from '../../api/client';
 import { useApi } from '../../api/hooks';
 import { AVATAR_ME, ICON_ALL, ICON_CREATED, ICON_DASHBOARD, ICON_EMAIL2, ICON_ESCALATED, ICON_FILTER, ICON_FIN, ICON_FIN_SVC, ICON_MANAGE, ICON_MENTION, ICON_MESSENGER, ICON_PENDING, ICON_PHONE2, ICON_SEARCH2, ICON_SORT, ICON_SPAM, ICON_TICKETS, ICON_UNASSIGNED, ICON_WHATSAPP2, SettingsSidebar, TrialBanner, messages, relativeTime, titleCase } from '../sharedUi';
 import type { Attachment, Conversation, Message, View } from '../types';
@@ -678,7 +678,7 @@ function normalizePrototypeMessage(message: any, index: number): Message {
   const text = message.content || message.text || message.body || message.message || '';
   const key = String(direction).toLowerCase();
   const isCustomer = ['customer', 'user', 'inbound'].includes(key);
-  const isAi = ['ai', 'assistant', 'bot', 'fin'].includes(key);
+  const isAi = ['ai', 'assistant', 'bot', 'fin'].includes(key) || message.author_type === 'ai';
   // The backend stores attachments as a JSON string on the messages row.
   // Parse it defensively — old rows have null, integration messages might
   // pass an array directly.
@@ -717,6 +717,10 @@ function normalizePrototypeMessage(message: any, index: number): Message {
     time: relativeTime(message.createdAt || message.created_at || message.time || message.timestamp),
     senderName: message.senderName || message.sender_name || (isAi ? 'Fin' : isCustomer ? undefined : 'Equipo'),
     attachments: attachments && attachments.length > 0 ? attachments : undefined,
+    isFinDraft: message.is_private === true && message.author_type === 'ai',
+    confidence: typeof message.confidence === 'number' ? message.confidence
+      : message.confidence != null ? Number(message.confidence) : null,
+    citations: Array.isArray(message.citations) ? message.citations.map(String) : undefined,
   };
 }
 
@@ -743,6 +747,134 @@ function MessageAttachmentChip({ att }: { att: Attachment }) {
         <span className="text-[10px] text-[#646462]">{formatBytes(att.size)}</span>
       </div>
     </a>
+  );
+}
+
+// ─── FinDraftCard ────────────────────────────────────────────────────────────
+// A private Fin draft in the thread (spec §10 answer-inspection + E5 delivery):
+// distinct styling + confidence + citations + send/discard actions.
+function FinDraftCard({ msg, onChanged }: { msg: Message; onChanged?: () => void }) {
+  const [busy, setBusy] = useState<'send' | 'discard' | null>(null);
+  const [gone, setGone] = useState<string | null>(null);
+  async function act(kind: 'send' | 'discard') {
+    setBusy(kind);
+    try {
+      if (kind === 'send') { await finApi.sendDraft(msg.id); setGone('Enviado al cliente'); }
+      else { await finApi.discardDraft(msg.id); setGone('Borrador descartado'); }
+      onChanged?.();
+    } catch (err) {
+      console.error('FinDraftCard action failed:', err);
+    } finally {
+      setBusy(null);
+    }
+  }
+  if (gone) {
+    return (
+      <div className="mb-3 mx-8 rounded-xl bg-[#f8f8f7] border border-[#e9eae6] px-4 py-2.5 text-[12.5px] text-[#646462]">
+        {gone}
+      </div>
+    );
+  }
+  const pct = msg.confidence != null ? Math.round(Number(msg.confidence) * 100) : null;
+  return (
+    <div className="flex items-end gap-2 mb-3">
+      <div className="w-6 h-6 rounded-xl bg-[#e7e2fd] flex items-center justify-center flex-shrink-0">
+        <img src={ICON_FIN} alt="" className="w-3 h-3" />
+      </div>
+      <div className="max-w-[420px] rounded-xl rounded-bl-sm border border-dashed border-[#d8b45a] bg-[#fdf8ec] px-4 py-3">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[12px] font-semibold text-[#8a6d1f]">Borrador de Fin · privado</span>
+          {pct != null && (
+            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[#f3e7c8] text-[#8a6d1f] font-semibold">{pct}% confianza</span>
+          )}
+          {msg.citations && msg.citations.length > 0 && (
+            <span className="text-[11px] text-[#8a6d1f]">{msg.citations.length} {msg.citations.length === 1 ? 'fuente' : 'fuentes'}</span>
+          )}
+        </div>
+        <p className="whitespace-pre-wrap text-[14px] leading-[20px] text-[#1a1a1a]">{msg.text}</p>
+        <div className="mt-2.5 flex items-center gap-2">
+          <button
+            onClick={() => act('send')}
+            disabled={busy !== null}
+            className="h-7 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[12px] font-semibold hover:bg-black disabled:opacity-50"
+          >
+            {busy === 'send' ? 'Enviando…' : 'Enviar al cliente'}
+          </button>
+          <button
+            onClick={() => act('discard')}
+            disabled={busy !== null}
+            className="h-7 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12px] font-semibold text-[#646462] hover:bg-[#f8f8f7] disabled:opacity-50"
+          >
+            {busy === 'discard' ? 'Descartando…' : 'Descartar'}
+          </button>
+          <span className="text-[11px] text-[#8a6d1f] ml-auto">{msg.time}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FinPendingActionsBanner ─────────────────────────────────────────────────
+// write_approval connector actions waiting for a human decision (spec §5.1).
+// Approving executes the action and resumes the procedure run.
+function FinPendingActionsBanner({ caseId, onDecided }: { caseId: string; onDecided?: () => void }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    finApi.listPendingActions('pending')
+      .then((all) => { if (!cancelled) setItems(all.filter((p: any) => p.case_id === caseId)); })
+      .catch(() => { /* backend down: hide the banner */ });
+    return () => { cancelled = true; };
+  }, [caseId]);
+  if (!items.length) return null;
+
+  async function decide(id: string, decision: 'approve' | 'reject') {
+    setBusyId(id);
+    try {
+      await finApi.decidePendingAction(id, decision);
+      setItems((prev) => prev.filter((p) => p.id !== id));
+      onDecided?.();
+    } catch (err) {
+      console.error('FinPendingActionsBanner decision failed:', err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="mx-4 mb-3 flex flex-col gap-2">
+      {items.map((p) => (
+        <div key={p.id} className="rounded-xl bg-[#eff2ff] border border-[#c7d2fe] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#3b59f6] flex-shrink-0"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 7a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
+            <div className="flex-1 min-w-0">
+              <span className="text-[13px] font-semibold text-[#1e2f96]">Fin solicita aprobación para una acción</span>
+              <p className="text-[12.5px] text-[#3a4a9f] mt-0.5">{p.preview || 'Acción de conector externo'}</p>
+              {p.args && Object.keys(p.args).length > 0 && (
+                <p className="text-[11.5px] text-[#6474c4] mt-0.5 font-mono truncate">{JSON.stringify(p.args)}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => decide(p.id, 'approve')}
+                disabled={busyId !== null}
+                className="h-7 px-3 rounded-[8px] bg-[#3b59f6] text-white text-[12px] font-semibold hover:bg-[#2c46d6] disabled:opacity-50"
+              >
+                {busyId === p.id ? 'Ejecutando…' : 'Aprobar y ejecutar'}
+              </button>
+              <button
+                onClick={() => decide(p.id, 'reject')}
+                disabled={busyId !== null}
+                className="h-7 px-3 rounded-[8px] border border-[#c7d2fe] bg-white text-[12px] font-semibold text-[#3a4a9f] hover:bg-[#f6f7ff] disabled:opacity-50"
+              >
+                Rechazar
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1956,10 +2088,12 @@ function ConversationPanel({
   panels,
   onTogglePanel,
   onNewConversation,
+  messagesLoading,
 }: {
   selectedConv: Conversation;
   inboxView: any;
   onRefresh: () => void;
+  messagesLoading?: boolean;
   onAction: (message: string, type?: 'success' | 'error') => void;
   replyText: string;
   setReplyText: Dispatch<SetStateAction<string>>;
@@ -2013,8 +2147,18 @@ function ConversationPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const latestDraft = getInboxLatestDraft(inboxView);
+  // Only trust inboxView once it belongs to the selected conversation — while a
+  // new one is loading, useApi still holds the previous case's bundle, so gating
+  // by id avoids briefly flashing the wrong thread (or an empty state).
+  const inboxViewCaseId = inboxView?.case?.id ?? inboxView?.state?.case?.id ?? null;
+  const inboxViewMatches = !!inboxView && (inboxViewCaseId == null || inboxViewCaseId === selectedConv.id);
+  const inboxViewStale = !!inboxView && inboxViewCaseId != null && inboxViewCaseId !== selectedConv.id;
+  // Show the spinner while actively fetching or while the panel still holds the
+  // previous conversation's bundle. If the fetch finished with no bundle (error/
+  // not found), fall through to the empty state instead of spinning forever.
+  const messagesPending = Boolean(messagesLoading) || inboxViewStale;
   // Real backend messages only — no mock fallback. Empty thread = empty UI.
-  const allMessages = getInboxMessages(inboxView).map(normalizePrototypeMessage);
+  const allMessages = (inboxViewMatches ? getInboxMessages(inboxView) : []).map(normalizePrototypeMessage);
   const displayMessages = showSearch && searchQuery.trim()
     ? allMessages.filter((m: any) => (m.text || '').toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : allMessages;
@@ -2422,12 +2566,20 @@ function ConversationPanel({
             onRejected={onRefresh}
           />
         )}
-        {displayMessages.length === 0 && (
+        <FinPendingActionsBanner caseId={selectedConv.id} onDecided={onRefresh} />
+        {messagesPending && displayMessages.length === 0 && (
+          <div className="flex items-center justify-center py-16" role="status" aria-label="Cargando mensajes">
+            <span className="w-6 h-6 border-2 border-[#e9eae6] border-t-[#1a1a1a] rounded-full animate-spin" />
+          </div>
+        )}
+        {!messagesPending && displayMessages.length === 0 && (
           <div className="text-center py-10 text-[13px] text-[#646462]">
             No hay mensajes en este caso todavía. Escribe abajo para empezar la conversación.
           </div>
         )}
-        {displayMessages.map((msg) => <ChatMessage key={msg.id} msg={msg} />)}
+        {displayMessages.map((msg) => msg.isFinDraft
+          ? <FinDraftCard key={msg.id} msg={msg} onChanged={onRefresh} />
+          : <ChatMessage key={msg.id} msg={msg} />)}
         {/* Live AI summary card — only shown when the backend actually exposes
             a summary for this case (case.ai_diagnosis.summary or
             customer.ai_executive_summary). No fake placeholder anymore. */}
@@ -4066,7 +4218,7 @@ export function InboxView() {
     return result;
   }, [serverCounts, liveConversations, currentUserId, teams, teammates]);
   const selectedConv = scopedConversations.find(c => c.id === selectedConvId) ?? scopedConversations[0] ?? liveConversations[0];
-  const { data: inboxView } = useApi(
+  const { data: inboxView, loading: inboxViewLoading } = useApi(
     () => selectedConv?.id ? casesApi.inboxView(selectedConv.id) : Promise.resolve(null),
     [selectedConv?.id, refreshKey],
   );
@@ -4074,6 +4226,23 @@ export function InboxView() {
   useEffect(() => {
     if (!selectedConvId && liveConversations[0]?.id) setSelectedConvId(liveConversations[0].id);
   }, [selectedConvId, liveConversations]);
+
+  // Deep-link resilience: a URL-selected case that isn't on the loaded page
+  // (server-side pagination) is fetched directly and prepended, instead of
+  // silently falling back to the first conversation in the list.
+  const deepLinkFetchedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedConvId || loading) return;
+    if (rawCases.some((c: any) => c.id === selectedConvId)) return;
+    if (deepLinkFetchedRef.current === selectedConvId) return; // already tried
+    deepLinkFetchedRef.current = selectedConvId;
+    casesApi.get(selectedConvId)
+      .then((row: any) => {
+        const caseRow = row?.data ?? row;
+        if (caseRow?.id) setRawCases((prev: any[]) => prev.some(c => c.id === caseRow.id) ? prev : [caseRow, ...prev]);
+      })
+      .catch(() => { /* unknown id: fall back to first conversation */ });
+  }, [selectedConvId, loading, rawCases]);
 
   // ─── Live updates via SSE ────────────────────────────────────────────────
   // Subscribe once to /api/sse/case-events and bump refreshKey whenever a
@@ -4341,6 +4510,7 @@ export function InboxView() {
               <ConversationPanel
                 selectedConv={selectedConv}
                 inboxView={inboxView}
+                messagesLoading={inboxViewLoading}
                 onRefresh={() => setRefreshKey(k => k + 1)}
                 onAction={showToast}
                 replyText={replyText}
