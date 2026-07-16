@@ -68,6 +68,8 @@ router.get('/', async (req: MultiTenantRequest, res: Response) => {
       assigned_team_id: typeof req.query.assigned_team_id === 'string' ? req.query.assigned_team_id : undefined,
       assigned_agent_id: typeof req.query.assigned_agent_id === 'string' ? req.query.assigned_agent_id : undefined,
       source_channel: typeof req.query.source_channel === 'string' ? req.query.source_channel : undefined,
+      limit: typeof req.query.limit === 'string' ? Math.min(Math.max(Number(req.query.limit) || 0, 0), 200) : undefined,
+      offset: typeof req.query.offset === 'string' ? Math.max(Number(req.query.offset) || 0, 0) : undefined,
     };
 
     const items = await caseRepository.list(scope, filters);
@@ -135,6 +137,19 @@ router.get('/search', async (req: MultiTenantRequest, res: Response) => {
     res.json(items);
   } catch (error) {
     console.error('Error searching cases:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Sidebar scope counts, computed server-side (no need to load every case).
+// Registered before /:id so "counts" isn't captured as a case id.
+router.get('/counts', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const counts = await caseRepository.counts(scope, req.userId || '');
+    res.json(counts);
+  } catch (error) {
+    console.error('Error fetching case counts:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

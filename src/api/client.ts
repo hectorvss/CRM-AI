@@ -240,6 +240,9 @@ export const casesApi = {
   // Multi-source server-side search (case number / customer / message content).
   search: (q: string, limit = 50) =>
     request<any>(`/cases/search?q=${encodeURIComponent(q)}&limit=${limit}`).then(unwrapList),
+  // Server-side sidebar scope counts (avoids loading every case to count).
+  // Returns { <scope>: n, teams: [{id,count}], agents: [{id,count}] }.
+  counts: () => request<Record<string, any>>('/cases/counts'),
   create: (payload: Record<string, any>) =>
     request<any>('/cases', { method: 'POST', body: JSON.stringify(payload) }),
   get: (id: string) => request<any>(`/cases/${id}`),

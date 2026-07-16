@@ -20,6 +20,8 @@ export interface CaseFilters {
   assigned_team_id?: string;  // filter by assigned_team_id
   assigned_agent_id?: string; // filter by assigned_user_id (agent scope)
   source_channel?: string;    // filter by source_channel column
+  limit?: number;             // pagination page size
+  offset?: number;            // pagination offset
 }
 
 function buildConflictSummary(bundle: any) {
@@ -1590,6 +1592,13 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
     }
   }
 
+  // Pagination: apply a bounded window when the caller asks for one. Without a
+  // limit we keep the previous behaviour (return the scope's full set).
+  if (typeof filters.limit === 'number' && filters.limit > 0) {
+    const offset = typeof filters.offset === 'number' && filters.offset > 0 ? filters.offset : 0;
+    query = query.range(offset, offset + filters.limit - 1);
+  }
+
   const { data, error } = await query;
   if (error) throw error;
 
@@ -1741,6 +1750,7 @@ async function searchCasesSupabase(scope: CaseScope, q: string, limit = 50): Pro
 export interface CaseRepository {
   list(scope: CaseScope, filters: CaseFilters): Promise<any[]>;
   search(scope: CaseScope, q: string, limit?: number): Promise<any[]>;
+  counts(scope: CaseScope, userId: string): Promise<Record<string, any>>;
   get(scope: CaseScope, caseId: string): Promise<any | null>;
   getBundle(scope: CaseScope, caseId: string): Promise<any | null>;
   update(scope: CaseScope, id: string, updates: any): Promise<void>;
@@ -1797,6 +1807,16 @@ class SupabaseCaseRepository implements CaseRepository {
   }
   async search(scope: CaseScope, q: string, limit?: number) {
     return searchCasesSupabase(scope, q, limit);
+  }
+  async counts(scope: CaseScope, userId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.rpc('inbox_counts', {
+      p_tenant: scope.tenantId,
+      p_workspace: scope.workspaceId,
+      p_user: userId || 'nobody',
+    });
+    if (error) throw error;
+    return (data ?? {}) as Record<string, any>;
   }
   async get(scope: CaseScope, caseId: string) {
     const supabase = getSupabaseAdmin();

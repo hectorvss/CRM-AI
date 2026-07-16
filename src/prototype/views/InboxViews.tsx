@@ -3,7 +3,7 @@
 // Extracted from the monolithic Prototype.tsx (auto-split, behavior-preserving).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { type Dispatch, type ReactNode, type SetStateAction, type UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { aiApi, attachmentsApi, casesApi, customersApi, iamApi, inboxesApi, macrosApi } from '../../api/client';
 import { useApi } from '../../api/hooks';
 import { AVATAR_ME, ICON_ALL, ICON_CREATED, ICON_DASHBOARD, ICON_EMAIL2, ICON_ESCALATED, ICON_FILTER, ICON_FIN, ICON_FIN_SVC, ICON_MANAGE, ICON_MENTION, ICON_MESSENGER, ICON_PENDING, ICON_PHONE2, ICON_SEARCH2, ICON_SORT, ICON_SPAM, ICON_TICKETS, ICON_UNASSIGNED, ICON_WHATSAPP2, SettingsSidebar, TrialBanner, messages, relativeTime, titleCase } from '../sharedUi';
@@ -539,6 +539,9 @@ function ConversationList({
   title,
   scope,
   onCollapse,
+  onLoadMore,
+  hasMore,
+  loadingMore,
 }: {
   selectedId: string;
   onSelect: (id: string) => void;
@@ -548,7 +551,16 @@ function ConversationList({
   title: string;
   scope: InboxScope;
   onCollapse?: () => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 }) {
+  // Infinite scroll: fire onLoadMore when the user nears the bottom.
+  function handleListScroll(e: UIEvent<HTMLDivElement>) {
+    if (!onLoadMore || !hasMore || loadingMore) return;
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) onLoadMore();
+  }
   const openCount = items.filter(conv => conv.status !== 'closed' && conv.status !== 'resolved').length;
   return (
     <div className="flex flex-col h-full w-[271px] border-l border-[#e9eae6] bg-[#f8f8f7] flex-shrink-0">
@@ -587,7 +599,7 @@ function ConversationList({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 pb-16 flex flex-col gap-0">
+      <div className="flex-1 overflow-y-auto px-3 pb-16 flex flex-col gap-0" onScroll={handleListScroll}>
         {scope === 'dashboard' && (
           <div className="grid grid-cols-2 gap-2 mb-3">
             {[
@@ -619,6 +631,9 @@ function ConversationList({
             <ConversationCard conv={conv} isSelected={conv.id === selectedId} onSelect={() => onSelect(conv.id)} />
           </div>
         ))}
+        {loadingMore && (
+          <div className="text-[12px] text-[#646462] px-3 py-3 text-center">Cargando más…</div>
+        )}
       </div>
 
       <div className="absolute bottom-4 left-6 bg-white border border-[#e9eae6] rounded-full shadow-[0px_8px_8px_rgba(20,20,20,0.15)] flex items-center gap-1 p-[5px]">
@@ -3903,35 +3918,74 @@ export function InboxView() {
   const { data: membersData } = useApi(() => iamApi.members(), [], []);
   const teams: any[] = Array.isArray(teamsData) ? teamsData : (teamsData as any)?.data ?? (teamsData as any)?.teams ?? [];
   const teammates: any[] = Array.isArray(membersData) ? membersData : (membersData as any)?.data ?? (membersData as any)?.members ?? [];
-  const { data: apiCases, loading, error } = useApi(
-    () => {
-      const params: Record<string, string> = {};
-      if (scope === 'unassigned') params.scope = 'unassigned';
-      if (scope === 'spam') params.status = 'spam';
-      if (scope === 'inbox' && currentUserId) params.assigned_user_id = currentUserId;
-      if (scope === 'created' && currentUserId) params.created_by = currentUserId;
-      // Fin AI scopes — fetch all ai_handled cases; client matchesInboxScope handles sub-filtering
-      if (scope === 'fin-all' || scope === 'fin-resolved' || scope === 'fin-escalated' || scope === 'fin-pending' || scope === 'fin-spam') {
-        params.ai_handled = 'true';
-      }
-      // Dynamic team/agent scopes
-      if (scope.startsWith('team:')) params.assigned_team_id = scope.replace('team:', '');
-      if (scope.startsWith('agent:')) params.assigned_agent_id = scope.replace('agent:', '');
-      // Channel views — comma-separated = OR (server supports .in() filter)
-      if (scope === 'v-messenger') params.source_channel = 'messenger,web_chat,chat';
-      if (scope === 'v-email') params.source_channel = 'email';
-      if (scope === 'v-whatsapp') params.source_channel = 'whatsapp,social';
-      if (scope === 'v-phone') params.source_channel = 'phone,sms';
-      if (scope === 'v-tickets') params.source_channel = 'ticket,tickets';
-      return casesApi.list(Object.keys(params).length ? params : undefined);
-    },
-    [refreshKey, scope, currentUserId],
-    [],
-  );
+  // Build the server-side filter params for the active scope.
+  function buildScopeParams(): Record<string, string> {
+    const params: Record<string, string> = {};
+    if (scope === 'unassigned') params.scope = 'unassigned';
+    if (scope === 'spam') params.status = 'spam';
+    if (scope === 'inbox' && currentUserId) params.assigned_user_id = currentUserId;
+    if (scope === 'created' && currentUserId) params.created_by = currentUserId;
+    // Fin AI scopes — fetch all ai_handled cases; client matchesInboxScope handles sub-filtering
+    if (scope === 'fin-all' || scope === 'fin-resolved' || scope === 'fin-escalated' || scope === 'fin-pending' || scope === 'fin-spam') {
+      params.ai_handled = 'true';
+    }
+    if (scope.startsWith('team:')) params.assigned_team_id = scope.replace('team:', '');
+    if (scope.startsWith('agent:')) params.assigned_agent_id = scope.replace('agent:', '');
+    if (scope === 'v-messenger') params.source_channel = 'messenger,web_chat,chat';
+    if (scope === 'v-email') params.source_channel = 'email';
+    if (scope === 'v-whatsapp') params.source_channel = 'whatsapp,social';
+    if (scope === 'v-phone') params.source_channel = 'phone,sms';
+    if (scope === 'v-tickets') params.source_channel = 'ticket,tickets';
+    return params;
+  }
+
+  // Paginated list loader (page size 50) — the inbox no longer pulls every case
+  // into the browser. Page 0 loads on scope/refresh change; loadMore() appends
+  // the next page for the infinite-scroll list. A request-id guard drops stale
+  // responses when the scope changes mid-flight.
+  const LIST_PAGE_SIZE = 50;
+  const [rawCases, setRawCases] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const listOffsetRef = useRef(0);
+  const listReqRef = useRef(0);
+  async function loadCasesPage(reset: boolean) {
+    const params = buildScopeParams();
+    params.limit = String(LIST_PAGE_SIZE);
+    params.offset = String(reset ? 0 : listOffsetRef.current);
+    const reqId = ++listReqRef.current;
+    if (reset) setLoading(true); else setLoadingMore(true);
+    try {
+      const rows = await casesApi.list(params);
+      if (reqId !== listReqRef.current) return; // superseded
+      const arr = Array.isArray(rows) ? rows : [];
+      setHasMore(arr.length === LIST_PAGE_SIZE);
+      if (reset) { setRawCases(arr); listOffsetRef.current = arr.length; }
+      else { setRawCases(prev => [...prev, ...arr]); listOffsetRef.current += arr.length; }
+      setError(null);
+    } catch (e) {
+      if (reqId !== listReqRef.current) return;
+      if (reset) setRawCases([]);
+      setHasMore(false);
+      setError(e);
+    } finally {
+      if (reqId === listReqRef.current) { setLoading(false); setLoadingMore(false); }
+    }
+  }
+  // Reset + load page 0 whenever the scope, user or refresh key changes.
+  useEffect(() => {
+    loadCasesPage(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey, scope, currentUserId]);
+  function loadMoreCases() {
+    if (hasMore && !loading && !loadingMore) loadCasesPage(false);
+  }
   // Real backend data only — no mock fallback. Empty list = empty UI.
   const liveConversations = useMemo(
-    () => (Array.isArray(apiCases) ? apiCases.map(mapCaseToPrototypeConversation) : []),
-    [apiCases],
+    () => rawCases.map(mapCaseToPrototypeConversation),
+    [rawCases],
   );
   // Sidebar "Buscar" → activates a global free-text search across every
   // conversation field (channel / customer / preview / tags / company /
@@ -3969,27 +4023,39 @@ export function InboxView() {
     }
     return liveConversations.filter(conv => matchesInboxScope(conv, scope, currentUserId));
   }, [liveConversations, scope, globalSearchQuery, searchResults, currentUserId]);
+  // Sidebar counts come from the server (one RPC, no need to load every case).
+  // While that request is in flight — or if it fails — we fall back to counting
+  // whatever is currently loaded so the badges are never blank.
+  const { data: serverCounts } = useApi<Record<string, any> | null>(() => casesApi.counts(), [refreshKey], null);
   const counts = useMemo(() => {
-    const staticScopes: InboxScope[] = ['inbox', 'mentions', 'created', 'all', 'unassigned', 'spam', 'fin-all', 'fin-resolved', 'fin-escalated', 'fin-pending', 'fin-spam', 'v-messenger', 'v-email', 'v-whatsapp', 'v-phone', 'v-tickets'];
     const result: Partial<Record<InboxScope, number>> = {};
+    if (serverCounts && typeof serverCounts === 'object') {
+      for (const [k, v] of Object.entries(serverCounts)) {
+        if (k === 'teams' && Array.isArray(v)) {
+          for (const t of v) if (t?.id != null) result[`team:${t.id}` as InboxScope] = Number(t.count) || 0;
+        } else if (k === 'agents' && Array.isArray(v)) {
+          for (const a of v) if (a?.id != null) result[`agent:${a.id}` as InboxScope] = Number(a.count) || 0;
+        } else if (typeof v === 'number') {
+          result[k as InboxScope] = v;
+        }
+      }
+      return result;
+    }
+    // Fallback: derive from the loaded set until the server responds.
+    const staticScopes: InboxScope[] = ['inbox', 'mentions', 'created', 'all', 'unassigned', 'spam', 'fin-all', 'fin-resolved', 'fin-escalated', 'fin-pending', 'fin-spam', 'v-messenger', 'v-email', 'v-whatsapp', 'v-phone', 'v-tickets'];
     for (const key of staticScopes) {
       result[key] = liveConversations.filter(conv => matchesInboxScope(conv, key, currentUserId)).length;
     }
-    // Dynamic team/agent scopes
     for (const team of teams) {
       const tid = team.id ?? team.team_id;
-      if (!tid) continue;
-      const key = `team:${tid}` as InboxScope;
-      result[key] = liveConversations.filter(conv => matchesInboxScope(conv, key, currentUserId)).length;
+      if (tid) result[`team:${tid}` as InboxScope] = liveConversations.filter(conv => matchesInboxScope(conv, `team:${tid}` as InboxScope, currentUserId)).length;
     }
     for (const member of teammates) {
       const mid = member.id ?? member.user_id;
-      if (!mid) continue;
-      const key = `agent:${mid}` as InboxScope;
-      result[key] = liveConversations.filter(conv => matchesInboxScope(conv, key, currentUserId)).length;
+      if (mid) result[`agent:${mid}` as InboxScope] = liveConversations.filter(conv => matchesInboxScope(conv, `agent:${mid}` as InboxScope, currentUserId)).length;
     }
     return result;
-  }, [liveConversations, currentUserId, teams, teammates]);
+  }, [serverCounts, liveConversations, currentUserId, teams, teammates]);
   const selectedConv = scopedConversations.find(c => c.id === selectedConvId) ?? scopedConversations[0] ?? liveConversations[0];
   const { data: inboxView } = useApi(
     () => selectedConv?.id ? casesApi.inboxView(selectedConv.id) : Promise.resolve(null),
@@ -4246,11 +4312,14 @@ export function InboxView() {
                 selectedId={selectedConv?.id || selectedConvId}
                 onSelect={setSelectedConvId}
                 items={scope === 'dashboard' ? liveConversations : scopedConversations}
-                loading={loading}
-                error={error}
+                loading={loading || (scope === 'search' && searchLoading)}
+                error={error ? (error?.message || 'No se pudieron cargar las conversaciones') : null}
                 title={inboxScopeTitle(scope)}
                 scope={scope}
                 onCollapse={() => togglePanel('list')}
+                onLoadMore={scope === 'search' ? undefined : loadMoreCases}
+                hasMore={scope === 'search' ? false : hasMore}
+                loadingMore={loadingMore}
               />
             </div>
           </div>
