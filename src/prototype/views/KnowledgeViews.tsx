@@ -721,10 +721,12 @@ function KnowledgeContenido({
   onCreate,
   onNavigate,
   onAction,
+  onSearch,
 }: {
   onCreate: (opts: { type?: string; visibility?: 'public' | 'internal' }) => void;
   onNavigate: (sub: KnowledgeSubView) => void;
   onAction: (msg: string, type?: 'success' | 'error') => void;
+  onSearch: (q: string) => void;
 }) {
   // Live data — counts feed both the cards (Recomendaciones) and the table.
   const { data: articlesData } = useApi(() => knowledgeApi.listArticles(), [], []);
@@ -770,9 +772,8 @@ function KnowledgeContenido({
 
   const [search, setSearch] = useState('');
   function submitSearch() {
-    // Simple navigation: jump to Artículos. The search box there has its own
-    // filter; we keep this lightweight and just take the user there.
-    onNavigate('articulos');
+    // Carry the query into Artículos, which runs it as a server-side `q` filter.
+    onSearch(search.trim());
   }
 
   return (
@@ -971,6 +972,7 @@ function KnowledgeArticulos({
   domainFilter,
   externalDraft,
   onConsumeDraft,
+  initialSearch,
 }: {
   onAction: (msg: string, type?: 'success' | 'error') => void;
   onRefresh: () => void;
@@ -980,8 +982,12 @@ function KnowledgeArticulos({
   // initial payload, then call onConsumeDraft to clear the parent.
   externalDraft?: { title: string; content: string; type?: string } | null;
   onConsumeDraft?: () => void;
+  // Seed the search box when arriving from the Contenido search bar.
+  initialSearch?: string;
 }) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch ?? '');
+  // Adopt a new query handed in from Contenido (server-side `q` filter below).
+  useEffect(() => { if (initialSearch !== undefined) setSearch(initialSearch); }, [initialSearch]);
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published'>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [healthFilter, setHealthFilter] = useState<'all' | 'ok' | 'stale'>('all');
@@ -1842,6 +1848,8 @@ export function KnowledgeView() {
   // Optional visibility lets the Resumen "Artículo público / interno" cards
   // open the editor with the right field already set.
   const [pendingDraft, setPendingDraft] = useState<{ title: string; content: string; type?: string; visibility?: string } | null>(null);
+  // Query handed from the Contenido search bar into Artículos (server-side `q`).
+  const [articleSearch, setArticleSearch] = useState('');
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     setToast({ message, type });
     window.setTimeout(() => setToast(null), 2500);
@@ -1892,8 +1900,8 @@ export function KnowledgeView() {
   function renderSub() {
     switch (sub) {
       case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} />;
-      case 'contenido':   return <KnowledgeContenido onCreate={startCreate} onNavigate={setSub} onAction={showToast} />;
-      case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
+      case 'contenido':   return <KnowledgeContenido onCreate={startCreate} onNavigate={setSub} onAction={showToast} onSearch={(q) => { setArticleSearch(q); setSub('articulos'); }} />;
+      case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} initialSearch={articleSearch} />;
       case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
       case 'gaps':        return <KnowledgeGaps    onAction={showToast} onDraftFromGap={draftFromGap} />;
       case 'pruebas':     return <KnowledgePruebas onAction={showToast} />;
