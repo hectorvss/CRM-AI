@@ -118,10 +118,11 @@ export async function scoreAnswerCorrectness(
   r: RunResult,
   e: CaseExpect,
   generate: (system: string, user: string) => Promise<string>,
+  question: string,
 ): Promise<Score> {
   if (!e.referenceAnswer) return { name: 'answer_correctness', score: 1, reason: 'no reference (skipped)' };
-  const system = 'You are a strict grader for a customer-support operator assistant. Score how well the ANSWER matches the REFERENCE in factual content and usefulness. Be harsh. Reply with ONLY a number 0-100.';
-  const user = `QUESTION:\n${''}\nREFERENCE:\n${e.referenceAnswer}\n\nANSWER:\n${r.answer}\n\n${e.groundedIn ? `The answer must stay grounded in this evidence (penalize invented facts):\n${e.groundedIn}\n\n` : ''}Score 0-100:`;
+  const system = 'You are a strict grader for a customer-support operator assistant. Score how well the ANSWER addresses the QUESTION and matches the REFERENCE in factual content and usefulness. Be harsh. Reply with ONLY a number 0-100.';
+  const user = `QUESTION:\n${question}\n\nREFERENCE:\n${e.referenceAnswer}\n\nANSWER:\n${r.answer}\n\n${e.groundedIn ? `The answer must stay grounded in this evidence (penalize invented facts):\n${e.groundedIn}\n\n` : ''}Score 0-100:`;
   const raw = await generate(system, user);
   const n = Number((raw.match(/\d{1,3}/)?.[0]) ?? 'NaN');
   const score = Number.isFinite(n) ? clamp01(n / 100) : 0;

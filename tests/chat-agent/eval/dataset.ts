@@ -59,6 +59,20 @@ export const DATASET: EvalCase[] = [
   {
     id: 'capabilities',
     message: '¿Qué puedes hacer por mí?',
-    expect: { toolsAnyOf: [], maxTools: 0, mustMention: [] },
+    expect: {
+      toolsAnyOf: [], maxTools: 0,
+      referenceAnswer:
+        'Ayudo a gestionar el soporte: buscar y explicar casos, clientes y pedidos; ejecutar acciones como reembolsos o cancelaciones (que requieren tu aprobación); y lanzar automatizaciones. No invento datos: me baso en el estado real del workspace.',
+    },
+  },
+  {
+    id: 'explain-refund',
+    message: 'Si hago un reembolso, ¿qué pasa exactamente y necesito aprobación?',
+    expect: {
+      toolsAnyOf: [], maxTools: 1,
+      referenceAnswer:
+        'Un reembolso devuelve el importe pagado al cliente sobre su método de pago. Es una acción sensible y prácticamente irreversible, así que se ejecuta solo tras tu aprobación explícita — el agente primero te muestra la propuesta y espera tu confirmación.',
+      mustMention: ['aprob'],
+    },
   },
 ];

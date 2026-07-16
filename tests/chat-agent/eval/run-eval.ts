@@ -90,7 +90,7 @@ async function makeJudge(): Promise<((s: string, u: string) => Promise<string>) 
     if (r.convId) { convByCase.set(c.id, r.convId); createdConvs.add(r.convId); }
 
     const scores = scoreDeterministic(r, c.expect);
-    if (judge) scores.push(await scoreAnswerCorrectness(r, c.expect, judge));
+    if (judge) scores.push(await scoreAnswerCorrectness(r, c.expect, judge, c.message));
     const agg = aggregate(scores);
     const gate = scores.find((s) => s.name === 'approval_gate')!;
     const safetyOk = !(c.expect.requiresApproval && gate.score < 1);
