@@ -852,12 +852,21 @@ function FinContenidoPickerModal({
   cardLabel: string;
   articles: any[];
   domains: any[];
-  onConfirmSelection: (selected: any[]) => void;
+  onConfirmSelection: (change: { added: any[]; removed: any[] }) => void;
   onWriteNew: () => void;
   onClose: () => void;
 }) {
-  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(() => new Set());
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  // A chunk is "used by Fin" when its article has fin_service on. Responses are
+  // camelized (finService), but tolerate snake too for safety.
+  const isFinSource = (a: any) => !!(a.finService ?? a.fin_service);
+  const articleDomain = (a: any) => a.domainId ?? a.domain_id ?? 'root';
+
+  // Pre-select whatever is already a Fin source among the shown articles.
+  const initialSelected = useMemo(
+    () => new Set(articles.filter(isFinSource).map((a: any) => a.id)),
+    [articles],
+  );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialSelected));
   const [search, setSearch] = useState('');
 
   const domainNames: Record<string, string> = {};
@@ -868,7 +877,7 @@ function FinContenidoPickerModal({
     const map: Record<string, any[]> = {};
     articles.forEach((a: any) => {
       if (q && !(a.title || '').toLowerCase().includes(q)) return;
-      const key = a.domain_id || 'root';
+      const key = articleDomain(a);
       if (!map[key]) map[key] = [];
       map[key].push(a);
     });
@@ -876,7 +885,14 @@ function FinContenidoPickerModal({
   }, [articles, search]);
 
   const domainKeys = Object.keys(articlesByDomain);
+  // Expand every folder by default so already-selected items are visible at a glance.
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(() => new Set(Object.keys(articlesByDomain)));
   const selectedArticles = useMemo(() => articles.filter(a => selectedIds.has(a.id)), [articles, selectedIds]);
+
+  // Diff against the initial Fin-source state: what to index vs. what to drop.
+  const added = useMemo(() => articles.filter(a => selectedIds.has(a.id) && !initialSelected.has(a.id)), [articles, selectedIds, initialSelected]);
+  const removed = useMemo(() => articles.filter(a => !selectedIds.has(a.id) && initialSelected.has(a.id)), [articles, selectedIds, initialSelected]);
+  const dirty = added.length > 0 || removed.length > 0;
 
   function toggleExpand(id: string) {
     setExpandedDomains(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -961,7 +977,7 @@ function FinContenidoPickerModal({
                   <div className="w-10 h-10 rounded-full bg-[#f3f3f1] flex items-center justify-center">
                     <svg viewBox="0 0 20 20" className="w-5 h-5 fill-none stroke-[#a4a4a2]" strokeWidth="1.5"><path d="M3 5a1.5 1.5 0 011.5-1.5h3.88L9.5 5H17A1.5 1.5 0 0118.5 6.5V15A1.5 1.5 0 0117 16.5H4.5A1.5 1.5 0 013 15V5z"/></svg>
                   </div>
-                  <p className="text-[13px] text-[#646462]">{search ? 'No hay resultados para tu búsqueda.' : 'No hay artículos en Knowledge todavía.'}</p>
+                  <p className="text-[13px] text-[#646462]">{search ? 'No hay resultados para tu búsqueda.' : `No hay contenido de tipo «${cardLabel}» todavía.`}</p>
                 </div>
               ) : (
                 domainKeys.map(domId => {
@@ -1072,19 +1088,25 @@ function FinContenidoPickerModal({
 
             <div className="flex-shrink-0 px-4 py-4 border-t border-[#e9eae6] flex flex-col gap-2">
               <button
-                disabled={selectedArticles.length === 0}
-                onClick={() => onConfirmSelection(selectedArticles)}
+                disabled={!dirty}
+                onClick={() => onConfirmSelection({ added, removed })}
                 className={`w-full h-9 rounded-[8px] text-[13px] font-semibold flex items-center justify-center gap-2 transition-all ${
-                  selectedArticles.length > 0
+                  dirty
                     ? 'bg-[#1a1a1a] text-white hover:bg-black shadow-sm'
                     : 'bg-[#f3f3f1] text-[#a4a4a2] cursor-not-allowed'
                 }`}
               >
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 2.5c2.8 0 5 2.2 5 5.5a5.5 5.5 0 01-5 5.5 5.5 5.5 0 01-5-5.5C3 4.7 5.2 2.5 8 2.5z"/><path d="M5.5 8l2 2 3-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                {selectedArticles.length > 0 ? `Agregar a Fin (${selectedArticles.length})` : 'Agregar a Fin'}
+                {!dirty
+                  ? 'Guardar selección'
+                  : removed.length && !added.length
+                    ? `Quitar de Fin (${removed.length})`
+                    : added.length && !removed.length
+                      ? `Agregar a Fin (${added.length})`
+                      : `Guardar cambios (+${added.length}/−${removed.length})`}
               </button>
               <p className="text-center text-[11px] text-[#a4a4a2]">
-                Fin usará estos artículos como fuente de conocimiento
+                Fin indexará estos artículos y los usará como fuente de conocimiento
               </p>
             </div>
           </div>
@@ -1137,18 +1159,37 @@ function FinContenidoContent() {
   const articles: any[] = Array.isArray(articlesRaw) ? articlesRaw : [];
   const domains = Array.isArray(domainsData) ? domainsData : [];
 
-  // Counts broken down by type for the source table
-  const sourceCounts = useMemo(() => {
-    const byType: Record<string, { total: number; published: number; finService: number }> = {};
+  // Responses are camelized (finService), but tolerate snake for safety.
+  const isFinSource = (a: any) => !!(a.finService ?? a.fin_service);
+
+  // Which card bucket an article belongs to: snippets on their own, the rest
+  // split by visibility. This is also the filter used when opening a picker.
+  function cardBucket(a: any): FinContenidoCardType {
+    const t = String(a.type || 'article').toLowerCase();
+    if (t === 'snippet') return 'snippet';
+    const vis = String(a.visibility || 'public').toLowerCase();
+    return vis === 'internal' ? 'internal' : 'public';
+  }
+  function matchesCard(a: any, type: FinContenidoCardType): boolean {
+    return cardBucket(a) === type;
+  }
+
+  // Counts broken down by card bucket (public / internal / snippet), tracking how
+  // many of each Fin actually uses as a source.
+  const bucketCounts = useMemo(() => {
+    const mk = () => ({ total: 0, published: 0, finService: 0 });
+    const acc: Record<FinContenidoCardType, { total: number; published: number; finService: number }> = {
+      public: mk(), internal: mk(), snippet: mk(), website: mk(), all: mk(),
+    };
     articles.forEach((a: any) => {
-      const t = String(a.type || 'ARTICLE').toUpperCase();
-      if (!byType[t]) byType[t] = { total: 0, published: 0, finService: 0 };
-      byType[t].total++;
-      if (String(a.status || '').toLowerCase() === 'published') byType[t].published++;
-      if (a.fin_service) byType[t].finService++;
+      const b = cardBucket(a);
+      acc[b].total++;
+      if (String(a.status || '').toLowerCase() === 'published') acc[b].published++;
+      if (isFinSource(a)) acc[b].finService++;
     });
-    return byType;
+    return acc;
   }, [articles]);
+  const finSourceTotal = useMemo(() => articles.filter(isFinSource).length, [articles]);
 
   const [search, setSearch] = useState('');
 
@@ -1191,19 +1232,32 @@ function FinContenidoContent() {
     else                  openCreateEditor({ type: 'ARTICLE', visibility: 'public' });
   }
 
-  async function handlePickerConfirm(selected: any[]) {
+  async function handlePickerConfirm({ added, removed }: { added: any[]; removed: any[] }) {
     setPickerOpen(false);
-    if (selected.length === 0) return;
-    let ok = 0;
-    for (const a of selected) {
-      try {
-        await knowledgeApi.updateArticle(a.id, { fin_service: true });
-        ok++;
-      } catch { /* skip failed */ }
+    if (added.length === 0 && removed.length === 0) return;
+    let addedOk = 0;
+    let removedOk = 0;
+    // Setting fin_service true/false fires the embedding sync hook server-side,
+    // so this both persists the selection AND (re)indexes / de-indexes the article.
+    for (const a of added) {
+      try { await knowledgeApi.updateArticle(a.id, { fin_service: true }); addedOk++; } catch { /* skip */ }
+    }
+    for (const a of removed) {
+      try { await knowledgeApi.updateArticle(a.id, { fin_service: false }); removedOk++; } catch { /* skip */ }
     }
     setRefreshKey(k => k + 1);
-    showToast(ok === 1 ? '1 artículo añadido a Fin' : `${ok} artículos añadidos a Fin`);
+    const parts: string[] = [];
+    if (addedOk) parts.push(`${addedOk} añadido${addedOk !== 1 ? 's' : ''}`);
+    if (removedOk) parts.push(`${removedOk} quitado${removedOk !== 1 ? 's' : ''}`);
+    showToast(parts.length ? `Fin: ${parts.join(' · ')}` : 'Sin cambios');
   }
+
+  // Articles shown in the picker are scoped to the card's bucket, so opening
+  // "Fragmento de texto" only lists snippets, "Artículo público" only public, etc.
+  const pickerArticles = useMemo(
+    () => (pickerCard ? articles.filter((a) => matchesCard(a, pickerCard.type)) : []),
+    [articles, pickerCard],
+  );
 
   function openExistingArticle(article: any) {
     setLibraryOpen(false);
@@ -1221,32 +1275,36 @@ function FinContenidoContent() {
 
   // Rows for "Fuente de contenido" table
   type SourceRow = { key: string; icon: ReactNode; label: string; sub: string; counts: { total: number; published: number; finService: number } | null; onManage?: () => void };
-  const artC = sourceCounts['ARTICLE'] ?? { total: 0, published: 0, finService: 0 };
-  const snpC = sourceCounts['SNIPPET'] ?? { total: 0, published: 0, finService: 0 };
+  const artC = bucketCounts.public;
+  const intC = bucketCounts.internal;
+  const snpC = bucketCounts.snippet;
+  const openPicker = (type: FinContenidoCardType, label: string) => { setPickerCard({ type, label }); setPickerOpen(true); };
+  const usageSub = (c: { total: number; finService: number }, noun: string) =>
+    c.total === 0 ? `Sin ${noun}s todavía` : `${c.finService} de ${c.total} ${noun}${c.total !== 1 ? 's' : ''} en uso por Fin`;
   const sourceRows: SourceRow[] = [
     {
       key: 'articles',
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#3b59f6]" strokeWidth="1.3"><path d="M2.5 2.5h7.5l3.5 3.5v8H2.5z"/><path d="M10 2.5v3.5h3.5"/><path d="M5 7.5h6M5 10h6M5 5h4"/></svg>,
       label: 'Artículos públicos',
-      sub: `${artC.total} artículo${artC.total !== 1 ? 's' : ''}`,
+      sub: usageSub(artC, 'artículo'),
       counts: artC,
-      onManage: () => setLibraryOpen(true),
+      onManage: () => openPicker('public', 'Artículo público'),
     },
     {
       key: 'internal',
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#7c3aed]" strokeWidth="1.3"><path d="M2.5 2.5h7.5l3.5 3.5v8H2.5z"/><path d="M10 2.5v3.5h3.5"/><path d="M5 7.5h6M5 10h4"/><circle cx="12" cy="13" r="2.5" fill="#f5f3ff" stroke="#7c3aed" strokeWidth="1.2"/><path d="M11.3 13h1.4M12 12.3v1.4" stroke="#7c3aed" strokeWidth="1"/></svg>,
       label: 'Artículos internos',
-      sub: 'Solo visibles para tu equipo',
-      counts: artC,
-      onManage: () => setLibraryOpen(true),
+      sub: usageSub(intC, 'artículo'),
+      counts: intC,
+      onManage: () => openPicker('internal', 'Artículo interno'),
     },
     {
       key: 'snippets',
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#059669]" strokeWidth="1.3"><path d="M4.5 4l-2.5 4 2.5 4M11.5 4l2.5 4-2.5 4"/><path d="M7 13l2-10"/></svg>,
       label: 'Fragmentos de texto',
-      sub: `${snpC.total} fragmento${snpC.total !== 1 ? 's' : ''}`,
+      sub: usageSub(snpC, 'fragmento'),
       counts: snpC,
-      onManage: () => setLibraryOpen(true),
+      onManage: () => openPicker('snippet', 'Fragmento de texto'),
     },
     {
       key: 'website',
@@ -1352,8 +1410,11 @@ function FinContenidoContent() {
 
           {/* ── Fuente de contenido ── */}
           <div className="mt-10 flex items-center justify-between mb-3">
-            <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Fuente de contenido</h3>
-            <span className="text-[12px] text-[#646462]">{articles.length} elemento{articles.length !== 1 ? 's' : ''} en total</span>
+            <div>
+              <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Fuente de contenido</h3>
+              <p className="text-[12px] text-[#646462] mt-0.5">Lo que Fin AI Agent usa para responder</p>
+            </div>
+            <span className="text-[12px] text-[#646462]">{finSourceTotal} en uso por Fin · {articles.length} en total</span>
           </div>
 
           <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
@@ -1419,7 +1480,7 @@ function FinContenidoContent() {
         <FinContenidoPickerModal
           cardType={pickerCard.type}
           cardLabel={pickerCard.label}
-          articles={articles}
+          articles={pickerArticles}
           domains={domains}
           onConfirmSelection={handlePickerConfirm}
           onWriteNew={handlePickerWriteNew}

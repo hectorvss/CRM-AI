@@ -670,21 +670,21 @@ export function KnowledgeArticleEditor({
   const [domainId, setDomainId] = useState<string>(initial?.domain_id || initial?.domainId || '');
   const [visibility, setVisibility] = useState<'public' | 'internal'>(initial?.visibility === 'internal' ? 'internal' : 'public');
   const [language, setLanguage] = useState<string>(initial?.language || 'en');
-  const [authorUserId, setAuthorUserId] = useState<string>(initial?.author_user_id || initial?.created_by || '');
+  const [authorUserId, setAuthorUserId] = useState<string>(initial?.author_user_id || initial?.authorUserId || initial?.created_by || initial?.createdBy || '');
   // ── Fin section ─────────────────────────────────────────────────────────
-  const [finService,    setFinService]    = useState<boolean>(!!initial?.fin_service);
-  const [finSales,      setFinSales]      = useState<boolean>(!!initial?.fin_sales);
-  const [copilotEnabled,setCopilotEnabled]= useState<boolean>(initial?.copilot_enabled !== false);
-  const [finAudience,   setFinAudience]   = useState<string[]>(
-    Array.isArray(initial?.fin_audience) && initial.fin_audience.length
-      ? initial.fin_audience
-      : ['users','leads','visitors'],
-  );
+  // API responses are camelized (finService); tolerate snake for prefills too.
+  const [finService,    setFinService]    = useState<boolean>(!!(initial?.finService ?? initial?.fin_service));
+  const [finSales,      setFinSales]      = useState<boolean>(!!(initial?.finSales ?? initial?.fin_sales));
+  const [copilotEnabled,setCopilotEnabled]= useState<boolean>((initial?.copilotEnabled ?? initial?.copilot_enabled) !== false);
+  const [finAudience,   setFinAudience]   = useState<string[]>(() => {
+    const aud = initial?.finAudience ?? initial?.fin_audience;
+    return Array.isArray(aud) && aud.length ? aud : ['users','leads','visitors'];
+  });
   // ── Help-center section ─────────────────────────────────────────────────
   const [hcStatus, setHcStatus] = useState<'draft' | 'published'>(
-    initial?.helpcenter_status === 'published' ? 'published' : 'draft',
+    (initial?.helpcenterStatus ?? initial?.helpcenter_status) === 'published' ? 'published' : 'draft',
   );
-  const [hcCollectionId, setHcCollectionId] = useState<string>(initial?.helpcenter_collection_id || '');
+  const [hcCollectionId, setHcCollectionId] = useState<string>(initial?.helpcenterCollectionId || initial?.helpcenter_collection_id || '');
   const [hcAudience, setHcAudience] = useState<string[]>(
     Array.isArray(initial?.helpcenter_audience) && initial.helpcenter_audience.length
       ? initial.helpcenter_audience
@@ -2064,7 +2064,12 @@ export function KnowledgeContentLibrary({
                     className="w-full text-left grid grid-cols-[1fr_120px_120px_120px_140px_100px] items-center gap-3 px-5 py-3 border-b border-[#f1f1ee] hover:bg-[#fafafa]"
                   >
                     <div className="min-w-0">
-                      <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate">{a.title || 'Sin título'}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate">{a.title || 'Sin título'}</p>
+                        {(a.finService ?? a.fin_service) && (
+                          <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full bg-[#eef2ff] text-[#3b59f6] text-[10px] font-semibold" title="En uso por Fin">Fin</span>
+                        )}
+                      </div>
                       {a.description && <p className="text-[12px] text-[#646462] truncate">{a.description}</p>}
                     </div>
                     <span className="text-[12.5px] text-[#1a1a1a]">{typeLabel(a.type)}</span>
@@ -2074,7 +2079,7 @@ export function KnowledgeContentLibrary({
                       </span>
                     </span>
                     <span className="text-[12.5px] text-[#646462]">{visibility === 'internal' ? 'Interno' : 'Público'}</span>
-                    <span className="text-[12.5px] text-[#646462] truncate">{domainName(a.domain_id)}</span>
+                    <span className="text-[12.5px] text-[#646462] truncate">{domainName(a.domainId ?? a.domain_id)}</span>
                     <div className="flex items-center justify-end gap-2">
                       {status !== 'published' && (
                         <span
