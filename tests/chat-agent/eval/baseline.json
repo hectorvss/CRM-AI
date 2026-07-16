@@ -1,0 +1,5 @@
+{
+  "overall": 0.984,
+  "note": "Regression floor from a live run over the 3 data-agnostic cases (empty org_default). Re-establish on a seeded LIVE_TENANT with EVAL_UPDATE_BASELINE=1 for a fuller baseline.",
+  "cases": 3
+}
