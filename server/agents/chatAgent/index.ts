@@ -48,6 +48,7 @@ import { assembleSituation, formatSituationForPrompt, loadOpenEntity } from './s
 import { wrapExternal } from './fencing.js';
 import type { CatalogEntry } from '../planEngine/registry.js';
 import { getPrimaryProvider, getUtilityProvider } from './providers/index.js';
+import { compactHistory, CONVERSATION_SUMMARY_SYSTEM } from './compaction.js';
 import type { ProviderMessage, ProviderToolCall } from './providers/types.js';
 import { ProviderNotConfiguredError } from './providers/types.js';
 import { adaptToolkit } from './toolAdapter.js';
@@ -248,7 +249,20 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
     } else {
       // ── Fresh turn ───────────────────────────────────────────────────────
       const historyRows = !isNewConversation ? await listMessages(scope, conversationId) : [];
-      messages = rebuildProviderHistory(historyRows.slice(-30));
+      // Compact long histories (summarize older turns) instead of hard-dropping
+      // them, so long conversations don't lose context or blow the window.
+      // Fail-safe: any summarizer error falls back to the previous bounded slice.
+      try {
+        const util = getUtilityProvider();
+        const { messages: compacted } = await compactHistory(
+          rebuildProviderHistory(historyRows),
+          async (transcript) => (await util.completeUtility({ system: CONVERSATION_SUMMARY_SYSTEM, prompt: transcript, maxTokens: 500 })).text,
+        );
+        messages = compacted;
+      } catch (err) {
+        logger.warn('chatAgent: history compaction failed, using bounded slice', { error: (err as Error)?.message });
+        messages = rebuildProviderHistory(historyRows.slice(-30));
+      }
       messages.push({ role: 'user', content: input.message });
       assistantText = '';
       await appendMessage(scope, conversationId, { role: 'user', content: input.message })
