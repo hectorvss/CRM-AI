@@ -23,6 +23,8 @@
     "test:settings-profile-critical": "tsx tests/settings-profile/run-critical.ts",
     "test:interop-http": "tsx tests/interop-http/run-end-to-end.ts",
     "test:e2e:interop": "tsx tests/interop-http/run-end-to-end.ts",
+    "test:chat-agent": "tsx tests/chat-agent/run-approval-risk-smoke.ts && tsx tests/chat-agent/run-redaction-smoke.ts && tsx tests/chat-agent/eval/run-scorers-selfcheck.ts",
+    "test:chat-agent:eval": "tsx tests/chat-agent/eval/run-eval.ts",
     "worker": "tsx server/worker-standalone.ts",
     "seed:supabase-demo": "tsx seed_sample_data.ts",
     "seed:demo": "psql $DATABASE_URL -f scripts/seed-demo.sql"
