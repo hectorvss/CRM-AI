@@ -421,7 +421,15 @@ function KnowledgeFuentes({
   // live "configured" + "status" info when the user has actually wired the
   // matching connector to Clain.
   const { data: connectorsData } = useApi(() => connectorsApi.list(), [], []);
-  const connectors = Array.isArray(connectorsData) ? connectorsData : [];
+  // useApi blanks `data` to its fallback ([]) on every refetch (incl. the global
+  // `crm-data-changed` event the agent fires on writes). If we read that directly
+  // the action buttons flip "Administrar" → "Agregar artículo" and back on each
+  // refresh. Hold the last non-empty connector list so a transient empty result
+  // never downgrades the row.
+  const [connectors, setConnectors] = useState<any[]>(Array.isArray(connectorsData) ? connectorsData : []);
+  useEffect(() => {
+    if (Array.isArray(connectorsData) && connectorsData.length > 0) setConnectors(connectorsData);
+  }, [connectorsData]);
   const connectorsByProvider = useMemo(() => {
     const map = new Map<string, any>();
     connectors.forEach((c: any) => {
