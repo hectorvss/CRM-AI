@@ -20,12 +20,14 @@ alter table knowledge_articles
   add column if not exists copilot_enabled           boolean not null default true,
   add column if not exists fin_audience              jsonb   not null default '["users","leads","visitors"]'::jsonb,
   add column if not exists helpcenter_status         text    not null default 'draft',
-  add column if not exists helpcenter_collection_id  uuid    null     references knowledge_domains(id) on delete set null,
+  -- NOTE: ids in this deployment are TEXT, not UUID — so these are plain TEXT
+  -- (no FK) to match knowledge_domains(id)/users(id) which are TEXT here.
+  add column if not exists helpcenter_collection_id  text    null,
   add column if not exists helpcenter_audience       jsonb   not null default '["users","leads","visitors"]'::jsonb,
   add column if not exists excluded_from_suggestions boolean not null default false,
   add column if not exists tags                      jsonb   not null default '[]'::jsonb,
   add column if not exists language                  text    not null default 'en',
-  add column if not exists author_user_id            uuid    null     references users(id) on delete set null,
+  add column if not exists author_user_id            text    null,
   add column if not exists description               text    null,
   add column if not exists view_count                integer not null default 0,
   add column if not exists conversation_count        integer not null default 0,

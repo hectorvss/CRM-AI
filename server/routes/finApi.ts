@@ -446,6 +446,34 @@ router.patch('/actions/:id', requirePermission('settings.write'), async (req: Mu
   }
 });
 
+// ── Knowledge indexing (P0: make UI content retrievable by Fin) ───────────────
+
+// GET /fin/knowledge-status → how many Fin chunks are indexed
+router.get('/knowledge-status', async (req: MultiTenantRequest, res) => {
+  const scope = scopeOf(req);
+  if (!scope) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  try {
+    const { countIndexedChunks } = await import('../agents/finAgent/ingest.js');
+    res.json({ data: { indexed_chunks: await countIndexedChunks(scope) } });
+  } catch (err) {
+    console.error('[finApi] knowledge-status failed:', err);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// POST /fin/reindex → (re)embed every fin_service article for this workspace
+router.post('/reindex', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+  const scope = scopeOf(req);
+  if (!scope) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  try {
+    const { reindexWorkspace } = await import('../agents/finAgent/ingest.js');
+    res.json({ data: await reindexWorkspace(scope) });
+  } catch (err) {
+    console.error('[finApi] reindex failed:', err);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
 // ── AI drafts (inbox: send to customer / discard) ─────────────────────────────
 
 router.post('/drafts/:messageId/send', requirePermission('cases.write'), async (req: MultiTenantRequest, res) => {

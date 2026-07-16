@@ -984,6 +984,42 @@ function FinContenidoPickerModal({
   );
 }
 
+/**
+ * Reindex button + status: content added here only becomes retrievable by Fin
+ * once it's embedded into knowledge_embeddings (P0). Saving an article does it
+ * automatically, but this lets you backfill/re-run and see how many chunks Fin
+ * currently has indexed.
+ */
+function FinReindexButton() {
+  const [chunks, setChunks] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => { finApi.knowledgeStatus().then((s) => setChunks(s.indexed_chunks)).catch(() => {}); }, []);
+  async function reindex() {
+    setBusy(true); setNote(null);
+    try {
+      const r = await finApi.reindexKnowledge();
+      setChunks(r.chunks);
+      setNote(`${r.articles} artículos · ${r.embedded}/${r.chunks} fragmentos indexados`);
+    } catch { setNote('Error al reindexar'); }
+    finally { setBusy(false); }
+  }
+  return (
+    <button
+      onClick={reindex}
+      disabled={busy}
+      title={note ?? 'Reindexa el contenido para que Fin pueda encontrarlo en sus respuestas'}
+      className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50"
+    >
+      <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-none stroke-[#646462] ${busy ? 'animate-spin' : ''}`} strokeWidth="1.4"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      <span>{busy ? 'Indexando…' : 'Reindexar para Fin'}</span>
+      {chunks != null && (
+        <span className="ml-0.5 px-1.5 rounded-full bg-[#eef2ff] text-[#3b59f6] text-[11px] font-semibold">{chunks}</span>
+      )}
+    </button>
+  );
+}
+
 function FinContenidoContent() {
   const [refreshKey, setRefreshKey] = useState(0);
   const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
@@ -1134,11 +1170,14 @@ function FinContenidoContent() {
             </span>
             <h1 className="text-[18px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Contenido</h1>
           </div>
-          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#ededea]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M2.5 13.5c.8-2.4 2.8-4 5.5-4s4.7 1.6 5.5 4"/></svg>
-            <span>Aprender</span>
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <FinReindexButton />
+            <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M2.5 13.5c.8-2.4 2.8-4 5.5-4s4.7 1.6 5.5 4"/></svg>
+              <span>Aprender</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+          </div>
         </div>
         <div className="px-6 pb-3 flex items-center gap-2.5">
           <div className="flex-1 max-w-[400px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2 focus-within:border-[#1a1a1a] transition-colors">

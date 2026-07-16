@@ -7,6 +7,16 @@ export interface KnowledgeScope {
   userId?: string;
 }
 
+// Fin knowledge ingestion — keep knowledge_embeddings in sync with articles so
+// Fin's retrieval can actually find UI-authored content (spec §2 / P0). Dynamic
+// import avoids a data↔agents cycle; fully fire-and-forget (never breaks CRUD).
+function fireFinEmbeddingSync(scope: KnowledgeScope, article: any, articleId: string): void {
+  import('../agents/finAgent/ingest.js')
+    .then(({ syncArticleEmbeddings }) => syncArticleEmbeddings(
+      { tenantId: scope.tenantId, workspaceId: scope.workspaceId }, article, articleId))
+    .catch((err) => console.warn('[knowledge] fin embedding sync import failed:', err?.message ?? err));
+}
+
 export interface KnowledgeArticleFilters {
   domain_id?: string;
   type?: string;
@@ -141,7 +151,9 @@ async function createArticleSupabase(scope: KnowledgeScope, input: any) {
   };
   const { error } = await supabase.from('knowledge_articles').insert(payload);
   if (error) throw error;
-  return getArticleSupabase(scope, id);
+  const article = await getArticleSupabase(scope, id);
+  fireFinEmbeddingSync(scope, article, id);
+  return article;
 }
 
 async function updateArticleSupabase(scope: KnowledgeScope, articleId: string, input: any) {
@@ -190,7 +202,9 @@ async function updateArticleSupabase(scope: KnowledgeScope, articleId: string, i
     .eq('tenant_id', scope.tenantId)
     .eq('workspace_id', scope.workspaceId);
   if (error) throw error;
-  return getArticleSupabase(scope, articleId);
+  const article = await getArticleSupabase(scope, articleId);
+  fireFinEmbeddingSync(scope, article, articleId);
+  return article;
 }
 
 async function publishArticleSupabase(scope: KnowledgeScope, articleId: string) {
@@ -203,7 +217,9 @@ async function publishArticleSupabase(scope: KnowledgeScope, articleId: string) 
     .eq('tenant_id', scope.tenantId)
     .eq('workspace_id', scope.workspaceId);
   if (error) throw error;
-  return getArticleSupabase(scope, articleId);
+  const article = await getArticleSupabase(scope, articleId);
+  fireFinEmbeddingSync(scope, article, articleId);
+  return article;
 }
 
 async function listDomainsSupabase(scope: KnowledgeScope) {

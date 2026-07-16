@@ -1737,6 +1737,12 @@ export const finApi = {
     request<{ data: any }>(`/fin/drafts/${messageId}/send`, { method: 'POST' }).then((r) => r.data),
   discardDraft: (messageId: string) =>
     request<any>(`/fin/drafts/${messageId}/discard`, { method: 'POST' }),
+
+  // Knowledge indexing (make UI content retrievable by Fin)
+  knowledgeStatus: () =>
+    request<{ data: { indexed_chunks: number } }>('/fin/knowledge-status').then((r) => r.data),
+  reindexKnowledge: () =>
+    request<{ data: { articles: number; chunks: number; embedded: number } }>('/fin/reindex', { method: 'POST' }).then((r) => r.data),
 };
 
 export const agentApi = {
