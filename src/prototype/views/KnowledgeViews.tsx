@@ -5,7 +5,7 @@
 
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
-import { agentsApi, connectorsApi, knowledgeApi } from '../../api/client';
+import { agentsApi, connectorsApi, knowledgeApi, workspacesApi } from '../../api/client';
 import { Dropdown, KH_TYPE_OPTIONS, KnowledgeArticleEditor, LibraryIcon, TrialBanner, relativeTime, titleCase } from '../sharedUi';
 import { parsePath, replaceRoute } from '../router';
 
@@ -1571,6 +1571,10 @@ function KnowledgeCentroAyuda({
   const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [], []);
   const articles: any[] = Array.isArray(articlesRaw) ? articlesRaw : [];
 
+  // Workspace context — the public help-center on/off flag persists here via the
+  // settings blob (help_center_published), shared with HelpCenterSettingsView.
+  const { data: wsCtx } = useApi<any>(() => workspacesApi.currentContext(), [], null);
+
   // HC-published articles (helpcenter_status === 'published' or status === 'published' / 'live')
   const hcLive = articles.filter(a =>
     a.helpcenter_status === 'published' ||
@@ -1588,8 +1592,33 @@ function KnowledgeCentroAyuda({
   }, [hcLive]);
 
   const [hcEnabled, setHcEnabled] = useState(true);
+  const [hcSaving, setHcSaving] = useState(false);
   const [folderModal, setFolderModal] = useState<null | 'create' | { id: string; name: string; description?: string }>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Hydrate the toggle from the persisted workspace setting (default: enabled).
+  useEffect(() => {
+    const s = (wsCtx as any)?.settings;
+    if (s && s.help_center_published !== undefined) setHcEnabled(!!s.help_center_published);
+  }, [wsCtx]);
+
+  // Persist the public help-center flag via the workspace settings blob.
+  async function toggleHelpCenter() {
+    const next = !hcEnabled;
+    const wsId = (wsCtx as any)?.id ?? (wsCtx as any)?.workspace?.id ?? (wsCtx as any)?.workspace_id;
+    setHcEnabled(next); // optimistic
+    if (!wsId) { onAction('No se pudo identificar el workspace', 'error'); return; }
+    setHcSaving(true);
+    try {
+      await workspacesApi.updateSettings(wsId, { help_center_published: next });
+      onAction(next ? 'Centro de ayuda habilitado' : 'Centro de ayuda deshabilitado');
+    } catch (err: any) {
+      setHcEnabled(!next); // revert on failure
+      onAction(err?.message || 'No se pudo guardar', 'error');
+    } finally {
+      setHcSaving(false);
+    }
+  }
 
   async function deleteCollection(d: { id: string; name: string }) {
     if (typeof window !== 'undefined' && !window.confirm(`¿Eliminar la colección "${d.name}"?`)) return;
@@ -1638,10 +1667,11 @@ function KnowledgeCentroAyuda({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[13px] text-[#646462]">{hcEnabled ? 'Activo' : 'Inactivo'}</span>
+            <span className="text-[13px] text-[#646462]">{hcSaving ? 'Guardando…' : hcEnabled ? 'Activo' : 'Inactivo'}</span>
             <button
-              onClick={() => setHcEnabled(v => !v)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${hcEnabled ? 'bg-[#1a1a1a]' : 'bg-[#d4d4d2]'}`}
+              onClick={toggleHelpCenter}
+              disabled={hcSaving}
+              className={`relative w-11 h-6 rounded-full transition-colors disabled:opacity-60 ${hcEnabled ? 'bg-[#1a1a1a]' : 'bg-[#d4d4d2]'}`}
             >
               <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${hcEnabled ? 'left-[26px]' : 'left-1'}`} />
             </button>
