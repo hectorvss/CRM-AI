@@ -388,6 +388,8 @@ export function AgentChatView({
   const [trace, setTrace] = useState<{ traces: any[]; metrics: any } | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
   const [displayedText, setDisplayedText] = useState('');
+  const [heroLen, setHeroLen] = useState(0);
+  const HERO_TEXT = '¿En qué puedo ayudarte?';
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -432,6 +434,21 @@ export function AgentChatView({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, displayedText]);
+
+  // ── Hero typewriter (empty state): types the greeting letter by letter in
+  //    gradient; on completion the whole text settles to solid black. ─────────
+  useEffect(() => {
+    const empty = messages.length === 0 && !streaming;
+    if (!empty) { setHeroLen(0); return; }
+    setHeroLen(0);
+    let i = 0;
+    const id = setInterval(() => {
+      i += 1;
+      setHeroLen(i);
+      if (i >= HERO_TEXT.length) clearInterval(id);
+    }, 55);
+    return () => clearInterval(id);
+  }, [messages.length, streaming]);
 
   // ── Slash autocomplete visibility ─────────────────────────────────────────
   useEffect(() => {
@@ -1006,13 +1023,8 @@ export function AgentChatView({
         @keyframes max-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes max-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
         @keyframes max-blink { 0%,100%{opacity:1} 50%{opacity:0} }
-        .agent-hero-rainbow { background-image: linear-gradient(90deg,#3b82f6 0%,#8b5cf6 28%,#ec4899 52%,#f43f5e 74%,#f97316 100%); background-size:220% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation: agent-hero-reveal 2.2s ease-in-out forwards; }
-        @keyframes agent-hero-reveal {
-          0%   { opacity:0; background-position:140% 0; -webkit-text-fill-color:transparent; }
-          20%  { opacity:1; background-position:110% 0; -webkit-text-fill-color:transparent; }
-          55%  { background-position:0% 0; -webkit-text-fill-color:transparent; }
-          100% { background-position:0% 0; -webkit-text-fill-color:#1a1a1a; }
-        }
+        .agent-hero-rainbow { background-image: linear-gradient(90deg,#3b82f6 0%,#8b5cf6 28%,#ec4899 52%,#f43f5e 74%,#f97316 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; transition:-webkit-text-fill-color .5s ease .15s; }
+        .agent-hero-rainbow.is-done { -webkit-text-fill-color:#1a1a1a; }
       `}</style>
       {/* Memory toast */}
       {memoryToast && (
@@ -1062,7 +1074,12 @@ export function AgentChatView({
             <div className="flex-1 overflow-y-auto min-h-0 px-4 py-5">
               {messages.length === 0 && !streaming ? (
                 <div className="flex flex-col items-center justify-center h-full text-center px-8">
-                  <h1 className="agent-hero-rainbow text-[34px] sm:text-[46px] font-semibold tracking-tight leading-tight">¿En qué puedo ayudarte?</h1>
+                  <h1 className={`agent-hero-rainbow inline-block text-[34px] sm:text-[46px] font-semibold tracking-tight leading-tight ${heroLen >= HERO_TEXT.length ? 'is-done' : ''}`}>
+                    {HERO_TEXT.slice(0, heroLen)}
+                    {heroLen < HERO_TEXT.length && (
+                      <span className="inline-block w-[3px] h-[0.85em] align-middle ml-1 rounded-sm bg-[#8b5cf6]" style={{ animation: 'max-blink 1s steps(2) infinite' }} />
+                    )}
+                  </h1>
                 </div>
               ) : (
                 <div className="@container/thread flex flex-col w-full max-w-[720px] mx-auto gap-1.5">
