@@ -32,10 +32,20 @@ const GuidancePiece = z.object({
 });
 
 const FinAttribute = z.object({
+  id: z.string().optional(),
   name: z.string().min(1),
   description: z.string().default(''),
   type: z.enum(['text', 'number', 'boolean', 'select']).default('text'),
   options: z.array(z.string()).optional(),
+  // Round-trip metadata for the Atributos editor (values with descriptions,
+  // audience, enabled). The engine reads name/description/values to classify.
+  values: z.array(z.object({
+    id: z.string().optional(),
+    name: z.string(),
+    description: z.string().optional(),
+  })).optional(),
+  audience: z.string().optional(),
+  enabled: z.boolean().optional(),
 });
 
 const EscalationRule = z.object({

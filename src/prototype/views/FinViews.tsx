@@ -199,6 +199,75 @@ function useFinProceduresResource(seed: FinProcedimiento[]) {
   };
 }
 
+// ─── Attributes — server-backed via fin.attributes (config blob) ─────────────
+// The engine reads config.attributes to classify conversations into
+// ai_triage.attributes (spec §5). We round-trip the editor's shape.
+function uiAttrToServer(a: FinAtributo): Record<string, unknown> {
+  return {
+    id: a.id,
+    name: a.name || 'Atributo',
+    description: a.description ?? '',
+    type: 'select',
+    options: (a.values ?? []).map((v) => v.name).filter(Boolean),
+    values: (a.values ?? []).map((v) => ({ id: v.id, name: v.name, description: v.description })),
+    audience: a.audience,
+    enabled: a.enabled,
+  };
+}
+function serverAttrToUi(a: any): FinAtributo {
+  const values = Array.isArray(a.values) && a.values.length
+    ? a.values.map((v: any, i: number) => ({ id: v.id ?? `v${i}`, name: v.name ?? '', description: v.description ?? '' }))
+    : (a.options ?? []).map((o: string, i: number) => ({ id: `v${i}`, name: o, description: '' }));
+  return {
+    id: a.id ?? `attr_${Math.random().toString(36).slice(2, 8)}`,
+    name: a.name ?? '',
+    description: a.description ?? '',
+    audience: (a.audience as FinAtributo['audience']) ?? 'all',
+    escalationRules: 0,
+    reDetectOnClose: false,
+    values,
+    conditions: [],
+    enabled: a.enabled !== false,
+  };
+}
+
+/** Server-backed attributes store: loads from /fin/config on mount, mirrors
+ *  every change by patching the whole fin.attributes array (arrays replace). */
+function useFinAttributesResource(seed: FinAtributo[]) {
+  const local = useFinResource<FinAtributo>('atributos', seed);
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+    finApi.getConfig()
+      .then((cfg) => {
+        const arr = Array.isArray(cfg?.attributes) ? cfg.attributes : [];
+        if (arr.length) local.replace(arr.map(serverAttrToUi));
+      })
+      .catch(() => { /* offline/dev: stay on localStorage */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const pushAll = (items: FinAtributo[]) =>
+    finApi.patchConfig({ attributes: items.map(uiAttrToServer) }).catch(() => { /* keep local */ });
+  return {
+    items: local.items,
+    create: (item: Omit<FinAtributo, 'id'>): FinAtributo => {
+      const created = local.create(item);
+      pushAll([...local.items, created]);
+      return created;
+    },
+    update: (id: string, patch: Partial<FinAtributo>) => {
+      local.update(id, patch);
+      pushAll(local.items.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+    },
+    remove: (id: string) => {
+      local.remove(id);
+      pushAll(local.items.filter((it) => it.id !== id));
+    },
+    replace: local.replace,
+  };
+}
+
 /**
  * Live channel activation for the Despliegue screens: reads/patches
  * fin.channels.<channel>.enabled (and flips the master fin.enabled on first
@@ -2638,7 +2707,7 @@ function FinAtributoEditor({
 
 // ─── Capacitar > Atributos (Figma 1:5966) ────────────────────────────────────
 function FinAtributosContent() {
-  const atributos = useFinResource<FinAtributo>('atributos', FIN_SEED_ATRIBUTOS);
+  const atributos = useFinAttributesResource(FIN_SEED_ATRIBUTOS);
   const toast = useFinToast();
   const [editing, setEditing] = useState<FinAtributo | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);

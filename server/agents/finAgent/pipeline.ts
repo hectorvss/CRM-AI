@@ -19,6 +19,7 @@ import { getActiveRun, matchProcedure, runProcedureTurn } from './procedures.js'
 import { hasActiveBillableOutcome } from './outcome.js';
 import {
   REFINE_SYSTEM, refinePrompt,
+  ATTRIBUTES_SYSTEM, attributesPrompt,
   buildGenerateSystem, generatePrompt,
   VALIDATE_SYSTEM, validatePrompt,
   fence,
@@ -228,6 +229,32 @@ export async function runFinPipeline(input: FinRunInput): Promise<FinRunResult> 
     }>(refineRaw.text);
     triage.classification = { ticket_type: refined.ticket_type, language: refined.language, refined_query: refined.refined_query };
     done('ok', { ticket_type: refined.ticket_type, safe: refined.safe });
+
+    // ── E1.5: attributes — classify the workspace's configured attributes into
+    // ai_triage.attributes (spec §5, "Atributos"). Cheap utility call; best-effort.
+    const activeAttributes = (config.attributes ?? []).filter((a: any) => a.enabled !== false);
+    if (activeAttributes.length) {
+      done = t('e1b_attributes');
+      try {
+        const attrRaw = await getUtilityProvider().completeUtility({
+          system: ATTRIBUTES_SYSTEM,
+          prompt: attributesPrompt({
+            attributes: activeAttributes.map((a: any) => ({
+              name: a.name,
+              description: a.description,
+              values: (a.values ?? []).map((v: any) => v.name).filter(Boolean).concat(a.options ?? []),
+            })),
+            history: thread.history, latest: thread.latest, f,
+          }),
+          maxTokens: 300,
+        });
+        const attrs = parseJsonBlock<Record<string, unknown>>(attrRaw.text);
+        triage.attributes = attrs;
+        done('ok', attrs);
+      } catch (err: any) {
+        done('fail', { error: String(err?.message ?? err) });
+      }
+    }
 
     if (!refined.safe) {
       triage.outcome = 'blocked_unsafe';
