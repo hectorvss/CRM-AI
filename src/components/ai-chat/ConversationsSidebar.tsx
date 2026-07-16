@@ -83,12 +83,12 @@ const ConversationsSidebar: React.FC<Props> = ({
       <button
         type="button"
         onClick={onToggle}
-        title="Open conversations"
-        // Match the SaaS brand mark used in the left nav (Sidebar.tsx):
-        // black square + graphic_eq icon (inverted in dark mode).
+        title="Mostrar conversaciones"
+        aria-label="Mostrar el panel de conversaciones"
+        // Standard show/hide sidebar affordance — right-side panel toggle icon.
         className="absolute right-5 top-5 z-10 flex h-8 w-8 items-center justify-center rounded-md bg-black shadow-sm transition hover:opacity-80 dark:bg-white"
       >
-        <span className="material-symbols-outlined text-[18px] text-white dark:text-black">graphic_eq</span>
+        <span className="material-symbols-outlined text-[18px] text-white dark:text-black">right_panel_open</span>
       </button>
     );
   }
@@ -103,10 +103,11 @@ const ConversationsSidebar: React.FC<Props> = ({
         <button
           type="button"
           onClick={onToggle}
-          title="Hide sidebar"
+          title="Ocultar conversaciones"
+          aria-label="Ocultar el panel de conversaciones"
           className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950 dark:hover:bg-white/5 dark:hover:text-white"
         >
-          <span className="material-symbols-outlined text-[18px]">close</span>
+          <span className="material-symbols-outlined text-[18px]">right_panel_close</span>
         </button>
       </header>
 
