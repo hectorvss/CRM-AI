@@ -1682,7 +1682,7 @@ async function streamAgentEndpoint(
 // Backend: server/routes/finApi.ts · spec: docs/fin-ai-agent-spec.md
 export interface FinGuidancePiece {
   id: string;
-  category: 'communication_style' | 'context_clarification' | 'content_sources' | 'other';
+  category: 'communication_style' | 'context_clarification' | 'content_sources' | 'spam_filtering' | 'other';
   text: string;
   active: boolean;
 }
@@ -1732,6 +1732,11 @@ export const finApi = {
     request<{ data: any[] }>(`/fin/pending-actions${status ? `?status=${status}` : ''}`).then((r) => r.data ?? []),
   decidePendingAction: (id: string, decision: 'approve' | 'reject') =>
     request<{ data: any }>(`/fin/pending-actions/${id}/${decision}`, { method: 'POST' }).then((r) => r.data),
+
+  sendDraft: (messageId: string) =>
+    request<{ data: any }>(`/fin/drafts/${messageId}/send`, { method: 'POST' }).then((r) => r.data),
+  discardDraft: (messageId: string) =>
+    request<any>(`/fin/drafts/${messageId}/discard`, { method: 'POST' }),
 };
 
 export const agentApi = {
@@ -1741,11 +1746,19 @@ export const agentApi = {
     signal?: AbortSignal,
   ): Promise<void> => streamAgentEndpoint('/agent/chat', payload, onEvent, signal),
 
+  // Situational awareness snapshot for the briefing panel.
+  getSituation: () =>
+    request<{ ok: boolean; situation: any }>('/agent/situation'),
+
   listConversations: () =>
     request<{ ok: boolean; conversations: any[] }>('/agent/conversations'),
 
   getConversation: (id: string) =>
     request<{ ok: boolean; conversation: any; messages: any[] }>(`/agent/conversations/${id}`),
+
+  // Auditable execution timeline for a conversation (per-turn traces + metrics).
+  getTrace: (id: string) =>
+    request<{ ok: boolean; traces: any[]; metrics: any }>(`/agent/conversations/${id}/trace`),
 
   deleteConversation: (id: string) =>
     request<{ ok: boolean }>(`/agent/conversations/${id}`, { method: 'DELETE' }),

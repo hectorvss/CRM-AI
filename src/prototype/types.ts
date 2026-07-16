@@ -88,7 +88,15 @@ export type DropdownItem = {
 };
 
 export type Attachment = { id: string; name: string; size: number; type: string; dataUrl?: string; url?: string };
-export type Message = { id: string; from: "user" | "agent" | "bot"; text: string; time: string; senderName?: string; attachments?: Attachment[] };
+export type Message = {
+  id: string; from: "user" | "agent" | "bot"; text: string; time: string;
+  senderName?: string; attachments?: Attachment[];
+  /** Fin AI Agent metadata (docs/fin-ai-agent-spec.md): private drafts carry
+   *  send/discard actions in the inbox; confidence/citations feed answer inspection. */
+  isFinDraft?: boolean;
+  confidence?: number | null;
+  citations?: string[];
+};
 
 // â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export type AgentMode = 'auto' | 'product_analytics' | 'sql' | 'session_replay' | 'error_tracking' | 'surveys' | 'flags' | 'llm_analytics';

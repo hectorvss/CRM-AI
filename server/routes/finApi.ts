@@ -230,10 +230,11 @@ router.get('/outcomes', async (req: MultiTenantRequest, res) => {
 // ═══ F4: Procedures + Data Connectors (spec §5, §5.1) ═════════════════════════
 
 const StepSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('instruction'), text: z.string().min(1) }),
-  z.object({ type: z.literal('collect'), variable: z.string().regex(/^\w+$/), prompt: z.string().min(1) }),
-  z.object({ type: z.literal('verify_identity'), method: z.enum(['email_otp']).optional() }),
-  z.object({ type: z.literal('condition'), text: z.string().min(1) }),
+  // title/ui_kind are presentation metadata round-tripped for the editor.
+  z.object({ type: z.literal('instruction'), text: z.string().min(1), title: z.string().optional(), ui_kind: z.string().optional() }),
+  z.object({ type: z.literal('collect'), variable: z.string().regex(/^\w+$/), prompt: z.string().min(1), title: z.string().optional() }),
+  z.object({ type: z.literal('verify_identity'), method: z.enum(['email_otp']).optional(), title: z.string().optional() }),
+  z.object({ type: z.literal('condition'), text: z.string().min(1), title: z.string().optional(), ui_kind: z.string().optional() }),
   z.object({
     type: z.literal('action'),
     action_id: z.string().min(1),
@@ -441,6 +442,68 @@ router.patch('/actions/:id', requirePermission('settings.write'), async (req: Mu
     res.json({ data });
   } catch (err) {
     console.error('[finApi] action patch failed:', err);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// ── AI drafts (inbox: send to customer / discard) ─────────────────────────────
+
+router.post('/drafts/:messageId/send', requirePermission('cases.write'), async (req: MultiTenantRequest, res) => {
+  const scope = scopeOf(req);
+  if (!scope) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data: msg, error } = await supabase
+      .from('messages')
+      .select('id, case_id, conversation_id, is_private, author_type')
+      .eq('id', req.params.messageId)
+      .eq('tenant_id', scope.tenantId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!msg || msg.author_type !== 'ai' || !msg.is_private) {
+      return sendError(res, 404, 'DRAFT_NOT_FOUND', 'AI draft not found (or already sent)');
+    }
+    const now = new Date().toISOString();
+    const { error: upErr } = await supabase
+      .from('messages')
+      .update({ is_private: false, type: 'reply', sent_at: now })
+      .eq('id', msg.id)
+      .eq('tenant_id', scope.tenantId);
+    if (upErr) throw upErr;
+    // The reply is now public → the assumed-resolution sweeper may claim it.
+    if (msg.case_id) {
+      const { data: caseRow } = await supabase
+        .from('cases').select('ai_triage').eq('id', msg.case_id).eq('tenant_id', scope.tenantId).maybeSingle();
+      const triage = { ...(caseRow?.ai_triage ?? {}), outcome: 'replied', sent_by_operator_at: now };
+      await supabase.from('cases')
+        .update({ ai_triage: triage, updated_at: now })
+        .eq('id', msg.case_id).eq('tenant_id', scope.tenantId);
+    }
+    res.json({ data: { id: msg.id, sent: true } });
+  } catch (err) {
+    console.error('[finApi] draft send failed:', err);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+router.post('/drafts/:messageId/discard', requirePermission('cases.write'), async (req: MultiTenantRequest, res) => {
+  const scope = scopeOf(req);
+  if (!scope) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('id', req.params.messageId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('is_private', true)
+      .eq('author_type', 'ai')
+      .select('id');
+    if (error) throw error;
+    if (!data?.length) return sendError(res, 404, 'DRAFT_NOT_FOUND', 'AI draft not found (or already sent)');
+    res.status(204).send();
+  } catch (err) {
+    console.error('[finApi] draft discard failed:', err);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });

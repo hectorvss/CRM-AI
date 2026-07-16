@@ -1624,7 +1624,9 @@ async function hydrateCaseRows(scope: CaseScope, rows: any[], q?: string) {
     customerIds.length ? supabase.from('customers').select('id, canonical_name, canonical_email, segment').in('id', customerIds) : Promise.resolve({ data: [], error: null } as any),
     userIds.length ? supabase.from('users').select('id, name').in('id', userIds) : Promise.resolve({ data: [], error: null } as any),
     teamIds.length ? supabase.from('teams').select('id, name').in('id', teamIds) : Promise.resolve({ data: [], error: null } as any),
-    caseIds.length ? supabase.from('messages').select('case_id, content, sent_at').in('case_id', caseIds).eq('tenant_id', scope.tenantId).order('sent_at', { ascending: false }) : Promise.resolve({ data: [], error: null } as any),
+    // List previews must never leak private AI drafts (fin spec §E5) — only
+    // customer-visible messages feed the row preview.
+    caseIds.length ? supabase.from('messages').select('case_id, content, sent_at').in('case_id', caseIds).eq('tenant_id', scope.tenantId).eq('is_private', false).order('sent_at', { ascending: false }) : Promise.resolve({ data: [], error: null } as any),
     orderIds.length ? supabase.from('orders').select('id, status, fulfillment_status, external_order_id, updated_at, has_conflict, conflict_domain, conflict_detected, risk_level').in('id', orderIds).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
     paymentIds.length ? supabase.from('payments').select('id, order_id, customer_id, status, approval_status, external_payment_id, updated_at, has_conflict, conflict_detected, risk_level').in('id', paymentIds).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
     returnIds.length ? supabase.from('returns').select('id, order_id, customer_id, status, approval_status, refund_status, external_return_id, updated_at, has_conflict, conflict_detected, risk_level').in('id', returnIds).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),

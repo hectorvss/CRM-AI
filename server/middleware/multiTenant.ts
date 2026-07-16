@@ -139,6 +139,28 @@ export interface ResolvedTenantContext {
   isAnonymousFallback?: boolean;
 }
 
+/**
+ * Memoized first-workspace lookup for the anonymous fallback. Without this,
+ * a transient DB error on one request makes the SAME anonymous client flap
+ * between the real first tenant and the 'org_default' demo fallback — cases
+ * would intermittently 404 depending on which request happened to fail.
+ * Successful results are cached for 60s; on failure the last known good
+ * value is reused instead of silently changing tenant.
+ */
+let _firstWsCache: { value: any; at: number } | null = null;
+async function getFirstWorkspaceCached(workspaceRepo: { getFirstWorkspace: () => Promise<any> }): Promise<any> {
+  const now = Date.now();
+  if (_firstWsCache && now - _firstWsCache.at < 60_000) return _firstWsCache.value;
+  try {
+    const ws = await workspaceRepo.getFirstWorkspace();
+    if (ws) _firstWsCache = { value: ws, at: now };
+    return ws ?? _firstWsCache?.value ?? null;
+  } catch (err) {
+    if (_firstWsCache) return _firstWsCache.value; // last known good
+    throw err;
+  }
+}
+
 export async function resolveTenantWorkspaceContext(
   tenantId?: string | null,
   workspaceId?: string | null,
@@ -182,7 +204,7 @@ export async function resolveTenantWorkspaceContext(
     // another tenant's settings (e.g. their IP allowlist policy would reject
     // the new user) and silently associate the user with someone else's data.
     if (!userId || userId === 'system') {
-      const ws = await workspaceRepo.getFirstWorkspace();
+      const ws = await getFirstWorkspaceCached(workspaceRepo);
       if (ws) {
         return {
           tenantId: tenantId || ws.org_id,

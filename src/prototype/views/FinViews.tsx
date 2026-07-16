@@ -117,6 +117,88 @@ function useFinGuidanceResource(seed: FinPauta[]) {
   };
 }
 
+// ─── Procedures — server-backed via /api/fin/procedures ──────────────────────
+// UI FinProcedimientoStep {kind: verification|action|condition, title, body} ↔
+// server steps (docs/fin-ai-agent-spec.md §5). verification/action without a
+// connector action_id map to NL instruction steps with ui_kind round-tripped.
+function uiStepToServer(s: FinProcedimientoStep): any {
+  const text = [s.title, s.body].filter(Boolean).join(': ') || '(paso vacío)';
+  if (s.kind === 'condition') return { type: 'condition', text, title: s.title, ui_kind: 'condition' };
+  return { type: 'instruction', text, title: s.title, ui_kind: s.kind };
+}
+function serverStepToUi(s: any, i: number): FinProcedimientoStep {
+  // request() camelizes API responses — accept both key forms defensively.
+  const id = `srv_${i}`;
+  const uiKind = s?.uiKind ?? s?.ui_kind;
+  switch (s?.type) {
+    case 'condition':   return { id, kind: 'condition', title: s.title ?? 'Condición', body: s.text ?? '' };
+    case 'instruction': return { id, kind: (uiKind === 'action' ? 'action' : uiKind === 'condition' ? 'condition' : 'verification'), title: s.title ?? 'Paso', body: s.text ?? '' };
+    case 'collect':     return { id, kind: 'verification', title: s.title ?? `Recoger ${s.variable}`, body: s.prompt ?? '' };
+    case 'verify_identity': return { id, kind: 'verification', title: s.title ?? 'Verificar identidad', body: 'Verificación de identidad del cliente (OTP)' };
+    case 'action':      return { id, kind: 'action', title: s.title ?? 'Acción de conector', body: `action_id: ${s.actionId ?? s.action_id} · args: ${JSON.stringify(s.argsTemplate ?? s.args_template ?? {})}` };
+    case 'handoff':     return { id, kind: 'action', title: 'Handoff al equipo' + (s.team ? ` (${s.team})` : ''), body: s.note ?? '' };
+    default:            return { id, kind: 'verification', title: 'Paso', body: JSON.stringify(s) };
+  }
+}
+function serverProcedureToUi(p: any): FinProcedimiento {
+  const createdRaw = p.createdAt ?? p.created_at;
+  return {
+    id: p.id,
+    name: p.name ?? '',
+    description: p.description ?? '',
+    prompt: p.triggerCriteria ?? p.trigger_criteria ?? '',
+    steps: Array.isArray(p.steps) ? p.steps.map(serverStepToUi) : [],
+    enabled: p.status === 'live',
+    createdAt: createdRaw ? Date.parse(createdRaw) : Date.now(),
+  };
+}
+function uiProcedureToServer(p: Partial<FinProcedimiento>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (p.name !== undefined) out.name = p.name || 'Sin nombre';
+  if (p.description !== undefined) out.description = p.description;
+  if (p.prompt !== undefined) out.trigger_criteria = p.prompt;
+  if (p.steps !== undefined) out.steps = p.steps.map(uiStepToServer);
+  if (p.enabled !== undefined) out.status = p.enabled ? 'live' : 'draft';
+  return out;
+}
+
+/** Server-backed variant of useFinResource for procedures (same optimistic
+ *  local-state pattern as useFinGuidanceResource). */
+function useFinProceduresResource(seed: FinProcedimiento[]) {
+  const local = useFinResource<FinProcedimiento>('procedimientos', seed);
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+    finApi.listProcedures()
+      .then((rows) => {
+        if (!Array.isArray(rows) || rows.length === 0) return;
+        local.replace(rows.map(serverProcedureToUi));
+      })
+      .catch(() => { /* offline/dev without backend: stay on localStorage */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return {
+    items: local.items,
+    create: (item: Omit<FinProcedimiento, 'id'>): FinProcedimiento => {
+      const created = local.create(item);
+      finApi.createProcedure(uiProcedureToServer(created) as any)
+        .then((server) => { if (server?.id) local.update(created.id, { id: server.id } as any); })
+        .catch(() => { /* keep local */ });
+      return created;
+    },
+    update: (id: string, patch: Partial<FinProcedimiento>) => {
+      local.update(id, patch);
+      finApi.updateProcedure(id, uiProcedureToServer(patch)).catch(() => { /* keep local */ });
+    },
+    remove: (id: string) => {
+      local.remove(id);
+      finApi.archiveProcedure(id).catch(() => { /* keep local */ });
+    },
+    replace: local.replace,
+  };
+}
+
 /**
  * Live channel activation for the Despliegue screens: reads/patches
  * fin.channels.<channel>.enabled (and flips the master fin.enabled on first
@@ -3958,7 +4040,7 @@ function FinProcedimientosContent() {
   const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
   const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
   const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
-  const procedimientos = useFinResource<FinProcedimiento>('procedimientos', FIN_SEED_PROCEDIMIENTOS);
+  const procedimientos = useFinProceduresResource(FIN_SEED_PROCEDIMIENTOS);
   const [search, setSearch] = useState('');
   const toast = useFinToast();
   const [editing, setEditing] = useState<FinProcedimiento | null>(null);

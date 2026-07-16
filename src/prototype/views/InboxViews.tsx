@@ -539,6 +539,83 @@ function ConversationCard({ conv, isSelected, onSelect }: { conv: Conversation; 
   );
 }
 
+// ── Conversation-list sort & filter ─────────────────────────────────────────
+type ListSort = 'recent' | 'oldest' | 'priority' | 'unassigned';
+const LIST_SORT_OPTIONS: { value: ListSort; label: string }[] = [
+  { value: 'recent',     label: 'Última actividad' },
+  { value: 'oldest',     label: 'Más antiguas primero' },
+  { value: 'priority',   label: 'Prioridad' },
+  { value: 'unassigned', label: 'Sin asignar primero' },
+];
+type ListFilters = { status: string[]; priority: string[]; channel: string[] };
+const EMPTY_LIST_FILTERS: ListFilters = { status: [], priority: [], channel: [] };
+const LIST_FILTER_GROUPS: { key: keyof ListFilters; label: string; options: { value: string; label: string }[] }[] = [
+  { key: 'status', label: 'Estado', options: [
+    { value: 'open', label: 'Abierta' }, { value: 'pending', label: 'Pendiente' },
+    { value: 'escalated', label: 'Escalada' }, { value: 'resolved', label: 'Resuelta' },
+  ] },
+  { key: 'priority', label: 'Prioridad', options: [
+    { value: 'high', label: 'Alta' }, { value: 'medium', label: 'Media' }, { value: 'low', label: 'Baja' },
+  ] },
+  { key: 'channel', label: 'Canal', options: [
+    { value: 'email', label: 'Email' }, { value: 'chat', label: 'Chat / Messenger' },
+    { value: 'whatsapp', label: 'WhatsApp' }, { value: 'phone', label: 'Teléfono / SMS' },
+  ] },
+];
+const PRIORITY_RANK: Record<string, number> = { critical: 4, urgent: 4, high: 3, medium: 2, normal: 2, low: 1 };
+function convActivityTs(c: Conversation): number {
+  const raw: any = c.raw || {};
+  const v = raw.last_activity_at || raw.last_message_at || raw.updated_at || raw.created_at;
+  const t = v ? new Date(v).getTime() : 0;
+  return Number.isFinite(t) ? t : 0;
+}
+function convPriorityGroup(c: Conversation): string {
+  const s = String(c.priority || '').toLowerCase();
+  if (['critical', 'urgent', 'high'].includes(s)) return 'high';
+  if (s === 'low') return 'low';
+  return 'medium';
+}
+function convChannelGroup(c: Conversation): string {
+  const ch = String(c.sourceChannel || c.channel || '').toLowerCase();
+  if (ch.includes('email')) return 'email';
+  if (ch.includes('whatsapp') || ch.includes('social')) return 'whatsapp';
+  if (ch.includes('messenger') || ch.includes('web') || ch.includes('chat')) return 'chat';
+  if (ch.includes('phone') || ch.includes('sms')) return 'phone';
+  return 'other';
+}
+function convStatusGroup(c: Conversation): string {
+  const s = String(c.status || '').toLowerCase();
+  if (['resolved', 'closed', 'done', 'completed'].includes(s)) return 'resolved';
+  if (['snoozed', 'waiting', 'pending', 'on_hold'].includes(s)) return 'pending';
+  if (['escalated', 'blocked'].includes(s)) return 'escalated';
+  return 'open';
+}
+function countActiveFilters(f: ListFilters): number {
+  return f.status.length + f.priority.length + f.channel.length;
+}
+function applyListSort(list: Conversation[], sort: ListSort): Conversation[] {
+  const arr = [...list];
+  switch (sort) {
+    case 'oldest':   arr.sort((a, b) => convActivityTs(a) - convActivityTs(b)); break;
+    case 'priority': arr.sort((a, b) => (PRIORITY_RANK[String(b.priority || '').toLowerCase()] ?? 0) - (PRIORITY_RANK[String(a.priority || '').toLowerCase()] ?? 0) || convActivityTs(b) - convActivityTs(a)); break;
+    case 'unassigned': arr.sort((a, b) => {
+      const ua = (!a.assignee && !a.raw?.assigned_user_id) ? 0 : 1;
+      const ub = (!b.assignee && !b.raw?.assigned_user_id) ? 0 : 1;
+      return ua - ub || convActivityTs(b) - convActivityTs(a);
+    }); break;
+    default: arr.sort((a, b) => convActivityTs(b) - convActivityTs(a));
+  }
+  return arr;
+}
+function applyListFilters(list: Conversation[], f: ListFilters): Conversation[] {
+  if (!countActiveFilters(f)) return list;
+  return list.filter(c =>
+    (!f.status.length   || f.status.includes(convStatusGroup(c))) &&
+    (!f.priority.length || f.priority.includes(convPriorityGroup(c))) &&
+    (!f.channel.length  || f.channel.includes(convChannelGroup(c))),
+  );
+}
+
 function ConversationList({
   selectedId,
   onSelect,
@@ -551,6 +628,10 @@ function ConversationList({
   onLoadMore,
   hasMore,
   loadingMore,
+  sortMode = 'recent',
+  onSortChange,
+  filters = EMPTY_LIST_FILTERS,
+  onFiltersChange,
 }: {
   selectedId: string;
   onSelect: (id: string) => void;
@@ -563,12 +644,37 @@ function ConversationList({
   onLoadMore?: () => void;
   hasMore?: boolean;
   loadingMore?: boolean;
+  sortMode?: ListSort;
+  onSortChange?: (s: ListSort) => void;
+  filters?: ListFilters;
+  onFiltersChange?: (f: ListFilters) => void;
 }) {
   // Infinite scroll: fire onLoadMore when the user nears the bottom.
   function handleListScroll(e: UIEvent<HTMLDivElement>) {
     if (!onLoadMore || !hasMore || loadingMore) return;
     const el = e.currentTarget;
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) onLoadMore();
+  }
+  const [sortOpen, setSortOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const sortWrapRef = useRef<HTMLDivElement | null>(null);
+  const filterWrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!sortOpen && !filterOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (sortOpen && sortWrapRef.current && !sortWrapRef.current.contains(e.target as Node)) setSortOpen(false);
+      if (filterOpen && filterWrapRef.current && !filterWrapRef.current.contains(e.target as Node)) setFilterOpen(false);
+    }
+    window.addEventListener('mousedown', onDoc);
+    return () => window.removeEventListener('mousedown', onDoc);
+  }, [sortOpen, filterOpen]);
+  const activeFilters = countActiveFilters(filters);
+  const sortLabel = LIST_SORT_OPTIONS.find(o => o.value === sortMode)?.label ?? 'Última actividad';
+  function toggleFilter(key: keyof ListFilters, value: string) {
+    if (!onFiltersChange) return;
+    const cur = filters[key];
+    const next = cur.includes(value) ? cur.filter(v => v !== value) : [...cur, value];
+    onFiltersChange({ ...filters, [key]: next });
   }
   const openCount = items.filter(conv => conv.status !== 'closed' && conv.status !== 'resolved').length;
   return (
@@ -599,12 +705,76 @@ function ConversationList({
           {loading ? 'Cargando...' : `${openCount} Abierta`}
         </button>
         <div className="flex items-center gap-1">
-          <button className="bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] px-[9px] py-[5px] rounded-full">
-            Última actividad
-          </button>
-          <button className="bg-white border border-[#e9eae6] w-6 h-6 flex items-center justify-center rounded-full">
-            <img src={ICON_FILTER} alt="" className="w-4 h-4" />
-          </button>
+          {/* Sort */}
+          <div ref={sortWrapRef} className="relative">
+            <button
+              onClick={() => { setSortOpen(o => !o); setFilterOpen(false); }}
+              title="Ordenar"
+              className={`flex items-center gap-1 border text-[13px] font-semibold text-[#1a1a1a] px-[9px] py-[5px] rounded-full ${sortOpen ? 'bg-[#ededea] border-[#d3d2cc]' : 'bg-white border-[#e9eae6] hover:bg-[#f5f5f4]'}`}
+            >
+              {sortLabel}
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
+            </button>
+            {sortOpen && (
+              <div role="menu" className="absolute right-0 top-full mt-1 z-30 w-[210px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_12px_28px_rgba(20,20,20,0.16)] py-1">
+                {LIST_SORT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => { onSortChange?.(opt.value); setSortOpen(false); }}
+                    className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${opt.value === sortMode ? 'text-[#fa7938] font-semibold' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                  >
+                    <span className="flex-1 truncate">{opt.label}</span>
+                    {opt.value === sortMode && (
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#fa7938]" strokeWidth="2"><path d="M3 8l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Filter */}
+          <div ref={filterWrapRef} className="relative">
+            <button
+              onClick={() => { setFilterOpen(o => !o); setSortOpen(false); }}
+              title="Filtros"
+              className={`relative border w-6 h-6 flex items-center justify-center rounded-full ${filterOpen || activeFilters ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'bg-white border-[#e9eae6] hover:bg-[#f5f5f4]'}`}
+            >
+              <img src={ICON_FILTER} alt="" className={`w-4 h-4 ${filterOpen || activeFilters ? 'invert' : ''}`} />
+              {activeFilters > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-[#fa7938] text-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center text-[10px] font-bold px-1 border border-white">{activeFilters}</span>
+              )}
+            </button>
+            {filterOpen && (
+              <div role="menu" className="absolute right-0 top-full mt-1 z-30 w-[230px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_12px_28px_rgba(20,20,20,0.16)] p-2">
+                <div className="flex items-center justify-between px-1 pb-1.5">
+                  <span className="text-[12px] font-bold text-[#1a1a1a]">Filtros</span>
+                  {activeFilters > 0 && (
+                    <button onClick={() => onFiltersChange?.({ status: [], priority: [], channel: [] })} className="text-[11.5px] font-semibold text-[#646462] hover:text-[#1a1a1a]">Limpiar</button>
+                  )}
+                </div>
+                {LIST_FILTER_GROUPS.map(group => (
+                  <div key={group.key} className="mb-1.5 last:mb-0">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#a4a4a2] px-1 mb-0.5">{group.label}</p>
+                    {group.options.map(opt => {
+                      const checked = filters[group.key].includes(opt.value);
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => toggleFilter(group.key, opt.value)}
+                          className="w-full flex items-center gap-2 px-1 h-8 text-[13px] text-left rounded-md hover:bg-[#f8f8f7]"
+                        >
+                          <span className={`w-4 h-4 rounded-[5px] border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#d3d2cc]'}`}>
+                            {checked && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-white" strokeWidth="2.4"><path d="M3 8l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                          </span>
+                          <span className="flex-1 truncate text-[#1a1a1a]">{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -646,8 +816,23 @@ function ConversationList({
       </div>
 
       <div className="absolute bottom-4 left-6 bg-white border border-[#e9eae6] rounded-full shadow-[0px_8px_8px_rgba(20,20,20,0.15)] flex items-center gap-1 p-[5px]">
-        <button className="bg-[#f8f8f7] rounded-full px-3 py-2"><img src={ICON_FILTER} alt="" className="w-4 h-4" /></button>
-        <button className="rounded-full px-3 py-2"><img src={ICON_SORT} alt="" className="w-4 h-4" /></button>
+        <button
+          onClick={() => { setFilterOpen(o => !o); setSortOpen(false); }}
+          title="Filtros"
+          className={`relative rounded-full px-3 py-2 ${activeFilters ? 'bg-[#1a1a1a]' : 'bg-[#f8f8f7] hover:bg-[#ededea]'}`}
+        >
+          <img src={ICON_FILTER} alt="" className={`w-4 h-4 ${activeFilters ? 'invert' : ''}`} />
+          {activeFilters > 0 && (
+            <span className="absolute -top-1 -right-1 bg-[#fa7938] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center text-[9px] font-bold px-0.5 border border-white">{activeFilters}</span>
+          )}
+        </button>
+        <button
+          onClick={() => { setSortOpen(o => !o); setFilterOpen(false); }}
+          title="Ordenar"
+          className="rounded-full px-3 py-2 hover:bg-[#f8f8f7]"
+        >
+          <img src={ICON_SORT} alt="" className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );
@@ -678,7 +863,7 @@ function normalizePrototypeMessage(message: any, index: number): Message {
   const text = message.content || message.text || message.body || message.message || '';
   const key = String(direction).toLowerCase();
   const isCustomer = ['customer', 'user', 'inbound'].includes(key);
-  const isAi = ['ai', 'assistant', 'bot', 'fin'].includes(key) || message.author_type === 'ai';
+  const isAi = ['ai', 'assistant', 'bot', 'fin'].includes(key) || (message.authorType ?? message.author_type) === 'ai';
   // The backend stores attachments as a JSON string on the messages row.
   // Parse it defensively — old rows have null, integration messages might
   // pass an array directly.
@@ -717,7 +902,9 @@ function normalizePrototypeMessage(message: any, index: number): Message {
     time: relativeTime(message.createdAt || message.created_at || message.time || message.timestamp),
     senderName: message.senderName || message.sender_name || (isAi ? 'Fin' : isCustomer ? undefined : 'Equipo'),
     attachments: attachments && attachments.length > 0 ? attachments : undefined,
-    isFinDraft: message.is_private === true && message.author_type === 'ai',
+    // request() camelizes API responses — accept both key forms defensively.
+    isFinDraft: (message.isPrivate ?? message.is_private) === true
+      && (message.authorType ?? message.author_type) === 'ai',
     confidence: typeof message.confidence === 'number' ? message.confidence
       : message.confidence != null ? Number(message.confidence) : null,
     citations: Array.isArray(message.citations) ? message.citations.map(String) : undefined,
@@ -823,7 +1010,7 @@ function FinPendingActionsBanner({ caseId, onDecided }: { caseId: string; onDeci
   useEffect(() => {
     let cancelled = false;
     finApi.listPendingActions('pending')
-      .then((all) => { if (!cancelled) setItems(all.filter((p: any) => p.case_id === caseId)); })
+      .then((all) => { if (!cancelled) setItems(all.filter((p: any) => (p.caseId ?? p.case_id) === caseId)); })
       .catch(() => { /* backend down: hide the banner */ });
     return () => { cancelled = true; };
   }, [caseId]);
@@ -4184,6 +4371,20 @@ export function InboxView() {
     }
     return liveConversations.filter(conv => matchesInboxScope(conv, scope, currentUserId));
   }, [liveConversations, scope, globalSearchQuery, searchResults, currentUserId]);
+  // List sort + filter (applied on top of the scoped set). Persisted per-browser.
+  const [listSort, setListSort] = useState<ListSort>(() => {
+    if (typeof window === 'undefined') return 'recent';
+    const v = window.localStorage.getItem('clain.inbox.sort');
+    return (v === 'recent' || v === 'oldest' || v === 'priority' || v === 'unassigned') ? v : 'recent';
+  });
+  const [listFilters, setListFilters] = useState<ListFilters>(EMPTY_LIST_FILTERS);
+  useEffect(() => {
+    try { window.localStorage.setItem('clain.inbox.sort', listSort); } catch { /* ignore */ }
+  }, [listSort]);
+  const visibleConversations = useMemo(
+    () => applyListSort(applyListFilters(scopedConversations, listFilters), listSort),
+    [scopedConversations, listFilters, listSort],
+  );
   // Sidebar counts come from the server (one RPC, no need to load every case).
   // While that request is in flight — or if it fails — we fall back to counting
   // whatever is currently loaded so the badges are never blank.
@@ -4217,7 +4418,7 @@ export function InboxView() {
     }
     return result;
   }, [serverCounts, liveConversations, currentUserId, teams, teammates]);
-  const selectedConv = scopedConversations.find(c => c.id === selectedConvId) ?? scopedConversations[0] ?? liveConversations[0];
+  const selectedConv = visibleConversations.find(c => c.id === selectedConvId) ?? visibleConversations[0] ?? liveConversations[0];
   const { data: inboxView, loading: inboxViewLoading } = useApi(
     () => selectedConv?.id ? casesApi.inboxView(selectedConv.id) : Promise.resolve(null),
     [selectedConv?.id, refreshKey],
@@ -4489,7 +4690,7 @@ export function InboxView() {
               <ConversationList
                 selectedId={selectedConv?.id || selectedConvId}
                 onSelect={setSelectedConvId}
-                items={scope === 'dashboard' ? liveConversations : scopedConversations}
+                items={scope === 'dashboard' ? liveConversations : visibleConversations}
                 loading={loading || (scope === 'search' && searchLoading)}
                 error={error ? (error?.message || 'No se pudieron cargar las conversaciones') : null}
                 title={inboxScopeTitle(scope)}
@@ -4498,6 +4699,10 @@ export function InboxView() {
                 onLoadMore={scope === 'search' ? undefined : loadMoreCases}
                 hasMore={scope === 'search' ? false : hasMore}
                 loadingMore={loadingMore}
+                sortMode={listSort}
+                onSortChange={setListSort}
+                filters={listFilters}
+                onFiltersChange={setListFilters}
               />
             </div>
           </div>
