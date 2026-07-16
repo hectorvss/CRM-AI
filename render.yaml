@@ -1,0 +1,51 @@
+# Render Blueprint — Clain background worker (Option A: dedicated always-on worker)
+#
+# Runs the SAME repo as `npm run worker` (server/worker-standalone.ts): a
+# long-lived poll loop that drains the Supabase `jobs` queue in near-real-time
+# (default QUEUE_POLL_INTERVAL_MS=1000). Channel ingestion, canonicalization,
+# reconciliation, draft/reply, SLA, agent execution and AI jobs all run here.
+#
+# No application code changes: this only adds deploy config. `tsx` lives in
+# devDependencies, so the build installs dev deps too (--include=dev) to make it
+# available at runtime. (Optional later optimization: move `tsx` to
+# `dependencies` and drop `--include=dev` for a leaner image.)
+#
+# One-click deploy: New → Blueprint → point at this repo. Then set the two
+# secret env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) in the dashboard.
+# See docs/WORKER_DEPLOY.md for the full runbook.
+
+services:
+  - type: worker
+    name: clain-worker
+    runtime: node
+    plan: starter            # bump to standard / add replicas as volume grows
+    region: frankfurt        # keep close to the Supabase region (eu-central)
+    branch: main
+    autoDeploy: true
+    buildCommand: npm install --include=dev
+    startCommand: npm run worker
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DB_PROVIDER
+        value: supabase
+      # ── Secrets — set these in the Render dashboard (sync:false = not in git) ──
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # ── Queue tuning (near-real-time defaults; safe to leave as-is) ──
+      - key: QUEUE_POLL_INTERVAL_MS
+        value: "1000"
+      - key: QUEUE_CONCURRENCY
+        value: "5"
+      - key: QUEUE_MAX_ATTEMPTS
+        value: "3"
+      # ── Optional: copy the API's integration / AI keys here so channel
+      #    ingestion + Fin can run in the worker too (leave unset to start). ──
+      # - key: ANTHROPIC_API_KEY
+      #   sync: false
+      # - key: OPENAI_API_KEY
+      #   sync: false
