@@ -378,6 +378,7 @@ export function AgentChatView({
   const [activeToolCalls, setActiveToolCalls] = useState<{ toolCallId?: string; toolName: string; args: any; result?: any; durationMs?: number; done: boolean }[]>([]);
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMode, setCurrentMode] = useState<CrmAgentMode | null>(null);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -386,11 +387,13 @@ export function AgentChatView({
   const [pendingApproval, setPendingApproval] = useState(false);
   const [trace, setTrace] = useState<{ traces: any[]; metrics: any } | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
+  const [displayedText, setDisplayedText] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const memoryToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shownCharsRef = useRef(0);
 
   // ── Load conversation list ─────────────────────────────────────────────────
   useEffect(() => {
@@ -401,10 +404,34 @@ export function AgentChatView({
       .finally(() => setLoadingHistory(false));
   }, []);
 
+  // ── Smooth typewriter: reveal streamingText char-by-char (Claude-style) ─────
+  // The SSE delivers text in bursts; instead of painting each burst at once we
+  // let a rAF loop catch up to it a few chars per frame, so the purple caret
+  // trails smoothly like Claude. shownCharsRef survives re-renders; when a new
+  // turn clears streamingText the reveal restarts from zero.
+  useEffect(() => {
+    const target = streamingText.length;
+    if (target < shownCharsRef.current) { shownCharsRef.current = 0; setDisplayedText(''); }
+    if (shownCharsRef.current >= target) return;
+    let raf = 0;
+    const step = () => {
+      const t = streamingText.length;
+      if (shownCharsRef.current >= t) return;
+      const backlog = t - shownCharsRef.current;
+      // Steady, smooth pace; nudges faster only when far behind so it never lags.
+      const perFrame = Math.min(10, Math.max(1, Math.ceil(backlog / 8)));
+      shownCharsRef.current = Math.min(t, shownCharsRef.current + perFrame);
+      setDisplayedText(streamingText.slice(0, shownCharsRef.current));
+      if (shownCharsRef.current < t) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [streamingText]);
+
   // ── Scroll to bottom ──────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingText]);
+  }, [messages, displayedText]);
 
   // ── Slash autocomplete visibility ─────────────────────────────────────────
   useEffect(() => {
@@ -960,7 +987,7 @@ export function AgentChatView({
           )}
           {streamingText ? (
             <div className="border border-[#e3e3e3] rounded-lg bg-white py-2 px-3 break-words text-[14px] leading-relaxed text-[#0d0d0d] max-w-full">
-              {renderMarkdown(streamingText)}
+              {renderMarkdown(displayedText)}
               <span className="inline-block w-[3px] h-[15px] align-middle ml-0.5 rounded-sm" style={{ background: '#8b30ff', animation: 'max-blink 1s steps(2) infinite' }} />
             </div>
           ) : (activeToolCalls.length === 0 && !reasoning) ? (
@@ -979,6 +1006,8 @@ export function AgentChatView({
         @keyframes max-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes max-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
         @keyframes max-blink { 0%,100%{opacity:1} 50%{opacity:0} }
+        .agent-hero-word { opacity:0; animation: agent-hero-in .5s cubic-bezier(.2,.7,.2,1) forwards; }
+        @keyframes agent-hero-in { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
       `}</style>
       {/* Memory toast */}
       {memoryToast && (
@@ -993,8 +1022,8 @@ export function AgentChatView({
       )}
 
       <div className="flex flex-1 min-h-0">
-        {/* Single, minimal chat column — no side panels, no conversation list */}
-        <div className="flex flex-1 min-w-0 h-full">
+        {/* Chat column + collapsible conversations sidebar */}
+        <div className="flex flex-1 min-w-0 h-full gap-2">
 
           {/* Active chat area */}
           <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
@@ -1020,13 +1049,29 @@ export function AgentChatView({
                   Nuevo
                 </button>
               )}
+              {/* Toggle the collapsible conversations sidebar */}
+              <button
+                onClick={() => setSidebarOpen(v => !v)}
+                title={sidebarOpen ? 'Cerrar conversaciones' : 'Abrir conversaciones'}
+                aria-label={sidebarOpen ? 'Cerrar la barra de conversaciones' : 'Abrir la barra de conversaciones'}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 ${sidebarOpen ? 'bg-[#f0f0ef] text-[#646462]' : 'text-[#9a9a98] hover:bg-[#f3f3f1] hover:text-[#646462]'}`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M15 3v18" />
+                </svg>
+              </button>
             </div>
 
             {/* Messages — centered Max thread */}
             <div className="flex-1 overflow-y-auto min-h-0 px-4 py-5">
               {messages.length === 0 && !streaming ? (
                 <div className="flex flex-col items-center justify-center h-full text-center px-8">
-                  <h2 className="text-[22px] font-semibold text-[#1a1a1a]">¿En qué te ayudo?</h2>
+                  <h1 className="agent-hero flex flex-wrap justify-center gap-x-2.5 gap-y-1 text-[34px] sm:text-[44px] font-semibold tracking-tight text-[#1a1a1a]">
+                    {['¿En', 'qué', 'puedo', 'ayudarte?'].map((word, i) => (
+                      <span key={word} className="agent-hero-word inline-block" style={{ animationDelay: `${120 + i * 80}ms` }}>{word}</span>
+                    ))}
+                  </h1>
                 </div>
               ) : (
                 <div className="@container/thread flex flex-col w-full max-w-[720px] mx-auto gap-1.5">
@@ -1103,6 +1148,55 @@ export function AgentChatView({
               </div>
             </div>
           </div>
+
+          {/* Collapsible conversations sidebar — hidden by default, opens on demand */}
+          {sidebarOpen && (
+            <aside className="w-[280px] flex-shrink-0 bg-[#fbfbf9] rounded-[12px] border border-[#e9eae6] flex flex-col overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">Conversaciones</span>
+                <button
+                  onClick={newConversation}
+                  title="Nueva conversación"
+                  className="w-6 h-6 rounded-md hover:bg-[#e9eae6] flex items-center justify-center text-[#646462] transition-colors"
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10" /></svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto py-1">
+                {loadingHistory ? (
+                  <div className="px-3 py-2 text-[12px] text-[#9a9a98]">Cargando…</div>
+                ) : conversations.length === 0 ? (
+                  <div className="px-3 py-4 text-[12px] text-[#9a9a98] text-center">Sin conversaciones</div>
+                ) : (
+                  conversations.map(c => (
+                    <div
+                      key={c.id}
+                      onClick={() => openConversation(c.id)}
+                      className={`group relative flex items-start px-3 py-2 pr-8 cursor-pointer hover:bg-[#f3f3f1] transition-colors ${activeConversationId === c.id ? 'bg-[#f0f0ef]' : ''}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-medium text-[#1a1a1a] truncate">{c.title || 'Sin título'}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <p className="text-[11px] text-[#9a9a98]">{c.messageCount ?? c.message_count ?? 0} msgs</p>
+                          {c.updatedAt || c.updated_at ? (
+                            <p className="text-[10px] text-[#b4b4b0]">{relativeTime(c.updatedAt ?? c.updated_at)}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <button
+                        onClick={e => deleteConv(c.id, e)}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-md flex items-center justify-center text-[#9a9a98] hover:text-[#ef4444] hover:bg-[#e9eae6] opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none transition-opacity"
+                        title="Eliminar conversación"
+                        aria-label="Eliminar conversación"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.5 8.5h5l.5-8.5" /></svg>
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </aside>
+          )}
         </div>
       </div>
 
