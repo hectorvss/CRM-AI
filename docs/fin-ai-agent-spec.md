@@ -1,210 +1,329 @@
-# Fin AI Agent — especificación del agente de soporte
+# Fin AI Agent — especificación v2 (arquitectura competitiva)
 
-> **Qué es.** Fin AI Agent es el agente autónomo de cara al cliente: el que conversa
-> constantemente con los usuarios finales en todos los canales (chat/widget, email,
-> WhatsApp, teléfono…), resuelve solo lo que puede resolver con confianza y escala el
-> resto a humanos con el mejor borrador posible.
+> **Qué es.** Fin AI Agent es el agente autónomo de cara al cliente de Clain: conversa
+> constantemente con los usuarios finales en todos los canales, resuelve de forma
+> autónoma (respuestas + acciones reales en sistemas externos) y escala a humanos con
+> contexto cuando no debe o no puede resolver.
 >
-> **Qué NO es.** No es el súper agente del operario (`server/agents/chatAgent` en modo
-> `operator`, el copiloto del dashboard). Son dos sistemas **desacoplados por diseño**,
-> replicando la separación Max ↔ Conversations de PostHog (ver
-> [posthog-support-agent-analysis.md](posthog-support-agent-analysis.md)). Comparten
-> solo la capa de datos y el catálogo de tools; nada más.
+> **Objetivo competitivo.** Paridad funcional con **Fin de Intercom (Fin 3)** — el
+> referente del mercado (~76% de resolución media, $0.99/resolución). Esta v2 sustituye
+> a la v1 (que replicaba solo el pipeline batch de PostHog Conversations) por una
+> arquitectura de motor completo: tiempo real, procedimientos con acciones de
+> escritura, testing con simulaciones y un motor de outcomes facturable.
 >
-> Fuente de diseño: pipeline `products/conversations` de PostHog (repo local Txlemetry).
-> Regla del proyecto: **portar antes que inventar** — prompts, constantes, umbrales y
-> flujos se copian/adaptan de ahí citando el origen.
+> **Qué NO es.** No es el copiloto del operario (`server/agents/chatAgent` en modo
+> `operator`). Dos sistemas desacoplados; comparten capa de datos, catálogo de tools y
+> providers LLM. Nada más.
+>
+> Fuentes de diseño: análisis del Fin real (ver §11), pipeline PostHog Conversations
+> ([posthog-support-agent-analysis.md](posthog-support-agent-analysis.md)) para los
+> patrones de implementación, y el principio del proyecto: portar antes que inventar.
 
 ---
 
-## 1. Principios
+## 0. Principios
 
-1. **Completamente configurable.** Toda decisión del agente (si responde, cómo, en qué
-   canales, con qué tono, con qué límites) es configuración por workspace, no código.
-   La superficie de configuración ya existe como UI (las pantallas Fin del prototipo,
-   §5); esta spec define las claves que hay detrás.
-2. **Contexto amplio.** El agente no responde "de memoria del modelo": responde con
-   (a) la conversación completa, (b) la base de conocimiento del workspace (RAG),
-   (c) los datos reales del cliente (pedidos, pagos, casos previos, eventos de sesión)
-   y (d) la memoria persistente del workspace (CoreMemory). Presupuestos de tokens por
-   fuente y compactación de ventana (~100k) para no desbordar.
-3. **Capacidad completa, con puertas.** El agente puede *leer* todo (superficie
-   `support_readonly` del toolkit, hoy 61 tools) y *actuar* solo a través de gates:
-   borrador privado por defecto, publicación solo con opt-in por canal+tipo, acciones
-   de escritura solo vía procedimientos aprobados (§7).
-4. **Seguro por defecto.** Safety gate de entrada (prompt injection) y de salida (PII/
-   exfiltración) como etapas separadas del pipeline. Lo que no pasa, se escala.
-5. **Idempotente y auditable.** Un run por ticket con ID determinista
-   (`support-reply-<case_id>`), estado de cada etapa persistido en `ai_triage`,
-   todo evento en `audit_events`.
+1. **Completamente configurable** — cada decisión del agente es configuración por
+   workspace (§8), administrada desde las pantallas Fin ya existentes en la UI.
+2. **Contexto amplio** — conversación completa multi-turno + conocimiento (RAG
+   híbrido) + datos reales del cliente + memoria del workspace, con presupuestos de
+   tokens por fuente.
+3. **Capacidad completa** — no solo responde: **actúa**. Lecturas libres (toolkit
+   `support_readonly`) y escrituras reales vía Procedimientos con conectores,
+   verificación de identidad y política por-acción (§5).
+4. **Seguro por defecto** — safety gates de entrada/salida, validación de grounding
+   independiente, escalado automático ante riesgo, todo auditado.
+5. **Medible y facturable** — cada conversación termina en exactamente un outcome de
+   una taxonomía cerrada (§7); la resolución es la métrica primaria de TODO el sistema
+   (hasta del entrenamiento del retrieval).
 
-## 2. Arquitectura (blueprint PostHog Conversations → stack propio)
+## 1. El motor — pipeline por mensaje (tiempo real)
+
+A diferencia de la v1 (cron batch cada 1 min), el motor es **event-driven**: cada
+mensaje entrante del cliente encola un run. El debounce depende del canal: chat ~5 s
+de settle (el cliente puede seguir escribiendo), email 2 min, voz inmediato.
+Un run por conversación a la vez (lock por `conversation_id`), ID determinista
+`fin-run-<case_id>-<n>` (idempotencia).
 
 ```
-[Canales: widget/email/whatsapp/…]                [Coordinador (cron 1 min)]
-        │ crea/actualiza case+conversation                │ gates + caps
-        ▼                                                 ▼
-   cases / conversations / messages  ◄────────  SupportReplyPipeline (por ticket)
-                                                  1. build_context
-                                                  2. safety gate entrada
-                                                  3. classify (how_to/diagnostic/
-                                                     account_billing/unactionable)
-                                                  4. loop refine→retrieve→draft→validate
-                                                     (máx 5 intentos, confianza ≥ 0.5)
-                                                  5. safety gate salida
-                                                  6. persist_reply (privado|publicado)
-                                                  7. persist_knowledge_gap
+mensaje del cliente
+  │
+  ▼
+[E1 REFINAR]  safety-in (injection/autolesión/ilegal) · detección de idioma ·
+  │           reescritura de la consulta con historial multi-turno ·
+  │           chequeo de triggers: ¿procedimiento por intención? ¿custom answer?
+  │           ¿workflow? · resolución de audiencia (¿debe Fin atender a este user?) ·
+  │           carga de guidance aplicable (ANTES de buscar contenido)
+  ▼
+[E2 RECUPERAR] retrieval híbrido (§3): vector + full-text sobre todas las fuentes →
+  │            ~40 candidatos → rerank → top-k con citas
+  ▼
+[E3 GENERAR]  con guidance + contexto de cliente + fuentes:
+  │             a) si ambigüedad → PREGUNTA DE CLARIFICACIÓN (nunca adivinar)
+  │             b) si intención ejecutable → correr PROCEDIMIENTO (§5)
+  │             c) si no → redactar respuesta fundamentada con citas
+  ▼
+[E4 VALIDAR]  juez independiente: ¿responde a la pregunta? ¿fundamentada SOLO en las
+  │           fuentes? ¿cumple guidance/políticas? ¿PII/exfiltración? →
+  │           score < umbral → reintento con feedback (máx N) o escalado
+  ▼
+[E5 ENTREGAR] publicar según política del canal (§6) · streaming SSE en chat ·
+  │           registrar citas + razonamiento para answer-inspection
+  ▼
+[E6 OUTCOME]  máquina de estados de la conversación (§7): esperar confirmación /
+              timeout → confirmed/assumed resolution · handoff · escalated · abandoned
+              → alimenta analytics, facturación y knowledge gaps
 ```
 
-- **Coordinador**: cron (node-cron en Express; pg_cron cuando haya workers) cada
-  1 minuto. Gates: flag maestro, `fin.enabled` por workspace, canal habilitado,
-  consentimiento IA de la organización, dedupe (no tocar tickets ya respondidos).
-  Debounce: última actividad del cliente hace ≥2 min y ≤5 min. Caps: 10 tickets/
-  workspace/tick, 50 global.
-- **Pipeline**: cadena de llamadas con estado por etapa en `cases.ai_triage` (JSON)
-  para poder reanudar. No hace falta Temporal al principio; una tabla de jobs +
-  reintentos basta.
-- **Modelos**: utility (classify/refine) = Haiku; drafting/validación = Sonnet.
-  Proveedores ya abstraídos en `server/agents/chatAgent/providers/` (Claude primario,
-  OpenAI utility, conmutable con `AGENT_PROVIDER`). Reusar, no duplicar.
-- **Política de publicación** (copiar tal cual): el mensaje del agente nace
-  `is_private=true` (sugerencia interna). Solo se publica al cliente si
-  (a) el pipeline terminó con confianza ≥ umbral, (b) el tipo es publicable
-  (por defecto **solo `how_to`**), y (c) el workspace activó `bot_reply` para ese
-  canal+tipo en `fin.reply_modes`. Si se agotan los intentos: mejor borrador como
-  nota interna (`escalated_with_best`) o escalado sin borrador (`escalated_no_reply`).
+Etapas E1/E4 usan el modelo utility (barato, rápido); E3 el modelo fuerte. Providers
+ya abstraídos en `server/agents/chatAgent/providers/` — reusar.
 
-## 3. Contexto amplio (build_context)
+## 2. Knowledge System (el combustible)
 
-Orden de ensamblado (los bloques estáticos primero, para prompt caching):
+- **Fuentes**: artículos del Help Center (`knowledge_articles`, existe), **snippets**
+  internos (contenido solo-para-Fin, no público), **PDFs y URLs** (pipeline de
+  ingesta: crawl → extracción → chunking ~500-1000 tokens con solape → embeddings),
+  y **conversaciones pasadas resueltas** (curadas: solo hilos con resolución
+  confirmada, anonimizados).
+- **Targeting por audiencia**: cada pieza de contenido puede restringirse por plan /
+  región / marca / canal — el retrieval filtra por la audiencia del cliente ANTES de
+  buscar.
+- **Multilingüe**: embeddings multilingües desde el día 1 (responder en el idioma del
+  cliente aunque el contenido esté en otro). Objetivo: 40+ idiomas.
+- **Custom answers**: respuestas fijadas por el equipo para consultas concretas
+  (matching en E1, cortocircuitan el pipeline).
+- **Almacén**: `knowledge_embeddings` (existe) sobre pgvector; añadir tabla
+  `fin_content_chunks` (chunk, fuente, audiencia, idioma, hash para re-embedding
+  incremental).
 
-1. **System prompt** = identidad + orientación del workspace (§5 Capacitar/Orientación)
-   + reglas anti-injection con fences dinámicos alrededor de contenido de terceros.
-2. **CoreMemory del workspace** (tabla `agent_core_memory`, ya existe): hechos
-   persistentes del negocio (máx ~10k chars).
-3. **Conocimiento recuperado** (RAG): `knowledge_articles` + `knowledge_embeddings`
-   (ya existen) con rerank; presupuesto propio de tokens.
-4. **Datos del cliente** (solo si el tipo lo requiere, §4): perfil de `customers`,
-   pedidos/pagos/devoluciones, casos previos, eventos de sesión en ventana ±5 min.
-   Allowlist anti-PII sobre propiedades expuestas al modelo.
-5. **La conversación** completa (compactada si excede ventana).
+## 3. Retrieval Engine (dónde se gana la calidad)
 
-## 4. Capacidad: toolkit y scopes por tipo de ticket
+Fin de Intercom usa modelos propios (`fin-cx-retrieval` + `fin-cx-reranker`,
+finetuneados sobre ~2M consultas reales). Nuestra escalera:
 
-La superficie ya existe: `server/agents/chatAgent/toolkit.ts` →
-`selectToolkit({ surface: 'support_readonly' })` filtra el catálogo a
-`sideEffect === 'read'` y aplica `maxRisk`/`allow`/`block`. Sobre eso:
+- **v0 (ya posible)**: búsqueda híbrida = pgvector (embedding multilingüe comercial)
+  + full-text de Postgres, unión de candidatos (~40) → **rerank con LLM utility**
+  (puntuar relevancia/actualidad/ajuste) → top 5-8 con citas.
+- **v1**: reranker dedicado (cross-encoder open-source) servido aparte; cache de
+  embeddings de consultas frecuentes.
+- **v2 (el foso de Fin, replicable)**: finetuning del modelo de embeddings con pares
+  minados de NUESTRAS conversaciones resueltas — positivos duros = chunks citados en
+  respuestas que acabaron en resolución confirmada y bien puntuados por el juez;
+  negativos duros = recuperados pero no usados y mal puntuados. Loss contrastivo
+  (InfoNCE). La métrica de entrenamiento offline es proxy; la métrica real es
+  **resolution rate** en producción. (Receta pública de Intercom: base multilingüe
+  ~0.5B params, 1 positivo + 4 negativos, 2 épocas — ver fuentes §11.)
 
-- **Scopes base** (todo ticket): knowledge:read, case:read (el propio), customer:read
-  (el propio, con allowlist).
-- **Scopes ampliados por clasificación** — copiar la semántica de PostHog:
-  `diagnostic` añade lectura de errores/eventos/sesiones; `account_billing` añade
-  billing:read del cliente. `how_to` no añade nada (solo RAG).
-- **Escrituras**: NUNCA directas. Solo mediante **Procedimientos** (§5) que compilan a
-  workflows aprobados con parámetros tipados (p. ej. "reenviar email de confirmación",
-  "crear devolución"), cada uno con su gate de riesgo y su registro de aprobación.
-  Implementación: los procedimientos publican una `pending_action` que ejecuta el
-  runtime de workflows existente, no el agente.
+## 4. Guidance (el system prompt gobernado por el cliente)
 
-## 5. Configurabilidad completa — mapeo UI → config
+Réplica del modelo de Fin:
 
-Las pantallas Fin del prototipo (importadas de Figma al 100%, hoy en
-`src/prototype/views/FinViews.tsx`) son la superficie de administración. Cada una
-gobierna claves reales bajo el blob `workspaces.settings.fin` (o tabla propia donde se
-indica):
+- **4 categorías**: `communication_style` (tono, terminología), `context_clarification`
+  (cuándo/cómo pedir aclaraciones), `content_sources` (qué fuentes usar para qué
+  temas), `other` (políticas de empresa).
+- Se cargan en E1, **antes** del retrieval — moldean cómo se busca y cómo se responde.
+- Cap de piezas activas (Fin: 100) + plantillas por categoría + preview del efecto.
+- Puede referenciar **atributos del cliente** (`{{customer.plan}}`) para personalizar.
+- Almacén: `fin.guidance[]` en settings-blob; UI ya existe (`capGuidance`).
 
-| Pantalla (FinSubView) | Configura | Claves / almacén |
+## 5. Procedures (la capacidad real — donde superamos a la v1)
+
+El equivalente a Fin Procedures (3ª generación de Intercom, sustituye a Tasks).
+**Un procedimiento es un documento**, no un árbol de decisión:
+
+- **Pasos en lenguaje natural** ("pide el número de pedido, verifica que existe…").
+- **Bloques deterministas** intercalados: condiciones if/else (NL o código),
+  **bloques de código** sandboxeados (cálculos de fechas, formateo, elegibilidad)
+  — sandbox: proceso aislado con solo los inputs del paso, sin red ni fs.
+- **Data Connectors** (§5.1) y **tools MCP** como pasos de acción.
+- **Sub-procedimientos** reutilizables.
+- **Trigger por intención**: el agente decide arrancarlo en E1/E3 comparando la
+  intención detectada con los criterios del procedimiento (no se invocan desde
+  workflows; los workflows pueden hacer handoff HACIA el agente).
+- **Ejecución**: secuencial, cada paso completa antes del siguiente; estado del run en
+  `fin_procedure_runs` (retomable). **No lineal**: si el cliente se desvía, interrumpe
+  o cambia de tema, el agente razona a qué paso volver o si cambiar de procedimiento
+  — sin scripts rígidos.
+- **Verificación de identidad** como paso nativo: OTP por email / preguntas de
+  seguridad / HMAC del widget, ANTES de toda operación sensible.
+- **Wait-for-webhook**: pausar el run hasta que un sistema externo confirme.
+- **Escalado nativo**: bucles sin progreso, petición explícita de humano, o juicio
+  sensible → handoff con resumen + estado del procedimiento.
+
+### 5.1 Data Connectors (escrituras reales, gobernadas)
+
+Cambio clave respecto a la v1 (que solo permitía escrituras vía workflows internos):
+
+- Un conector = definición de API externa o interna (auth guardada cifrada, nunca
+  visible para el modelo) + catálogo de **acciones** tipadas (schema de entrada/salida).
+- **Política por acción**: `read` (libre) · `write_auto` (el agente ejecuta solo,
+  p. ej. reenviar email de confirmación) · `write_approval` (crea `pending_action`,
+  aprueba un humano desde el inbox) · `blocked`.
+- Toda acción de escritura exige: identidad verificada + elegibilidad comprobada
+  (paso de código) + registro en `audit_events`.
+- Los conectores internos (pedidos, pagos, devoluciones del propio CRM) son el caso 1;
+  Stripe/Shopify después. El toolkit `support_readonly` existente es el catálogo
+  de lecturas internas ya hecho (61 tools).
+
+## 6. Canales y despliegue
+
+- **Chat/widget** (primero): tiempo real, streaming, `bot_reply` por defecto tras
+  opt-in. Auth de widget: `widget_session_id` anónimo o HMAC identificado.
+- **Email**: debounce 2 min, threading por In-Reply-To, borrador-privado-por-defecto
+  hasta que el workspace active bot_reply.
+- **WhatsApp/social/SMS**: como chat con adaptación de formato.
+- **Voz** (fase tardía): ASR/TTS sobre el mismo motor.
+- **Política de publicación por canal+tipo** (`fin.reply_modes`): `off` /
+  `draft_only` (sugerencia interna en el inbox) / `bot_reply` (directo al cliente).
+  Por defecto todo `draft_only` salvo opt-in explícito.
+- **Audiencias** (`fin.audiences[]`): a quién atiende el agente (plan/región/canal/
+  marca); fuera de audiencia → routing normal a humanos.
+
+## 7. Outcome Engine (medición + facturación)
+
+Copiamos la taxonomía de Fin — es también nuestro modelo de negocio (precio por
+resolución):
+
+| Outcome | Cuándo | Facturable |
 |---|---|---|
-| `allRoles` | Roles del agente (Servicio / Ventas) | `fin.roles[]` |
-| `capContent` (Capacitar·Contenido) | Fuentes de conocimiento activas | `knowledge_articles`/`knowledge_domains` + `fin.sources[]` |
-| `capGuidance` (Orientación) | Pautas de tono/estilo/contexto (system prompt del workspace) | `fin.guidance[]` (categoría, texto, activa) |
-| `capAttributes` (Atributos) | Atributos que el agente extrae por conversación (sentiment, urgency, complexity…) | `fin.attributes[]` → escribe en `ai_triage.attributes` |
-| `capEscalation` (Escalamiento) | Reglas + pautas de escalado (cuándo pasar a humano, a qué equipo) | `fin.escalation.rules[]` |
-| `capProcedures` (Procedimientos) | Acciones ejecutables (las únicas escrituras permitidas) | `fin.procedures[]` → workflows |
-| `pruebaTesting` (Pruebas) | Playground de evaluación con preguntas + rating Bueno/Aceptable/Malo | `ai_feedback` (existe) |
-| `depChat` / `depEmail` / `depPhone` (Despliegue) | Activación e identidad por canal | `fin.channels.{chat,email,phone}.{enabled, reply_mode}` |
-| `anaPerformance` / `anaTopicTrends` / `anaMonitor` (Analizar) | Solo lectura: resolución, temas, monitores | `reporting_events` + `ai_triage` agregados |
-| `changelog` | Solo lectura: histórico de cambios de config del agente | `audit_events` (scope fin) |
-| `settings` | Identidad, límites de uso/alertas, multilingüe, formalidad, botones de respuesta | `fin.identity`, `fin.limits`, `fin.locale` |
-| `settingsAudiences` | Segmentación: a qué usuarios responde el agente | `fin.audiences[]` |
-| `finWorkflows` / `finSimpleAutomations` | Orquestación alrededor del agente | `visual_flows` / `automation_rules` (existen) |
-| `studio*` (AI Studio legacy) | Catálogo avanzado de agentes/permn./safety | migrar gradualmente a las claves `fin.*` |
+| `resolution_confirmed` | el cliente confirma que le sirvió | ✔ |
+| `resolution_assumed` | el cliente se va tras la respuesta sin pedir más (timeout 24 h) | ✔ |
+| `procedure_handoff` | un procedimiento completó y terminó en handoff diseñado | ✔ |
+| `escalated` | frustración/petición de humano/regla → humano | ✘ |
+| `procedure_failure` | error técnico en un paso → escalado | ✘ |
+| `abandoned` | sin respuesta del agente o el cliente se fue tras pregunta de clarificación | ✘ |
+| `spam` | filtrado | ✘ |
 
-**Regla:** ninguna pantalla Fin debe guardar estado solo-frontend. Si falta el
-endpoint, se añade al settings-blob (`PATCH /workspaces/settings` con merge profundo,
-patrón ya usado por HelpCenter/Tickets-Portal).
+Reglas: **máximo un outcome facturable por conversación**; si el cliente vuelve a la
+misma conversación pidiendo más ayuda (incluso en otro ciclo de facturación), la
+resolución se revierte. Máquina de estados sobre `cases.ai_triage.outcome` +
+`fin_outcomes` (tabla de eventos para billing/analytics).
 
-Claves centrales del blob (resumen):
+CSAT: encuesta post-resolución (tabla `csat_survey_responses`, existe) + **CX Score**
+inferido por LLM sobre conversaciones sin encuesta (muestreo).
+
+## 8. Configuración (`workspaces.settings.fin`) — superset de la v1
 
 ```jsonc
 fin: {
-  enabled: false,                      // flag maestro por workspace
-  reply_modes: {                       // política de publicación por canal+tipo
-    chat:  { how_to: "bot_reply", diagnostic: "draft_only", account_billing: "draft_only" },
-    email: { how_to: "draft_only", "*": "off" }
-  },
-  confidence_threshold: 0.5,           // umbral del loop draft→validate
-  max_attempts: 5,
-  debounce_minutes: 2,
-  caps: { per_workspace_tick: 10 },
-  identity: { name: "Fin", tone: "…", formality: "tú", languages: ["es","en"] },
-  guidance: [...], escalation: {...}, procedures: [...], audiences: [...],
-  limits: { daily_replies: null, alert_email: null }
+  enabled: false,
+  audiences: [...],                       // a quién atiende
+  channels: { chat: {...}, email: {...}, whatsapp: {...} },
+  reply_modes: { chat: { how_to: "bot_reply", "*": "draft_only" }, email: { "*": "draft_only" } },
+  identity: { name: "Fin", tone: "friendly|professional|humorous", answer_length: "…",
+              formality: "tú|usted", languages: ["es","en"] },
+  guidance: [ { category, text, active } ],          // cap 100 activas
+  attributes: [ { name, description, type } ],       // extracción por conversación
+  escalation: { rules: [...], default_team: "…" },
+  procedures: [...],                                 // → tablas propias (§9)
+  retrieval: { top_k: 8, candidates: 40 },
+  validation: { confidence_threshold: 0.6, max_attempts: 3 },
+  debounce: { chat_seconds: 5, email_minutes: 2 },
+  caps: { concurrent_runs: 20, daily_replies: null, alert_email: null },
+  safety: { blocked_topics: [...], regional_hosting: "eu" }
 }
 ```
 
-## 6. Modelo de datos (reuso máximo)
+## 9. Modelo de datos (delta sobre lo existente)
 
-Ya existe casi todo: `cases` (ticket: status/priority/assigned/SLA vía `applied_slas`),
-`conversations` + `messages` (hilo omnicanal; el merge por conversation_id ya está
-arreglado en `server/data/cases.ts`), `knowledge_*`, `agent_core_memory`,
-`ai_feedback`, `csat_survey_responses`, `audit_events`. Añadir:
+Existente y reutilizado: `cases`, `conversations`+`messages`, `knowledge_*`,
+`agent_core_memory`, `ai_feedback`, `csat_survey_responses`, `audit_events`,
+`applied_slas`, toolkit/providers del chatAgent.
 
-1. `cases.ai_triage JSONB` — estado del pipeline por etapa + clasificación + confianza
-   + attempts (equivalente al `ai_triage` de PostHog). **Migración nueva.**
-2. `cases.ai_resolved BOOLEAN` + `cases.escalation_reason TEXT`. **Misma migración.**
-3. `messages.is_private BOOLEAN DEFAULT false` + `messages.author_type`
-   (customer/support/ai) + `messages.citations JSONB` + `messages.confidence REAL` —
-   si alguna ya existe, no duplicar. **Misma migración.**
-4. `fin_knowledge_gaps` (workspace, case_id, gap_text, status) — alimenta Capacitar.
+Nuevo (migraciones):
 
-## 7. Seguridad
+1. `cases.ai_triage JSONB` + `cases.ai_resolved BOOL` + `cases.escalation_reason TEXT`.
+2. `messages.is_private BOOL` + `messages.author_type` + `messages.citations JSONB` +
+   `messages.confidence REAL` + `messages.reasoning JSONB` (answer-inspection).
+3. `fin_content_chunks` (chunking + embeddings incrementales + audiencia + idioma).
+4. `fin_procedures` (doc NL + bloques serializados, versión, draft/live, criterios de
+   trigger) y `fin_procedure_runs` (estado por paso, retomable, resultado).
+5. `fin_connectors` + `fin_connector_actions` (auth cifrada, política por acción).
+6. `fin_pending_actions` (aprobaciones de escritura desde el inbox).
+7. `fin_outcomes` (evento por conversación: tipo, ts, revertido, facturable).
+8. `fin_simulations` (definición + últimos resultados) — §10.
+9. `fin_knowledge_gaps` (detectadas por E4/E6 → pantalla Capacitar).
 
-- Safety gates de entrada/salida como llamadas utility separadas (portar prompts).
-- Allowlist de propiedades de cliente expuestas al modelo (anti-PII).
-- Fences dinámicos alrededor de todo contenido de origen externo (mensajes del
-  cliente, artículos, resultados de tools) + reglas anti-injection en el system prompt.
-- El agente jamás ve secretos (tokens de canal, API keys) ni puede llamar tools de
-  escritura; los procedimientos ejecutan en el runtime de workflows con su propio RBAC.
-- Todo run y toda publicación → `audit_events`.
-- Recordatorio de plataforma (independiente del agente): RLS sigue deshabilitado en
-  las 110 tablas — ver [[supabase]] / memoria del proyecto. Debe resolverse antes de
-  exponer el widget público.
+## 10. Testing y calidad (condición para vender confianza)
 
-## 8. Fases de implementación
+- **Simulaciones**: un LLM hace de cliente sintético con un objetivo ("consigue
+  devolver un pedido sin número de pedido") contra el agente real en sandbox (con
+  conectores mockeados). Criterios de éxito evaluados por juez → pass/fail + traza
+  del razonamiento paso a paso. Guardables → **suite de regresión** que corre al
+  cambiar guidance/procedimientos/contenido.
+- **Batch tests de contenido**: lote de preguntas reales históricas → ¿qué % obtiene
+  respuesta fundamentada? → detecta lagunas antes de activar un canal.
+- **Preview**: probar el agente como si fueras un cliente concreto (audiencia,
+  atributos, plan) sin afectar producción. UI ya existe (`pruebaTesting` con rating
+  Bueno/Aceptable/Malo → `ai_feedback`).
+- **Answer inspection**: cada respuesta enviada guarda fuentes citadas + guidance
+  aplicada + score de validación → visible en el inbox para el operario.
+- **Drafts**: procedimientos y guidance se editan en borrador y se publican
+  explícitamente (nunca edición en caliente).
 
-- **F0 (hecho)**: toolkit con superficie `support_readonly` (61 tools read-only),
-  providers Claude/OpenAI, stores `agent_conversations`/`agent_core_memory`,
-  UI Fin completa (fidelidad Figma), inbox omnicanal con hilo real.
-- **F1 — Config real**: claves `fin.*` en settings-blob + wiring de las pantallas
-  Capacitar/Despliegue/Settings (hoy parcialmente estáticas). Migración `ai_triage`.
-- **F2 — Pipeline mínimo**: coordinador cron + classify + RAG (embeddings ya
-  existentes) + draft + validate + gates + persist como borrador privado en el hilo
-  (visible en el inbox como sugerencia). Sin publicación automática.
-- **F3 — Publicación gated**: `reply_modes` por canal+tipo, empezar por chat/how_to.
-  CSAT post-resolución. Knowledge gaps → Capacitar.
-- **F4 — Procedimientos**: acciones de escritura vía workflows aprobados + aprobación
-  humana en inbox. Scopes diagnostic (eventos/errores del cliente).
-- **F5 — Analizar**: rellenar Desempeño/Temas/Monitores con datos reales de
-  `ai_triage`/`reporting_events`.
+## 11. Analytics y optimización continua
 
-## 9. Decisiones copiadas tal cual de PostHog (no re-litigar)
+- **Métricas núcleo**: resolution rate (norte de todo el sistema), involvement rate,
+  CSAT/CX Score, deflection, tiempo a resolución, outcomes por tipo/canal/idioma.
+- **Topics Explorer**: clustering automático (embeddings) de conversaciones en
+  temas/subtemas sin etiquetado manual → pantalla Analizar·Temas.
+- **AI recommendations**: detectar contenido infrautilizado/desactualizado, lagunas
+  recurrentes (de `fin_knowledge_gaps`), procedimientos con alta tasa de fallo →
+  sugerencias accionables en Capacitar.
+- Todo alimenta las pantallas Analizar (`anaPerformance`, `anaTopicTrends`,
+  `anaMonitor`) ya importadas.
 
-- Mensajes IA privados por defecto; publicación gated por tipo+canal+opt-in.
-- Debounce de 2 min (no responder mientras el cliente sigue escribiendo).
-- IDs de run deterministas por ticket (cero borradores duplicados).
-- Safety gates entrada/salida como etapas separadas.
-- Loop draft→validate con umbral de confianza y realimentación de gaps.
-- Escalado a humano SIEMPRE con el mejor borrador adjunto.
-- Registro de knowledge gaps que alimenta la base de conocimiento.
-- Modelos: utility barato para clasificar, modelo fuerte para redactar/validar.
+## 12. Seguridad y confianza
+
+- Safety gates E1 (injection, autolesión, contenido de menores, jailbreak, consejo
+  médico/legal/financiero de riesgo → escalado inmediato) y E4 (PII/exfiltración).
+- Fences dinámicos alrededor de TODO contenido externo (mensajes, artículos,
+  resultados de conectores).
+- Checklist OWASP LLM Top-10 como criterio de revisión de cada release del motor.
+- Proveedores LLM con zero-retention; opción de región de inferencia (EU).
+- El modelo nunca ve credenciales de conectores ni claves; RBAC del runtime.
+- **Prerrequisito de plataforma**: habilitar RLS (hoy deshabilitado en 110 tablas)
+  antes de exponer el widget público.
+
+## 13. Fases (revisión v2)
+
+- **F0 (hecho)**: toolkit `support_readonly`, providers, stores del agente, UI Fin
+  completa, inbox omnicanal real.
+- **F1 — Config + datos**: claves `fin.*`, migraciones §9 (1-2), wiring de pantallas
+  Capacitar/Despliegue/Settings/Audiencias.
+- **F2 — Motor de respuesta (chat, draft_only)**: pipeline E1-E5 event-driven con
+  retrieval híbrido v0 + validación + citas; respuestas como sugerencia interna en el
+  inbox. Preview + answer inspection.
+- **F3 — Resolución en vivo**: bot_reply gated en chat, Outcome Engine completo (§7),
+  CSAT, Topics v0, knowledge gaps.
+- **F4 — Procedures + Connectors**: editor de procedimientos (pantalla existe),
+  runs retomables, identity verification, conectores internos con política por acción
+  y aprobaciones en inbox. Simulaciones v0.
+- **F5 — Email + retrieval v1**: canal email con threading, reranker dedicado,
+  batch tests, suite de regresión.
+- **F6 — Escala**: finetuning del retrieval con datos propios (§3 v2), Topics
+  completo, AI recommendations, WhatsApp/social, multilingüe 40+, voz (exploración).
+
+## 14. Paridad competitiva (checklist contra Fin 3)
+
+| Capacidad Fin 3 | Nuestro equivalente | Fase |
+|---|---|---|
+| AI Engine (refine→retrieve→rerank→generate→validate) | Pipeline E1-E5 | F2 |
+| Custom retrieval+reranker finetuneados | Escalera §3 v0→v2 | F2→F6 |
+| Guidance (4 categorías, pre-retrieval, cap 100) | §4 | F1-F2 |
+| Procedures (NL+código+conectores+MCP+subproc.) | §5 | F4 |
+| Data Connectors con escrituras + identity verification | §5.1 | F4 |
+| Simulaciones + regresión + batch tests + preview | §10 | F4-F5 |
+| Outcomes facturables (1/conversación, reversión) | §7 | F3 |
+| Topics Explorer + AI recommendations | §11 | F3→F6 |
+| Audiencias por plan/región/marca/canal | §6 | F1 |
+| 45+ idiomas / respuestas multilingües | §2 | F2 (base) → F6 |
+| Canales: chat/email/WhatsApp/voz | §6 | F2→F6 |
+| Trust (OWASP, zero-retention, hosting regional) | §12 | transversal |
+
+## 15. Fuentes de la investigación (2026-07-16)
+
+- Intercom Help: [The Fin AI Engine™](https://www.intercom.com/help/en/articles/9929230-the-fin-ai-engine) · [Fin AI Agent explained](https://www.intercom.com/help/en/articles/7120684-fin-ai-agent-explained) · [Fin Procedures explained](https://www.intercom.com/help/en/articles/12495167-fin-procedures-explained) · [Fin Tasks & Data Connectors](https://www.intercom.com/help/en/articles/9569407-fin-tasks-and-data-connectors-explained) · [Fin AI Agent outcomes](https://www.intercom.com/help/en/articles/8205718-fin-ai-agent-outcomes) · [Fin Guidance](https://www.intercom.com/help/en/articles/10210126-provide-fin-ai-agent-with-specific-guidance)
+- fin.ai: [The Fin AI Engine](https://fin.ai/ai-engine) (fin-cx-retrieval, fin-cx-reranker, Fin Apex 1.0; 76% resolución media; 65% menos alucinaciones) · [Finetuning Retrieval for Fin](https://fin.ai/research/finetuning-retrieval-for-fin/) (Arctic 2 + InfoNCE + hard negatives de 2M consultas) · [Fin Procedures](https://fin.ai/procedures)
+- Pricing/outcomes de terceros: [aimdoc](https://aimdoc.ai/blog/intercom-resolution-pricing-explained) · [gleap](https://www.gleap.io/blog/intercom-fin-ai-pricing-2026)
+- Interno: [posthog-support-agent-analysis.md](posthog-support-agent-analysis.md) (patrones de implementación: debounce, IDs deterministas, safety gates separados, draft privado por defecto).
