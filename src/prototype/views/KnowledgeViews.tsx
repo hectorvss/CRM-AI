@@ -7,6 +7,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { agentsApi, connectorsApi, knowledgeApi } from '../../api/client';
 import { Dropdown, KH_TYPE_OPTIONS, KnowledgeArticleEditor, LibraryIcon, TrialBanner, relativeTime, titleCase } from '../sharedUi';
+import { parsePath, replaceRoute } from '../router';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1775,13 +1776,19 @@ function KnowledgeCentroAyuda({
 
 function readInitialKnowledgeSubFromUrl(): KnowledgeSubView {
   if (typeof window === 'undefined') return 'fuentes';
-  const s = new URLSearchParams(window.location.search).get('sub');
+  const { view, sub: s } = parsePath();
+  if (view !== 'knowledge' || !s) return 'fuentes';
   const known: KnowledgeSubView[] = ['fuentes','contenido','articulos','gaps','pruebas','centroAyuda','carpeta'];
-  return s && (known as string[]).includes(s) ? (s as KnowledgeSubView) : 'fuentes';
+  return (known as string[]).includes(s) ? (s as KnowledgeSubView) : 'fuentes';
 }
 
 export function KnowledgeView() {
   const [sub, setSub] = useState<KnowledgeSubView>(() => readInitialKnowledgeSubFromUrl());
+  // Sync /knowledge/:sub so deep-links + reload land on the right sub-view.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    replaceRoute({ view: 'knowledge', sub });
+  }, [sub]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   // null = closed, 'create' = creating, { id, name, description } = editing.
   const [folderModal, setFolderModal] = useState<null | 'create' | { id: string; name: string; description?: string }>(null);

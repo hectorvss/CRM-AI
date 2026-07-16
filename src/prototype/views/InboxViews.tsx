@@ -8,6 +8,7 @@ import { aiApi, attachmentsApi, casesApi, customersApi, iamApi, inboxesApi, macr
 import { useApi } from '../../api/hooks';
 import { AVATAR_ME, ICON_ALL, ICON_CREATED, ICON_DASHBOARD, ICON_EMAIL2, ICON_ESCALATED, ICON_FILTER, ICON_FIN, ICON_FIN_SVC, ICON_MANAGE, ICON_MENTION, ICON_MESSENGER, ICON_PENDING, ICON_PHONE2, ICON_SEARCH2, ICON_SORT, ICON_SPAM, ICON_TICKETS, ICON_UNASSIGNED, ICON_WHATSAPP2, SettingsSidebar, TrialBanner, messages, relativeTime, titleCase } from '../sharedUi';
 import type { Attachment, Conversation, Message, View } from '../types';
+import { parsePath, pathFor, replaceRoute } from '../router';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3166,7 +3167,7 @@ function CustomerRecentConvsSection({ customerId, currentCaseId }: { customerId:
         {others.map((c: any) => (
           <a
             key={c.id}
-            href={`/?view=inbox&scope=all&case=${encodeURIComponent(c.id)}`}
+            href={pathFor({ view: 'inbox', scope: 'all', caseId: c.id })}
             className="flex items-center justify-between rounded-lg bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2 hover:bg-[#ededea]"
           >
             <div className="min-w-0">
@@ -3392,7 +3393,7 @@ function SimilarConversationsSection({ customerId, currentCaseId }: { customerId
         {ranked.map(({ c, overlap }) => (
           <a
             key={c.id}
-            href={`/?view=inbox&scope=all&case=${encodeURIComponent(c.id)}`}
+            href={pathFor({ view: 'inbox', scope: 'all', caseId: c.id })}
             className="flex items-center justify-between rounded-lg bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2 hover:bg-[#ededea]"
           >
             <div className="min-w-0">
@@ -3787,7 +3788,7 @@ function DetailsSidebar({
                 return (
                   <a
                     key={targetId}
-                    href={`/?view=inbox&scope=all&case=${encodeURIComponent(targetId)}`}
+                    href={pathFor({ view: 'inbox', scope: 'all', caseId: targetId })}
                     title="Abrir esta conversación"
                     className="rounded-xl bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2 hover:bg-[#ededea] hover:border-[#d3cec6] block"
                   >
@@ -3824,15 +3825,16 @@ function DetailsSidebar({
 }
 
 // Read inbox-specific deep-link params from the URL once at mount.
-// Supports: ?scope=<InboxScope>  ?case=<caseId>  (?entityType=case is acknowledged
-// but currently only 'case' is wired to the inbox.)
+// Path form: /inbox/:scope/:caseId (with a legacy ?scope=&case= fallback,
+// handled inside router.parsePath).
 function readInitialInboxParams(): { scope: InboxScope; caseId: string } {
   if (typeof window === 'undefined') return { scope: 'inbox', caseId: '' };
-  const sp = new URLSearchParams(window.location.search);
-  const scopeRaw = sp.get('scope') || '';
+  const { view, scope, caseId } = parsePath();
+  if (view !== 'inbox') return { scope: 'inbox', caseId: '' };
   const knownScopes: InboxScope[] = ['inbox','mentions','created','all','unassigned','spam','dashboard','fin-all','fin-resolved','fin-escalated','fin-pending','fin-spam','v-messenger','v-email','v-whatsapp','v-phone','v-tickets'];
-  const scope = (knownScopes as string[]).includes(scopeRaw) ? (scopeRaw as InboxScope) : 'inbox';
-  return { scope, caseId: sp.get('case') || '' };
+  const isDynamic = typeof scope === 'string' && (scope.startsWith('team:') || scope.startsWith('agent:'));
+  const resolvedScope = scope && ((knownScopes as string[]).includes(scope) || isDynamic) ? (scope as InboxScope) : 'inbox';
+  return { scope: resolvedScope, caseId: caseId || '' };
 }
 
 // CollapsedRail — thin (28px) bar shown in place of a hidden sidebar. Click
@@ -4099,22 +4101,14 @@ export function InboxView() {
     return () => window.removeEventListener('keydown', handler);
   }, [scopedConversations, liveConversations, selectedConv?.id]);
 
-  // Reflect scope + selected case in the URL so deep-links survive reloads
-  // and back/forward navigation. Only writes when something actually changed.
+  // Reflect scope + selected case in the URL as a clean path
+  // (/inbox/:scope/:caseId) so deep-links survive reloads and back/forward.
+  // 'search' is a transient UI mode, not a shareable scope — don't put it in
+  // the path. replaceRoute refines in place (no history spam per keystroke).
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const url = new URL(window.location.href);
-    let dirty = false;
-    if (url.searchParams.get('scope') !== scope) {
-      url.searchParams.set('scope', scope);
-      dirty = true;
-    }
-    const targetCase = selectedConv?.id || '';
-    if (targetCase && url.searchParams.get('case') !== targetCase) {
-      url.searchParams.set('case', targetCase);
-      dirty = true;
-    }
-    if (dirty) window.history.replaceState({}, '', url.toString());
+    const scopeForUrl = scope === 'search' ? undefined : scope;
+    replaceRoute({ view: 'inbox', scope: scopeForUrl, caseId: selectedConv?.id || undefined });
   }, [scope, selectedConv?.id]);
 
   function showToast(message: string, type: 'success' | 'error' = 'success') {
@@ -4211,9 +4205,7 @@ export function InboxView() {
               teammates={teammates}
               onTeamsChanged={() => setTeamsRefresh(k => k + 1)}
               onNewTeammate={() => {
-                const url = new URL(window.location.href);
-                url.searchParams.set('view', 'workspaceTeammates');
-                window.location.href = url.toString();
+                window.dispatchEvent(new CustomEvent('app-navigate', { detail: { view: 'workspaceTeammates' } }));
               }}
             />
         ) : (

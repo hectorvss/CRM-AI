@@ -12,6 +12,7 @@ import SuperAgent from '../../components/SuperAgent';
 import { FIGMA_CDN, IMG_FIN_DEPLOY_CHAT, IMG_FIN_DEPLOY_EMAIL, IMG_FIN_PRO_TRIAL_BANNER, IMG_FIN_VOICE_BANNER } from '../assets';
 import { Dropdown, IMG_FIN_LOGO_MARK, IMG_FIN_SALES_AGENT, IMG_FIN_SERVICE_AGENT, KnowledgeArticleEditor, KnowledgeContentLibrary, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, SettingsSidebar, TrialBanner } from '../sharedUi';
 import type { DropdownItem, View } from '../types';
+import { parsePath, replaceRoute } from '../router';
 
 
 // ─── Fin client-side resource store (localStorage-backed CRUD) ───────────────
@@ -6708,10 +6709,12 @@ function FinVistaPreviaPanel() {
   );
 }
 
-// Read ?sub= once at mount so deep-links land on the right Fin sub-view.
+// Read the /fin/:sub path once at mount so deep-links land on the right Fin
+// sub-view (with a legacy ?sub= fallback handled by router.parsePath).
 function readInitialFinSubFromUrl(): FinSubView {
   if (typeof window === 'undefined') return 'allRoles';
-  const s = new URLSearchParams(window.location.search).get('sub');
+  const { view, sub: s } = parsePath();
+  if (view !== 'fin' || !s) return 'allRoles';
   const known: FinSubView[] = [
     'allRoles','anaGetStarted',
     'capacitar','capContent','capGuidance','capAttributes','capEscalation','capProcedures',
@@ -6742,14 +6745,10 @@ export function FinAiView() {
     try { window.localStorage.setItem('clain.fin.panels', JSON.stringify({ sidebar: sidebarCollapsed })); } catch { /* storage may be disabled */ }
   }, [sidebarCollapsed]);
 
-  // Sync ?sub= with current state so back/forward + reload work.
+  // Sync /fin/:sub with current state so back/forward + reload work.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const url = new URL(window.location.href);
-    if (url.searchParams.get('sub') !== sub) {
-      url.searchParams.set('sub', sub);
-      window.history.replaceState({}, '', url.toString());
-    }
+    replaceRoute({ view: 'fin', sub });
   }, [sub]);
 
   // When AIStudio's own internal links flip its activeTab, mirror that to the

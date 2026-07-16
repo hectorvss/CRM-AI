@@ -8,6 +8,7 @@ import { useApi } from '../../api/hooks';
 import { casesApi, customersApi, emailTemplatesApi, workflowsApi } from '../../api/client';
 import Workflows from '../../components/Workflows';
 import { Dropdown, KnowledgePlaceholder, TrialBanner, messages } from '../sharedUi';
+import { parsePath, replaceRoute } from '../router';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2110,13 +2111,19 @@ function OutboundSeries() {
 
 function readInitialOutboundSubFromUrl(): OutboundSubView {
   if (typeof window === 'undefined') return 'mensajes';
-  const s = new URLSearchParams(window.location.search).get('sub');
+  const { view, sub: s } = parsePath();
+  if (view !== 'outbound' || !s) return 'mensajes';
   const known: OutboundSubView[] = ['mensajes', 'series', 'ultimo', 'borradores', 'ajustes'];
-  return s && (known as string[]).includes(s) ? (s as OutboundSubView) : 'mensajes';
+  return (known as string[]).includes(s) ? (s as OutboundSubView) : 'mensajes';
 }
 
 export function OutboundView() {
   const [sub, setSub] = useState<OutboundSubView>(() => readInitialOutboundSubFromUrl());
+  // Sync /outbound/:sub so deep-links + reload land on the right sub-view.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    replaceRoute({ view: 'outbound', sub });
+  }, [sub]);
   function renderSub() {
     switch (sub) {
       case 'mensajes':   return <OutboundMensajes />;

@@ -5,6 +5,7 @@
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useApi } from '../api/hooks';
+import { parsePath, pushRoute, currentHeadSegment } from './router';
 import { iamApi, workspacesApi } from '../api/client';
 import SuperAgent from '../components/SuperAgent';
 import { AgentChatView } from './views/AgentViews';
@@ -734,37 +735,34 @@ export default function Prototype() {
   return <PrototypeApp />;
 }
 
-// Read the initial view + inbox deep-link params from the URL once at mount
-// so links like /?view=inbox&entityType=case&case=<id>&scope=<scope> work.
-function readInitialViewFromUrl(): View {
-  if (typeof window === 'undefined') return 'inbox';
-  const v = new URLSearchParams(window.location.search).get('view');
-  // Allow only known View values; fall back to inbox.
-  const known: View[] = [
-    'inbox','contacts','allLeads','settings','imports','personal','security',
-    'notifications','visible','tokens','accountAccess','multilingual','assignments',
-    'macros','tickets','sla','aiInbox','automation','appStore','connectors','labels',
-    'people','companies','workspaceSecurity','workspaceMultilingual','workspaceHours',
-    'workspaceBrands','workspaceGeneral','workspaceTeammates','billingPlans','billing','messenger',
-    'email','phone','whatsapp','discord','sms',
-    'social','allChannels','dataConversaciones','inboxTeam','fin','knowledge','reports','outbound',
-  ];
-  return v && (known as string[]).includes(v) ? (v as View) : 'inbox';
-}
-
 function PrototypeApp() {
-  const [view, setView] = useState<View>(() => readInitialViewFromUrl());
+  // Initial view comes from the path (with a legacy ?view= fallback). See router.ts.
+  const [view, setView] = useState<View>(() => parsePath().view);
 
-  // Keep the URL ?view=... in sync with the active view so back/forward and
-  // page reloads land back on the same screen.
+  // Push a clean path on genuine view CHANGES only (not on mount) so navigation
+  // produces shareable URLs like /contacts or /inbox and never carries stale
+  // params over from the previous screen. Views with sub-state (inbox / fin /
+  // knowledge / outbound) refine their own path from within.
+  const prevView = useRef<View>(view);
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const url = new URL(window.location.href);
-    if (url.searchParams.get('view') !== view) {
-      url.searchParams.set('view', view);
-      window.history.replaceState({}, '', url.toString());
-    }
+    if (prevView.current === view) return; // mount or no change
+    prevView.current = view;
+    // Only reset the base path when we actually left the previous view's path.
+    if (currentHeadSegment() !== view) pushRoute({ view });
   }, [view]);
+
+  // Back/forward → re-sync the active view from the URL.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    function onPop() {
+      const next = parsePath().view;
+      prevView.current = next;
+      setView(next);
+    }
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // Global app-navigate event — lets deeply nested components jump to a top-level view.
   // Usage: window.dispatchEvent(new CustomEvent('app-navigate', { detail: { view: 'inbox' } }))
