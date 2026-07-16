@@ -6497,10 +6497,36 @@ function FinSettingsContent() {
 // ─── Fin · Audiencias (Figma 1:21030) ────────────────────────────────────────
 // Layout: standard settings header (icon + H1 "Audiencias" + "Crear" CTA on right)
 //         + empty-state hero card with title/body/CTA
+type FinAudience = { id: string; name: string; active: boolean; filters?: Record<string, string> };
+
 function FinAudiencesContent() {
+  const [audiences, setAudiences] = useState<FinAudience[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+
+  useEffect(() => {
+    finApi.getConfig()
+      .then((cfg) => setAudiences(Array.isArray(cfg?.audiences) ? cfg.audiences : []))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const persist = (next: FinAudience[]) => {
+    setAudiences(next);
+    finApi.patchConfig({ audiences: next }).catch(() => {});
+  };
+  const add = () => {
+    const n = name.trim();
+    if (!n) return;
+    persist([...audiences, { id: `aud_${Date.now()}`, name: n, active: true, filters: {} }]);
+    setName(''); setCreating(false);
+  };
+  const toggle = (id: string) => persist(audiences.map((a) => (a.id === id ? { ...a, active: !a.active } : a)));
+  const remove = (id: string) => persist(audiences.filter((a) => a.id !== id));
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      {/* Standard header row */}
       <div className="flex-shrink-0 px-4 pt-4 pb-4 flex items-center gap-2">
         <button className="w-8 h-8 rounded-[8px] hover:bg-[#f3f3f1] flex items-center justify-center">
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
@@ -6508,27 +6534,58 @@ function FinAudiencesContent() {
           </svg>
         </button>
         <h1 className="text-[20px] font-bold text-[#1a1a1a] leading-[24px] flex-1">Audiencias</h1>
-        <a href="#" className="inline-flex h-8 px-3 rounded-full bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] items-center">
+        <button onClick={() => setCreating(true)} className="inline-flex h-8 px-3 rounded-full bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] items-center">
           Crear audiencia
-        </a>
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-8 pt-11">
-          {/* Hero empty-state card (bg-neutral-container) */}
-          <div className="bg-[#fbfbf9] border border-[#e9eae6] rounded-[16px] px-11 py-9 max-w-[1100px]">
-            <h2 className="text-[22px] font-semibold text-[#1a1a1a] leading-[32px] tracking-[-0.2px] max-w-[640px]">
-              Segmenta tu contenido y pautas de Fin para usuarios específicos
-            </h2>
-            <p className="mt-2 text-[14px] text-[#646462] leading-[20px] max-w-[835px]">
-              Crea y administra audiencias personalizadas para controlar qué conocimientos utiliza Fin y qué pauta aplica, asegurando que los usuarios obtengan respuestas que siempre sean relevantes.
-            </p>
-            <div className="mt-6">
-              <a href="#" className="inline-flex h-8 px-3 rounded-full bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] items-center">
-                Crear tu primera audiencia
-              </a>
+        <div className="px-8 pt-8 max-w-[900px]">
+          {creating && (
+            <div className="mb-4 flex items-center gap-2 bg-white border border-[#e9eae6] rounded-[10px] p-3">
+              <input
+                autoFocus value={name} onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') add(); if (e.key === 'Escape') { setCreating(false); setName(''); } }}
+                placeholder="Nombre de la audiencia (p. ej. Clientes premium)"
+                className="flex-1 h-9 px-3 rounded-[8px] border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+              />
+              <button onClick={add} className="h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Crear</button>
+              <button onClick={() => { setCreating(false); setName(''); }} className="h-9 px-3 rounded-[8px] border border-[#e9eae6] text-[13px] text-[#646462] hover:bg-[#f8f8f7]">Cancelar</button>
             </div>
-          </div>
+          )}
+
+          {loaded && audiences.length === 0 && !creating ? (
+            <div className="bg-[#fbfbf9] border border-[#e9eae6] rounded-[16px] px-11 py-9">
+              <h2 className="text-[22px] font-semibold text-[#1a1a1a] leading-[32px] tracking-[-0.2px] max-w-[640px]">
+                Segmenta tu contenido y pautas de Fin para usuarios específicos
+              </h2>
+              <p className="mt-2 text-[14px] text-[#646462] leading-[20px] max-w-[835px]">
+                Crea audiencias para controlar qué conocimientos y pautas usa Fin. El agente ya aplica la segmentación por audiencia del contenido (usuarios / leads / visitantes) al recuperar respuestas.
+              </p>
+              <div className="mt-6">
+                <button onClick={() => setCreating(true)} className="inline-flex h-8 px-3 rounded-full bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] items-center">
+                  Crear tu primera audiencia
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {audiences.map((a) => (
+                <div key={a.id} className="flex items-center gap-3 bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-semibold text-[#1a1a1a] truncate">{a.name}</div>
+                    <div className="text-[12px] text-[#646462]">{a.active ? 'Activa' : 'Pausada'}</div>
+                  </div>
+                  <button onClick={() => toggle(a.id)} className={`h-7 px-3 rounded-full text-[12px] font-semibold ${a.active ? 'bg-[#eef7ee] text-[#3ba55d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                    {a.active ? 'Activa' : 'Pausada'}
+                  </button>
+                  <button onClick={() => remove(a.id)} title="Eliminar" className="w-7 h-7 rounded-full text-[#a4a4a2] hover:bg-[#f8f8f7] hover:text-red-600 flex items-center justify-center">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6.5 4.5V3.2c0-.4.3-.7.7-.7h1.6c.4 0 .7.3.7.7v1.3M4.5 4.5l.5 8h6l.5-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

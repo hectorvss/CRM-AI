@@ -89,8 +89,14 @@ async function loadThread(input: FinRunInput): Promise<{ history: string; latest
   };
 }
 
-async function loadCustomerContext(input: FinRunInput): Promise<string | null> {
-  // Allowlisted, PII-minimal customer snapshot (spec §3.4).
+interface CustomerSnapshot {
+  context: string | null;                 // formatted, for the prompt
+  facts: Record<string, unknown>;         // structured, for escalation rules
+  audience: 'users' | 'leads' | 'visitors'; // content-targeting token (spec §2)
+}
+
+async function loadCustomerContext(input: FinRunInput): Promise<CustomerSnapshot> {
+  // Allowlisted, PII-minimal customer snapshot (spec §3.4) + audience token.
   const supabase = getSupabaseAdmin();
   const { data: caseRow } = await supabase
     .from('cases')
@@ -98,23 +104,30 @@ async function loadCustomerContext(input: FinRunInput): Promise<string | null> {
     .eq('id', input.caseId)
     .eq('tenant_id', input.scope.tenantId)
     .maybeSingle();
-  if (!caseRow?.customer_id) return null;
+  // No linked customer → anonymous visitor.
+  if (!caseRow?.customer_id) return { context: null, facts: { case_type: caseRow?.type }, audience: 'visitors' };
   const { data: cust } = await supabase
     .from('customers')
     .select('display_name, segment, language, metadata')
     .eq('id', caseRow.customer_id)
     .eq('tenant_id', input.scope.tenantId)
     .maybeSingle();
-  if (!cust) return null;
-  const allow: Record<string, unknown> = {
-    name: cust.display_name ?? undefined,
-    segment: (cust as any).segment ?? undefined,
-    language: (cust as any).language ?? undefined,
+  const segment = (cust as any)?.segment ?? null;
+  const audience: CustomerSnapshot['audience'] =
+    /lead|prospect/i.test(String(segment)) ? 'leads' : 'users';
+  const facts: Record<string, unknown> = {
+    name: cust?.display_name ?? undefined,
+    segment: segment ?? undefined,
+    language: (cust as any)?.language ?? undefined,
     case_type: caseRow.type ?? undefined,
     case_priority: caseRow.priority ?? undefined,
   };
-  const entries = Object.entries(allow).filter(([, v]) => v !== undefined && v !== null);
-  return entries.length ? entries.map(([k, v]) => `${k}: ${v}`).join('\n') : null;
+  const entries = Object.entries(facts).filter(([, v]) => v !== undefined && v !== null);
+  return {
+    context: entries.length ? entries.map(([k, v]) => `${k}: ${v}`).join('\n') : null,
+    facts,
+    audience,
+  };
 }
 
 function resolveReplyMode(config: FinConfig, channel: string, ticketType: string): 'off' | 'draft_only' | 'bot_reply' {
@@ -215,7 +228,9 @@ export async function runFinPipeline(input: FinRunInput): Promise<FinRunResult> 
       ? { history: '', latest: input.previewQuestion, latestId: null }
       : await loadThread(input);
     if (!thread.latest.trim()) return { runId, status: 'skipped', triage: { ...triage, skip_reason: 'no_inbound_message' } };
-    const customerContext = input.previewQuestion ? null : await loadCustomerContext(input);
+    const customer = input.previewQuestion ? null : await loadCustomerContext(input);
+    const customerContext = customer?.context ?? null;
+    if (customer) triage.customer_facts = customer.facts;
 
     // ── E1: refine ────────────────────────────────────────────────────────────
     let done = t('e1_refine');
@@ -367,7 +382,7 @@ export async function runFinPipeline(input: FinRunInput): Promise<FinRunResult> 
 
     // ── E2: retrieve ──────────────────────────────────────────────────────────
     done = t('e2_retrieve');
-    const retrieval = await retrieveKnowledge(input.scope, refined.refined_query, config);
+    const retrieval = await retrieveKnowledge(input.scope, refined.refined_query, config, { audience: customer?.audience ?? null });
     done('ok', { candidates: retrieval.chunks.length, degraded: retrieval.degraded });
     triage.retrieval = { chunks: retrieval.chunks.map((c) => c.id), degraded: retrieval.degraded };
 

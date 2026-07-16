@@ -124,10 +124,21 @@ export interface RetrievalResult {
   degraded: boolean; // true when vector search was unavailable
 }
 
+/** Audience gate (spec §2): a chunk is usable for a customer if the article's
+ *  fin_audience includes the customer's token, or the article has no audience
+ *  restriction. Undefined audience ⇒ open to everyone. */
+function chunkAllowedForAudience(c: RetrievedChunk, audience?: string | null): boolean {
+  if (!audience) return true;
+  const aud = (c.metadata?.fin_audience as unknown);
+  if (!Array.isArray(aud) || aud.length === 0) return true; // unrestricted
+  return aud.map((x) => String(x).toLowerCase()).includes(audience.toLowerCase());
+}
+
 export async function retrieveKnowledge(
   scope: FinScope,
   query: string,
   config: FinConfig,
+  opts?: { audience?: string | null },
 ): Promise<RetrievalResult> {
   const half = Math.ceil(config.retrieval.candidates / 2);
   const embedding = await embedQuery(query);
@@ -143,7 +154,8 @@ export async function retrieveKnowledge(
     if (!prev) byId.set(c.id, c);
     else byId.set(c.id, { ...prev, score: Math.max(prev.score, c.score), via: [...new Set([...prev.via, ...c.via])] as any });
   }
-  const merged = [...byId.values()];
+  // Audience filter (content targeting) BEFORE rerank so budget isn't wasted.
+  const merged = [...byId.values()].filter((c) => chunkAllowedForAudience(c, opts?.audience));
   const chunks = await rerank(query, merged, config.retrieval.top_k);
   return { chunks, degraded: !embedding };
 }
