@@ -85,6 +85,34 @@ export function redactStructuredValue<T>(value: T): T {
   return out as T;
 }
 
+/**
+ * Redact ONLY credentials/secrets from a structured value — API keys, tokens,
+ * JWTs, passwords and any field whose KEY looks secret — while leaving customer
+ * PII (emails, phones, addresses) intact. Use this on tool results before they
+ * reach the LLM provider / trace: an authorized operator legitimately needs to
+ * see customer contact data, but credentials must never leak into the model
+ * context or into super_agent_traces at rest. (`redactStructuredValue` is the
+ * stricter variant that also strips PII.)
+ */
+export function redactSecretsOnly<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string') {
+    return value.replace(jwtPattern, '[REDACTED_JWT]').replace(apiKeyPattern, '[REDACTED_API_KEY]') as unknown as T;
+  }
+  if (Array.isArray(value)) return value.map((item) => redactSecretsOnly(item)) as unknown as T;
+  if (typeof value !== 'object') return value;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (sensitiveKeyPattern.test(key)) {
+      out[key] = '[REDACTED_SECRET]';
+      continue;
+    }
+    out[key] = redactSecretsOnly(nested);
+  }
+  return out as T;
+}
+
 export function classifyRiskFromArgs(toolName: string, args: unknown): RiskLevel {
   const text = redactSensitiveText(JSON.stringify(args ?? {})).toLowerCase();
 

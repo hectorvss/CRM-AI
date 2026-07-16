@@ -22,7 +22,7 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../../utils/logger.js';
 import { invokeTool } from '../planEngine/invokeTool.js';
-import { effectiveToolRisk } from '../planEngine/safety.js';
+import { effectiveToolRisk, redactSecretsOnly } from '../planEngine/safety.js';
 import { toolRegistry } from '../planEngine/registry.js';
 import { persistTrace } from '../planEngine/traceRepository.js';
 import type { ExecutionSpan, ExecutionStatus, RiskLevel } from '../planEngine/types.js';
@@ -587,11 +587,12 @@ function buildSpans(executed: StoredToolCall[], catalogByName: Map<string, Catal
     startedAt: new Date(endBase - tc.durationMs).toISOString(),
     endedAt: new Date(endBase).toISOString(),
     latencyMs: tc.durationMs,
-    args: tc.args,
-    // Spans keep the UNTRUNCATED result (faithful audit), unlike the persisted
-    // message (4KB) and the model-facing content (16KB).
+    // Redact credentials/secrets (not customer PII) from what's persisted to
+    // super_agent_traces at rest. Results stay UNTRUNCATED (faithful audit),
+    // unlike the persisted message (4KB) and the model-facing content (8KB).
+    args: redactSecretsOnly(tc.args),
     result: tc.ok
-      ? { ok: true, value: tc.result }
+      ? { ok: true, value: redactSecretsOnly(tc.result) }
       : { ok: false, error: (tc.result as any)?.error, errorCode: (tc.result as any)?.errorCode },
     riskLevel: (catalogByName.get(tc.toolName)?.risk ?? 'none') as RiskLevel,
     dryRun: false,
@@ -647,7 +648,9 @@ function summarizeArgs(args: Record<string, unknown>): string {
 function serializeForModel(value: unknown): string {
   let json: string;
   try {
-    json = JSON.stringify(value) ?? 'null';
+    // Strip credentials/secrets (not customer PII) before the result reaches the
+    // LLM provider — defense in depth on top of the untrusted-content fence.
+    json = JSON.stringify(redactSecretsOnly(value)) ?? 'null';
   } catch {
     json = String(value);
   }
