@@ -190,8 +190,8 @@ export const rootCauseAnalyzeTool: ToolSpec<RootCauseArgs, unknown> = {
 
 export const interoperabilityCheckTool: ToolSpec<{ entityType: string; entityId: string }, unknown> = {
   name: 'analysis.interoperability_check',
-  version: '1.0.0',
-  description: 'Perform a deep consistency check between SaaS modules for a specific entity (order, payment, customer). Identifies if data in Stripe, Shopify, and the CRM are out of sync.',
+  version: '2.0.0',
+  description: 'Check the canonical multi-system state of a case for REAL inconsistencies between modules (payments, orders, fulfillment, CRM). Reports the actual systems flagged warning/critical/blocked and the stored conflict — it does not fabricate mismatches and does not call external Stripe/Shopify APIs directly. Pass the related case UUID (or a customer UUID to use their latest case).',
   category: 'resolution',
   sideEffect: 'read',
   risk: 'none',
@@ -201,25 +201,57 @@ export const interoperabilityCheckTool: ToolSpec<{ entityType: string; entityId:
     entityType: s.string({ description: 'Type of entity to check: order, payment, customer' }),
     entityId: s.string({ description: 'UUID or external ID of the entity' }),
   }),
-  returns: s.any('Detailed interoperability report with detected mismatches'),
+  returns: s.any('Interoperability report derived from the canonical case state'),
   async run({ args, context }) {
     const scopeValue = scope(context);
-    // In a real system, this would call multiple repository methods and compare results.
-    // For now, we simulate the reconciliation logic.
-    
-    const mismatches: string[] = [];
-    let status = 'synced';
-
-    // Simulated check logic
-    if (args.entityType === 'order') {
-       // Logic to check Shopify vs CRM vs ERP
-       mismatches.push('Shopify shows "Fulfilled" but ERP shows "Processing"');
-       status = 'mismatch_detected';
-    } else if (args.entityType === 'payment') {
-       // Logic to check Stripe vs CRM
-       mismatches.push('Stripe shows "Refunded" but CRM case is still "Open"');
-       status = 'mismatch_detected';
+    if (!args.entityId) {
+      return { ok: false, error: 'Provide entityId (a case UUID; for a customer, its id)', errorCode: 'INVALID_ARGS' };
     }
+
+    // The only cross-system state we actually have is the canonical case bundle,
+    // which buildCaseState assembles from real records. Resolve the entity to it.
+    let state: any = null;
+    if (args.entityType === 'customer') {
+      const customer = await customerRepo.getDetail(scopeValue, args.entityId);
+      const caseId = customer && Array.isArray(customer.cases) && customer.cases.length > 0
+        ? [...customer.cases].sort((a: any, b: any) =>
+            new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime())[0]?.id
+        : null;
+      if (caseId) {
+        const bundle = await caseRepo.getBundle(scopeValue, caseId);
+        if (bundle) state = buildCaseState(bundle);
+      }
+    } else {
+      // order / payment / case share the case bundle view; treat entityId as the case UUID.
+      const bundle = await caseRepo.getBundle(scopeValue, args.entityId);
+      if (bundle) state = buildCaseState(bundle);
+    }
+
+    if (!state) {
+      return {
+        ok: true,
+        value: {
+          entityType: args.entityType,
+          entityId: args.entityId,
+          status: 'unknown',
+          mismatches: [],
+          note: 'No canonical case state found for this entity. Cross-system reconciliation is only available through a case — pass the related case UUID.',
+          timestamp: new Date().toISOString(),
+        },
+      };
+    }
+
+    // REAL mismatches: systems flagged non-OK in the canonical state, plus the stored conflict.
+    const mismatches: string[] = [];
+    for (const system of Object.values(state.systems || {}) as any[]) {
+      if (system && ['warning', 'critical', 'blocked'].includes(String(system.status))) {
+        mismatches.push(`${titleCase(system.label || system.key)} is ${system.status}${system.summary ? `: ${system.summary}` : ''}`);
+      }
+    }
+    if (state.conflict?.summary) mismatches.push(state.conflict.summary);
+    if (state.conflict?.root_cause) mismatches.push(`Root cause: ${state.conflict.root_cause}`);
+    const unique = Array.from(new Set(mismatches));
+    const status = unique.length > 0 ? 'mismatch_detected' : 'synced';
 
     return {
       ok: true,
@@ -227,9 +259,11 @@ export const interoperabilityCheckTool: ToolSpec<{ entityType: string; entityId:
         entityType: args.entityType,
         entityId: args.entityId,
         status,
-        mismatches,
+        mismatches: unique,
+        recommendation: status === 'mismatch_detected'
+          ? (state.conflict?.recommended_action || 'Reconcile the flagged systems before acting on this entity.')
+          : 'No cross-system mismatch detected in the canonical state.',
         timestamp: new Date().toISOString(),
-        recommendation: status === 'mismatch_detected' ? 'Run reconciliation.resolve_issue to align systems.' : 'No action needed.',
       },
     };
   },
