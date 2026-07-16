@@ -1154,7 +1154,80 @@ function FinReindexButton() {
   );
 }
 
-function FinContenidoContent() {
+// ── Contenido header dropdowns (Audiencia / Filtros) ─────────────────────────
+// Small popover menus with per-item icons. Copilot/Fin rows use our own logo
+// mark (the Fin star) instead of a generic glyph.
+type FinMenuItem = { key: string; label: string; icon: ReactNode; onClick: () => void; checked?: boolean };
+type FinMenuSection = { header?: string; items: FinMenuItem[] };
+
+// 16px monochrome glyphs used across the Contenido filter menus.
+const _mi = (paths: ReactNode) => (
+  <svg viewBox="0 0 16 16" className="w-full h-full fill-none stroke-current" strokeWidth="1.4">{paths}</svg>
+);
+const FIN_MI = {
+  logo:    <img src={IMG_FIN_LOGO_MARK} alt="" className="w-3.5 h-3.5 object-contain" />,
+  person:  _mi(<><circle cx="8" cy="5.5" r="2.5"/><path d="M3.5 13c.6-2.2 2.3-3.5 4.5-3.5s3.9 1.3 4.5 3.5"/></>),
+  people:  _mi(<><circle cx="6" cy="6" r="2"/><path d="M2.5 12.5c.4-1.9 1.8-3 3.5-3s3.1 1.1 3.5 3"/><path d="M10.5 5a2 2 0 0 1 0 3.9M11 12.5c-.2-1.3-.8-2.3-1.7-3"/></>),
+  visitor: _mi(<><path d="M1.8 8S4 4 8 4s6.2 4 6.2 4-2.2 4-6.2 4-6.2-4-6.2-4z"/><circle cx="8" cy="8" r="1.8"/></>),
+  pencil:  _mi(<path d="M10.5 2.8l2.7 2.7L6 12.6l-3.4.9.9-3.4 7-7.3z" strokeLinejoin="round"/>),
+  tag:     _mi(<><path d="M2.5 2.5h4.6L14 9.4 9.4 14 2.5 7.1V2.5z" strokeLinejoin="round"/><circle cx="5" cy="5" r=".9" fill="currentColor" stroke="none"/></>),
+  calendar:_mi(<><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></>),
+  language:_mi(<><path d="M2 4.5h6M5 3v1.5M6.4 4.5c0 3-1.8 5-4 6M4 7c.7 1.6 2 2.7 3.5 3.4"/><path d="M8.5 13l2.5-6 2.5 6M9.6 11h3.8"/></>),
+  type:    _mi(<><path d="M8 2l6 3-6 3-6-3 6-3z" strokeLinejoin="round"/><path d="M2.2 8L8 11l5.8-3M2.2 11L8 14l5.8-3"/></>),
+  collection:_mi(<><rect x="2.5" y="4.5" width="11" height="8.5" rx="1.3"/><path d="M4 4.5V3.2h3.6l1 1.3M5 8h6M5 10.3h4"/></>),
+  status:  _mi(<><circle cx="8" cy="8" r="5.5"/><path d="M5.5 8l1.7 1.7 3.3-3.7" strokeLinecap="round" strokeLinejoin="round"/></>),
+};
+
+function FinContentMenu({ trigger, sections, align = 'left', width = 224 }: {
+  trigger: (open: boolean) => ReactNode;
+  sections: FinMenuSection[];
+  align?: 'left' | 'right';
+  width?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    window.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('mousedown', onDoc); window.removeEventListener('keydown', onKey); };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)}>{trigger(open)}</button>
+      {open && (
+        <div
+          className={`absolute top-[calc(100%+4px)] ${align === 'right' ? 'right-0' : 'left-0'} z-40 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_28px_rgba(20,20,20,0.16)] py-1.5`}
+          style={{ minWidth: width }}
+          role="menu"
+        >
+          {sections.map((sec, si) => (
+            <div key={si}>
+              {si > 0 && <div className="my-1.5 border-t border-[#f1f1ee]" />}
+              {sec.header && <div className="px-3 pt-1 pb-1.5 text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide">{sec.header}</div>}
+              {sec.items.map(it => (
+                <button
+                  key={it.key}
+                  role="menuitem"
+                  onClick={() => { it.onClick(); setOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-3 h-8 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                >
+                  <span className="w-4 h-4 flex items-center justify-center text-[#646462] flex-shrink-0">{it.icon}</span>
+                  <span className="flex-1 truncate">{it.label}</span>
+                  {it.checked && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.7"><path d="M3 8.5l3.3 3.3L13 4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinContenidoContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubView) => void } = {}) {
   const [refreshKey, setRefreshKey] = useState(0);
   const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
   const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
@@ -1176,22 +1249,35 @@ function FinContenidoContent() {
     return cardBucket(a) === type;
   }
 
+  // Audience view-filter (top "Audiencia" dropdown). null = all audiences.
+  const [audienceFilter, setAudienceFilter] = useState<string | null>(null);
+  const audienceAllows = (a: any, aud: string | null) => {
+    if (!aud) return true;
+    const arr = a.finAudience ?? a.fin_audience;
+    if (!Array.isArray(arr) || arr.length === 0) return true; // unrestricted
+    return arr.map((x: any) => String(x).toLowerCase()).includes(aud);
+  };
+  const visibleArticles = useMemo(
+    () => (audienceFilter ? articles.filter((a) => audienceAllows(a, audienceFilter)) : articles),
+    [articles, audienceFilter],
+  );
+
   // Counts broken down by card bucket (public / internal / snippet), tracking how
-  // many of each Fin actually uses as a source.
+  // many of each Fin actually uses as a source. Respects the audience filter.
   const bucketCounts = useMemo(() => {
     const mk = () => ({ total: 0, published: 0, finService: 0 });
     const acc: Record<FinContenidoCardType, { total: number; published: number; finService: number }> = {
       public: mk(), internal: mk(), snippet: mk(), website: mk(), all: mk(),
     };
-    articles.forEach((a: any) => {
+    visibleArticles.forEach((a: any) => {
       const b = cardBucket(a);
       acc[b].total++;
       if (String(a.status || '').toLowerCase() === 'published') acc[b].published++;
       if (isFinSource(a)) acc[b].finService++;
     });
     return acc;
-  }, [articles]);
-  const finSourceTotal = useMemo(() => articles.filter(isFinSource).length, [articles]);
+  }, [visibleArticles]);
+  const finSourceTotal = useMemo(() => visibleArticles.filter(isFinSource).length, [visibleArticles]);
 
   const [search, setSearch] = useState('');
 
@@ -1361,15 +1447,60 @@ function FinContenidoContent() {
               className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
             />
           </div>
-          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.2 13c.7-2 2.5-3.2 4.8-3.2s4.1 1.2 4.8 3.2"/></svg>
-            <span>Audiencia</span>
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-          </button>
-          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-            <span>Filtros</span>
-          </button>
+          {/* Audiencia dropdown */}
+          <FinContentMenu
+            align="left"
+            width={230}
+            trigger={(open) => (
+              <span className={`h-8 px-3 rounded-[8px] bg-[#f8f8f7] border flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#ededea] ${open ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}>
+                <span className="w-3.5 h-3.5 text-[#646462]">{FIN_MI.person}</span>
+                <span>{audienceFilter ? FIN_AUDIENCE_LABEL[audienceFilter] : 'Audiencia'}</span>
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+              </span>
+            )}
+            sections={[
+              { items: [
+                { key: 'all',      label: 'Todas las audiencias', icon: FIN_MI.people,  checked: !audienceFilter,               onClick: () => setAudienceFilter(null) },
+                { key: 'users',    label: 'Usuarios',             icon: FIN_MI.person,  checked: audienceFilter === 'users',    onClick: () => setAudienceFilter('users') },
+                { key: 'leads',    label: 'Leads',                icon: FIN_MI.person,  checked: audienceFilter === 'leads',    onClick: () => setAudienceFilter('leads') },
+                { key: 'visitors', label: 'Visitantes',           icon: FIN_MI.visitor, checked: audienceFilter === 'visitors', onClick: () => setAudienceFilter('visitors') },
+              ] },
+              { header: 'Audiencias', items: [
+                { key: 'manage', label: 'Gestionar audiencias', icon: FIN_MI.pencil, onClick: () => (onNavigateSub ? onNavigateSub('settingsAudiences') : jumpToKnowledge()) },
+              ] },
+            ]}
+          />
+          {/* Filtros dropdown */}
+          <FinContentMenu
+            align="left"
+            width={260}
+            trigger={(open) => (
+              <span className={`h-8 px-3 rounded-[8px] bg-[#f8f8f7] border flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#ededea] ${open ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                <span>Filtros</span>
+              </span>
+            )}
+            sections={[
+              { header: 'Todos los tipos de contenido', items: [
+                { key: 'created',   label: 'Creado por',            icon: FIN_MI.person,   onClick: () => setLibraryOpen(true) },
+                { key: 'copilot',   label: 'Estado de Copilot',     icon: FIN_MI.logo,     onClick: () => setLibraryOpen(true) },
+                { key: 'fin-ecom',  label: 'Estado de Fin Ecommerce', icon: FIN_MI.logo,   onClick: () => setLibraryOpen(true) },
+                { key: 'fin-sales', label: 'Estado de Fin Sales',   icon: FIN_MI.logo,     onClick: () => setLibraryOpen(true) },
+                { key: 'fin-svc',   label: 'Estado de Fin Service', icon: FIN_MI.logo,     onClick: () => setLibraryOpen(true) },
+                { key: 'tag',       label: 'Etiqueta',              icon: FIN_MI.tag,      onClick: () => setLibraryOpen(true) },
+                { key: 'date',      label: 'Fecha',                 icon: FIN_MI.calendar, onClick: () => setLibraryOpen(true) },
+                { key: 'lang',      label: 'Idioma',                icon: FIN_MI.language, onClick: () => setLibraryOpen(true) },
+                { key: 'type',      label: 'Tipo',                  icon: FIN_MI.type,     onClick: () => setLibraryOpen(true) },
+                { key: 'updated',   label: 'Última actualización de', icon: FIN_MI.people, onClick: () => setLibraryOpen(true) },
+              ] },
+              { header: 'Artículo público', items: [
+                { key: 'hc-audience',   label: 'Audiencia del centro de ayuda', icon: FIN_MI.people,     onClick: () => setLibraryOpen(true) },
+                { key: 'hc-collection', label: 'Colección del Centro de ayuda', icon: FIN_MI.collection, onClick: () => setLibraryOpen(true) },
+                { key: 'written',       label: 'Escrito por',                   icon: FIN_MI.person,     onClick: () => setLibraryOpen(true) },
+                { key: 'status',        label: 'Estado',                        icon: FIN_MI.status,     onClick: () => setLibraryOpen(true) },
+              ] },
+            ]}
+          />
         </div>
       </div>
 
@@ -7454,7 +7585,7 @@ export function FinAiView() {
     switch (sub) {
       case 'allRoles':       return <FinAllRolesContent />;
       case 'capacitar':      return <FinPlaceholderContent title="Capacitar"   subtitle="Configura el contenido, las atribuciones y los procedimientos que entrenan a Fin." />;
-      case 'capContent':     return <FinContenidoContent />;
+      case 'capContent':     return <FinContenidoContent onNavigateSub={setSub} />;
       case 'capGuidance':    return <FinOrientacionContent />;
       case 'capAttributes':  return <FinAtributosContent />;
       case 'capEscalation':  return <FinEscalamientoContent />;
