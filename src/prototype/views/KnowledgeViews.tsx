@@ -9,6 +9,9 @@ import { agentsApi, connectorsApi, knowledgeApi, workspacesApi } from '../../api
 import { Dropdown, KH_TYPE_OPTIONS, KnowledgeArticleEditor, KnowledgeConnectAppWizard, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, LibraryIcon, TrialBanner, relativeTime, titleCase } from '../sharedUi';
 import { parsePath, replaceRoute } from '../router';
 import { BrandIcon, brandColor, resolveBrandId } from '../brandIcons';
+import gradienteFin from '../media/gradiente3.jpg';
+import gradienteCopilot from '../media/gradiente2.jpg';
+import gradienteHelp from '../media/gradiente1.jpg';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -466,18 +469,17 @@ function KnowledgeFuentes({
   function enrich(items: KhItem[]) {
     return items.map(it => {
       const live = connectorsByProvider.get(it.provider.toLowerCase());
-      const base = !live ? it : (() => {
-        const status = live.status === 'connected' || live.status === 'active'
+      // A live connector updates the row's STATUS + checkmark, but NEVER the
+      // action label: Intercom keeps "Agregar artículo", externals keep
+      // "Sincronizar o importar". (Switching to "Administrar" here was the bug.)
+      const base = !live ? it : {
+        ...it,
+        configured: true,
+        status: live.status === 'connected' || live.status === 'active'
           ? `Conectado · ${live.last_synced_at ? `actualizado ${relativeTime(live.last_synced_at)}` : 'sin sincronizar todavía'}`
           : live.status === 'error' ? `Error: ${live.last_error || 'revisar configuración'}`
-          : it.status;
-        return {
-          ...it,
-          configured: true,
-          status,
-          action: live.status === 'error' ? 'Reconectar' : 'Administrar',
-        };
-      })();
+          : it.status,
+      };
       return { ...base, onClick: actionHandler(base) };
     });
   }
@@ -526,15 +528,13 @@ function KnowledgeFuentes({
           <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Optimiza tu contenido para Fin AI Agent, Copilot y el centro de ayuda</h3>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { name: 'Fin',     status: 'No establecido en vivo', desc: 'Fin utiliza tu conocimiento para generar respuestas precisas para los clientes.', cta: 'Configurar ahora', accent: '#ff5f3f', onClick: () => onOpenView?.('fin') },
-              { name: 'Copilot', status: 'En vivo',                desc: 'Copilot utiliza tus conocimientos para dar a tus compañeros de equipo las respuestas que necesitan.', cta: 'Ir a Inbox',         accent: '#3b59f6', onClick: () => onOpenView?.('inbox') },
-              { name: 'Centro de ayuda', status: 'No establecido en vivo', desc: 'Los clientes utilizan tu conocimiento para encontrar respuestas precisas por sí mismos.', cta: 'Configurar ahora', accent: '#646462', onClick: () => onNavigate('centroAyuda') },
+              { name: 'Fin',     status: 'No establecido en vivo', desc: 'Fin utiliza tu conocimiento para generar respuestas precisas para los clientes.', cta: 'Configurar ahora', accent: '#ff5f3f', image: gradienteFin,     onClick: () => onOpenView?.('fin') },
+              { name: 'Copilot', status: 'En vivo',                desc: 'Copilot utiliza tus conocimientos para dar a tus compañeros de equipo las respuestas que necesitan.', cta: 'Ir a Inbox',         accent: '#3b59f6', image: gradienteCopilot, onClick: () => onOpenView?.('inbox') },
+              { name: 'Centro de ayuda', status: 'No establecido en vivo', desc: 'Los clientes utilizan tu conocimiento para encontrar respuestas precisas por sí mismos.', cta: 'Configurar ahora', accent: '#646462', image: gradienteHelp, onClick: () => onNavigate('centroAyuda') },
             ].map(c => (
               <div key={c.name} className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] overflow-hidden">
-                <div className="h-[100px] bg-gradient-to-br from-[#ededea] to-[#dcdcd8] flex items-center justify-center">
-                  <span className="w-8 h-8 rounded-[8px] flex items-center justify-center" style={{ background: c.accent }}>
-                    <span className="text-[14px] font-bold text-white">{c.name[0]}</span>
-                  </span>
+                <div className="h-[100px] overflow-hidden">
+                  <img src={c.image} alt="" aria-hidden className="w-full h-full object-cover" draggable={false} />
                 </div>
                 <div className="p-3 flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
