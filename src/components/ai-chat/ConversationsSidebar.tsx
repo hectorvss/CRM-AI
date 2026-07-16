@@ -85,12 +85,15 @@ const ConversationsSidebar: React.FC<Props> = ({
         onClick={onToggle}
         title="Abrir barra lateral"
         aria-label="Abrir la barra lateral de conversaciones"
-        // Minimalist, ghost-gray sidebar toggle (thin panel-left icon).
-        className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/5 dark:hover:text-gray-300"
+        // Minimalist ghost-gray toggle. Offset from the panel's rounded corner
+        // so the rounded overflow-hidden wrapper doesn't clip it.
+        // Closed state → panel-right-OPEN (chevron pointing in = show).
+        className="absolute right-8 top-8 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/5 dark:hover:text-gray-300"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <path d="M15 3v18" />
+          <path d="m10 15-3-3 3-3" />
         </svg>
       </button>
     );
@@ -110,9 +113,11 @@ const ConversationsSidebar: React.FC<Props> = ({
           aria-label="Cerrar la barra lateral de conversaciones"
           className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/5 dark:hover:text-gray-300"
         >
+          {/* Open state → panel-right-CLOSE (chevron pointing out = hide). */}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <path d="M15 3v18" />
+            <path d="m8 9 3 3-3 3" />
           </svg>
         </button>
       </header>
@@ -123,7 +128,9 @@ const ConversationsSidebar: React.FC<Props> = ({
           onClick={onNewConversation}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/90 disabled:opacity-40 dark:bg-white dark:text-black dark:hover:bg-white/90"
         >
-          <span className="material-symbols-outlined text-[16px]">edit_square</span>
+          {/* Inline font-size — the base .material-symbols-outlined rule
+              (24px) outranks Tailwind text-[..] utilities, so set it here. */}
+          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>edit_square</span>
           New conversation
         </button>
       </div>
