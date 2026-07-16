@@ -10,7 +10,9 @@ import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../../components/Wor
 import AIStudio from '../../components/AIStudio';
 import SuperAgent from '../../components/SuperAgent';
 import { FIGMA_CDN, IMG_FIN_DEPLOY_CHAT, IMG_FIN_DEPLOY_EMAIL, IMG_FIN_PRO_TRIAL_BANNER, IMG_FIN_VOICE_BANNER } from '../assets';
-import { Dropdown, IMG_FIN_LOGO_MARK, IMG_FIN_SALES_AGENT, IMG_FIN_SERVICE_AGENT, KnowledgeArticleEditor, KnowledgeContentLibrary, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, SettingsSidebar, TrialBanner } from '../sharedUi';
+import { Dropdown, IMG_FIN_LOGO_MARK, KnowledgeArticleEditor, KnowledgeContentLibrary, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, SettingsSidebar, TrialBanner } from '../sharedUi';
+import finRoleServiceGradient from '../media/fin-role-service.jpg';
+import finRoleSalesGradient from '../media/fin-role-sales.jpg';
 import type { DropdownItem, View } from '../types';
 import { parsePath, replaceRoute } from '../router';
 
@@ -649,7 +651,7 @@ function FinAllRolesContent() {
         <div className="mt-12 flex justify-center">
           <div className="grid grid-cols-2 gap-4 w-[640px]">
             <FinRoleCard
-              image={IMG_FIN_SERVICE_AGENT}
+              image={finRoleServiceGradient}
               iconColor="#DE5612"
               iconKind="service"
               title="Servicio"
@@ -661,7 +663,7 @@ function FinAllRolesContent() {
               ]}
             />
             <FinRoleCard
-              image={IMG_FIN_SALES_AGENT}
+              image={finRoleSalesGradient}
               iconColor="#165FC6"
               iconKind="sales"
               title="Ventas"
