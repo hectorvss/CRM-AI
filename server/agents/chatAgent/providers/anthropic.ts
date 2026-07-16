@@ -6,7 +6,11 @@
  * claude-sonnet with streaming + native tool use).
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+// Type-only import: erased at compile time so the serverless cold-start never
+// requires '@anthropic-ai/sdk'. The real module is dynamically imported inside
+// getClient(), only when the chat agent is actually invoked — this keeps the
+// core API up even if the AI SDK isn't in the bundle.
+import type Anthropic from '@anthropic-ai/sdk';
 import { config } from '../../../config.js';
 import {
   type ChatLLMProvider,
@@ -24,10 +28,11 @@ const DEFAULT_UTILITY_MODEL = process.env.AGENT_MODEL_ANTHROPIC_UTILITY || 'clau
 // smaller default because CRM answers are shorter than analysis reports.
 const DEFAULT_MAX_TOKENS = 4096;
 
-function getClient(): Anthropic {
+async function getClient(): Promise<Anthropic> {
   const apiKey = config.ai?.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new ProviderNotConfiguredError('anthropic', 'ANTHROPIC_API_KEY');
-  return new Anthropic({ apiKey, timeout: 60_000 });
+  const { default: AnthropicClient } = await import('@anthropic-ai/sdk');
+  return new AnthropicClient({ apiKey, timeout: 60_000 });
 }
 
 function toAnthropicMessages(messages: ProviderMessage[]): Anthropic.MessageParam[] {
@@ -78,7 +83,7 @@ export class AnthropicChatProvider implements ChatLLMProvider {
     signal?: AbortSignal;
     onTextDelta: (text: string) => void;
   }): Promise<StreamChatResult> {
-    const client = getClient();
+    const client = await getClient();
     const model = DEFAULT_PRIMARY_MODEL;
 
     return withLLMRetry(async () => {
@@ -136,7 +141,7 @@ export class AnthropicChatProvider implements ChatLLMProvider {
   }
 
   async completeUtility(opts: { system: string; prompt: string; maxTokens?: number }) {
-    const client = getClient();
+    const client = await getClient();
     const model = DEFAULT_UTILITY_MODEL;
 
     return withLLMRetry(async () => {

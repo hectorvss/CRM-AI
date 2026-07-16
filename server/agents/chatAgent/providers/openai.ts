@@ -8,7 +8,10 @@
  *      AGENT_PROVIDER=openai (fallback or preference).
  */
 
-import OpenAI from 'openai';
+// Type-only import: erased at compile time so the serverless cold-start never
+// requires 'openai'. The real module is dynamically imported inside getClient(),
+// only when the chat agent actually runs on OpenAI.
+import type OpenAI from 'openai';
 import { config } from '../../../config.js';
 import {
   type ChatLLMProvider,
@@ -24,10 +27,11 @@ const DEFAULT_PRIMARY_MODEL = process.env.AGENT_MODEL_OPENAI_PRIMARY || 'gpt-4.1
 const DEFAULT_UTILITY_MODEL = process.env.AGENT_MODEL_UTILITY || 'gpt-4.1-mini';
 const DEFAULT_MAX_TOKENS = 4096;
 
-function getClient(): OpenAI {
+async function getClient(): Promise<OpenAI> {
   const apiKey = config.ai?.openaiApiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey) throw new ProviderNotConfiguredError('openai', 'OPENAI_API_KEY');
-  return new OpenAI({ apiKey, timeout: 60_000 });
+  const { default: OpenAIClient } = await import('openai');
+  return new OpenAIClient({ apiKey, timeout: 60_000 });
 }
 
 function toOpenAIMessages(
@@ -72,7 +76,7 @@ export class OpenAIChatProvider implements ChatLLMProvider {
     signal?: AbortSignal;
     onTextDelta: (text: string) => void;
   }): Promise<StreamChatResult> {
-    const client = getClient();
+    const client = await getClient();
     const model = DEFAULT_PRIMARY_MODEL;
 
     return withLLMRetry(async () => {
@@ -144,7 +148,7 @@ export class OpenAIChatProvider implements ChatLLMProvider {
   }
 
   async completeUtility(opts: { system: string; prompt: string; maxTokens?: number }) {
-    const client = getClient();
+    const client = await getClient();
     const model = DEFAULT_UTILITY_MODEL;
 
     return withLLMRetry(async () => {
