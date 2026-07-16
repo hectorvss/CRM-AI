@@ -83,12 +83,15 @@ const ConversationsSidebar: React.FC<Props> = ({
       <button
         type="button"
         onClick={onToggle}
-        title="Mostrar conversaciones"
-        aria-label="Mostrar el panel de conversaciones"
-        // Standard show/hide sidebar affordance — right-side panel toggle icon.
-        className="absolute right-5 top-5 z-10 flex h-8 w-8 items-center justify-center rounded-md bg-black shadow-sm transition hover:opacity-80 dark:bg-white"
+        title="Abrir barra lateral"
+        aria-label="Abrir la barra lateral de conversaciones"
+        // Minimalist, ghost-gray sidebar toggle (thin panel-left icon).
+        className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/5 dark:hover:text-gray-300"
       >
-        <span className="material-symbols-outlined text-[18px] text-white dark:text-black">right_panel_open</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 3v18" />
+        </svg>
       </button>
     );
   }
@@ -103,11 +106,14 @@ const ConversationsSidebar: React.FC<Props> = ({
         <button
           type="button"
           onClick={onToggle}
-          title="Ocultar conversaciones"
-          aria-label="Ocultar el panel de conversaciones"
-          className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950 dark:hover:bg-white/5 dark:hover:text-white"
+          title="Cerrar barra lateral"
+          aria-label="Cerrar la barra lateral de conversaciones"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/5 dark:hover:text-gray-300"
         >
-          <span className="material-symbols-outlined text-[18px]">right_panel_close</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M9 3v18" />
+          </svg>
         </button>
       </header>
 
