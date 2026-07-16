@@ -1023,8 +1023,22 @@ export function AgentChatView({
         @keyframes max-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes max-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
         @keyframes max-blink { 0%,100%{opacity:1} 50%{opacity:0} }
-        .agent-hero-rainbow { background-image: linear-gradient(90deg,#3b82f6 0%,#8b5cf6 28%,#ec4899 52%,#f43f5e 74%,#f97316 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; transition:-webkit-text-fill-color .5s ease .15s; }
-        .agent-hero-rainbow.is-done { -webkit-text-fill-color:#1a1a1a; }
+        .agent-hero-rainbow {
+          background-image:
+            linear-gradient(90deg, #1a1a1a 49.5%, rgba(26,26,26,0) 50.5%),
+            linear-gradient(90deg,#3b82f6 0%,#8b5cf6 28%,#ec4899 52%,#f43f5e 74%,#f97316 100%);
+          background-size: 200% 100%, 100% 100%;
+          background-position: 100% 0, 0 0;
+          background-repeat: no-repeat;
+          -webkit-background-clip:text; background-clip:text;
+          -webkit-text-fill-color:transparent; color:transparent;
+        }
+        .agent-hero-rainbow.is-done {
+          background-position: 0% 0, 0 0;
+          transition: background-position .7s cubic-bezier(.65,0,.35,1) .12s;
+          animation: hero-pop .62s ease .12s both;
+        }
+        @keyframes hero-pop { 0%{transform:scale(1)} 42%{transform:scale(1.05)} 100%{transform:scale(1)} }
       `}</style>
       {/* Memory toast */}
       {memoryToast && (
