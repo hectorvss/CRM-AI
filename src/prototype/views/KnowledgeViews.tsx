@@ -6,7 +6,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { agentsApi, connectorsApi, knowledgeApi, workspacesApi } from '../../api/client';
-import { Dropdown, KH_TYPE_OPTIONS, KnowledgeArticleEditor, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, LibraryIcon, TrialBanner, relativeTime, titleCase } from '../sharedUi';
+import { Dropdown, KH_TYPE_OPTIONS, KnowledgeArticleEditor, KnowledgeConnectAppWizard, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, LibraryIcon, TrialBanner, relativeTime, titleCase } from '../sharedUi';
 import { parsePath, replaceRoute } from '../router';
 import { BrandIcon, brandColor, resolveBrandId } from '../brandIcons';
 
@@ -403,6 +403,7 @@ function KnowledgeFuentes({
   onOpenView,
   onOpenWebsiteSync,
   onOpenExternalPicker,
+  onConnectApp,
 }: {
   onCreate: (opts: { type?: string; visibility?: 'public' | 'internal' }) => void;
   // "Agregar artículo" opens the folder-modal-styled picker (elegir/crear artículo).
@@ -414,6 +415,8 @@ function KnowledgeFuentes({
   // Open the real ingestion flows (mounted once in KnowledgeView).
   onOpenWebsiteSync: () => void;
   onOpenExternalPicker: () => void;
+  // "Sincronizar o importar" on a connector row → per-app connect wizard.
+  onConnectApp: (provider: string) => void;
 }) {
   const [tab, setTab] = useState<KhTab>('all');
   // Real connector status. We don't replace the static catalog (it's the
@@ -447,7 +450,11 @@ function KnowledgeFuentes({
     if (a.includes('agregar artículo') || a.includes('agregar articulo')) return () => onAddArticle({ visibility: it.visibility || 'public' });
     if (a.includes('fragmento'))       return () => onCreate({ type: 'SNIPPET' });
     if (a.includes('cargar documento')) return () => onCreate({ type: 'DOCUMENT' });
-    if (a.includes('sincronizar') || a.includes('importar')) return () => onOpenExternalPicker();
+    // A connector row (Zendesk/Guru/Notion/Confluence…) → open that app's
+    // connect wizard. Rows without a provider fall back to the source picker.
+    if (a.includes('sincronizar') || a.includes('importar')) {
+      return it.provider ? () => onConnectApp(it.provider!) : () => onOpenExternalPicker();
+    }
     if (a.includes('administrar') || a.includes('reconectar')) return () => onOpenView?.('connectors');
     return undefined;
   }
@@ -615,7 +622,7 @@ function KnowledgeFuentes({
                   title="Sitios web"
                   description="Permite que Fin AI Agent utilice cualquier sitio web público."
                   items={[]}
-                  headerAction={{ label: 'Sincronizar o importar', onClick: onOpenExternalPicker }}
+                  headerAction={{ label: 'Sincronizar o importar', onClick: onOpenWebsiteSync }}
                 />
                 <KhSection
                   title="Más fuentes de contenido"
@@ -668,7 +675,7 @@ function KnowledgeFuentes({
                   title="Sitios web"
                   description="Permite que Copilot utilice cualquier sitio web público."
                   items={[]}
-                  headerAction={{ label: 'Sincronizar o importar', onClick: onOpenExternalPicker }}
+                  headerAction={{ label: 'Sincronizar o importar', onClick: onOpenWebsiteSync }}
                 />
                 <KhSection
                   title="Más fuentes de contenido"
@@ -1959,6 +1966,8 @@ export function KnowledgeView() {
   const [externalPickerOpen, setExternalPickerOpen] = useState(false);
   // "Agregar artículo" picker (folder-modal styled). Holds the target visibility.
   const [addArticleModal, setAddArticleModal] = useState<null | { visibility: 'public' | 'internal' }>(null);
+  // Per-app connect wizard ("Sincronizar o importar"). Holds the provider name.
+  const [connectApp, setConnectApp] = useState<string | null>(null);
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     setToast({ message, type });
     window.setTimeout(() => setToast(null), 2500);
@@ -2008,7 +2017,7 @@ export function KnowledgeView() {
   }
   function renderSub() {
     switch (sub) {
-      case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onAddArticle={(opts) => setAddArticleModal({ visibility: opts.visibility || 'public' })} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} onOpenExternalPicker={() => setExternalPickerOpen(true)} />;
+      case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onAddArticle={(opts) => setAddArticleModal({ visibility: opts.visibility || 'public' })} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} onOpenExternalPicker={() => setExternalPickerOpen(true)} onConnectApp={(p) => setConnectApp(p)} />;
       case 'contenido':   return <KnowledgeContenido onCreate={startCreate} onNavigate={setSub} onAction={showToast} onSearch={(q) => { setArticleSearch(q); setSub('articulos'); }} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} />;
       case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} initialSearch={articleSearch} />;
       case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
@@ -2068,6 +2077,14 @@ export function KnowledgeView() {
             setAddArticleModal(null);
             startCreate({ type: 'ARTICLE', visibility: vis });
           }}
+        />
+      )}
+      {connectApp && (
+        <KnowledgeConnectAppWizard
+          provider={connectApp}
+          onClose={() => setConnectApp(null)}
+          onSaved={() => { setRefreshKey(k => k + 1); }}
+          onAction={showToast}
         />
       )}
       {websiteSyncOpen && (

@@ -7,6 +7,7 @@ import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from '
 import { aiApi, attachmentsApi, iamApi, knowledgeApi, workflowsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import { ICON_LIBRARY } from './icons';
+import { BrandIcon, brandColor } from './brandIcons';
 import type { DropdownItem, IconVariant, Message, View } from './types';
 
 
@@ -1806,6 +1807,402 @@ export function KnowledgeWebsiteSyncWizard({
             onClick={next}
             disabled={busy || (step === 'connect' && !isValidUrl(url))}
             className="h-8 px-5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]"
+          >
+            {busy ? 'Sincronizando…' : step === 'review' ? 'Sincronizar' : 'Siguiente'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KnowledgeConnectAppWizard — the "Conocimiento de {App}" connect panel shown
+// when a user hits "Sincronizar o importar" on a connector row in Fuentes.
+// Provider-aware: same components for every connectable app (Zendesk, Guru,
+// Notion, Confluence, …), only the brand + auth details change. Steps mirror
+// Intercom: Conectar · Metadatos · Segmentación · Revisar.
+// ─────────────────────────────────────────────────────────────────────────────
+interface ConnectAppSpec {
+  name: string;
+  /** Domain suffix → subdomain input placeholder `mydomain.<suffix>`. */
+  domainSuffix?: string;
+  /** Auth methods offered in the segmented toggle. */
+  auth: Array<'api' | 'oauth'>;
+  /** Which auth method carries the ★ (recommended) and is selected by default. */
+  recommend: 'api' | 'oauth';
+  /** Show the "Cómo obtener el subdominio" helper link. */
+  subdomainHelp?: boolean;
+}
+
+const CONNECT_APPS: Record<string, ConnectAppSpec> = {
+  zendesk:    { name: 'Zendesk',    domainSuffix: 'zendesk.com',      auth: ['api', 'oauth'], recommend: 'oauth', subdomainHelp: true },
+  confluence: { name: 'Confluence', domainSuffix: 'atlassian.net',    auth: ['api', 'oauth'], recommend: 'oauth', subdomainHelp: true },
+  freshdesk:  { name: 'Freshdesk',  domainSuffix: 'freshdesk.com',    auth: ['api'],          recommend: 'api',   subdomainHelp: true },
+  salesforce: { name: 'Salesforce', domainSuffix: 'my.salesforce.com', auth: ['oauth'],       recommend: 'oauth', subdomainHelp: true },
+  guru:       { name: 'Guru',       auth: ['api'],          recommend: 'api' },
+  notion:     { name: 'Notion',     auth: ['oauth'],        recommend: 'oauth' },
+  document360:{ name: 'Document360', auth: ['api'],         recommend: 'api' },
+  box:        { name: 'Box',        auth: ['oauth'],        recommend: 'oauth' },
+};
+
+function connectAppSpec(provider: string): ConnectAppSpec {
+  const key = String(provider || '').toLowerCase();
+  return CONNECT_APPS[key] ?? { name: provider || 'la aplicación', auth: ['api', 'oauth'], recommend: 'oauth' };
+}
+
+/** Clain destination tile shown opposite the external app in the connect header. */
+function ClainMark({ size = 26 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} aria-label="Clain">
+      <g fill="#1a1a1a">
+        <rect x="2" y="2.5" width="1.7" height="11" rx="0.5" />
+        <rect x="5.2" y="4" width="1.7" height="9.5" rx="0.5" />
+        <rect x="8.4" y="2.5" width="1.7" height="11" rx="0.5" />
+        <rect x="11.6" y="4" width="1.7" height="9.5" rx="0.5" />
+      </g>
+    </svg>
+  );
+}
+
+export function KnowledgeConnectAppWizard({
+  provider,
+  onClose,
+  onSaved,
+  onAction,
+}: {
+  provider: string;
+  onClose: () => void;
+  onSaved: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  const spec = connectAppSpec(provider);
+  type Step = 'connect' | 'metadata' | 'segmentation' | 'review';
+  const STEPS: { id: Step; label: string }[] = [
+    { id: 'connect',      label: 'Conectar' },
+    { id: 'metadata',     label: 'Metadatos' },
+    { id: 'segmentation', label: 'Segmentación' },
+    { id: 'review',       label: 'Revisar' },
+  ];
+  const [step, setStep] = useState<Step>('connect');
+  const [authMode, setAuthMode] = useState<'api' | 'oauth'>(spec.recommend);
+  const [subdomain, setSubdomain] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [syncLoggedIn, setSyncLoggedIn] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [audience, setAudience] = useState<string[]>(['users', 'leads', 'visitors']);
+  const [importPublic, setImportPublic] = useState(true);
+  const [importInternal, setImportInternal] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const needsDomain = !!spec.domainSuffix;
+  const needsApiKey = !needsDomain && authMode === 'api';
+  const canConnect = needsDomain ? subdomain.trim().length > 0
+    : needsApiKey ? apiKey.trim().length > 0
+    : true; // pure OAuth (Notion/Box) can always start the flow
+
+  const stepIdx = STEPS.findIndex(s => s.id === step);
+
+  function connect() {
+    if (connecting || connected || !canConnect) return;
+    setConnecting(true);
+    // Prototype: simulate the OAuth/token handshake. A real integration would
+    // redirect to the provider or POST the token to /connectors here.
+    window.setTimeout(() => {
+      setConnecting(false);
+      setConnected(true);
+      onAction(`Conectado a ${spec.name}`);
+    }, 650);
+  }
+  function toggleAudience(token: string) {
+    setAudience(prev => {
+      const next = prev.includes(token) ? prev.filter(t => t !== token) : [...prev, token];
+      return next.length === 0 ? prev : next;
+    });
+  }
+  function next() {
+    if (step === 'connect') { if (!connected) return; setStep('metadata'); }
+    else if (step === 'metadata') setStep('segmentation');
+    else if (step === 'segmentation') setStep('review');
+    else if (step === 'review') void persist();
+  }
+  function back() {
+    if (step === 'metadata') setStep('connect');
+    else if (step === 'segmentation') setStep('metadata');
+    else if (step === 'review') setStep('segmentation');
+  }
+  async function persist() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const scopes = [importPublic && 'artículos públicos', importInternal && 'artículos internos'].filter(Boolean).join(' y ');
+      const lines = [
+        `# Sincronización con ${spec.name}`,
+        '',
+        `Origen: ${spec.name}${needsDomain ? ` (${subdomain.trim()}.${spec.domainSuffix})` : ''}`,
+        `Método: ${authMode === 'oauth' ? 'OAuth' : 'Token de API'}`,
+        '',
+        '## Contenido importado',
+        `- ${scopes || 'artículos'}`,
+        `- Usuarios con sesión iniciada: ${syncLoggedIn ? 'sí' : 'no'}`,
+      ];
+      await knowledgeApi.createArticle({
+        title: `Sincronización: ${spec.name}`,
+        content: lines.join('\n'),
+        description: `Fuente ${spec.name} conectada e importando ${scopes || 'artículos'}.`,
+        type: 'website',
+        visibility: importInternal && !importPublic ? 'internal' : 'public',
+        helpcenter_status: 'draft',
+        helpcenter_audience: audience,
+        fin_audience: audience,
+        copilot_enabled: true,
+        fin_service: true,
+        tags: [`${spec.name.toLowerCase()}-sync`],
+      });
+      onAction(`${spec.name} sincronizado`);
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo completar la sincronización', 'error');
+    } finally { setBusy(false); }
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (!inEditable) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const Toggle = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
+    <button onClick={onClick} className={`w-9 h-5 rounded-full flex-shrink-0 transition-colors ${on ? 'bg-[#1a1a1a]' : 'bg-[#d4d4d2]'} relative`}>
+      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
+    </button>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className="absolute top-0 bottom-0 right-0 w-[860px] max-w-[94vw] bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] rounded-l-[14px] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 h-[58px] border-b border-[#e9eae6] flex items-center px-6 gap-4">
+          <h2 className="flex-1 text-[16px] font-bold text-[#1a1a1a]">Conocimiento de {spec.name}</h2>
+          <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex-shrink-0 border-b border-[#e9eae6] flex items-center px-6 gap-6">
+          {STEPS.map((s, idx) => {
+            const active = s.id === step;
+            const reached = idx <= stepIdx;
+            return (
+              <button
+                key={s.id}
+                onClick={() => reached && setStep(s.id)}
+                disabled={!reached}
+                className={`relative h-[44px] text-[13.5px] ${active ? 'text-[#1a1a1a] font-semibold' : reached ? 'text-[#1a1a1a] hover:text-black' : 'text-[#a4a4a2]'}`}
+              >
+                {s.label}
+                {active && <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-[#1a1a1a] rounded-full"/>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {step === 'connect' && (
+            <div className="max-w-[560px] mx-auto px-8 py-9 flex flex-col gap-6">
+              {/* Brand tiles */}
+              <div className="flex items-center justify-center gap-4">
+                <span className="w-14 h-14 rounded-2xl bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center">
+                  <BrandIcon name={provider} size={28} />
+                </span>
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-[#ed621d]" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>
+                <span className="w-14 h-14 rounded-2xl bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center">
+                  <ClainMark size={26} />
+                </span>
+              </div>
+              <h3 className="text-center text-[17px] font-semibold text-[#1a1a1a]">Conectarse a {spec.name}</h3>
+
+              {/* Connect card */}
+              <div className="rounded-[14px] border border-[#e9eae6] p-5 flex flex-col gap-4">
+                {spec.auth.length > 1 && (
+                  <div className="self-center inline-flex bg-[#f3f3f1] rounded-full p-0.5">
+                    {spec.auth.map(m => {
+                      const on = authMode === m;
+                      return (
+                        <button
+                          key={m}
+                          onClick={() => setAuthMode(m)}
+                          className={`h-8 px-4 rounded-full text-[13px] font-medium inline-flex items-center gap-1 transition-colors ${on ? 'bg-white text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}
+                        >
+                          {m === 'api' ? 'Token de API' : 'OAuth'}
+                          {spec.recommend === m && <span className="text-[#f5a623]">★</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {needsDomain ? (
+                  <div className="flex items-center rounded-lg border border-[#e9eae6] bg-white h-11 px-3 focus-within:border-[#1a1a1a]">
+                    <input
+                      autoFocus
+                      value={subdomain}
+                      onChange={e => setSubdomain(e.target.value.replace(/\s+/g, ''))}
+                      onKeyDown={e => { if (e.key === 'Enter' && canConnect) connect(); }}
+                      placeholder="mydomain"
+                      className="flex-1 bg-transparent outline-none text-[13.5px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
+                    />
+                    <span className="text-[13.5px] text-[#646462]">.{spec.domainSuffix}</span>
+                  </div>
+                ) : needsApiKey ? (
+                  <input
+                    autoFocus
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && canConnect) connect(); }}
+                    placeholder={`Pega tu token de API de ${spec.name}`}
+                    className="w-full h-11 rounded-lg border border-[#e9eae6] bg-white px-3 text-[13.5px] text-[#1a1a1a] outline-none focus:border-[#1a1a1a] placeholder:text-[#a4a4a2]"
+                  />
+                ) : (
+                  <p className="text-[12.5px] text-[#646462] text-center">Se abrirá {spec.name} para autorizar el acceso de forma segura mediante OAuth.</p>
+                )}
+
+                <div className="flex items-center justify-between">
+                  {spec.subdomainHelp ? (
+                    <a href="#" onClick={e => e.preventDefault()} className="inline-flex items-center gap-1.5 text-[12.5px] text-[#1a1a1a] hover:underline">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M6.5 9.5l3-3M7 5h2.5a2.5 2.5 0 0 1 0 5H9M9 11H6.5a2.5 2.5 0 0 1 0-5H7" strokeLinecap="round"/></svg>
+                      Cómo obtener el subdominio
+                    </a>
+                  ) : <span />}
+                  <button
+                    onClick={connect}
+                    disabled={!canConnect || connecting || connected}
+                    className={`h-9 px-5 rounded-full text-[13px] font-semibold transition-colors ${connected ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#1a1a1a] text-white hover:bg-black disabled:bg-[#e9eae6] disabled:text-[#a4a4a2]'}`}
+                  >
+                    {connected ? '✓ Conectado' : connecting ? 'Conectando…' : authMode === 'oauth' && !needsDomain ? `Conectar con ${spec.name}` : 'Conectar'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Sync logged-in toggle */}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[13.5px] font-semibold text-[#1a1a1a]">Sincronizar artículos para usuarios que han iniciado sesión</p>
+                  <p className="text-[12.5px] text-[#646462] leading-[17px] mt-0.5">Incluya artículos que solo sean visibles para los usuarios que hayan iniciado sesión.</p>
+                </div>
+                <Toggle on={syncLoggedIn} onClick={() => setSyncLoggedIn(v => !v)} />
+              </div>
+
+              {/* Resumen */}
+              <div className="pt-2">
+                <p className="text-center text-[13px] font-semibold text-[#1a1a1a] mb-4">Resumen</p>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="flex flex-col items-center text-center gap-2">
+                    <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg>
+                    <p className="text-[12px] text-[#646462] leading-[16px]">Sincronice artículos con ajustes personalizados con Fin AI Agent, Copilot y los Centros de ayuda</p>
+                  </div>
+                  <div className="flex flex-col items-center text-center gap-2">
+                    <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v5c0 4-3 6.5-7 8-4-1.5-7-4-7-8V6z"/><path d="M9 12l2 2 4-4"/></svg>
+                    <p className="text-[12px] text-[#646462] leading-[16px]">Sus datos de {spec.name} están seguros. Clain no cambiará sus datos ni ajustes.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 'metadata' && (
+            <div className="max-w-[560px] mx-auto px-8 py-9">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">¿Qué contenido de {spec.name} quieres importar?</h3>
+              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">Elige qué se sincroniza con tu base de conocimiento de Clain.</p>
+              <div className="bg-white border border-[#e9eae6] rounded-[10px] divide-y divide-[#f1f1ee]">
+                <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
+                  <input type="checkbox" checked={importPublic} onChange={() => setImportPublic(v => !v)} className="w-4 h-4 accent-[#1a1a1a]" />
+                  <div>
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Artículos públicos</p>
+                    <p className="text-[12px] text-[#646462]">Visibles en tu centro de ayuda para todos los clientes.</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
+                  <input type="checkbox" checked={importInternal} onChange={() => setImportInternal(v => !v)} className="w-4 h-4 accent-[#1a1a1a]" />
+                  <div>
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Artículos internos</p>
+                    <p className="text-[12px] text-[#646462]">Solo para tu equipo y Copilot.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {step === 'segmentation' && (
+            <div className="max-w-[560px] mx-auto px-8 py-9">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">¿A quién sirve este contenido?</h3>
+              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">Fin AI Agent y el Centro de ayuda usarán el contenido de {spec.name} para responder a las audiencias seleccionadas.</p>
+              <div className="flex flex-wrap gap-2">
+                {(['users', 'leads', 'visitors'] as const).map(t => {
+                  const active = audience.includes(t);
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => toggleAudience(t)}
+                      className={`h-9 px-4 rounded-full text-[13px] font-semibold border ${active ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                    >
+                      {t === 'users' ? 'Usuarios' : t === 'leads' ? 'Leads' : 'Visitantes'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {step === 'review' && (
+            <div className="max-w-[560px] mx-auto px-8 py-9">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Revisar y sincronizar</h3>
+              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">Comprueba la configuración antes de importar el contenido de {spec.name}.</p>
+              <dl className="bg-white border border-[#e9eae6] rounded-[10px] divide-y divide-[#f1f1ee] text-[13px]">
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">Fuente</dt>
+                  <dd className="text-[#1a1a1a] font-medium">{spec.name}{needsDomain && subdomain ? ` · ${subdomain}.${spec.domainSuffix}` : ''}</dd>
+                </div>
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">Método</dt>
+                  <dd className="text-[#1a1a1a]">{authMode === 'oauth' ? 'OAuth' : 'Token de API'}</dd>
+                </div>
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">Contenido</dt>
+                  <dd className="text-[#1a1a1a]">{[importPublic && 'Públicos', importInternal && 'Internos'].filter(Boolean).join(' + ') || '—'}</dd>
+                </div>
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">Audiencia</dt>
+                  <dd className="text-[#1a1a1a]">{audience.length === 3 ? 'Users, Leads, Visitors' : audience.join(', ')}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 border-t border-[#e9eae6] flex items-center justify-between px-6 h-[60px]">
+          <button
+            onClick={back}
+            disabled={step === 'connect' || busy}
+            className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-40"
+          >Atrás</button>
+          <button
+            onClick={next}
+            disabled={busy || (step === 'connect' && !connected)}
+            className="h-8 px-5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:bg-[#e9eae6] disabled:text-[#a4a4a2]"
           >
             {busy ? 'Sincronizando…' : step === 'review' ? 'Sincronizar' : 'Siguiente'}
           </button>
