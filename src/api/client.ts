@@ -1708,6 +1708,30 @@ export const finApi = {
     request<{ data: any[] }>(`/fin/gaps${status ? `?status=${status}` : ''}`).then((r) => r.data ?? []),
   listOutcomes: () =>
     request<{ data: any[] }>('/fin/outcomes').then((r) => r.data ?? []),
+
+  // ── F4: Procedures + Connectors ─────────────────────────────
+  listProcedures: () => request<{ data: any[] }>('/fin/procedures').then((r) => r.data ?? []),
+  createProcedure: (payload: { name: string; description?: string; trigger_criteria?: string; steps?: any[] }) =>
+    request<{ data: any }>('/fin/procedures', { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data),
+  updateProcedure: (id: string, payload: Record<string, any>) =>
+    request<{ data: any }>(`/fin/procedures/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }).then((r) => r.data),
+  archiveProcedure: (id: string) =>
+    request<any>(`/fin/procedures/${id}`, { method: 'DELETE' }),
+  publishProcedure: (id: string) =>
+    request<{ data: any }>(`/fin/procedures/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'live' }) }).then((r) => r.data),
+
+  listConnectors: () => request<{ data: any[] }>('/fin/connectors').then((r) => r.data ?? []),
+  createConnector: (payload: { name: string; kind: 'internal' | 'http'; base_url?: string | null; auth?: Record<string, string>; active?: boolean }) =>
+    request<{ data: any }>('/fin/connectors', { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data),
+  createConnectorAction: (connectorId: string, payload: Record<string, any>) =>
+    request<{ data: any }>(`/fin/connectors/${connectorId}/actions`, { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data),
+  updateConnectorAction: (id: string, payload: Record<string, any>) =>
+    request<{ data: any }>(`/fin/actions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }).then((r) => r.data),
+
+  listPendingActions: (status?: string) =>
+    request<{ data: any[] }>(`/fin/pending-actions${status ? `?status=${status}` : ''}`).then((r) => r.data ?? []),
+  decidePendingAction: (id: string, decision: 'approve' | 'reject') =>
+    request<{ data: any }>(`/fin/pending-actions/${id}/${decision}`, { method: 'POST' }).then((r) => r.data),
 };
 
 export const agentApi = {

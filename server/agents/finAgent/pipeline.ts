@@ -15,6 +15,8 @@ import { getSupabaseAdmin } from '../../db/supabase.js';
 import { getPrimaryProvider, getUtilityProvider } from '../chatAgent/providers/index.js';
 import { loadFinConfig, type FinConfig, type FinScope } from './config.js';
 import { retrieveKnowledge, type RetrievedChunk } from './retrieval.js';
+import { getActiveRun, matchProcedure, runProcedureTurn } from './procedures.js';
+import { hasActiveBillableOutcome } from './outcome.js';
 import {
   REFINE_SYSTEM, refinePrompt,
   buildGenerateSystem, generatePrompt,
@@ -150,6 +152,40 @@ async function recordKnowledgeGap(input: FinRunInput, gapText: string, queryText
   });
 }
 
+/** Insert an agent-authored message (draft or public reply) into the thread. */
+async function insertAgentMessage(
+  input: FinRunInput,
+  config: FinConfig,
+  text: string,
+  opts: { isPrivate: boolean; type: string; citations?: string[]; confidence?: number; reasoning?: Record<string, unknown> },
+): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  const messageId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('messages').insert({
+    id: messageId,
+    conversation_id: input.conversationId,
+    case_id: input.caseId,
+    type: opts.type,
+    direction: 'outbound',
+    sender_id: 'fin-agent',
+    sender_name: config.identity.name,
+    content: text,
+    content_type: 'text',
+    channel: input.channel,
+    sent_at: now,
+    created_at: now,
+    tenant_id: input.scope.tenantId,
+    is_private: opts.isPrivate,
+    author_type: 'ai',
+    citations: opts.citations ?? [],
+    confidence: opts.confidence ?? null,
+    reasoning: opts.reasoning ?? null,
+  });
+  if (error) throw error;
+  return messageId;
+}
+
 // ── The engine ────────────────────────────────────────────────────────────────
 
 export async function runFinPipeline(input: FinRunInput): Promise<FinRunResult> {
@@ -211,6 +247,66 @@ export async function runFinPipeline(input: FinRunInput): Promise<FinRunResult> 
       triage.outcome = 'skipped_reply_mode_off';
       await persistTriage(input, triage);
       return { runId, status: 'skipped', triage };
+    }
+
+    // ── E3-P: procedures (spec §5) — before RAG. An active run for this
+    // conversation always resumes; otherwise the refined intent is matched
+    // against the live procedure catalog. Preview runs skip procedures.
+    if (!input.previewQuestion) {
+      done = t('e3_procedures');
+      const activeRun = await getActiveRun(input.scope, input.conversationId);
+      const matched = activeRun ? null : await matchProcedure(input.scope, refined.refined_query);
+      if (activeRun || matched) {
+        const turn = await runProcedureTurn({
+          scope: input.scope, config,
+          caseId: input.caseId, conversationId: input.conversationId,
+          history: thread.history, latest: thread.latest, fence: f,
+          run: activeRun, procedure: matched,
+        });
+        done('ok', turn ? { run_id: turn.runId, status: turn.status } : { skipped: true });
+        if (turn) {
+          triage.procedure = { run_id: turn.runId, procedure_id: turn.procedureId, status: turn.status };
+          const isPrivate = replyMode !== 'bot_reply';
+          let messageId: string | undefined;
+          if (turn.say && !input.dryRun) {
+            messageId = await insertAgentMessage(input, config, turn.say, {
+              isPrivate,
+              type: isPrivate ? 'ai_draft' : 'reply',
+              reasoning: { run_id: runId, procedure_run_id: turn.runId, kind: 'procedure' },
+            });
+          }
+          const procOutcome = (turn as any).status === 'failed' ? 'procedure_failure'
+            : turn.handoff && turn.status === 'completed' ? 'procedure_handoff'
+            : null;
+          if (procOutcome === 'procedure_handoff') {
+            // Designed handoffs are billable (outcome taxonomy §7), one per conversation.
+            if (!(await hasActiveBillableOutcome(input.scope, input.conversationId))) {
+              await recordOutcome(input, 'procedure_handoff', true, { procedure_run_id: turn.runId, team: turn.handoff?.team ?? null });
+            }
+            if (!input.dryRun) {
+              const supabase = getSupabaseAdmin();
+              await supabase.from('cases')
+                .update({ escalation_reason: `fin_procedure_handoff${turn.handoff?.team ? `:${turn.handoff.team}` : ''}` })
+                .eq('id', input.caseId).eq('tenant_id', input.scope.tenantId);
+            }
+          } else if (procOutcome === 'procedure_failure') {
+            await recordOutcome(input, 'procedure_failure', false, { procedure_run_id: turn.runId, note: turn.handoff?.note ?? null });
+          }
+          triage.outcome = `procedure_${turn.status}`;
+          triage.finished_at = new Date().toISOString();
+          await persistTriage(input, triage);
+          const status: FinRunResult['status'] =
+            procOutcome === 'procedure_failure' ? 'escalated' :
+            procOutcome === 'procedure_handoff' ? 'escalated' :
+            turn.say ? (isPrivate ? 'draft_created' : 'replied') : 'skipped';
+          return {
+            runId, status, triage,
+            reply: turn.say ? { text: turn.say, citations: [], confidence: 1, isPrivate, messageId } : undefined,
+          };
+        }
+      } else {
+        done('skip');
+      }
     }
 
     // ── E2: retrieve ──────────────────────────────────────────────────────────
@@ -283,30 +379,13 @@ export async function runFinPipeline(input: FinRunInput): Promise<FinRunResult> 
 
     if (!input.dryRun && best.type !== 'cannot_answer') {
       done = t('e5_deliver');
-      const supabase = getSupabaseAdmin();
-      messageId = crypto.randomUUID();
-      const now = new Date().toISOString();
-      const { error } = await supabase.from('messages').insert({
-        id: messageId,
-        conversation_id: input.conversationId,
-        case_id: input.caseId,
+      messageId = await insertAgentMessage(input, config, best.text, {
+        isPrivate,
         type: isPrivate ? 'ai_draft' : 'reply',
-        direction: 'outbound',
-        sender_id: 'fin-agent',
-        sender_name: config.identity.name,
-        content: best.text,
-        content_type: 'text',
-        channel: input.channel,
-        sent_at: now,
-        created_at: now,
-        tenant_id: input.scope.tenantId,
-        is_private: isPrivate,
-        author_type: 'ai',
         citations: best.citations,
         confidence: best.score,
         reasoning: { run_id: runId, type: best.type, attempts: stages.filter((s) => s.stage.startsWith('e3')).length },
       });
-      if (error) throw error;
       done('ok', { messageId, isPrivate });
     }
 
