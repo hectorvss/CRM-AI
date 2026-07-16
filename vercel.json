@@ -132,7 +132,7 @@
   "crons": [
     { "path": "/api/internal/worker/tick",     "schedule": "0 12 * * *" },
     { "path": "/api/internal/scheduler/tick",  "schedule": "0 12 * * *" },
-    { "path": "/api/internal/fin/sweep",       "schedule": "30 * * * *" },
+    { "path": "/api/internal/fin/sweep",       "schedule": "30 6 * * *" },
     { "path": "/api/super-agent/cron/check",   "schedule": "0 0 * * *" }
   ]
 }
