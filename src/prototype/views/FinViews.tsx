@@ -231,6 +231,52 @@ function serverAttrToUi(a: any): FinAtributo {
   };
 }
 
+// ─── Escalation rules — server-backed via fin.escalation.rules ───────────────
+// The engine evaluates these deterministic rules and hands off to a human when
+// one matches (spec §5). Round-trip the editor's shape.
+function useFinEscalationRulesResource(seed: FinEscalationRule[]) {
+  const local = useFinResource<FinEscalationRule>('escalation_rules', seed);
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+    finApi.getConfig()
+      .then((cfg) => {
+        const arr = Array.isArray(cfg?.escalation?.rules) ? cfg.escalation.rules : [];
+        if (arr.length) local.replace(arr.map((r: any) => ({
+          id: r.id, title: r.title ?? r.description ?? '', enabled: r.enabled !== false,
+          audience: r.audience ?? 'all', channels: r.channels ?? [],
+          conditions: Array.isArray(r.conditions) ? r.conditions : [],
+        })));
+      })
+      .catch(() => { /* offline/dev */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const toServer = (r: FinEscalationRule) => ({
+    id: r.id, title: r.title, description: r.title, active: r.enabled !== false, enabled: r.enabled,
+    audience: r.audience, channels: r.channels, conditions: r.conditions,
+  });
+  const pushAll = (items: FinEscalationRule[]) =>
+    finApi.patchConfig({ escalation: { rules: items.map(toServer) } }).catch(() => { /* keep local */ });
+  return {
+    items: local.items,
+    create: (item: Omit<FinEscalationRule, 'id'>): FinEscalationRule => {
+      const created = local.create(item);
+      pushAll([...local.items, created]);
+      return created;
+    },
+    update: (id: string, patch: Partial<FinEscalationRule>) => {
+      local.update(id, patch);
+      pushAll(local.items.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+    },
+    remove: (id: string) => {
+      local.remove(id);
+      pushAll(local.items.filter((it) => it.id !== id));
+    },
+    replace: local.replace,
+  };
+}
+
 /** Server-backed attributes store: loads from /fin/config on mount, mirrors
  *  every change by patching the whole fin.attributes array (arrays replace). */
 function useFinAttributesResource(seed: FinAtributo[]) {
@@ -3583,7 +3629,7 @@ function FinEscalamientoContent() {
     [],
     [],
   );
-  const escalationRules = useFinResource<FinEscalationRule>('escalation_rules', FIN_SEED_ESCALATION_RULES);
+  const escalationRules = useFinEscalationRulesResource(FIN_SEED_ESCALATION_RULES);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<null | 'rule' | 'guideline'>(null);
   const [justCreated, setJustCreated] = useState<string | null>(null);

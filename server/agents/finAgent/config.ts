@@ -48,10 +48,21 @@ const FinAttribute = z.object({
   enabled: z.boolean().optional(),
 });
 
+const EscalationCondition = z.object({
+  id: z.string().optional(),
+  field: z.string(),
+  operator: z.string(),
+  value: z.string().optional().default(''),
+});
 const EscalationRule = z.object({
   id: z.string(),
-  description: z.string(),
+  title: z.string().optional().default(''),
+  description: z.string().optional().default(''),
   active: z.boolean().default(true),
+  enabled: z.boolean().optional(),
+  audience: z.string().optional(),
+  channels: z.array(z.string()).optional(),
+  conditions: z.array(EscalationCondition).optional().default([]),
 });
 
 const Audience = z.object({

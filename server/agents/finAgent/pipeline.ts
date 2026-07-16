@@ -17,6 +17,7 @@ import { loadFinConfig, type FinConfig, type FinScope } from './config.js';
 import { retrieveKnowledge, type RetrievedChunk } from './retrieval.js';
 import { getActiveRun, matchProcedure, runProcedureTurn } from './procedures.js';
 import { hasActiveBillableOutcome } from './outcome.js';
+import { evaluateEscalation } from './escalation.js';
 import {
   REFINE_SYSTEM, refinePrompt,
   ATTRIBUTES_SYSTEM, attributesPrompt,
@@ -253,6 +254,34 @@ export async function runFinPipeline(input: FinRunInput): Promise<FinRunResult> 
         done('ok', attrs);
       } catch (err: any) {
         done('fail', { error: String(err?.message ?? err) });
+      }
+    }
+
+    // ── E1.6: deterministic escalation rules (spec §5). If a rule matches, Fin
+    // hands off to a human instead of answering.
+    const escRules = (config.escalation as any)?.rules ?? [];
+    if (escRules.length && !input.previewQuestion) {
+      const match = evaluateEscalation(escRules, {
+        attributes: (triage.attributes as Record<string, unknown>) ?? {},
+        ticketType: refined.ticket_type,
+        language: refined.language,
+        message: thread.latest,
+        customer: (triage as any).customer_facts ?? {},
+      });
+      if (match) {
+        const defaultTeam = (config.escalation as any)?.default_team ?? null;
+        triage.escalation = { rule_id: match.ruleId, title: match.title, team: defaultTeam };
+        triage.outcome = 'escalated_by_rule';
+        triage.finished_at = new Date().toISOString();
+        await persistTriage(input, triage);
+        await recordOutcome(input, 'escalated', false, { reason: match.reason, rule_id: match.ruleId, team: defaultTeam });
+        if (!input.dryRun) {
+          const supabase = getSupabaseAdmin();
+          await supabase.from('cases')
+            .update({ escalation_reason: match.reason, ...(defaultTeam ? { assigned_team_id: defaultTeam } : {}) })
+            .eq('id', input.caseId).eq('tenant_id', input.scope.tenantId);
+        }
+        return { runId, status: 'escalated', triage };
       }
     }
 
