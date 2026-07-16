@@ -8,6 +8,7 @@ import { useApi } from '../../api/hooks';
 import { agentsApi, connectorsApi, knowledgeApi, workspacesApi } from '../../api/client';
 import { Dropdown, KH_TYPE_OPTIONS, KnowledgeArticleEditor, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, LibraryIcon, TrialBanner, relativeTime, titleCase } from '../sharedUi';
 import { parsePath, replaceRoute } from '../router';
+import { BrandIcon, brandColor, resolveBrandId } from '../brandIcons';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,53 +35,57 @@ const KH_CONVERSATIONS: KhItem[] = [
   { provider: 'Zendesk',  status: 'Importar los folios de atención de Zendesk (tarda entre 24 y 48 horas)', action: 'Sincronizar o importar', configured: false },
 ];
 
+// Some brands ship a very light official colour (e.g. Intercom #6AFDEF) that a
+// white mark can't sit on. Override the tile background for those so the glyph
+// always reads; every other brand uses its official colour from brandIcons.
+const KH_TILE_BG: Record<string, string> = {
+  Intercom: '#1a1a1a',
+};
+
 function KhProviderIcon({ name }: { name: string }) {
-  // Brand glyph with Figma-style brand mark on a small square.
   const cls = "w-5 h-5 rounded-[4px] flex items-center justify-center flex-shrink-0";
-  switch (name) {
-    case 'Intercom':
-      // Intercom mark: stacked vertical bars (book-like)
-      return (
-        <span className={cls} style={{ background: '#1a1a1a' }}>
-          <svg viewBox="0 0 16 16" className="w-3 h-3"><g fill="white"><rect x="2" y="2" width="1.4" height="9" rx="0.4"/><rect x="5" y="3.5" width="1.4" height="7.5" rx="0.4"/><rect x="8" y="2" width="1.4" height="10" rx="0.4"/><rect x="11" y="3.5" width="1.4" height="7.5" rx="0.4"/><rect x="2" y="12" width="10.4" height="1.4" rx="0.5"/></g></svg>
-        </span>
-      );
-    case 'Zendesk':
-      // Zendesk mark: two diagonal triangles
-      return (
-        <span className={cls} style={{ background: '#0e3a3a' }}>
-          <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M2 4l4 5v3H2zM7 12c0-2.5 2-4.5 4.5-4.5h2.5L8 12z" fill="white"/></svg>
-        </span>
-      );
-    case 'Guru':
-      // Guru mark: G letter in stylized form
-      return (
-        <span className={cls} style={{ background: '#a070ff' }}>
-          <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M8 3a5 5 0 100 10 5 5 0 003.5-1.5V8H8" fill="none" stroke="white" strokeWidth="1.6"/></svg>
-        </span>
-      );
-    case 'Notion':
-      // Notion mark: slanted N
-      return (
-        <span className={cls} style={{ background: '#000000' }}>
-          <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M5 3v10M5 3l6 10M11 3v10" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round"/></svg>
-        </span>
-      );
-    case 'Confluence':
-      // Confluence mark: two interlocking arcs
-      return (
-        <span className={cls} style={{ background: '#2563eb' }}>
-          <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M2 11c2-3 4.5-3 7 0M14 5c-2 3-4.5 3-7 0" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round"/></svg>
-        </span>
-      );
-    default:
-      // Fallback: dark square with first letter
-      return (
-        <span className={cls} style={{ background: '#646462' }}>
-          <span className="text-[10px] font-bold text-white">{name[0]}</span>
-        </span>
-      );
+  const id = resolveBrandId(name);
+  if (!id) {
+    // Unknown brand (e.g. Guru) → neutral tile with the initial.
+    return (
+      <span className={cls} style={{ background: '#646462' }}>
+        <span className="text-[10px] font-bold text-white">{name[0]}</span>
+      </span>
+    );
   }
+  const bg = KH_TILE_BG[name] ?? brandColor(name);
+  return (
+    <span className={cls} style={{ background: bg }}>
+      <BrandIcon name={name} size={12} monochrome color="#ffffff" />
+    </span>
+  );
+}
+
+// Polished action pill used for every source row / section action. Picks a
+// leading glyph from the action verb so "Agregar…", "Sincronizar o importar" and
+// "Administrar" read consistently across the whole Fuentes screen.
+function KhActionButton({ label, onClick }: { label: string; onClick?: () => void }) {
+  const a = label.toLowerCase();
+  const kind: 'add' | 'sync' | 'manage' = /agregar|cargar|añadir/.test(a) ? 'add'
+    : /sincroniz|importar/.test(a) ? 'sync'
+    : 'manage';
+  const Icon = kind === 'add' ? (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+  ) : kind === 'sync' ? (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2v3h-3"/></svg>
+  ) : (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><circle cx="8" cy="8" r="1.6"/><path d="M8 2.5v1.6M8 11.9v1.6M13.5 8h-1.6M4.1 8H2.5M11.9 4.1l-1.1 1.1M5.2 10.8l-1.1 1.1M11.9 11.9l-1.1-1.1M5.2 5.2 4.1 4.1" strokeLinecap="round"/></svg>
+  );
+  return (
+    <button
+      onClick={onClick}
+      disabled={!onClick}
+      className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full border border-[#e5e5e2] bg-white text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4] hover:border-[#d4d4d2] active:bg-[#efefec] disabled:opacity-45 disabled:cursor-default transition-colors flex-shrink-0"
+    >
+      <span className="text-[#646462]">{Icon}</span>
+      {label}
+    </button>
+  );
 }
 
 function KhSection({
@@ -106,9 +111,9 @@ function KhSection({
           {description && <p className="text-[13px] text-[#646462] mt-0.5">{description}</p>}
         </div>
         {headerAction && (
-          <button onClick={headerAction.onClick} className="text-[13px] font-medium text-[#1a1a1a] hover:underline flex-shrink-0">
-            {headerAction.label}
-          </button>
+          <div className="flex-shrink-0 mt-0.5">
+            <KhActionButton label={headerAction.label} onClick={headerAction.onClick} />
+          </div>
         )}
       </div>
       {hasItems && (
@@ -122,9 +127,9 @@ function KhSection({
                 }
               </div>
               {it.icon ?? <KhProviderIcon name={it.provider} />}
-              <span className="flex-1 text-[13px] text-[#1a1a1a]">{it.provider}</span>
-              <span className="text-[13px] text-[#646462]">{it.status}</span>
-              <button onClick={it.onClick} className="text-[13px] font-medium text-[#1a1a1a] hover:underline">{it.action}</button>
+              <span className="flex-shrink-0 text-[13px] font-medium text-[#1a1a1a]">{it.provider}</span>
+              <span className="flex-1 text-[13px] text-[#646462] truncate">{it.status}</span>
+              <KhActionButton label={it.action} onClick={it.onClick} />
             </div>
           ))}
         </div>

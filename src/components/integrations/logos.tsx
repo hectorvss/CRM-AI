@@ -15,6 +15,7 @@
  */
 
 import React from 'react';
+import { BRAND_ICONS, BrandIcon } from '../../prototype/brandIcons';
 
 // Map: integration id -> Simple Icons slug + brand hex (no #).
 // When both `slug` and `hex` are present we render the cdn.simpleicons.org SVG.
@@ -122,13 +123,22 @@ interface LogoProps {
  */
 export function IntegrationLogo({ id, size = 24, className = '' }: LogoProps) {
   const spec = INTEGRATION_LOGOS[id];
+
+  // Prefer the locally-vendored inline SVG (no runtime CDN request, CSP-safe).
+  // Sits inside the caller's colored chip, so mark colour mirrors the old CDN
+  // behaviour: white when monochromeWhite, otherwise the brand hex.
+  if (BRAND_ICONS[id]) {
+    const colour = !spec || spec.monochromeWhite ? '#ffffff' : `#${spec.hex ?? 'ffffff'}`;
+    return <BrandIcon name={id} size={size} color={colour} className={`select-none ${className}`} />;
+  }
+
   if (!spec) {
     // Unknown id — render a generic puzzle icon.
     return <span className={`material-symbols-outlined text-white ${className}`} style={{ fontSize: `${size}px` }} aria-hidden>extension</span>;
   }
 
   if (spec.slug) {
-    // Use white when the chip bg is the brand color (default) so the SVG reads.
+    // Brand not in the local set (removed from simple-icons) — fall back to CDN.
     const colour = spec.monochromeWhite ? 'ffffff' : spec.hex ?? 'ffffff';
     const url = `https://cdn.simpleicons.org/${spec.slug}/${colour}`;
     return (
