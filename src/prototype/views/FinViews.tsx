@@ -6393,35 +6393,101 @@ export function FinAiSettingsView({ view, onNavigate }: { view: View; onNavigate
 // Layout: H1 "Ajustes" + 2 sections (Uso, Personalización)
 //   Uso section: 2 cards — "Alertas y límites" + "Supervisar el uso" (with CTA)
 //   Personalización section: 5 accordion-style cards
-function FinSettingsCard({ icon, title, body, action }: { icon: React.ReactNode; title: string; body?: string; action?: React.ReactNode }) {
+function FinSettingsAccordionCard({ icon, title, body, children, defaultOpen }: { icon: ReactNode; title: string; body?: string; children?: ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
+  const expandable = !!children;
   return (
-    <div className="bg-white border border-[#e9eae6] rounded-[12px] px-6 py-6 flex items-start gap-3">
-      <div className="flex-shrink-0 w-5 h-5 mt-0.5 text-[#1a1a1a]">{icon}</div>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-[16px] font-semibold text-[#1a1a1a] leading-[24px]">{title}</h3>
-        {body && <p className="mt-1.5 text-[13px] text-[#646462] leading-[20px]">{body}</p>}
+    <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+      <div
+        onClick={() => expandable && setOpen((v) => !v)}
+        className={`px-6 py-6 flex items-center gap-3 ${expandable ? 'cursor-pointer hover:bg-[#fbfbf9]' : ''}`}
+      >
+        <div className="flex-shrink-0 w-5 h-5 text-[#1a1a1a]">{icon}</div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-[16px] font-semibold text-[#1a1a1a] leading-[24px]">{title}</h3>
+          {body && <p className="mt-1 text-[13px] text-[#646462] leading-[20px]">{body}</p>}
+        </div>
+        <svg viewBox="0 0 16 16" className={`flex-shrink-0 w-4 h-4 fill-none stroke-[#646462] transition-transform ${open ? 'rotate-90' : ''}`} strokeWidth="1.4">
+          <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
       </div>
-      {action && <div className="flex-shrink-0 ml-2">{action}</div>}
+      {expandable && open && (
+        <div className="px-6 pb-6 pt-1 border-t border-[#f0f0ee]">{children}</div>
+      )}
     </div>
   );
 }
 
-function FinSettingsAccordionCard({ icon, title, body }: { icon: React.ReactNode; title: string; body?: string }) {
+// Small labeled row helpers for the Fin settings form.
+function FinSettingField({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="bg-white border border-[#e9eae6] rounded-[12px] px-6 py-6 flex items-center gap-3 cursor-pointer hover:bg-[#fbfbf9]">
-      <div className="flex-shrink-0 w-5 h-5 text-[#1a1a1a]">{icon}</div>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-[16px] font-semibold text-[#1a1a1a] leading-[24px]">{title}</h3>
-        {body && <p className="mt-1 text-[13px] text-[#646462] leading-[20px]">{body}</p>}
-      </div>
-      <svg viewBox="0 0 16 16" className="flex-shrink-0 w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4">
-        <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
+    <div className="py-3 first:pt-4">
+      <div className="text-[13px] font-semibold text-[#1a1a1a]">{label}</div>
+      {hint && <div className="text-[12px] text-[#646462] mt-0.5 mb-1.5">{hint}</div>}
+      <div className={hint ? '' : 'mt-1.5'}>{children}</div>
     </div>
   );
 }
+const FIN_SETTINGS_INPUT = 'h-9 px-3 rounded-[8px] border border-[#e9eae6] text-[13px] bg-white focus:outline-none focus:border-[#1a1a1a]';
+
+const FIN_LANG_LABELS: Record<string, string> = {
+  es: 'Español', en: 'Inglés', fr: 'Francés', de: 'Alemán', it: 'Italiano',
+  pt: 'Portugués', nl: 'Neerlandés', ca: 'Catalán', gl: 'Gallego', eu: 'Euskera',
+};
 
 function FinSettingsContent() {
+  const [cfg, setCfg] = useState<any | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [newLang, setNewLang] = useState('');
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    finApi.getConfig()
+      .then((c: any) => setCfg(c && typeof c === 'object' ? c : {}))
+      .catch(() => { setLoadError(true); setCfg({}); });
+    return () => { if (savedTimer.current) clearTimeout(savedTimer.current); };
+  }, []);
+
+  const flashSaved = () => {
+    setSaved(true);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 1600);
+  };
+  const save = (partial: Record<string, any>) => {
+    finApi.patchConfig(partial).then(flashSaved).catch(() => {});
+  };
+  const setIdentity = (patch: Record<string, any>) => {
+    setCfg((p: any) => ({ ...p, identity: { ...(p?.identity ?? {}), ...patch } }));
+    save({ identity: patch });
+  };
+  const setCaps = (patch: Record<string, any>) => {
+    setCfg((p: any) => ({ ...p, caps: { ...(p?.caps ?? {}), ...patch } }));
+    save({ caps: patch });
+  };
+  const setValidation = (patch: Record<string, any>) => {
+    setCfg((p: any) => ({ ...p, validation: { ...(p?.validation ?? {}), ...patch } }));
+    save({ validation: patch });
+  };
+
+  if (!cfg) {
+    return <div className="flex-1 flex items-center justify-center text-[13px] text-[#646462]">Cargando ajustes…</div>;
+  }
+
+  const id = cfg.identity ?? {};
+  const caps = cfg.caps ?? {};
+  const validation = cfg.validation ?? {};
+  const languages: string[] = Array.isArray(id.languages) ? id.languages : [];
+  const confidence = typeof validation.confidence_threshold === 'number' ? validation.confidence_threshold : 0.6;
+
+  const addLang = () => {
+    const l = newLang.trim().toLowerCase();
+    if (!l || languages.includes(l)) { setNewLang(''); return; }
+    setIdentity({ languages: [...languages, l] });
+    setNewLang('');
+  };
+  const removeLang = (l: string) => setIdentity({ languages: languages.filter((x) => x !== l) });
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* H1 header */}
@@ -6432,60 +6498,148 @@ function FinSettingsContent() {
           </svg>
         </button>
         <h1 className="text-[20px] font-bold text-[#1a1a1a] leading-[24px]">Ajustes</h1>
+        <span className={`ml-2 text-[12px] text-[#2f8f57] transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>Guardado ✓</span>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-6 py-6 max-w-[1100px] space-y-8">
-          {/* Uso section */}
-          <section>
-            <h2 className="text-[18px] font-semibold text-[#1a1a1a] leading-[24px] mb-4">Uso</h2>
-            <div className="space-y-3">
-              <FinSettingsCard
-                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1l1.5 4.5h4.5l-3.7 2.7L11.7 13 8 10.3 4.3 13l1.4-4.8L2 5.5h4.5L8 1z" strokeLinejoin="round"/></svg>}
-                title="Alertas y límites"
-                body="Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto."
-              />
-              <FinSettingsCard
-                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 11V7M8 11V5M11 11V9"/></svg>}
-                title="Supervisar el uso"
-                body="Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo."
-                action={
-                  <a href="#" className="inline-flex h-8 px-3 rounded-full bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] items-center">
-                    Ver el uso
-                  </a>
-                }
-              />
+          {loadError && (
+            <div className="rounded-[10px] border border-[#f0d8b8] bg-[#fdf6ec] px-4 py-3 text-[13px] text-[#8a5a1a]">
+              No se pudo cargar la configuración de Fin (¿sesión sin iniciar?). Los cambios podrían no guardarse.
             </div>
-          </section>
+          )}
 
           {/* Personalización section */}
           <section>
             <h2 className="text-[18px] font-semibold text-[#1a1a1a] leading-[24px] mb-4">Personalización</h2>
             <div className="space-y-3">
+              {/* Identidad — nombre / tono / longitud */}
               <FinSettingsAccordionCard
+                defaultOpen
                 icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="5.5" r="2.5"/><path d="M2.5 13.5c0-2.8 2.5-5 5.5-5s5.5 2.2 5.5 5"/></svg>}
                 title="La identidad de Fin"
-                body="Administra el nombre y avatar que verán tus clientes."
-              />
-              <FinSettingsAccordionCard
-                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="3.5" rx="1.5"/><rect x="2" y="9.5" width="12" height="3.5" rx="1.5"/></svg>}
-                title="Botones de respuesta de Fin"
-                body="Elija cómo Fin formula las opciones que les presenta a sus clientes. Disponible en SMS."
-              />
-              <FinSettingsAccordionCard
-                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13"/></svg>}
-                title="Soporte multilingüe de Fin"
-                body="Controla los idiomas en los que responderá Fin."
-              />
-              <FinSettingsAccordionCard
-                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>}
-                title="Respuestas de correo electrónico de Fin"
-                body="Controla cómo Fin responde a los correos electrónicos de tus clientes"
-              />
+                body="El nombre y el tono con el que Fin habla a tus clientes."
+              >
+                <FinSettingField label="Nombre" hint="Cómo se presenta Fin ante tus clientes.">
+                  <input
+                    className={`${FIN_SETTINGS_INPUT} w-full max-w-[320px]`}
+                    value={id.name ?? ''}
+                    placeholder="Fin"
+                    onChange={(e) => setCfg((p: any) => ({ ...p, identity: { ...(p?.identity ?? {}), name: e.target.value } }))}
+                    onBlur={(e) => save({ identity: { name: e.target.value } })}
+                  />
+                </FinSettingField>
+                <FinSettingField label="Tono" hint="Estilo general de las respuestas.">
+                  <select className={`${FIN_SETTINGS_INPUT} w-full max-w-[320px]`} value={id.tone ?? 'professional'} onChange={(e) => setIdentity({ tone: e.target.value })}>
+                    <option value="professional">Profesional</option>
+                    <option value="friendly">Cercano</option>
+                    <option value="humorous">Distendido</option>
+                  </select>
+                </FinSettingField>
+                <FinSettingField label="Longitud de respuesta" hint="Cuánto se extiende Fin al responder.">
+                  <select className={`${FIN_SETTINGS_INPUT} w-full max-w-[320px]`} value={id.answer_length ?? 'balanced'} onChange={(e) => setIdentity({ answer_length: e.target.value })}>
+                    <option value="concise">Concisa</option>
+                    <option value="balanced">Equilibrada</option>
+                    <option value="thorough">Detallada</option>
+                  </select>
+                </FinSettingField>
+              </FinSettingsAccordionCard>
+
+              {/* Formalidad */}
               <FinSettingsAccordionCard
                 icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 11c0-2.5 2-4.5 5-4.5s5 2 5 4.5"/><circle cx="8" cy="4.5" r="2.5"/></svg>}
                 title="Formalidad de los pronombres en Fin"
-              />
+                body="Trata a tus clientes de tú o de usted."
+              >
+                <FinSettingField label="Tratamiento">
+                  <select className={`${FIN_SETTINGS_INPUT} w-full max-w-[320px]`} value={id.formality ?? 'tú'} onChange={(e) => setIdentity({ formality: e.target.value })}>
+                    <option value="tú">Tú (informal)</option>
+                    <option value="usted">Usted (formal)</option>
+                  </select>
+                </FinSettingField>
+              </FinSettingsAccordionCard>
+
+              {/* Multilingüe */}
+              <FinSettingsAccordionCard
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13"/></svg>}
+                title="Soporte multilingüe de Fin"
+                body="Idiomas en los que Fin puede responder. Sin idiomas, responde en el idioma del cliente."
+              >
+                <FinSettingField label="Idiomas admitidos">
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {languages.length === 0 && <span className="text-[13px] text-[#646462]">Aún no hay idiomas configurados.</span>}
+                    {languages.map((l) => (
+                      <span key={l} className="inline-flex items-center gap-1.5 h-7 pl-3 pr-1.5 rounded-full bg-[#f3f3f1] text-[13px] text-[#1a1a1a]">
+                        {FIN_LANG_LABELS[l] ?? l}
+                        <button onClick={() => removeLang(l)} className="w-5 h-5 rounded-full hover:bg-[#e4e4e0] flex items-center justify-center text-[#646462]" aria-label={`Quitar ${l}`}>
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className={`${FIN_SETTINGS_INPUT} w-[200px]`}
+                      value={newLang}
+                      placeholder="es, en, fr…"
+                      onChange={(e) => setNewLang(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLang(); } }}
+                    />
+                    <button onClick={addLang} className="h-9 px-3 rounded-[8px] bg-[#222] hover:bg-black text-[#f8f8f7] text-[13px] font-semibold">Añadir</button>
+                  </div>
+                </FinSettingField>
+              </FinSettingsAccordionCard>
+            </div>
+          </section>
+
+          {/* Uso / límites section */}
+          <section>
+            <h2 className="text-[18px] font-semibold text-[#1a1a1a] leading-[24px] mb-4">Uso y límites</h2>
+            <div className="space-y-3">
+              <FinSettingsAccordionCard
+                defaultOpen
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1l1.5 4.5h4.5l-3.7 2.7L11.7 13 8 10.3 4.3 13l1.4-4.8L2 5.5h4.5L8 1z" strokeLinejoin="round"/></svg>}
+                title="Alertas y límites"
+                body="Controla cuántas respuestas envía Fin al día y a quién avisar."
+              >
+                <FinSettingField label="Máximo de respuestas al día" hint="0 o vacío = sin límite.">
+                  <input
+                    type="number" min={0}
+                    className={`${FIN_SETTINGS_INPUT} w-[160px]`}
+                    value={typeof caps.daily_replies === 'number' ? caps.daily_replies : ''}
+                    placeholder="Sin límite"
+                    onChange={(e) => setCfg((p: any) => ({ ...p, caps: { ...(p?.caps ?? {}), daily_replies: e.target.value === '' ? null : Number(e.target.value) } }))}
+                    onBlur={(e) => setCaps({ daily_replies: e.target.value === '' ? null : Number(e.target.value) })}
+                  />
+                </FinSettingField>
+                <FinSettingField label="Email de alertas" hint="Dónde avisar cuando se alcanza un límite.">
+                  <input
+                    type="email"
+                    className={`${FIN_SETTINGS_INPUT} w-full max-w-[320px]`}
+                    value={caps.alert_email ?? ''}
+                    placeholder="alertas@tuempresa.com"
+                    onChange={(e) => setCfg((p: any) => ({ ...p, caps: { ...(p?.caps ?? {}), alert_email: e.target.value } }))}
+                    onBlur={(e) => setCaps({ alert_email: e.target.value || null })}
+                  />
+                </FinSettingField>
+              </FinSettingsAccordionCard>
+
+              <FinSettingsAccordionCard
+                icon={<svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 11V7M8 11V5M11 11V9"/></svg>}
+                title="Umbral de confianza"
+                body="Cuánta seguridad necesita Fin para responder por sí solo en lugar de escalar."
+              >
+                <FinSettingField label={`Umbral: ${Math.round(confidence * 100)}%`} hint="Más alto = Fin responde solo cuando está muy seguro.">
+                  <input
+                    type="range" min={0} max={100} step={5}
+                    className="w-full max-w-[320px] accent-[#222]"
+                    value={Math.round(confidence * 100)}
+                    onChange={(e) => setCfg((p: any) => ({ ...p, validation: { ...(p?.validation ?? {}), confidence_threshold: Number(e.target.value) / 100 } }))}
+                    onMouseUp={(e) => setValidation({ confidence_threshold: Number((e.target as HTMLInputElement).value) / 100 })}
+                    onTouchEnd={(e) => setValidation({ confidence_threshold: Number((e.target as HTMLInputElement).value) / 100 })}
+                  />
+                </FinSettingField>
+              </FinSettingsAccordionCard>
             </div>
           </section>
         </div>
