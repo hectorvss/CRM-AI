@@ -10,6 +10,15 @@ import { AVATAR_ME, ICON_ALL, ICON_CREATED, ICON_DASHBOARD, ICON_EMAIL2, ICON_ES
 import type { Attachment, Conversation, Message, View } from '../types';
 import { parsePath, pathFor, replaceRoute } from '../router';
 
+// Navigate to another top-level view (optionally a sub-tab) from anywhere in the
+// inbox. Sets the clean path first, then fires app-navigate so PrototypeApp
+// switches the view without clobbering the sub segment.
+function navigateApp(view: View, sub?: string) {
+  if (typeof window === 'undefined') return;
+  window.history.pushState({}, '', pathFor(sub ? { view, sub } : { view }));
+  window.dispatchEvent(new CustomEvent('app-navigate', { detail: { view } }));
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INBOX VIEW
@@ -141,8 +150,8 @@ function InboxSidebar({
               <span
                 role="button"
                 tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); notify('Crear nueva regla de Fin — próximamente'); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); notify('Crear nueva regla de Fin — próximamente'); } }}
+                onClick={(e) => { e.stopPropagation(); navigateApp('fin', 'finSimpleAutomations'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); navigateApp('fin', 'finSimpleAutomations'); } }}
                 className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7] cursor-pointer"
                 title="Nueva regla de Fin"
               >
@@ -210,8 +219,8 @@ function InboxSidebar({
               <span
                 role="button"
                 tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); if (onNewTeammate) onNewTeammate(); else notify('Invitar compañero de equipo — próximamente'); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); if (onNewTeammate) onNewTeammate(); else notify('Invitar compañero de equipo — próximamente'); } }}
+                onClick={(e) => { e.stopPropagation(); if (onNewTeammate) onNewTeammate(); else navigateApp('workspaceTeammates'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); if (onNewTeammate) onNewTeammate(); else navigateApp('workspaceTeammates'); } }}
                 className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7] cursor-pointer"
                 title="Invitar compañero"
               >
