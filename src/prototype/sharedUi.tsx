@@ -1894,7 +1894,21 @@ export function KnowledgeConnectAppWizard({
   const [audience, setAudience] = useState<string[]>(['users', 'leads', 'visitors']);
   const [importPublic, setImportPublic] = useState(true);
   const [importInternal, setImportInternal] = useState(true);
+  const [destinationDomain, setDestinationDomain] = useState<string>('');
+  const [language, setLanguage] = useState<string>('es');
+  const [syncFrequency, setSyncFrequency] = useState<'manual' | 'daily' | 'weekly'>('daily');
+  const [products, setProducts] = useState<{ fin: boolean; copilot: boolean; helpcenter: boolean }>({ fin: true, copilot: true, helpcenter: false });
   const [busy, setBusy] = useState(false);
+
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
+  const domains: Array<{ id: string; name: string }> = (Array.isArray(domainsData) ? domainsData : []).map((d: any) => ({ id: d.id, name: d.name }));
+  const FREQ_LABEL: Record<'manual' | 'daily' | 'weekly', string> = { manual: 'Manual', daily: 'Diaria', weekly: 'Semanal' };
+  const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'Inglés', fr: 'Francés', de: 'Alemán', pt: 'Portugués', it: 'Italiano' };
+  const productList = [
+    products.fin && 'Fin AI Agent',
+    products.copilot && 'Copilot',
+    products.helpcenter && 'Centro de ayuda',
+  ].filter(Boolean) as string[];
 
   const needsDomain = !!spec.domainSuffix;
   const needsApiKey = !needsDomain && authMode === 'api';
@@ -1946,6 +1960,9 @@ export function KnowledgeConnectAppWizard({
         '## Contenido importado',
         `- ${scopes || 'artículos'}`,
         `- Usuarios con sesión iniciada: ${syncLoggedIn ? 'sí' : 'no'}`,
+        `- Idioma: ${LANG_LABEL[language] ?? language}`,
+        `- Sincronización: ${FREQ_LABEL[syncFrequency]}`,
+        `- Productos: ${productList.join(', ') || '—'}`,
       ];
       await knowledgeApi.createArticle({
         title: `Sincronización: ${spec.name}`,
@@ -1953,12 +1970,14 @@ export function KnowledgeConnectAppWizard({
         description: `Fuente ${spec.name} conectada e importando ${scopes || 'artículos'}.`,
         type: 'website',
         visibility: importInternal && !importPublic ? 'internal' : 'public',
-        helpcenter_status: 'draft',
+        ...(destinationDomain ? { domain_id: destinationDomain } : {}),
+        language,
+        helpcenter_status: products.helpcenter ? 'published' : 'draft',
         helpcenter_audience: audience,
         fin_audience: audience,
-        copilot_enabled: true,
-        fin_service: true,
-        tags: [`${spec.name.toLowerCase()}-sync`],
+        copilot_enabled: products.copilot,
+        fin_service: products.fin,
+        tags: [`${spec.name.toLowerCase()}-sync`, `sync-${syncFrequency}`],
       });
       onAction(`${spec.name} sincronizado`);
       onSaved();
@@ -2021,7 +2040,8 @@ export function KnowledgeConnectAppWizard({
         {/* Body */}
         <div className="flex-1 overflow-y-auto min-h-0">
           {step === 'connect' && (
-            <div className="max-w-[560px] mx-auto px-8 py-9 flex flex-col gap-6">
+            <div className="min-h-full flex flex-col max-w-[560px] mx-auto px-8 py-9">
+             <div className="flex flex-col gap-6">
               {/* Brand tiles */}
               <div className="flex items-center justify-center gap-4">
                 <span className="w-14 h-14 rounded-2xl bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center">
@@ -2105,17 +2125,25 @@ export function KnowledgeConnectAppWizard({
                 <Toggle on={syncLoggedIn} onClick={() => setSyncLoggedIn(v => !v)} />
               </div>
 
-              {/* Resumen */}
-              <div className="pt-2">
-                <p className="text-center text-[13px] font-semibold text-[#1a1a1a] mb-4">Resumen</p>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="flex flex-col items-center text-center gap-2">
-                    <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg>
-                    <p className="text-[12px] text-[#646462] leading-[16px]">Sincronice artículos con ajustes personalizados con Fin AI Agent, Copilot y los Centros de ayuda</p>
-                  </div>
-                  <div className="flex flex-col items-center text-center gap-2">
-                    <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v5c0 4-3 6.5-7 8-4-1.5-7-4-7-8V6z"/><path d="M9 12l2 2 4-4"/></svg>
-                    <p className="text-[12px] text-[#646462] leading-[16px]">Sus datos de {spec.name} están seguros. Clain no cambiará sus datos ni ajustes.</p>
+             </div>{/* end top group */}
+
+              {/* Resumen — pushed to the bottom to fill the empty space */}
+              <div className="mt-auto pt-10">
+                <div className="border-t border-[#f1f1ee] pt-8 pb-2">
+                  <p className="text-center text-[13px] font-semibold text-[#1a1a1a] mb-7">Resumen</p>
+                  <div className="grid grid-cols-2 gap-10">
+                    <div className="flex flex-col items-center text-center gap-3.5">
+                      <span className="w-12 h-12 rounded-2xl bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
+                        <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg>
+                      </span>
+                      <p className="text-[13px] text-[#646462] leading-[19px] max-w-[220px]">Sincronice artículos con ajustes personalizados con Fin AI Agent, Copilot y los Centros de ayuda</p>
+                    </div>
+                    <div className="flex flex-col items-center text-center gap-3.5">
+                      <span className="w-12 h-12 rounded-2xl bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
+                        <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v5c0 4-3 6.5-7 8-4-1.5-7-4-7-8V6z"/><path d="M9 12l2 2 4-4"/></svg>
+                      </span>
+                      <p className="text-[13px] text-[#646462] leading-[19px] max-w-[220px]">Sus datos de {spec.name} están seguros. Clain no cambiará sus datos ni ajustes.</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2123,70 +2151,162 @@ export function KnowledgeConnectAppWizard({
           )}
 
           {step === 'metadata' && (
-            <div className="max-w-[560px] mx-auto px-8 py-9">
-              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">¿Qué contenido de {spec.name} quieres importar?</h3>
-              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">Elige qué se sincroniza con tu base de conocimiento de Clain.</p>
-              <div className="bg-white border border-[#e9eae6] rounded-[10px] divide-y divide-[#f1f1ee]">
-                <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
-                  <input type="checkbox" checked={importPublic} onChange={() => setImportPublic(v => !v)} className="w-4 h-4 accent-[#1a1a1a]" />
-                  <div>
-                    <p className="text-[13px] font-medium text-[#1a1a1a]">Artículos públicos</p>
-                    <p className="text-[12px] text-[#646462]">Visibles en tu centro de ayuda para todos los clientes.</p>
-                  </div>
-                </label>
-                <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
-                  <input type="checkbox" checked={importInternal} onChange={() => setImportInternal(v => !v)} className="w-4 h-4 accent-[#1a1a1a]" />
-                  <div>
-                    <p className="text-[13px] font-medium text-[#1a1a1a]">Artículos internos</p>
-                    <p className="text-[12px] text-[#646462]">Solo para tu equipo y Copilot.</p>
-                  </div>
-                </label>
+            <div className="max-w-[560px] mx-auto px-8 py-9 flex flex-col gap-7">
+              <div>
+                <h3 className="text-[16px] font-semibold text-[#1a1a1a]">¿Qué contenido de {spec.name} quieres importar?</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1">Elige qué se sincroniza con tu base de conocimiento de Clain y cómo se organiza.</p>
+              </div>
+
+              {/* Qué importar */}
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide mb-2">Contenido</p>
+                <div className="bg-white border border-[#e9eae6] rounded-[10px] divide-y divide-[#f1f1ee]">
+                  {([
+                    { key: 'public',   on: importPublic,   set: setImportPublic,   title: 'Artículos públicos', desc: 'Visibles en tu centro de ayuda para todos los clientes.' },
+                    { key: 'internal', on: importInternal, set: setImportInternal, title: 'Artículos internos', desc: 'Solo para tu equipo y Copilot.' },
+                  ] as const).map(row => (
+                    <label key={row.key} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#fafafa]">
+                      <input type="checkbox" checked={row.on} onChange={() => row.set(v => !v)} className="w-4 h-4 accent-[#1a1a1a]" />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-medium text-[#1a1a1a]">{row.title}</p>
+                        <p className="text-[12px] text-[#646462]">{row.desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Carpeta destino + idioma */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Carpeta de destino</label>
+                  <select
+                    value={destinationDomain}
+                    onChange={e => setDestinationDomain(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-[#e9eae6] bg-white px-3 text-[13px] text-[#1a1a1a] outline-none focus:border-[#1a1a1a]"
+                  >
+                    <option value="">Sin carpeta</option>
+                    {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Idioma principal</label>
+                  <select
+                    value={language}
+                    onChange={e => setLanguage(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-[#e9eae6] bg-white px-3 text-[13px] text-[#1a1a1a] outline-none focus:border-[#1a1a1a]"
+                  >
+                    {Object.entries(LANG_LABEL).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Frecuencia */}
+              <div>
+                <label className="block text-[12px] font-semibold text-[#646462] mb-2">Frecuencia de sincronización</label>
+                <div className="inline-flex bg-[#f3f3f1] rounded-full p-0.5">
+                  {(['manual', 'daily', 'weekly'] as const).map(f => {
+                    const on = syncFrequency === f;
+                    return (
+                      <button
+                        key={f}
+                        onClick={() => setSyncFrequency(f)}
+                        className={`h-8 px-4 rounded-full text-[13px] font-medium transition-colors ${on ? 'bg-white text-[#1a1a1a] shadow-sm' : 'text-[#646462] hover:text-[#1a1a1a]'}`}
+                      >{FREQ_LABEL[f]}</button>
+                    );
+                  })}
+                </div>
+                <p className="text-[12px] text-[#646462] mt-2">
+                  {syncFrequency === 'manual' ? 'Solo se importará cuando lo lances manualmente.'
+                    : syncFrequency === 'daily' ? 'Clain revisará cambios en Zendesk cada día.'.replace('Zendesk', spec.name)
+                    : 'Clain revisará cambios cada semana.'}
+                </p>
               </div>
             </div>
           )}
 
           {step === 'segmentation' && (
-            <div className="max-w-[560px] mx-auto px-8 py-9">
-              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">¿A quién sirve este contenido?</h3>
-              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">Fin AI Agent y el Centro de ayuda usarán el contenido de {spec.name} para responder a las audiencias seleccionadas.</p>
-              <div className="flex flex-wrap gap-2">
-                {(['users', 'leads', 'visitors'] as const).map(t => {
-                  const active = audience.includes(t);
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => toggleAudience(t)}
-                      className={`h-9 px-4 rounded-full text-[13px] font-semibold border ${active ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
-                    >
-                      {t === 'users' ? 'Usuarios' : t === 'leads' ? 'Leads' : 'Visitantes'}
-                    </button>
-                  );
-                })}
+            <div className="max-w-[560px] mx-auto px-8 py-9 flex flex-col gap-7">
+              <div>
+                <h3 className="text-[16px] font-semibold text-[#1a1a1a]">¿A quién sirve este contenido?</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1">Elige la audiencia y qué productos de Clain usarán el contenido de {spec.name}.</p>
+              </div>
+
+              {/* Audiencia */}
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide mb-2">Audiencia</p>
+                <div className="flex flex-wrap gap-2">
+                  {(['users', 'leads', 'visitors'] as const).map(t => {
+                    const active = audience.includes(t);
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => toggleAudience(t)}
+                        className={`h-9 px-4 rounded-full text-[13px] font-semibold border ${active ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                      >
+                        {t === 'users' ? 'Usuarios' : t === 'leads' ? 'Leads' : 'Visitantes'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Productos */}
+              <div>
+                <p className="text-[12px] font-semibold text-[#646462] uppercase tracking-wide mb-2">Productos que usarán este contenido</p>
+                <div className="bg-white border border-[#e9eae6] rounded-[10px] divide-y divide-[#f1f1ee]">
+                  {([
+                    { key: 'fin' as const,        title: 'Fin AI Agent',   desc: 'Responde a los clientes con este contenido.' },
+                    { key: 'copilot' as const,    title: 'Copilot',        desc: 'Sugiere respuestas a tus agentes en el buzón.' },
+                    { key: 'helpcenter' as const, title: 'Centro de ayuda', desc: 'Publica el contenido para autoservicio de clientes.' },
+                  ]).map(row => (
+                    <div key={row.key} className="flex items-center gap-3 px-4 py-3">
+                      <div className="flex-1">
+                        <p className="text-[13px] font-medium text-[#1a1a1a]">{row.title}</p>
+                        <p className="text-[12px] text-[#646462]">{row.desc}</p>
+                      </div>
+                      <Toggle on={products[row.key]} onClick={() => setProducts(p => ({ ...p, [row.key]: !p[row.key] }))} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
           {step === 'review' && (
-            <div className="max-w-[560px] mx-auto px-8 py-9">
-              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Revisar y sincronizar</h3>
-              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">Comprueba la configuración antes de importar el contenido de {spec.name}.</p>
+            <div className="max-w-[560px] mx-auto px-8 py-9 flex flex-col gap-5">
+              <div>
+                <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Revisar y sincronizar</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1">Comprueba la configuración antes de importar el contenido de {spec.name}.</p>
+              </div>
+
+              {/* Brand header */}
+              <div className="flex items-center gap-3 bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] px-4 py-3.5">
+                <span className="w-10 h-10 rounded-xl bg-white border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                  <BrandIcon name={provider} size={22} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{spec.name}</p>
+                  <p className="text-[12px] text-[#646462] truncate">{needsDomain && subdomain ? `${subdomain}.${spec.domainSuffix}` : 'Conexión OAuth'} · {authMode === 'oauth' ? 'OAuth' : 'Token de API'}</p>
+                </div>
+                <span className="text-[11px] font-semibold text-[#15803d] bg-[#dcfce7] rounded-full px-2.5 py-1 flex-shrink-0">Conectado</span>
+              </div>
+
               <dl className="bg-white border border-[#e9eae6] rounded-[10px] divide-y divide-[#f1f1ee] text-[13px]">
-                <div className="flex items-start justify-between px-4 py-3 gap-4">
-                  <dt className="text-[#646462]">Fuente</dt>
-                  <dd className="text-[#1a1a1a] font-medium">{spec.name}{needsDomain && subdomain ? ` · ${subdomain}.${spec.domainSuffix}` : ''}</dd>
-                </div>
-                <div className="flex items-start justify-between px-4 py-3 gap-4">
-                  <dt className="text-[#646462]">Método</dt>
-                  <dd className="text-[#1a1a1a]">{authMode === 'oauth' ? 'OAuth' : 'Token de API'}</dd>
-                </div>
-                <div className="flex items-start justify-between px-4 py-3 gap-4">
-                  <dt className="text-[#646462]">Contenido</dt>
-                  <dd className="text-[#1a1a1a]">{[importPublic && 'Públicos', importInternal && 'Internos'].filter(Boolean).join(' + ') || '—'}</dd>
-                </div>
-                <div className="flex items-start justify-between px-4 py-3 gap-4">
-                  <dt className="text-[#646462]">Audiencia</dt>
-                  <dd className="text-[#1a1a1a]">{audience.length === 3 ? 'Users, Leads, Visitors' : audience.join(', ')}</dd>
-                </div>
+                {([
+                  ['Contenido', [importPublic && 'Públicos', importInternal && 'Internos'].filter(Boolean).join(' + ') || '—'],
+                  ['Carpeta de destino', destinationDomain ? (domains.find(d => d.id === destinationDomain)?.name || 'Carpeta') : 'Sin carpeta'],
+                  ['Idioma', LANG_LABEL[language] ?? language],
+                  ['Frecuencia', FREQ_LABEL[syncFrequency]],
+                  ['Usuarios con sesión', syncLoggedIn ? 'Incluidos' : 'No incluidos'],
+                  ['Audiencia', audience.length === 3 ? 'Usuarios, Leads, Visitantes' : audience.map(a => a === 'users' ? 'Usuarios' : a === 'leads' ? 'Leads' : 'Visitantes').join(', ')],
+                  ['Productos', productList.join(', ') || '—'],
+                ] as [string, string][]).map(([k, v]) => (
+                  <div key={k} className="flex items-start justify-between px-4 py-3 gap-4">
+                    <dt className="text-[#646462]">{k}</dt>
+                    <dd className="text-[#1a1a1a] text-right">{v}</dd>
+                  </div>
+                ))}
               </dl>
             </div>
           )}
@@ -2225,17 +2345,37 @@ export function KnowledgeExternalSourcePicker({
   onAction: (msg: string, type?: 'success' | 'error') => void;
 }) {
   type Source = { id: string; label: string; icon: ReactNode; provider: string };
+  // Monochrome brand marks (black), rendered small inside the source chips.
+  const brand = 'w-[18px] h-[18px] text-[#1a1a1a]';
   const sources: Source[] = [
-    { id: 'zendesk',     label: 'Desde Zendesk',     provider: 'zendesk',     icon: <span className="text-[14px] font-bold text-[#03363d]">Z</span> },
-    { id: 'guru',        label: 'Desde Guru',        provider: 'guru',        icon: <span className="w-4 h-4 rounded-full bg-[#ff595a] flex items-center justify-center text-white text-[10px] font-bold">G</span> },
-    { id: 'notion',      label: 'Desde Notion',      provider: 'notion',      icon: <span className="text-[14px] font-bold text-[#1a1a1a]">N</span> },
-    { id: 'confluence',  label: 'Desde Confluence',  provider: 'confluence',  icon: <span className="w-4 h-4 rounded-sm bg-[#0052cc] flex items-center justify-center text-white text-[9px] font-bold">C</span> },
-    { id: 'document',    label: 'Cargar un documento', provider: 'upload',    icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 2h6l3 3v9H4z"/><path d="M10 2v3h3"/><path d="M8 7v4M6 9l2-2 2 2" strokeLinecap="round"/></svg> },
-    { id: 'salesforce',  label: 'Desde Salesforce',  provider: 'salesforce',  icon: <span className="text-[12px] text-[#00a1e0] font-bold">SF</span> },
-    { id: 'box',         label: 'De Box',            provider: 'box',         icon: <span className="w-4 h-4 rounded-sm bg-[#0061d5] flex items-center justify-center text-white text-[9px] font-bold">B</span> },
-    { id: 'document360', label: 'Document360',       provider: 'document360', icon: <span className="w-4 h-4 rounded-full bg-[#ec1944] flex items-center justify-center text-white text-[9px] font-bold">D</span> },
-    { id: 'freshdesk',   label: 'De Freshdesk',      provider: 'freshdesk',   icon: <span className="w-4 h-4 rounded-sm bg-[#25c16f] flex items-center justify-center text-white text-[9px] font-bold">F</span> },
-    { id: 'shopify',     label: 'Desde Shopify',     provider: 'shopify',     icon: <span className="w-4 h-4 rounded-sm bg-[#95bf47] flex items-center justify-center text-white text-[9px] font-bold">S</span> },
+    { id: 'zendesk',     label: 'Desde Zendesk',     provider: 'zendesk',     icon: (
+      <svg viewBox="0 0 24 24" className={brand} fill="currentColor"><path d="M11 7.6V19H2.4z"/><path d="M13 19a5.3 5.3 0 0 1 5.3-5.3A5.3 5.3 0 0 1 23.6 19z"/><path d="M11 5a5.3 5.3 0 0 1-5.3 5.3A5.3 5.3 0 0 1 .4 5z"/><path d="M13 16.4V5h8.6z"/></svg>
+    ) },
+    { id: 'guru',        label: 'Desde Guru',        provider: 'guru',        icon: (
+      <svg viewBox="0 0 24 24" className={brand} fill="currentColor" fillRule="evenodd"><path d="M12 2.5A9.5 9.5 0 1 0 21.5 12 9.51 9.51 0 0 0 12 2.5zm0 5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5z"/></svg>
+    ) },
+    { id: 'notion',      label: 'Desde Notion',      provider: 'notion',      icon: (
+      <svg viewBox="0 0 24 24" className={brand} fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3.5" y="3" width="17" height="18" rx="2.5"/><path d="M8 16.5V8l8 8.5V8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    ) },
+    { id: 'confluence',  label: 'Desde Confluence',  provider: 'confluence',  icon: (
+      <svg viewBox="0 0 24 24" className={brand} fill="currentColor"><path d="M2.6 16.3c3.6-4.7 8.4-4.6 15.7-1.2l-2 4c-4.7-2.3-7.2-1.8-9.6 1.1z"/><path d="M21.4 7.7C17.8 12.4 13 12.3 5.7 8.9l2-4c4.7 2.3 7.2 1.8 9.6-1.1z"/></svg>
+    ) },
+    { id: 'document',    label: 'Cargar un documento', provider: 'upload',    icon: <svg viewBox="0 0 16 16" className="w-[18px] h-[18px] fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 2h6l3 3v9H4z"/><path d="M10 2v3h3"/><path d="M8 7v4M6 9l2-2 2 2" strokeLinecap="round"/></svg> },
+    { id: 'salesforce',  label: 'Desde Salesforce',  provider: 'salesforce',  icon: (
+      <svg viewBox="0 0 24 24" className={brand} fill="currentColor"><path d="M10.1 7.9a4.1 4.1 0 0 1 7.4.9 3.7 3.7 0 0 1 1.5-.3 3.7 3.7 0 0 1 0 7.4H8a3.3 3.3 0 0 1-.6-6.5 4.1 4.1 0 0 1 2.7-1.4z"/></svg>
+    ) },
+    { id: 'box',         label: 'De Box',            provider: 'box',         icon: (
+      <svg viewBox="0 0 24 24" className={brand} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M12 3l8 4.6v8.8L12 21l-8-4.6V7.6z"/><path d="M4 7.6l8 4.6 8-4.6M12 12.2V21"/></svg>
+    ) },
+    { id: 'document360', label: 'Document360',       provider: 'document360', icon: (
+      <svg viewBox="0 0 24 24" className={brand} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M9.5 15.5a2.5 2.5 0 1 0 2.5-2.5" strokeLinecap="round"/></svg>
+    ) },
+    { id: 'freshdesk',   label: 'De Freshdesk',      provider: 'freshdesk',   icon: (
+      <svg viewBox="0 0 24 24" className={brand} fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M5 13.5v-1.5a7 7 0 0 1 14 0v1.5"/><rect x="3" y="13" width="4" height="6.5" rx="2" fill="currentColor" stroke="none"/><rect x="17" y="13" width="4" height="6.5" rx="2" fill="currentColor" stroke="none"/></svg>
+    ) },
+    { id: 'shopify',     label: 'Desde Shopify',     provider: 'shopify',     icon: (
+      <svg viewBox="0 0 24 24" className={brand} fill="currentColor"><path d="M15 5.4l2.6.7L20 20.2l-9.4 1.9L6 6.6l2.7-.9V5.1a3.2 3.2 0 0 1 6.3-.7zm-1.7.3v-.5a1.6 1.6 0 0 0-3.1-.2v.9z"/></svg>
+    ) },
   ];
   function pick(s: Source) {
     onAction(`Conectando con ${s.label.replace(/^Desde |^De /, '')}…`);
