@@ -909,19 +909,14 @@ function FinContenidoPickerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" />
       <div
-        className="relative w-full max-w-[1000px] h-[78vh] bg-white rounded-t-[20px] shadow-[0px_-12px_48px_rgba(20,20,20,0.2)] flex flex-col overflow-hidden"
+        className="relative w-full max-w-[1000px] h-[78vh] max-h-[820px] bg-white rounded-[20px] shadow-[0px_24px_64px_rgba(20,20,20,0.24)] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        {/* Drag handle */}
-        <div className="flex-shrink-0 flex justify-center pt-3 pb-1">
-          <span className="w-10 h-1 rounded-full bg-[#e9eae6]"/>
-        </div>
-
         {/* Header */}
-        <div className="flex-shrink-0 px-6 pb-3 flex items-center justify-between">
+        <div className="flex-shrink-0 px-6 pt-5 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-[18px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Seleccionar contenido</h2>
             <span className="px-2.5 py-0.5 rounded-full bg-[#f3f3f1] border border-[#e9eae6] text-[12px] font-medium text-[#646462]">{cardLabel}</span>
