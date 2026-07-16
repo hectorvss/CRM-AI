@@ -111,6 +111,12 @@ export function classifyRiskFromPlanSignal(toolName: string, args: unknown): Ris
     return 'high';
   }
 
+  // Sending a customer-facing message is outward-facing and effectively
+  // irreversible — always require approval, regardless of the tool's static risk.
+  if (toolName === 'message.send_to_customer') {
+    return 'high';
+  }
+
   if (toolName === 'order.cancel') {
     const status = String((args as any)?.currentStatus ?? '').toLowerCase();
     if (status.includes('packed') || status.includes('shipped') || status.includes('delivered')) return 'high';
@@ -153,4 +159,15 @@ export function classifyRiskFromPlanSignal(toolName: string, args: unknown): Ris
   }
 
   return classifyRiskFromArgs(toolName, args);
+}
+
+/**
+ * The risk that should actually drive gating for a concrete tool call: the
+ * higher of the tool's declared static risk and the argument-aware dynamic
+ * classification. Use this (not the static ToolSpec risk) at the approval gate
+ * so e.g. a customer message, a large refund, or a bulk op is caught even when
+ * the ToolSpec's baseline risk is lower.
+ */
+export function effectiveToolRisk(toolName: string, args: unknown, staticRisk: RiskLevel = 'none'): RiskLevel {
+  return maxRisk(staticRisk, classifyRiskFromPlanSignal(toolName, args));
 }

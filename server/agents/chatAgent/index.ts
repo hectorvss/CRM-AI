@@ -22,6 +22,7 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../../utils/logger.js';
 import { invokeTool } from '../planEngine/invokeTool.js';
+import { effectiveToolRisk } from '../planEngine/safety.js';
 import { toolRegistry } from '../planEngine/registry.js';
 import { persistTrace } from '../planEngine/traceRepository.js';
 import type { ExecutionSpan, ExecutionStatus, RiskLevel } from '../planEngine/types.js';
@@ -288,9 +289,12 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
       messages.push({ role: 'assistant', content: result.text, toolCalls: result.toolCalls, _providerContent: result.rawContent });
 
       // ── Approval gate ────────────────────────────────────────────────────
-      const risky = result.toolCalls.filter(
-        (tc) => APPROVAL_RISKS.has(catalogByName.get(tc.toolName)?.risk ?? 'none'),
-      );
+      // Gate on the EFFECTIVE risk (max of the tool's static risk and the
+      // argument-aware dynamic classifier), so e.g. a customer message, a large
+      // refund, or a bulk op is caught even when the ToolSpec baseline is lower.
+      const effRisk = (tc: { toolName: string; args: unknown }): RiskLevel =>
+        effectiveToolRisk(tc.toolName, tc.args, catalogByName.get(tc.toolName)?.risk ?? 'none');
+      const risky = result.toolCalls.filter((tc) => APPROVAL_RISKS.has(effRisk(tc)));
       if (risky.length > 0) {
         const primary = risky[0];
         const proposalId = randomUUID();
@@ -302,11 +306,11 @@ export async function runChatAgent(input: RunChatAgentInput): Promise<void> {
             toolCallId: tc.id,
             toolName: tc.toolName,
             args: tc.args,
-            risk: catalogByName.get(tc.toolName)?.risk ?? 'none',
+            risk: effRisk(tc),
           })),
           primaryToolName: primary.toolName,
           primaryArgs: primary.args,
-          risk: catalogByName.get(primary.toolName)?.risk ?? 'high',
+          risk: effRisk(primary),
           preview,
           accumulatedText: assistantText,
           executedToolCalls,
