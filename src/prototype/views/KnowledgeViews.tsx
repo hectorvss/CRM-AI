@@ -424,23 +424,24 @@ function KnowledgeFuentes({
   // live "configured" + "status" info when the user has actually wired the
   // matching connector to Clain.
   const { data: connectorsData } = useApi(() => connectorsApi.list(), [], []);
-  // useApi blanks `data` to its fallback ([]) on every refetch (incl. the global
-  // `crm-data-changed` event the agent fires on writes). If we read that directly
-  // the action buttons flip "Administrar" → "Agregar artículo" and back on each
-  // refresh. Hold the last non-empty connector list so a transient empty result
-  // never downgrades the row.
-  const [connectors, setConnectors] = useState<any[]>(Array.isArray(connectorsData) ? connectorsData : []);
+  // Anti-flicker: useApi blanks `data` to its fallback ([]) on every refetch
+  // (incl. the global `crm-data-changed` event the agent fires on writes), and a
+  // refetch can also return a list that momentarily omits a provider. Reading it
+  // directly makes the action buttons flip "Administrar" ↔ "Agregar artículo".
+  // Accumulate connectors into a provider→row map that only ever adds/updates —
+  // never removes — so a configured source never downgrades on a transient fetch.
+  const [connectorsByProvider, setConnectorsByProvider] = useState<Map<string, any>>(new Map());
   useEffect(() => {
-    if (Array.isArray(connectorsData) && connectorsData.length > 0) setConnectors(connectorsData);
-  }, [connectorsData]);
-  const connectorsByProvider = useMemo(() => {
-    const map = new Map<string, any>();
-    connectors.forEach((c: any) => {
-      const key = String(c.provider || c.name || c.type || '').toLowerCase();
-      if (key) map.set(key, c);
+    if (!Array.isArray(connectorsData) || connectorsData.length === 0) return;
+    setConnectorsByProvider(prev => {
+      const map = new Map(prev);
+      connectorsData.forEach((c: any) => {
+        const key = String(c.provider || c.name || c.type || '').toLowerCase();
+        if (key) map.set(key, c);
+      });
+      return map;
     });
-    return map;
-  }, [connectors]);
+  }, [connectorsData]);
   // Default per-action handler — keeps the "Agregar artículo / Sincronizar o
   // importar / Administrar" buttons clickable even when the row is the static
   // catalog. Reads the item's visibility so "Agregar artículo" opens the picker
