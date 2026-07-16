@@ -992,71 +992,14 @@ export function AgentChatView({
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0 gap-2">
-        <SettingsSidebar view={view} onNavigate={onNavigate} />
-
-        {/* Main chat panel */}
-        <div className="flex flex-1 min-w-0 gap-2 h-full">
-
-          {/* Conversation history sidebar */}
-          <div className="w-[220px] flex-shrink-0 bg-[#fbfbf9] rounded-[12px] border border-[#e9eae6] flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-[#1a1a1a]">Conversaciones</span>
-              <button
-                onClick={newConversation}
-                title="Nueva conversación"
-                className="w-6 h-6 rounded-md hover:bg-[#e9eae6] flex items-center justify-center text-[#646462] transition-colors"
-              >
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current">
-                  <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto py-1">
-              {loadingHistory ? (
-                <div className="px-3 py-2 text-[12px] text-[#9a9a98]">Cargando…</div>
-              ) : conversations.length === 0 ? (
-                <div className="px-3 py-4 text-[12px] text-[#9a9a98] text-center">Sin conversaciones</div>
-              ) : (
-                conversations.map(c => (
-                  <div
-                    key={c.id}
-                    onClick={() => openConversation(c.id)}
-                    className={`group relative flex items-start px-3 py-2 pr-8 cursor-pointer hover:bg-[#f3f3f1] transition-colors ${
-                      activeConversationId === c.id ? 'bg-[#f0f0ef]' : ''
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-medium text-[#1a1a1a] truncate">{c.title || 'Sin título'}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <p className="text-[11px] text-[#9a9a98]">{c.messageCount ?? c.message_count ?? 0} msgs</p>
-                        {c.updatedAt || c.updated_at ? (
-                          <p className="text-[10px] text-[#b4b4b0]">{relativeTime(c.updatedAt ?? c.updated_at)}</p>
-                        ) : null}
-                      </div>
-                    </div>
-                    {/* Delete: absolute top-right so it never covers the time; small
-                        icon with a comfortable 24px hit area; visible on hover/focus. */}
-                    <button
-                      onClick={e => deleteConv(c.id, e)}
-                      className="absolute top-1 right-1 w-6 h-6 rounded-md flex items-center justify-center text-[#9a9a98] hover:text-[#ef4444] hover:bg-[#e9eae6] opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ef4444]/40 transition-opacity"
-                      title="Eliminar conversación"
-                      aria-label="Eliminar conversación"
-                    >
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.5 8.5h5l.5-8.5" />
-                      </svg>
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+      <div className="flex flex-1 min-h-0">
+        {/* Single, minimal chat column — no side panels, no conversation list */}
+        <div className="flex flex-1 min-w-0 h-full">
 
           {/* Active chat area */}
           <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
 
-            {/* Header */}
+            {/* Header — minimal: identity + new conversation only */}
             <div className="flex items-center gap-3 px-5 py-3 border-b border-[#e9eae6] flex-shrink-0">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center flex-shrink-0">
                 <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white">
@@ -1068,66 +1011,11 @@ export function AgentChatView({
                 <p className="text-[11px] text-[#9a9a98]">Asistente IA · CRM-AI</p>
               </div>
 
-              {/* Audit trace */}
-              {activeConversationId && (
-                <button
-                  onClick={openTrace}
-                  title="Ver traza / auditoría de esta conversación"
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#e9eae6] bg-white text-[11px] font-medium text-[#646462] hover:bg-[#f3f3f1] transition-colors"
-                >
-                  <span>🔎</span><span>Traza</span>
-                </button>
-              )}
-
-              {/* Mode badge */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowModeDropdown(v => !v)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium transition-all hover:opacity-80"
-                  style={currentMode ? { background: MODE_CONFIG[currentMode].color + '18', borderColor: MODE_CONFIG[currentMode].color + '50', color: MODE_CONFIG[currentMode].color } : { background: '#f3f3f1', borderColor: '#e9eae6', color: '#9a9a98' }}
-                >
-                  <span>{currentMode ? MODE_CONFIG[currentMode].icon : '🤖'}</span>
-                  <span>{currentMode ? MODE_CONFIG[currentMode].label : 'Modo'}</span>
-                  <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-current opacity-60"><path d="M4 6l4 4 4-4z"/></svg>
-                </button>
-                {showModeDropdown && (
-                  <div className="absolute top-full right-0 mt-1 w-[220px] bg-white border border-[#e9eae6] rounded-xl shadow-lg z-20 overflow-hidden py-1">
-                    {(Object.entries(MODE_CONFIG) as [CrmAgentMode, typeof MODE_CONFIG[CrmAgentMode]][]).map(([key, cfg]) => (
-                      <button
-                        key={key}
-                        onClick={() => selectMode(key)}
-                        className={`flex items-center gap-2.5 w-full px-3 py-2 hover:bg-[#f3f3f1] transition-colors text-left ${currentMode === key ? 'bg-[#f3f3f1]' : ''}`}
-                      >
-                        <span className="text-[16px] flex-shrink-0">{cfg.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12.5px] font-semibold" style={{ color: cfg.color }}>{cfg.label}</p>
-                          <p className="text-[11px] text-[#9a9a98] truncate">{cfg.description}</p>
-                        </div>
-                        {currentMode === key && <span className="text-[#6366f1] text-[11px]">✓</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Memory indicator */}
-              {memoryCount > 0 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#fdf4ff] border border-[#e9d5ff] rounded-full" title={`${memoryCount} hechos en memoria`}>
-                  <span className="text-[11px]">🧠</span>
-                  <span className="text-[11px] text-[#7c3aed] font-medium">{memoryCount}</span>
-                </div>
-              )}
-
-              {/* Online badge */}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#f0fdf4] border border-[#bbf7d0] rounded-full flex-shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
-                <span className="text-[11px] text-[#059669] font-medium">Online</span>
-              </div>
-
               {activeConversationId && (
                 <button
                   onClick={newConversation}
-                  className="ml-1 px-3 py-1.5 text-[12px] font-medium text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f3f3f1] transition-colors flex-shrink-0"
+                  title="Nueva conversación"
+                  className="px-3 py-1.5 text-[12px] font-medium text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f3f3f1] transition-colors flex-shrink-0"
                 >
                   Nuevo
                 </button>
@@ -1135,9 +1023,11 @@ export function AgentChatView({
             </div>
 
             {/* Messages — centered Max thread */}
-            <div className="flex-1 overflow-y-auto min-h-0 px-4 py-5" onClick={() => setShowModeDropdown(false)}>
+            <div className="flex-1 overflow-y-auto min-h-0 px-4 py-5">
               {messages.length === 0 && !streaming ? (
-                <WelcomeScreen />
+                <div className="flex flex-col items-center justify-center h-full text-center px-8">
+                  <h2 className="text-[22px] font-semibold text-[#1a1a1a]">¿En qué te ayudo?</h2>
+                </div>
               ) : (
                 <div className="@container/thread flex flex-col w-full max-w-[720px] mx-auto gap-1.5">
                   {messages.map(m => <MessageBubble key={m.id} msg={m} />)}
@@ -1150,23 +1040,6 @@ export function AgentChatView({
             {/* Composer — Max style */}
             <div className="flex-shrink-0 px-4 pb-3 pt-1">
               <div className="w-full max-w-[720px] mx-auto">
-                {/* Mode selector (subtle) */}
-                <div className="flex gap-1 mb-1.5 overflow-x-auto pb-0.5">
-                  {(Object.entries(MODE_CONFIG) as [CrmAgentMode, typeof MODE_CONFIG[CrmAgentMode]][]).map(([key, cfg]) => (
-                    <button
-                      key={key}
-                      onClick={() => { setCurrentMode(currentMode === key ? null : key); }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium transition-colors whitespace-nowrap flex-shrink-0 border"
-                      style={currentMode === key
-                        ? { background: cfg.color + '18', color: cfg.color, borderColor: cfg.color + '55' }
-                        : { background: 'transparent', color: '#666666', borderColor: '#e3e3e3' }}
-                    >
-                      <span>{cfg.icon}</span>
-                      <span>{cfg.label}</span>
-                    </button>
-                  ))}
-                </div>
-
                 <div className="relative">
                   {/* Slash command autocomplete */}
                   {showSlashMenu && (
@@ -1224,21 +1097,6 @@ export function AgentChatView({
                   </label>
                 </div>
 
-                {/* Suggestion pills (empty state) */}
-                {messages.length === 0 && !streaming && (
-                  <div className="flex flex-wrap gap-1.5 mt-2 justify-center">
-                    {(currentMode ? MODE_SUGGESTIONS[currentMode] : DEFAULT_SUGGESTIONS).slice(0, 3).map((s, i) => (
-                      <button
-                        key={i}
-                        onClick={() => sendMessage(s)}
-                        className="px-3 py-1 text-[12px] text-[#404040] border border-[#e3e3e3] rounded-full hover:border-[#8b30ff]/40 hover:bg-[#faf7ff] transition-colors truncate max-w-[220px]"
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
                 <p className="text-[11px] text-[#666666] mt-1.5 text-center">
                   Max puede cometer errores. Verifica la información importante.
                 </p>
@@ -1246,9 +1104,6 @@ export function AgentChatView({
             </div>
           </div>
         </div>
-
-        {/* Right: always-on situational briefing */}
-        <SituationBriefing onNavigate={onNavigate} />
       </div>
 
       {/* Audit trace modal */}
