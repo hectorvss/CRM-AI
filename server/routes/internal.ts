@@ -118,4 +118,20 @@ router.all('/scheduler/tick', async (_req, res) => {
   }
 });
 
+/**
+ * Fin outcome sweep — assumed resolutions (docs/fin-ai-agent-spec.md §7).
+ * Conversations whose last public message is an AI reply older than 24h and
+ * with no active billable outcome become `resolution_assumed`. Idempotent.
+ */
+router.all('/fin/sweep', async (_req, res) => {
+  try {
+    const { sweepAssumedResolutions } = await import('../agents/finAgent/outcome.js');
+    const result = await sweepAssumedResolutions();
+    return res.json({ ok: true, ...result });
+  } catch (err: any) {
+    logger.error('Fin sweep failed', { error: err?.message });
+    return res.status(500).json({ error: 'FIN_SWEEP_FAILED', message: err?.message });
+  }
+});
+
 export default router;

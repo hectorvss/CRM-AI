@@ -22,9 +22,13 @@ const ChannelConfig = z.object({
 
 const GuidancePiece = z.object({
   id: z.string(),
-  category: z.enum(['communication_style', 'context_clarification', 'content_sources', 'other']),
+  category: z.enum(['communication_style', 'context_clarification', 'content_sources', 'spam_filtering', 'other']),
   text: z.string().min(1),
   active: z.boolean().default(true),
+  // Presentation metadata round-tripped for the Orientación screen.
+  title: z.string().optional(),
+  audience: z.string().optional(),
+  channels: z.array(z.string()).optional(),
 });
 
 const FinAttribute = z.object({

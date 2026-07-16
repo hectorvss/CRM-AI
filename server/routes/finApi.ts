@@ -62,9 +62,12 @@ router.patch('/config', requirePermission('settings.write'), async (req: MultiTe
 // ── Guidance CRUD (entity-style facade over the config blob) ──────────────────
 
 const GuidanceCreate = z.object({
-  category: z.enum(['communication_style', 'context_clarification', 'content_sources', 'other']),
+  category: z.enum(['communication_style', 'context_clarification', 'content_sources', 'spam_filtering', 'other']),
   text: z.string().trim().min(1).max(2000),
   active: z.boolean().optional().default(true),
+  title: z.string().max(200).optional(),
+  audience: z.string().max(100).optional(),
+  channels: z.array(z.string()).optional(),
 });
 const GuidancePatch = GuidanceCreate.partial();
 

@@ -5,7 +5,7 @@
 
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../../api/hooks';
-import { agentsApi, aiApi, auditApi, casesApi, connectorsApi, finApi, knowledgeApi, policyRulesApi, reportsApi } from '../../api/client';
+import { agentsApi, aiApi, auditApi, casesApi, connectorsApi, finApi, knowledgeApi, policyRulesApi, reportsApi, type FinGuidancePiece } from '../../api/client';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../../components/Workflows';
 import AIStudio from '../../components/AIStudio';
 import SuperAgent from '../../components/SuperAgent';
@@ -41,6 +41,114 @@ function useFinResource<T extends { id: string }>(key: string, seed?: T[]) {
     remove: (id: string) => setItems(prev => prev.filter(it => it.id !== id)),
     replace: (next: T[]) => setItems(next),
   };
+}
+
+// ─── Guidance (pautas) — server-backed via /api/fin/guidance ─────────────────
+// Category ids used by the Orientación screen ↔ fin.* config enum.
+const PAUTA_CAT_TO_SERVER: Record<string, FinGuidancePiece['category']> = {
+  estilo_comunicacion: 'communication_style',
+  contexto_aclaraciones: 'context_clarification',
+  contenido_fuentes: 'content_sources',
+  correo_no_deseado: 'spam_filtering',
+  otros: 'other',
+};
+const SERVER_CAT_TO_PAUTA: Record<string, string> = Object.fromEntries(
+  Object.entries(PAUTA_CAT_TO_SERVER).map(([k, v]) => [v, k]),
+);
+
+/**
+ * Server-backed variant of useFinResource for guidance pieces: loads from
+ * /api/fin/guidance on mount and mirrors every mutation to the API
+ * (optimistic local state; API errors are logged, the UI keeps working).
+ */
+function useFinGuidanceResource(seed: FinPauta[]) {
+  const local = useFinResource<FinPauta>('pautas', seed);
+  const loadedRef = useRef(false);
+
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+    finApi.listGuidance()
+      .then((pieces) => {
+        if (!Array.isArray(pieces) || pieces.length === 0) return; // keep local/seed until the server has data
+        local.replace(pieces.map((p) => ({
+          id: p.id,
+          category: SERVER_CAT_TO_PAUTA[p.category] ?? 'otros',
+          title: (p as any).title ?? '',
+          audience: (p as any).audience ?? 'all',
+          channels: (p as any).channels ?? [],
+          body: p.text,
+          enabled: p.active,
+        })));
+      })
+      .catch(() => { /* offline/dev without backend: stay on localStorage */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function toServer(p: Partial<FinPauta>) {
+    const out: Record<string, unknown> = {};
+    if (p.category !== undefined) out.category = PAUTA_CAT_TO_SERVER[p.category] ?? 'other';
+    if (p.body !== undefined) out.text = p.body || '(vacía)';
+    if (p.enabled !== undefined) out.active = p.enabled;
+    if (p.title !== undefined) out.title = p.title;
+    if (p.audience !== undefined) out.audience = p.audience;
+    if (p.channels !== undefined) out.channels = p.channels;
+    return out;
+  }
+
+  return {
+    items: local.items,
+    create: (item: Omit<FinPauta, 'id'>): FinPauta => {
+      const created = local.create(item);
+      finApi.createGuidance(toServer(created) as any)
+        .then((server) => { if (server?.id) local.update(created.id, { id: server.id } as any); })
+        .catch(() => { /* keep local */ });
+      return created;
+    },
+    update: (id: string, patch: Partial<FinPauta>) => {
+      local.update(id, patch);
+      finApi.updateGuidance(id, toServer(patch) as any).catch(() => { /* keep local */ });
+    },
+    remove: (id: string) => {
+      local.remove(id);
+      finApi.deleteGuidance(id).catch(() => { /* keep local */ });
+    },
+    replace: local.replace,
+  };
+}
+
+/**
+ * Live channel activation for the Despliegue screens: reads/patches
+ * fin.channels.<channel>.enabled (and flips the master fin.enabled on first
+ * activation). Server-backed via /api/fin/config.
+ */
+function useFinChannelToggle(channel: 'chat' | 'email' | 'whatsapp') {
+  const [enabled, setEnabled] = useState<boolean | null>(null); // null = loading/unknown
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    finApi.getConfig()
+      .then((cfg) => { if (!cancelled) setEnabled(Boolean(cfg?.channels?.[channel]?.enabled)); })
+      .catch(() => { if (!cancelled) setEnabled(false); });
+    return () => { cancelled = true; };
+  }, [channel]);
+  const toggle = async () => {
+    if (busy || enabled === null) return;
+    const next = !enabled;
+    setBusy(true);
+    setEnabled(next); // optimistic
+    try {
+      await finApi.patchConfig({
+        ...(next ? { enabled: true } : {}),
+        channels: { [channel]: { enabled: next } },
+      });
+    } catch {
+      setEnabled(!next); // roll back
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { enabled, busy, toggle };
 }
 
 // ─── Fin domain types (used by Pautas + Atributos editors) ───────────────────
@@ -1484,7 +1592,7 @@ const FIN_SEED_PROCEDIMIENTOS: FinProcedimiento[] = [
 
 // ─── FinOrientacionContent: real CRUD over Pautas ────────────────────────────
 function FinOrientacionContent() {
-  const pautas = useFinResource<FinPauta>('pautas', FIN_SEED_PAUTAS);
+  const pautas = useFinGuidanceResource(FIN_SEED_PAUTAS);
   const toast = useFinToast();
   const [editing, setEditing] = useState<FinPauta | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -4638,6 +4746,7 @@ function DeployRow({ label, value, pill }: { label: string; value?: string; pill
 
 function FinDespliegueChatContent() {
   const status = useChannelDeploymentStatus(['chat', 'messenger', 'slack', 'whatsapp', 'sms', 'facebook', 'instagram']);
+  const fin = useFinChannelToggle('chat');
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -4651,10 +4760,16 @@ function FinDespliegueChatContent() {
               Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
             </p>
             <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                <span>Activar Fin para chat</span>
-              </a>
+              <button
+                onClick={fin.toggle}
+                disabled={fin.busy || fin.enabled === null}
+                className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold disabled:opacity-50"
+              >
+                <span className={`inline-block w-2 h-2 rounded-full ${fin.enabled ? 'bg-[#3ba55d]' : 'bg-[#c9c9c5]'}`} />
+                <span>
+                  {fin.enabled === null ? 'Comprobando…' : fin.enabled ? 'Fin activo en chat — desactivar' : 'Activar Fin para chat'}
+                </span>
+              </button>
               <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
                 <span>Usa Fin en los flujos de trabajo</span>
@@ -4783,6 +4898,7 @@ function FinDespliegueChatContent() {
 // ─── Desplegar / Correo electrónico (Figma 1:13680) ──────────────────────────
 function FinDespliegueEmailContent() {
   const status = useChannelDeploymentStatus(['email', 'mail', 'gmail', 'outlook', 'imap', 'smtp']);
+  const fin = useFinChannelToggle('email');
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -4796,6 +4912,16 @@ function FinDespliegueEmailContent() {
               Fin AI Agent interpreta los correos electrónicos entrantes, proporciona respuestas utilizando tu contenido de asistencia y escala los problemas complejos cuando es necesario, ampliando la asistencia más allá del chat en vivo.
             </p>
             <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
+              <button
+                onClick={fin.toggle}
+                disabled={fin.busy || fin.enabled === null}
+                className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold disabled:opacity-50"
+              >
+                <span className={`inline-block w-2 h-2 rounded-full ${fin.enabled ? 'bg-[#3ba55d]' : 'bg-[#c9c9c5]'}`} />
+                <span>
+                  {fin.enabled === null ? 'Comprobando…' : fin.enabled ? 'Fin activo en email — desactivar' : 'Activar Fin para email'}
+                </span>
+              </button>
               <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
                 <span>Aprende cómo Fin responde a los correos electrónicos</span>

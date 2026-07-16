@@ -12,8 +12,10 @@
  * F3) which picks up conversations with an unanswered inbound message.
  */
 
+import { getSupabaseAdmin } from '../../db/supabase.js';
 import { loadFinConfig, type FinScope } from './config.js';
 import { runFinPipeline, type FinRunResult } from './pipeline.js';
+import { handleInboundOutcome } from './outcome.js';
 
 interface PendingRun {
   timer: NodeJS.Timeout;
@@ -67,6 +69,31 @@ async function executeRun(input: FinTriggerInput, channelKey: string): Promise<F
   if (running.has(input.conversationId)) return null; // a run is in flight; its answer covers this message
   running.add(input.conversationId);
   try {
+    // Outcome Engine first (spec §7): a confirmation ("gracias, solucionado")
+    // records the billable resolution and skips the answer pipeline; anything
+    // else reverts a previously-assumed resolution and continues normally.
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data } = await supabase
+        .from('messages')
+        .select('content')
+        .eq('conversation_id', input.conversationId)
+        .eq('tenant_id', input.scope.tenantId)
+        .eq('direction', 'inbound')
+        .order('sent_at', { ascending: false })
+        .limit(1);
+      const latestInboundText = String(data?.[0]?.content ?? '');
+      const action = await handleInboundOutcome({
+        scope: input.scope,
+        caseId: input.caseId,
+        conversationId: input.conversationId,
+        latestInboundText,
+      });
+      if (action === 'skip_run') return null;
+    } catch (err: any) {
+      console.warn('[finAgent] outcome handling failed, continuing with run:', err?.message ?? err);
+    }
+
     return await runFinPipeline({
       scope: input.scope,
       caseId: input.caseId,

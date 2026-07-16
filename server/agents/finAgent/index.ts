@@ -14,3 +14,8 @@ export {
   type FinConfig, type FinScope,
 } from './config.js';
 export { retrieveKnowledge, embedQuery, _setEmbedderForTests } from './retrieval.js';
+export {
+  handleInboundOutcome, sweepAssumedResolutions,
+  hasActiveBillableOutcome, revertResolution,
+  type InboundOutcomeAction, type SweepResult,
+} from './outcome.js';
