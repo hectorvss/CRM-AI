@@ -3938,27 +3938,37 @@ export function InboxView() {
   // assignee / case id). When the search query is empty we fall through to
   // the regular scope filter so the user can clear without leaving the view.
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  // Server-side search: debounce the query and hit /cases/search so we match
+  // across the whole workspace (case number, customer, message content) — not
+  // just the conversations already loaded in memory.
+  const [searchResults, setSearchResults] = useState<Conversation[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  useEffect(() => {
+    if (scope !== 'search') return;
+    const q = globalSearchQuery.trim();
+    if (q.length < 2) { setSearchResults([]); setSearchLoading(false); return; }
+    setSearchLoading(true);
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      try {
+        const rows = await casesApi.search(q, 50);
+        if (!cancelled) setSearchResults(Array.isArray(rows) ? rows.map(mapCaseToPrototypeConversation) : []);
+      } catch {
+        if (!cancelled) setSearchResults([]);
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    }, 300);
+    return () => { cancelled = true; window.clearTimeout(t); };
+  }, [scope, globalSearchQuery]);
   const scopedConversations = useMemo(() => {
     if (scope === 'search') {
-      const q = globalSearchQuery.trim().toLowerCase();
-      if (!q) return liveConversations;
-      return liveConversations.filter(conv => {
-        const haystack = [
-          conv.id,
-          conv.channel,
-          conv.customerName,
-          conv.customerEmail,
-          conv.preview,
-          conv.assignee,
-          conv.team,
-          conv.company,
-          (conv.tags || []).join(' '),
-        ].filter(Boolean).join(' ').toLowerCase();
-        return haystack.includes(q);
-      });
+      // <2 chars → show the already-loaded set so the list isn't blank; once
+      // the user types a real query the debounced server results take over.
+      return globalSearchQuery.trim().length < 2 ? liveConversations : searchResults;
     }
     return liveConversations.filter(conv => matchesInboxScope(conv, scope, currentUserId));
-  }, [liveConversations, scope, globalSearchQuery, currentUserId]);
+  }, [liveConversations, scope, globalSearchQuery, searchResults, currentUserId]);
   const counts = useMemo(() => {
     const staticScopes: InboxScope[] = ['inbox', 'mentions', 'created', 'all', 'unassigned', 'spam', 'fin-all', 'fin-resolved', 'fin-escalated', 'fin-pending', 'fin-spam', 'v-messenger', 'v-email', 'v-whatsapp', 'v-phone', 'v-tickets'];
     const result: Partial<Record<InboxScope, number>> = {};
@@ -4219,13 +4229,15 @@ export function InboxView() {
                   autoFocus
                   value={globalSearchQuery}
                   onChange={e => setGlobalSearchQuery(e.target.value)}
-                  placeholder="Buscar conversaciones, clientes, etiquetas…"
+                  placeholder="Buscar por cliente, nº de caso o texto del mensaje…"
                   className="w-full h-9 rounded-lg border border-[#e9eae6] bg-white px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
                 />
                 <p className="text-[11px] text-[#646462] mt-1.5">
-                  {globalSearchQuery.trim()
-                    ? `${scopedConversations.length} de ${liveConversations.length} coinciden`
-                    : `Buscando en ${liveConversations.length} conversaciones`}
+                  {globalSearchQuery.trim().length < 2
+                    ? 'Escribe al menos 2 caracteres para buscar en todo el workspace'
+                    : searchLoading
+                      ? 'Buscando…'
+                      : `${scopedConversations.length} resultado${scopedConversations.length === 1 ? '' : 's'}`}
                 </p>
               </div>
             )}

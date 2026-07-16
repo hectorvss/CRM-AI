@@ -237,6 +237,9 @@ export const casesApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request<any>(`/cases${qs}`).then(unwrapList);
   },
+  // Multi-source server-side search (case number / customer / message content).
+  search: (q: string, limit = 50) =>
+    request<any>(`/cases/search?q=${encodeURIComponent(q)}&limit=${limit}`).then(unwrapList),
   create: (payload: Record<string, any>) =>
     request<any>('/cases', { method: 'POST', body: JSON.stringify(payload) }),
   get: (id: string) => request<any>(`/cases/${id}`),
@@ -1603,85 +1606,81 @@ export const visualFlowsApi = {
 };
 
 // ── Agent (Max AI) ────────────────────────────────────────
-export const agentApi = {
-  /**
-   * Open an SSE connection to stream a chat response.
-   * Returns an EventSource-compatible object.
-   *
-   * Usage:
-   *   const source = agentApi.chat({ message, conversationId, context });
-   *   source.addEventListener('text_chunk', e => ...);
-   *   source.addEventListener('done', e => ...);
-   *   source.close();
-   *
-   * Because the browser EventSource API only supports GET, we use fetch +
-   * ReadableStream to post the JSON body and still read the SSE stream.
-   */
-  chat: async (
-    payload: {
-      message: string;
-      conversationId?: string;
-      context?: Record<string, unknown>;
+/**
+ * POST a JSON body to an agent endpoint and consume its SSE stream.
+ *
+ * The browser EventSource API only supports GET, so we use fetch +
+ * ReadableStream to post the body and still read `event:`/`data:` frames.
+ * Shared by `chat` and `approve` (both stream the same event taxonomy).
+ */
+async function streamAgentEndpoint(
+  path: string,
+  payload: Record<string, unknown>,
+  onEvent: (event: string, data: unknown) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { data } = await (await import('./supabase')).supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const user = data.session?.user;
+  const tenantId =
+    user?.app_metadata?.tenant_id || user?.user_metadata?.tenant_id ||
+    (import.meta as any).env?.VITE_TENANT_ID || 'org_default';
+  const workspaceId =
+    user?.app_metadata?.workspace_id || user?.user_metadata?.workspace_id ||
+    (import.meta as any).env?.VITE_WORKSPACE_ID || 'ws_default';
+
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': tenantId,
+      'x-workspace-id': workspaceId,
+      'x-user-id': user?.id ?? 'system',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    onEvent: (event: string, data: unknown) => void,
-    signal?: AbortSignal,
-  ): Promise<void> => {
-    const { data } = await (await import('./supabase')).supabase.auth.getSession();
-    const token = data.session?.access_token;
-    const user = data.session?.user;
-    const tenantId =
-      user?.app_metadata?.tenant_id || user?.user_metadata?.tenant_id ||
-      (import.meta as any).env?.VITE_TENANT_ID || 'org_default';
-    const workspaceId =
-      user?.app_metadata?.workspace_id || user?.user_metadata?.workspace_id ||
-      (import.meta as any).env?.VITE_WORKSPACE_ID || 'ws_default';
+    body: JSON.stringify(payload),
+    signal,
+  });
 
-    const res = await fetch(`${BASE}/agent/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-tenant-id': tenantId,
-        'x-workspace-id': workspaceId,
-        'x-user-id': user?.id ?? 'system',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(payload),
-      signal,
-    });
+  if (!res.ok || !res.body) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `Agent error ${res.status}`);
+  }
 
-    if (!res.ok || !res.body) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || `Agent error ${res.status}`);
-    }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      let eventName = 'message';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          eventName = line.slice(7).trim();
-        } else if (line.startsWith('data: ')) {
-          const raw = line.slice(6).trim();
-          try {
-            const parsed = JSON.parse(raw);
-            onEvent(eventName, parsed);
-          } catch {
-            onEvent(eventName, raw);
-          }
-          eventName = 'message';
+    let eventName = 'message';
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        eventName = line.slice(7).trim();
+      } else if (line.startsWith('data: ')) {
+        const raw = line.slice(6).trim();
+        try {
+          onEvent(eventName, JSON.parse(raw));
+        } catch {
+          onEvent(eventName, raw);
         }
+        eventName = 'message';
       }
     }
-  },
+  }
+}
+
+export const agentApi = {
+  chat: (
+    payload: { message: string; conversationId?: string; context?: Record<string, unknown> },
+    onEvent: (event: string, data: unknown) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => streamAgentEndpoint('/agent/chat', payload, onEvent, signal),
 
   listConversations: () =>
     request<{ ok: boolean; conversations: any[] }>('/agent/conversations'),
@@ -1692,7 +1691,14 @@ export const agentApi = {
   deleteConversation: (id: string) =>
     request<{ ok: boolean }>(`/agent/conversations/${id}`, { method: 'DELETE' }),
 
-  // Approve or reject a dangerous operation proposed by the agent
-  approve: (payload: { proposalId: string; action: 'approve' | 'reject'; feedback?: string; conversationId: string }) =>
-    request<any>('/agent/chat/approve', { method: 'POST', body: JSON.stringify(payload) }),
+  /**
+   * Approve or reject a dangerous operation the agent proposed. Streams the
+   * resumed loop over SSE (same event taxonomy as `chat`) — do NOT re-send the
+   * user's message; the backend resumes from the persisted checkpoint.
+   */
+  approve: (
+    payload: { proposalId: string; action: 'approve' | 'reject'; feedback?: string; conversationId: string },
+    onEvent: (event: string, data: unknown) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => streamAgentEndpoint('/agent/chat/approve', payload, onEvent, signal),
 };

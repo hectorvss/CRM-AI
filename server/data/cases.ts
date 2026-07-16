@@ -1593,7 +1593,16 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
   const { data, error } = await query;
   if (error) throw error;
 
-  const rows = data ?? [];
+  return hydrateCaseRows(scope, data ?? [], filters.q);
+}
+
+// Enrich raw case rows with customer / assignee / latest-message / conflict
+// context and shape them the way the inbox list expects. Shared by both the
+// scoped list and the multi-source search so results look identical.
+// When `q` is given, keeps only rows whose case number / customer match it
+// (used by the list's own free-text filter; search pre-matches upstream).
+async function hydrateCaseRows(scope: CaseScope, rows: any[], q?: string) {
+  const supabase = getSupabaseAdmin();
   const caseIds = rows.map((row) => row.id);
   const customerIds = compactStrings(rows.map((row) => row.customer_id));
   const orderIds = compactStrings(rows.flatMap((row) => asArray<string>(row.order_ids)));
@@ -1633,9 +1642,9 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
 
   return rows
     .filter((row) => {
-      if (!filters.q) return true;
+      if (!q) return true;
       const customer = row.customer_id ? customers.get(row.customer_id) : null;
-      const term = filters.q!.toLowerCase();
+      const term = q.toLowerCase();
       return Boolean(
         row.case_number?.toLowerCase().includes(term)
         || customer?.canonical_name?.toLowerCase().includes(term)
@@ -1677,8 +1686,61 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
       };
     });
 }
+// Multi-source inbox search: matches a term against case numbers, customer
+// name/email, and message content, unions the matching case ids, then hydrates
+// them into the same shape as the list. Tenant/workspace scoped throughout.
+async function searchCasesSupabase(scope: CaseScope, q: string, limit = 50): Promise<any[]> {
+  const term = q.trim();
+  if (term.length < 2) return [];
+  const supabase = getSupabaseAdmin();
+  const like = `%${term}%`;
+  const CAP = 300;
+
+  const [byNumber, byName, byEmail, byMessage] = await Promise.all([
+    supabase.from('cases').select('id')
+      .eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+      .ilike('case_number', like).limit(CAP),
+    supabase.from('customers').select('id')
+      .eq('tenant_id', scope.tenantId).ilike('canonical_name', like).limit(CAP),
+    supabase.from('customers').select('id')
+      .eq('tenant_id', scope.tenantId).ilike('canonical_email', like).limit(CAP),
+    supabase.from('messages').select('case_id')
+      .eq('tenant_id', scope.tenantId).ilike('content', like)
+      .not('case_id', 'is', null).limit(CAP),
+  ]);
+  for (const r of [byNumber, byName, byEmail, byMessage]) {
+    if (r?.error) throw r.error;
+  }
+
+  // customer matches → their cases
+  const customerIds = compactStrings([...(byName.data ?? []), ...(byEmail.data ?? [])].map((r: any) => r.id));
+  const byCustomer = customerIds.length
+    ? await supabase.from('cases').select('id')
+        .eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+        .in('customer_id', customerIds).limit(CAP)
+    : { data: [], error: null } as any;
+  if (byCustomer?.error) throw byCustomer.error;
+
+  const ids = new Set<string>();
+  for (const r of byNumber.data ?? []) ids.add(r.id);
+  for (const r of byCustomer.data ?? []) ids.add(r.id);
+  for (const r of byMessage.data ?? []) if (r.case_id) ids.add(r.case_id);
+
+  const idList = Array.from(ids).slice(0, limit);
+  if (!idList.length) return [];
+
+  const { data: caseRows, error } = await supabase.from('cases').select('*')
+    .eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+    .in('id', idList)
+    .order('last_activity_at', { ascending: false });
+  if (error) throw error;
+
+  return hydrateCaseRows(scope, caseRows ?? []);
+}
+
 export interface CaseRepository {
   list(scope: CaseScope, filters: CaseFilters): Promise<any[]>;
+  search(scope: CaseScope, q: string, limit?: number): Promise<any[]>;
   get(scope: CaseScope, caseId: string): Promise<any | null>;
   getBundle(scope: CaseScope, caseId: string): Promise<any | null>;
   update(scope: CaseScope, id: string, updates: any): Promise<void>;
@@ -1732,6 +1794,9 @@ async function updateConflictStateSupabase(scope: CaseScope, caseId: string, has
 class SupabaseCaseRepository implements CaseRepository {
   async list(scope: CaseScope, filters: CaseFilters) {
     return listCasesSupabase(scope, filters);
+  }
+  async search(scope: CaseScope, q: string, limit?: number) {
+    return searchCasesSupabase(scope, q, limit);
   }
   async get(scope: CaseScope, caseId: string) {
     const supabase = getSupabaseAdmin();

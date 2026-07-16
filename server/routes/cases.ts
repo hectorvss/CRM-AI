@@ -123,6 +123,22 @@ router.post('/', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
+// Multi-source inbox search (case number / customer / message content).
+// Registered before /:id so "search" isn't captured as a case id.
+router.get('/search', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+    if (q.length < 2) return res.json([]);
+    const items = await caseRepository.search(scope, q, limit);
+    res.json(items);
+  } catch (error) {
+    console.error('Error searching cases:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
