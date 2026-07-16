@@ -6,7 +6,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { agentsApi, connectorsApi, knowledgeApi, workspacesApi } from '../../api/client';
-import { Dropdown, KH_TYPE_OPTIONS, KnowledgeArticleEditor, LibraryIcon, TrialBanner, relativeTime, titleCase } from '../sharedUi';
+import { Dropdown, KH_TYPE_OPTIONS, KnowledgeArticleEditor, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, LibraryIcon, TrialBanner, relativeTime, titleCase } from '../sharedUi';
 import { parsePath, replaceRoute } from '../router';
 
 
@@ -394,12 +394,17 @@ function KnowledgeFuentes({
   onNavigate,
   onAction,
   onOpenView,
+  onOpenWebsiteSync,
+  onOpenExternalPicker,
 }: {
   onCreate: (opts: { type?: string; visibility?: 'public' | 'internal' }) => void;
   onNavigate: (sub: KnowledgeSubView) => void;
   onAction: (msg: string, type?: 'success' | 'error') => void;
   // Top-level CRM views (e.g. 'fin', 'inbox', 'connectors') for "Configurar ahora" / "Ir a Inbox".
   onOpenView?: (view: string) => void;
+  // Open the real ingestion flows (mounted once in KnowledgeView).
+  onOpenWebsiteSync: () => void;
+  onOpenExternalPicker: () => void;
 }) {
   const [tab, setTab] = useState<KhTab>('all');
   // Real connector status. We don't replace the static catalog (it's the
@@ -423,7 +428,7 @@ function KnowledgeFuentes({
     if (a.includes('agregar artículo') || a.includes('agregar articulo')) return () => onCreate({ type: 'ARTICLE', visibility: 'public' });
     if (a.includes('fragmento'))       return () => onCreate({ type: 'SNIPPET' });
     if (a.includes('cargar documento')) return () => onCreate({ type: 'DOCUMENT' });
-    if (a.includes('sincronizar') || a.includes('importar')) return () => onAction('Sincronización / importación — próximamente. Crea o sube el contenido manualmente.', 'error');
+    if (a.includes('sincronizar') || a.includes('importar')) return () => onOpenExternalPicker();
     if (a.includes('administrar') || a.includes('reconectar')) return () => onOpenView?.('connectors');
     return undefined;
   }
@@ -541,7 +546,7 @@ function KnowledgeFuentes({
           title="Sitios web"
           description="Permite que Fin AI Agent y Copilot utilicen cualquier sitio web público."
           items={[]}
-          headerAction={{ label: 'Sincronizar', onClick: () => onAction('Sincronización de sitios web — próximamente.', 'error') }}
+          headerAction={{ label: 'Sincronizar', onClick: onOpenWebsiteSync }}
         />
         <KhSection
           title="Más fuentes de contenido"
@@ -591,7 +596,7 @@ function KnowledgeFuentes({
                   title="Sitios web"
                   description="Permite que Fin AI Agent utilice cualquier sitio web público."
                   items={[]}
-                  headerAction={{ label: 'Sincronizar' }}
+                  headerAction={{ label: 'Sincronizar', onClick: onOpenExternalPicker }}
                 />
                 <KhSection
                   title="Más fuentes de contenido"
@@ -644,7 +649,7 @@ function KnowledgeFuentes({
                   title="Sitios web"
                   description="Permite que Copilot utilice cualquier sitio web público."
                   items={[]}
-                  headerAction={{ label: 'Sincronizar' }}
+                  headerAction={{ label: 'Sincronizar', onClick: onOpenExternalPicker }}
                 />
                 <KhSection
                   title="Más fuentes de contenido"
@@ -722,11 +727,13 @@ function KnowledgeContenido({
   onNavigate,
   onAction,
   onSearch,
+  onOpenWebsiteSync,
 }: {
   onCreate: (opts: { type?: string; visibility?: 'public' | 'internal' }) => void;
   onNavigate: (sub: KnowledgeSubView) => void;
   onAction: (msg: string, type?: 'success' | 'error') => void;
   onSearch: (q: string) => void;
+  onOpenWebsiteSync: () => void;
 }) {
   // Live data — counts feed both the cards (Recomendaciones) and the table.
   const { data: articlesData } = useApi(() => knowledgeApi.listArticles(), [], []);
@@ -826,7 +833,7 @@ function KnowledgeContenido({
               { label: 'Artículo público',         icon: 'doc',     onClick: () => onCreate({ type: 'ARTICLE', visibility: 'public' }) },
               { label: 'Artículo interno',         icon: 'lock',    onClick: () => onCreate({ type: 'ARTICLE', visibility: 'internal' }) },
               { label: 'Fragmento de texto',       icon: 'snippet', onClick: () => onCreate({ type: 'SNIPPET' }) },
-              { label: 'Sincronización de sitio web', icon: 'web',  onClick: () => onAction('Sincronización web — próximamente. Crea un artículo manualmente por ahora.', 'error') },
+              { label: 'Sincronización de sitio web', icon: 'web',  onClick: onOpenWebsiteSync },
               { label: 'Ver todo',                 icon: 'more',    onClick: () => onNavigate('articulos') },
             ].map(c => (
               <button key={c.label} onClick={c.onClick} className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col items-start gap-2 hover:border-[#c8c9c4] bg-white text-left">
@@ -1850,6 +1857,9 @@ export function KnowledgeView() {
   const [pendingDraft, setPendingDraft] = useState<{ title: string; content: string; type?: string; visibility?: string } | null>(null);
   // Query handed from the Contenido search bar into Artículos (server-side `q`).
   const [articleSearch, setArticleSearch] = useState('');
+  // Real ingestion flows, opened from Fuentes/Contenido and mounted once below.
+  const [websiteSyncOpen, setWebsiteSyncOpen] = useState(false);
+  const [externalPickerOpen, setExternalPickerOpen] = useState(false);
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     setToast({ message, type });
     window.setTimeout(() => setToast(null), 2500);
@@ -1899,8 +1909,8 @@ export function KnowledgeView() {
   }
   function renderSub() {
     switch (sub) {
-      case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} />;
-      case 'contenido':   return <KnowledgeContenido onCreate={startCreate} onNavigate={setSub} onAction={showToast} onSearch={(q) => { setArticleSearch(q); setSub('articulos'); }} />;
+      case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} onOpenExternalPicker={() => setExternalPickerOpen(true)} />;
+      case 'contenido':   return <KnowledgeContenido onCreate={startCreate} onNavigate={setSub} onAction={showToast} onSearch={(q) => { setArticleSearch(q); setSub('articulos'); }} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} />;
       case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} initialSearch={articleSearch} />;
       case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
       case 'gaps':        return <KnowledgeGaps    onAction={showToast} onDraftFromGap={draftFromGap} />;
@@ -1941,6 +1951,19 @@ export function KnowledgeView() {
               setFolderModal(null);
             }
           }}
+          onAction={showToast}
+        />
+      )}
+      {websiteSyncOpen && (
+        <KnowledgeWebsiteSyncWizard
+          onClose={() => setWebsiteSyncOpen(false)}
+          onSaved={() => { setRefreshKey(k => k + 1); }}
+          onAction={showToast}
+        />
+      )}
+      {externalPickerOpen && (
+        <KnowledgeExternalSourcePicker
+          onClose={() => setExternalPickerOpen(false)}
           onAction={showToast}
         />
       )}
