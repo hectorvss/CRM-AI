@@ -1678,6 +1678,38 @@ async function streamAgentEndpoint(
   }
 }
 
+// ── Fin AI Agent (customer-facing autonomous support agent) ───────────────────
+// Backend: server/routes/finApi.ts · spec: docs/fin-ai-agent-spec.md
+export interface FinGuidancePiece {
+  id: string;
+  category: 'communication_style' | 'context_clarification' | 'content_sources' | 'other';
+  text: string;
+  active: boolean;
+}
+
+export const finApi = {
+  getConfig: () => request<{ data: any }>('/fin/config').then((r) => r.data ?? r),
+  patchConfig: (patch: Record<string, any>) =>
+    request<{ data: any }>('/fin/config', { method: 'PATCH', body: JSON.stringify(patch) }).then((r) => r.data ?? r),
+
+  listGuidance: () => request<{ data: FinGuidancePiece[] }>('/fin/guidance').then((r) => r.data ?? []),
+  createGuidance: (payload: { category: FinGuidancePiece['category']; text: string; active?: boolean }) =>
+    request<{ data: FinGuidancePiece }>('/fin/guidance', { method: 'POST', body: JSON.stringify(payload) }).then((r) => r.data),
+  updateGuidance: (id: string, payload: Partial<Omit<FinGuidancePiece, 'id'>>) =>
+    request<{ data: FinGuidancePiece }>(`/fin/guidance/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }).then((r) => r.data),
+  deleteGuidance: (id: string) =>
+    request<any>(`/fin/guidance/${id}`, { method: 'DELETE' }),
+
+  preview: (question: string) =>
+    request<{ data: any }>('/fin/preview', { method: 'POST', body: JSON.stringify({ question }) }).then((r) => r.data),
+  getRun: (caseId: string) =>
+    request<{ data: any }>(`/fin/runs/${caseId}`).then((r) => r.data),
+  listGaps: (status?: string) =>
+    request<{ data: any[] }>(`/fin/gaps${status ? `?status=${status}` : ''}`).then((r) => r.data ?? []),
+  listOutcomes: () =>
+    request<{ data: any[] }>('/fin/outcomes').then((r) => r.data ?? []),
+};
+
 export const agentApi = {
   chat: (
     payload: { message: string; conversationId?: string; context?: Record<string, unknown> },

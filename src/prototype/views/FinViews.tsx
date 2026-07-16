@@ -5,7 +5,7 @@
 
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../../api/hooks';
-import { agentsApi, aiApi, auditApi, casesApi, connectorsApi, knowledgeApi, policyRulesApi, reportsApi } from '../../api/client';
+import { agentsApi, aiApi, auditApi, casesApi, connectorsApi, finApi, knowledgeApi, policyRulesApi, reportsApi } from '../../api/client';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../../components/Workflows';
 import AIStudio from '../../components/AIStudio';
 import SuperAgent from '../../components/SuperAgent';
@@ -4154,12 +4154,30 @@ function FinPruebasContent() {
     const target = questions.find(q => q.id === id);
     if (!target) return;
     try {
-      const result = await knowledgeApi.test({
-        question: target.q,
-        agent_id: finAgent?.id,
-        agent_slug: finAgent?.slug,
-        system_prompt: agentCtx.systemPrompt || undefined,
-      });
+      // Primary: the real Fin pipeline (dry-run preview, spec §10). Falls back
+      // to the legacy knowledge test endpoint if the Fin engine errors (e.g.
+      // no LLM provider configured in this environment).
+      let result: any;
+      try {
+        const run = await finApi.preview(target.q);
+        if (run?.status === 'error') throw new Error(run?.triage?.error || 'Fin pipeline error');
+        result = {
+          answer: run?.reply?.text
+            ?? (run?.status === 'clarify' ? run?.reply?.text : null)
+            ?? `(${run?.status ?? 'sin respuesta'})`,
+          sources: (run?.reply?.citations ?? []).map((id: string) => ({ id, title: id })),
+          confidence: run?.reply?.confidence,
+          fin_status: run?.status,
+          triage: run?.triage,
+        };
+      } catch {
+        result = await knowledgeApi.test({
+          question: target.q,
+          agent_id: finAgent?.id,
+          agent_slug: finAgent?.slug,
+          system_prompt: agentCtx.systemPrompt || undefined,
+        });
+      }
       setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'done', result } : q));
     } catch (err: any) {
       setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'error', error: err?.message || 'Error' } : q));

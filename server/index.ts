@@ -72,6 +72,7 @@ import policyRouter from './routes/policy.js';
 import reconciliationRouter from './routes/reconciliation.js';
 import superAgentRouter from './routes/superAgent.js';
 import agentApiRouter from './routes/agentApi.js';
+import finApiRouter from './routes/finApi.js';
 import onboardingRouter from './routes/onboarding.js';
 import publicConfigRouter from './routes/publicConfig.js';
 import tagsRouter from './routes/tags.js';
@@ -122,34 +123,10 @@ import { toolsRouter } from './routes/tools.js';
 import internalRouter from './routes/internal.js';
 
 // ── Extended feature routes (previously unmounted) ───────────────────────────
-import companiesRouter from './routes/companies.js';
-import customAttributesRouter from './routes/customAttributes.js';
-import automationRulesRouter from './routes/automationRules.js';
-import assignmentPoliciesRouter from './routes/assignmentPolicies.js';
-import workingHoursRouter from './routes/workingHours.js';
-import inboxesRouter from './routes/inboxes.js';
-import cannedResponsesRouter from './routes/cannedResponses.js';
-import slaPoliciesRouter from './routes/slaPolicies.js';
-import csatSurveysRouter from './routes/csatSurveys.js';
-import reportingApiRouter from './routes/reporting.js';
-import aiGuardrailsRouter from './routes/aiGuardrails.js';
-import agentToolsRouter from './routes/agentTools.js';
-import agentScenariosRouter from './routes/agentScenarios.js';
-import knowledgeEmbeddingsRouter from './routes/knowledgeEmbeddings.js';
-import aiFeedbackRouter from './routes/aiFeedback.js';
-import copilotThreadsRouter from './routes/copilotThreads.js';
-import mcpServersRouter from './routes/mcpServers.js';
-import mentionsRouter from './routes/mentions.js';
+// NOTE: most extended routers are imported in the main block above — a bad
+// merge had re-imported 26 of them here (duplicate ESM bindings, boot failure).
 import adminSeedRouter from './routes/adminSeed.js';
-import notificationsApiRouter from './routes/notificationsApi.js';
-import customFiltersRouter from './routes/customFilters.js';
-import emailTemplatesRouter from './routes/emailTemplates.js';
-import visualFlowsRouter from './routes/visualFlows.js';
-import dataImportsRouter from './routes/dataImports.js';
-import customRolesRouter from './routes/customRoles.js';
 import personalApiKeysRouter from './routes/personalApiKeys.js';
-import callsApiRouter from './routes/callsApi.js';
-import agentApiRouter from './routes/agentApi.js';
 
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { superAgentLimiter, aiLimiter, onboardingLimiter } from './middleware/rateLimit.js';
@@ -284,7 +261,8 @@ app.use('/api/audit', auditRouter);
 app.use('/api/ai', aiLimiter, aiRouter);
 app.use('/api/ai-feedback', aiFeedbackRouter);
 app.use('/api/ai-guardrails', aiGuardrailsRouter);
-app.use('/api/agent', agentApiRouter);
+app.use('/api/agent', superAgentLimiter, agentApiRouter);
+app.use('/api/fin', superAgentLimiter, finApiRouter);
 app.use('/api/agent-tools', agentToolsRouter);
 app.use('/api/agent-scenarios', agentScenariosRouter);
 app.use('/api/iam', iamRouter);
@@ -299,7 +277,6 @@ app.use('/api/demo', demoRouter);
 app.use('/api/policy', policyRouter);
 app.use('/api/reconciliation', reconciliationRouter);
 app.use('/api/super-agent', superAgentLimiter, superAgentRouter);
-app.use('/api/agent', agentApiRouter);
 app.use('/api/onboarding', onboardingLimiter, onboardingRouter);
 // ── Extended feature routes ───────────────────────────────
 app.use('/api/custom-attributes', customAttributesRouter);

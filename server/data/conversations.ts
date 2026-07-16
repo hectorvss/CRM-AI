@@ -188,6 +188,21 @@ async function appendMessageSupabase(scope: ConversationScope, input: AppendMess
   const { error: insertError } = await supabase.from('messages').insert(payload);
   if (insertError) throw insertError;
 
+  // Fin AI Agent trigger (spec §1): inbound customer messages schedule a
+  // debounced agent run. Dynamic import avoids a data↔agents module cycle;
+  // fire-and-forget so agent scheduling can never break message ingestion.
+  if ((input.direction || 'outbound') === 'inbound' && input.caseId) {
+    import('../agents/finAgent/trigger.js')
+      .then(({ notifyMessageCreated }) => notifyMessageCreated({
+        scope: { tenantId: scope.tenantId, workspaceId: scope.workspaceId },
+        caseId: input.caseId!,
+        conversationId: input.conversationId,
+        channel: input.channel,
+        direction: 'inbound',
+      }))
+      .catch((err) => console.warn('[finAgent] trigger import failed:', err?.message ?? err));
+  }
+
   const { error: conversationError } = await supabase
     .from('conversations')
     .update({ last_message_at: now, updated_at: now })
