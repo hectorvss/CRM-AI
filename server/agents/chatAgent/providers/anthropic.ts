@@ -80,6 +80,27 @@ function toAnthropicMessages(messages: ProviderMessage[]): Anthropic.MessagePara
   return out;
 }
 
+const EPHEMERAL = { type: 'ephemeral' as const };
+
+/**
+ * Add an Anthropic prompt-cache breakpoint to the last content block of the last
+ * message, so the growing conversation prefix is cached and re-read cheaply
+ * across the loop's iterations (the loop calls the model up to 8× per turn with
+ * the same system + a growing message list). Mirrors PostHog Max's caching.
+ */
+function withMessageCacheBreakpoint(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  if (!messages.length) return messages;
+  const last = messages[messages.length - 1];
+  const content: Anthropic.ContentBlockParam[] = typeof last.content === 'string'
+    ? [{ type: 'text', text: last.content }]
+    : [...(last.content as Anthropic.ContentBlockParam[])];
+  if (!content.length) return messages;
+  content[content.length - 1] = { ...content[content.length - 1], cache_control: EPHEMERAL } as Anthropic.ContentBlockParam;
+  const out = messages.slice();
+  out[out.length - 1] = { ...last, content };
+  return out;
+}
+
 export class AnthropicChatProvider implements ChatLLMProvider {
   async streamChat(opts: {
     system: string;
@@ -122,8 +143,11 @@ export class AnthropicChatProvider implements ChatLLMProvider {
         {
           model,
           max_tokens: maxTokens,
-          system: opts.system,
-          messages: toAnthropicMessages(opts.messages),
+          // Cache breakpoint on the system prompt caches the stable tools+system
+          // prefix (~20k tokens) so the loop's repeated iterations re-read it at
+          // ~0.1x cost instead of re-sending it in full each time.
+          system: [{ type: 'text', text: opts.system, cache_control: EPHEMERAL }],
+          messages: withMessageCacheBreakpoint(toAnthropicMessages(opts.messages)),
           tools: opts.tools.map((t) => ({
             name: t.name,
             description: t.description,
