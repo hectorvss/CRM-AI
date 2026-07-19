@@ -2487,29 +2487,21 @@ function FinOrientacionContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSub
             <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[600px]">
               Capacite a Fin para proporcionar respuestas precisas y use su estilo de comunicación, lo que garantiza una asistencia coherente y escalable en todos los flujos de trabajo.
             </p>
-            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-[#1a1a1a]">
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[13px] font-semibold text-[#1a1a1a]">
               <a className="flex items-center gap-1.5 hover:underline" href="#">
-                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
-                  <img src={`${FIGMA_CDN}/7b2ccaec-cac5-47de-99ef-0683c2d1f989`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
-                </span>
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><path d="M4 3l9 5-9 5z" strokeLinejoin="round"/></svg>
                 <span>Comenzar</span>
               </a>
               <a className="flex items-center gap-1.5 hover:underline" href="#">
-                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
-                  <img src={`${FIGMA_CDN}/daddb388-508e-43b0-b9d5-1adb853c5354`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
-                </span>
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><path d="M8 1.5l1.8 4 4.2.4-3.2 2.8 1 4.1L8 10.6 4.2 12.8l1-4.1L2 5.9l4.2-.4z" strokeLinejoin="round"/></svg>
                 <span>Prácticas recomendadas</span>
               </a>
               <a className="flex items-center gap-1.5 hover:underline" href="#">
-                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
-                  <img src={`${FIGMA_CDN}/164f7485-358a-4b86-8247-fc962c6ede17`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
-                </span>
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
                 <span>Conceptos básicos de Fin</span>
               </a>
               <a className="flex items-center gap-1.5 hover:underline" href="#">
-                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
-                  <img src={`${FIGMA_CDN}/d3f6580a-ea0f-4ea4-82b2-a2412229a1aa`} alt="" className="absolute" style={{ inset: '12.5% 6.25%' }} />
-                </span>
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.6M8 5.2v.01" strokeLinecap="round"/></svg>
                 <span>Más información</span>
               </a>
             </div>
