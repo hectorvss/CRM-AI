@@ -413,7 +413,7 @@ const FIN_NAV_ITEMS: { key: FinSubView; label: string; icon: 'book' | 'play' | '
     key: 'capacitar', label: 'Capacitar', icon: 'book',
     children: [
       { key: 'capContent',    label: 'Contenido' },
-      { key: 'capGuidance',   label: 'Orientación' },
+      { key: 'capGuidance',   label: 'Pautas' },
       { key: 'capAttributes', label: 'Atributos' },
       { key: 'capEscalation', label: 'Escalada' },
       { key: 'capProcedures', label: 'Procedimientos' },
@@ -2032,6 +2032,53 @@ const FIN_SEED_PROCEDIMIENTOS: FinProcedimiento[] = [
   },
 ];
 
+// ─── "Básicos" card: quick tono + longitud (identity config), collapsible ────
+const FIN_TONE_ES: Record<string, string> = { professional: 'profesional', friendly: 'amistoso', humorous: 'distendido' };
+const FIN_LEN_ES: Record<string, string> = { concise: 'corta', balanced: 'estándar', thorough: 'detallada' };
+function FinPautasBasicos() {
+  const [cfg, setCfg] = useState<any | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { finApi.getConfig().then((c: any) => setCfg(c && typeof c === 'object' ? c : {})).catch(() => setCfg({})); }, []);
+  const id = cfg?.identity ?? {};
+  const tone = id.tone ?? 'friendly';
+  const len = id.answer_length ?? 'balanced';
+  const set = (patch: Record<string, any>) => {
+    setCfg((p: any) => ({ ...p, identity: { ...(p?.identity ?? {}), ...patch } }));
+    finApi.patchConfig({ identity: patch }).catch(() => {});
+  };
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+      <button onClick={() => setOpen(o => !o)} className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[#f8f8f7]/40">
+        <div className="flex items-baseline gap-2 min-w-0">
+          <span className="text-[14px] font-semibold text-[#1a1a1a]">Básicos</span>
+          <span className="text-[13px] text-[#646462] truncate">Tono {FIN_TONE_ES[tone] ?? tone}, Longitud {FIN_LEN_ES[len] ?? len}</span>
+        </div>
+        <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] flex-shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-3 border-t border-[#e9eae6] grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-semibold text-[#646462]">Tono</span>
+            <select value={tone} onChange={e => set({ tone: e.target.value })} className="h-9 px-2 rounded-lg border border-[#e9eae6] bg-white text-[13px] focus:outline-none focus:border-[#1a1a1a]">
+              <option value="professional">Profesional</option>
+              <option value="friendly">Amistoso</option>
+              <option value="humorous">Distendido</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-semibold text-[#646462]">Longitud de respuesta</span>
+            <select value={len} onChange={e => set({ answer_length: e.target.value })} className="h-9 px-2 rounded-lg border border-[#e9eae6] bg-white text-[13px] focus:outline-none focus:border-[#1a1a1a]">
+              <option value="concise">Corta</option>
+              <option value="balanced">Estándar</option>
+              <option value="thorough">Detallada</option>
+            </select>
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── FinOrientacionContent: real CRUD over Pautas ────────────────────────────
 function FinOrientacionContent() {
   const pautas = useFinGuidanceResource(FIN_SEED_PAUTAS);
@@ -2159,7 +2206,8 @@ function FinOrientacionContent() {
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-6 py-4 flex flex-col gap-3">
+        <div className="px-6 py-4 flex flex-col gap-3 max-w-[880px]">
+          <FinPautasBasicos />
           {/* Search + filtrar */}
           <div className="flex items-center gap-3">
             <div className="flex-1 max-w-[420px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
@@ -2194,70 +2242,68 @@ function FinOrientacionContent() {
             />
           </div>
 
-          {/* Categorías */}
+          {/* Categorías — cabecera ligera + tarjeta de contenido + Nuevo */}
           {FIN_PAUTA_CATEGORIES.map(cat => {
             const items = filtered.filter(p => p.category === cat.id);
             const isOpen = openCats[cat.id] !== false;
             return (
-              <div key={cat.id} className="bg-white border border-[#e9eae6] rounded-[12px]">
+              <div key={cat.id} className="pt-2">
                 <button
                   onClick={() => setOpenCats(s => ({ ...s, [cat.id]: !isOpen }))}
-                  className="w-full px-4 py-3 flex items-start justify-between border-b border-[#e9eae6] hover:bg-[#f8f8f7]/40 text-left"
+                  className="w-full flex items-center gap-3 py-1.5 text-left"
                 >
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5">{cat.icon}</span>
-                    <div>
-                      <p className="text-[14px] font-semibold text-[#1a1a1a]">
-                        {cat.title} <span className="text-[#646462] font-normal">({items.length})</span>
-                      </p>
-                      <p className="text-[13px] text-[#646462] mt-0.5">{cat.description}</p>
-                    </div>
+                  <span className="w-8 h-8 rounded-full bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">{cat.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-semibold text-[#1a1a1a]">
+                      {cat.title} <span className="text-[#646462] font-normal">({items.length})</span>
+                    </p>
+                    <p className="text-[13px] text-[#646462] mt-0.5">{cat.description}</p>
                   </div>
-                  <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] mt-1.5 transition-transform ${isOpen ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
+                  <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] flex-shrink-0 transition-transform ${isOpen ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
                 </button>
                 {isOpen && (
-                  <>
-                    {items.length === 0 ? (
-                      <div className="px-4 py-8 text-center text-[13px] text-[#646462] border-b border-[#e9eae6]">
-                        Aún no hay pautas. Haz clic en Nuevo para crear uno.
-                      </div>
-                    ) : (
-                      items.map(p => (
-                        <div
-                          key={p.id}
-                          onClick={() => openEdit(p)}
-                          className="group w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto_32px] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] text-left cursor-pointer"
-                        >
-                          <p className="text-[13.5px] font-medium text-[#1a1a1a] truncate">{p.title.trim() || 'Sin título'}</p>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
-                            {FIN_AUDIENCE_LABEL[p.audience] || 'Todos'}
-                          </span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
-                            {p.channels.length === 0 ? 'Todos los canales' : `${p.channels.length} canal${p.channels.length === 1 ? '' : 'es'}`}
-                          </span>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${p.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
-                            {p.enabled ? 'Habilitado' : 'Pausado'}
-                          </span>
-                          <button
-                            onClick={(e) => handleDeletePauta(p, e)}
-                            title="Eliminar pauta"
-                            className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          </button>
+                  <div className="pl-11 mt-1.5">
+                    <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                      {items.length === 0 ? (
+                        <div className="px-4 py-7 text-center text-[13px] text-[#646462]">
+                          Aún no hay pautas. Haz clic en Nuevo para crear uno.
                         </div>
-                      ))
-                    )}
-                    <div className="px-4 py-2.5">
-                      <button
-                        onClick={() => startCreate(cat.id)}
-                        className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black"
-                      >
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-                        <span>Nuevo</span>
-                      </button>
+                      ) : (
+                        items.map((p, i) => (
+                          <div
+                            key={p.id}
+                            onClick={() => openEdit(p)}
+                            className={`group w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto_32px] items-center gap-3 hover:bg-[#f8f8f7]/40 text-left cursor-pointer ${i < items.length - 1 ? 'border-b border-[#e9eae6]' : ''}`}
+                          >
+                            <p className="text-[13.5px] font-medium text-[#1a1a1a] truncate">{p.title.trim() || 'Sin título'}</p>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
+                              {FIN_AUDIENCE_LABEL[p.audience] || 'Todos'}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
+                              {p.channels.length === 0 ? 'Todos los canales' : `${p.channels.length} canal${p.channels.length === 1 ? '' : 'es'}`}
+                            </span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${p.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
+                              {p.enabled ? 'Habilitado' : 'Pausado'}
+                            </span>
+                            <button
+                              onClick={(e) => handleDeletePauta(p, e)}
+                              title="Eliminar pauta"
+                              className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </button>
+                          </div>
+                        ))
+                      )}
                     </div>
-                  </>
+                    <button
+                      onClick={() => startCreate(cat.id)}
+                      className="mt-2 h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white hover:bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                      <span>Nuevo</span>
+                    </button>
+                  </div>
                 )}
               </div>
             );
@@ -5045,7 +5091,7 @@ function FinPruebasContent() {
             <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-5">
               {([
                 { label: 'Contenido', items: agentCtx.stats.content > 0 ? [{ title: `${agentCtx.stats.content} artículos habilitados para Fin`, sub: '' }] : [], empty: 'Sin artículos habilitados. Ve a Capacitar → Contenido.' },
-                { label: 'Orientación', items: agentCtx.activePautas.map(p => ({ title: p.title, sub: p.body.split('\n')[0] })), empty: 'Sin pautas activas. Ve a Capacitar → Orientación.' },
+                { label: 'Pautas', items: agentCtx.activePautas.map(p => ({ title: p.title, sub: p.body.split('\n')[0] })), empty: 'Sin pautas activas. Ve a Capacitar → Pautas.' },
                 { label: 'Atributos', items: agentCtx.activeAtributos.map(a => ({ title: a.name, sub: a.values.map(v => v.name).join(' · ') })), empty: 'Sin atributos activos. Ve a Capacitar → Atributos.' },
                 { label: 'Escalada', items: agentCtx.activeRules.map(r => ({ title: r.title, sub: r.conditions.length > 0 ? `${r.conditions.length} condición${r.conditions.length > 1 ? 'es' : ''}` : 'Sin condiciones' })), empty: 'Sin reglas de escalada activas. Ve a Capacitar → Escalada.' },
                 { label: 'Procedimientos', items: agentCtx.activeProcs.map(p => ({ title: p.name, sub: p.description })), empty: 'Sin procedimientos activos. Ve a Capacitar → Procedimientos.' },
