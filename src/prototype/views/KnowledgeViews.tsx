@@ -200,32 +200,35 @@ function SidebarFolderNode({
           </span>
           <span className="flex-1 truncate pr-16">{folder.name}</span>
         </div>
-        <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 bg-[#f8f8f7] rounded">
+        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 bg-white border border-[#e9eae6] rounded-lg shadow-[0px_1px_3px_rgba(20,20,20,0.12)] p-0.5">
           {depth === 0 && onCreateSubfolder && (
             <button
               onClick={(e) => { e.stopPropagation(); onCreateSubfolder({ id: folder.id, name: folder.name }); }}
               title="Nueva subcarpeta"
-              className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#646462] hover:text-[#1a1a1a]"
+              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#f3f3f1] text-[#646462] hover:text-[#1a1a1a]"
             >
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              {/* folder-plus */}
+              <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.75 6.5A1.75 1.75 0 0 1 4.5 4.75h3l1.5 1.75h6.5a1.75 1.75 0 0 1 1.75 1.75V14a1.75 1.75 0 0 1-1.75 1.75h-11A1.75 1.75 0 0 1 2.75 14z"/><path d="M10 8.75v3.5M8.25 10.5h3.5"/></svg>
             </button>
           )}
           {onEditFolder && (
             <button
               onClick={(e) => { e.stopPropagation(); onEditFolder({ id: folder.id, name: folder.name, description: folder.description, icon: folder.icon }); }}
               title="Editar carpeta"
-              className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#646462] hover:text-[#1a1a1a]"
+              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#f3f3f1] text-[#646462] hover:text-[#1a1a1a]"
             >
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M11.5 1.5l3 3-9 9H2.5v-3z"/></svg>
+              {/* pencil */}
+              <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M13.4 3.6a1.6 1.6 0 0 1 2.3 0l.7.7a1.6 1.6 0 0 1 0 2.3L7.9 15.1l-3.4.9.9-3.4z"/><path d="M12.4 4.6l3 3"/></svg>
             </button>
           )}
           {onDeleteFolder && (
             <button
               onClick={(e) => { e.stopPropagation(); onDeleteFolder({ id: folder.id, name: folder.name }); }}
               title="Borrar carpeta"
-              className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#fef7f7] text-[#646462] hover:text-[#b91c1c]"
+              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#fdecec] text-[#646462] hover:text-[#dc2626]"
             >
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M5 3V2.5A1.5 1.5 0 016.5 1h3A1.5 1.5 0 0111 2.5V3h3v1.5h-1V13a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 014 13V4.5H3V3h2zm1.5 1.5V13h3V4.5h-3z"/></svg>
+              {/* trash */}
+              <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h12"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6"/><path d="M5.5 6l.6 9a1.5 1.5 0 0 0 1.5 1.4h4.8A1.5 1.5 0 0 0 13.9 15l.6-9"/><path d="M8.5 9v4.5M11.5 9v4.5"/></svg>
             </button>
           )}
         </div>
@@ -287,12 +290,18 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
       </div>
       <div className="flex-1 overflow-y-auto pl-3 pr-3 pb-4 flex flex-col gap-0.5">
         <button onClick={() => onSelect('fuentes')} className={itemCls(sub === 'fuentes')}>
-          <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-13" size={16} /></span>
+          <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+            {/* Fuentes — solid 2×2 grid */}
+            <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-[#1a1a1a]"><rect x="1.5" y="1.5" width="5.6" height="5.6" rx="1.6"/><rect x="8.9" y="1.5" width="5.6" height="5.6" rx="1.6"/><rect x="1.5" y="8.9" width="5.6" height="5.6" rx="1.6"/><rect x="8.9" y="8.9" width="5.6" height="5.6" rx="1.6"/></svg>
+          </span>
           <span className="flex-1">Fuentes</span>
         </button>
         {/* Contenido — expandable group, with new sub-items */}
         <button onClick={() => setOpenContenido(o => !o)} className={itemCls(false)}>
-          <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-14" size={16} /></span>
+          <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+            {/* Contenido — solid document */}
+            <svg viewBox="0 0 16 16" className="w-[15px] h-[15px]"><path fill="#1a1a1a" d="M4 1.4h4.7L13.2 6v8A1.6 1.6 0 0 1 11.6 15.6H4.4A1.6 1.6 0 0 1 2.8 14V3A1.6 1.6 0 0 1 4.4 1.4z"/><path fill="#fff" d="M8.4 1.6v3.8a.8.8 0 0 0 .8.8h3.6zM5.4 8.2h5.2v1.2H5.4zM5.4 10.7h5.2v1.2H5.4z"/></svg>
+          </span>
           <span className="flex-1">Contenido</span>
           <Chev open={openContenido} />
         </button>
@@ -322,9 +331,10 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
             <button
               onClick={onCreateFolder}
               title="Nueva carpeta"
-              className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#1a1a1a]"
+              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#e9eae6] text-[#1a1a1a]"
             >
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              {/* folder-plus */}
+              <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M2.75 6.5A1.75 1.75 0 0 1 4.5 4.75h3l1.5 1.75h6.5a1.75 1.75 0 0 1 1.75 1.75V14a1.75 1.75 0 0 1-1.75 1.75h-11A1.75 1.75 0 0 1 2.75 14z"/><path d="M10 8.75v3.5M8.25 10.5h3.5"/></svg>
             </button>
           )}
         </div>
@@ -343,9 +353,12 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
           </div>
         )}
         <button onClick={() => onSelect('centroAyuda')} className={`mt-2 ${itemCls(sub === 'centroAyuda')}`}>
-          <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-20" size={16} /></span>
+          <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+            {/* Centro de ayuda — solid life-ring */}
+            <svg viewBox="0 0 16 16" className="w-[15px] h-[15px]" fill="#1a1a1a" fillRule="evenodd" clipRule="evenodd"><path d="M8 .8a7.2 7.2 0 1 0 0 14.4A7.2 7.2 0 0 0 8 .8zm0 4.1a3.1 3.1 0 1 0 0 6.2 3.1 3.1 0 0 0 0-6.2z"/><path d="M11.9 2.5l-1.8 2.2a3.6 3.6 0 0 0-1.3-.7l.8-2.7zM2.5 4.1l2.2 1.8c-.3.4-.5.8-.7 1.3l-2.7-.8zm11 .1l-.8 2.7c-.5-.2-.9-.4-1.3-.5l.6-2.8zM4.2 11.4l-2.8.6.9-2.6c.3.4.6.8 1 1.1zm7.6.1l1.1 1.9-2.7-.8c.3-.3.6-.7.8-1.1zm-4.9 1.2l.9 2.7-2.2-1.8c.4-.3.8-.6 1.3-.9z"/></svg>
+          </span>
           <span className="flex-1">Centro de ayuda</span>
-          <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-21" size={16} /></span>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 flex-shrink-0 fill-none stroke-[#646462]" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5.5 10.5l5-5M6 5.5h4.5V10"/></svg>
         </button>
       </div>
     </div>
@@ -1037,6 +1050,7 @@ function KnowledgeFolderModal({
   const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [icon, setIcon] = useState(initial?.icon || '');
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   async function submit() {
     const trimmed = name.trim();
@@ -1061,9 +1075,33 @@ function KnowledgeFolderModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
       <div
-        className="w-[460px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
-        onClick={e => e.stopPropagation()}
+        className="relative w-[460px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
+        onClick={e => { setEmojiOpen(false); e.stopPropagation(); }}
       >
+        {/* Emoji dropdown — opens to the LEFT of the modal card. */}
+        {emojiOpen && (
+          <div
+            onClick={e => e.stopPropagation()}
+            className="absolute top-0 right-full mr-3 w-[212px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-3 z-10"
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#646462] px-1 mb-2">Elige un icono</p>
+            <div className="grid grid-cols-5 gap-1 max-h-[220px] overflow-y-auto">
+              <button
+                onClick={() => { setIcon(''); setEmojiOpen(false); }}
+                title="Sin icono"
+                className={`w-9 h-9 rounded-lg flex items-center justify-center text-[13px] text-[#646462] border ${!icon ? 'border-[#1a1a1a] bg-[#f3f3f1]' : 'border-transparent hover:bg-[#f3f3f1]'}`}
+              >—</button>
+              {KH_FOLDER_EMOJIS.map(e => (
+                <button
+                  key={e}
+                  onClick={() => { setIcon(e); setEmojiOpen(false); }}
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center text-[19px] leading-none border ${icon === e ? 'border-[#1a1a1a] bg-[#f3f3f1]' : 'border-transparent hover:bg-[#f3f3f1]'}`}
+                >{e}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">{title}</h3>
         <p className="text-[12.5px] text-[#646462] mb-4">
           {parent
@@ -1071,12 +1109,17 @@ function KnowledgeFolderModal({
             : <>Las carpetas agrupan artículos y políticas. Fin y Copilot pueden filtrar por carpeta.</>}
         </p>
 
-        {/* Icono + nombre en una fila */}
+        {/* Icono (abre el desplegable) + nombre */}
         <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Icono y nombre</label>
         <div className="flex items-center gap-2 mb-3">
-          <span className="w-9 h-9 rounded-lg border border-[#e9eae6] bg-[#f8f8f7] flex items-center justify-center text-[18px] leading-none flex-shrink-0">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setEmojiOpen(o => !o); }}
+            title="Elegir icono"
+            className={`w-9 h-9 rounded-lg border flex items-center justify-center text-[18px] leading-none flex-shrink-0 transition-colors ${emojiOpen ? 'border-[#1a1a1a] bg-[#f3f3f1]' : 'border-[#e9eae6] bg-[#f8f8f7] hover:bg-[#f3f3f1]'}`}
+          >
             {icon || <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" /></svg>}
-          </span>
+          </button>
           <input
             autoFocus
             value={name}
@@ -1085,22 +1128,6 @@ function KnowledgeFolderModal({
             placeholder="Reembolsos, Envíos, Facturación…"
             className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
           />
-        </div>
-
-        {/* Emoji picker */}
-        <div className="flex flex-wrap gap-1 mb-3 max-h-[76px] overflow-y-auto">
-          <button
-            onClick={() => setIcon('')}
-            title="Sin icono"
-            className={`w-8 h-8 rounded-md flex items-center justify-center text-[12px] text-[#646462] border ${!icon ? 'border-[#1a1a1a] bg-[#f3f3f1]' : 'border-transparent hover:bg-[#f3f3f1]'}`}
-          >—</button>
-          {KH_FOLDER_EMOJIS.map(e => (
-            <button
-              key={e}
-              onClick={() => setIcon(e)}
-              className={`w-8 h-8 rounded-md flex items-center justify-center text-[17px] leading-none border ${icon === e ? 'border-[#1a1a1a] bg-[#f3f3f1]' : 'border-transparent hover:bg-[#f3f3f1]'}`}
-            >{e}</button>
-          ))}
         </div>
 
         <label className="block text-[12px] font-semibold text-[#646462] mb-1">Descripción (opcional)</label>
