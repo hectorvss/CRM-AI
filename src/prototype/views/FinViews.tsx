@@ -849,6 +849,7 @@ function FinContenidoPickerModal({
   onConfirmSelection,
   onWriteNew,
   onOpenArticle,
+  openArticleId,
   onClose,
 }: {
   cardType: FinContenidoCardType;
@@ -858,6 +859,7 @@ function FinContenidoPickerModal({
   onConfirmSelection: (change: { added: any[]; removed: any[] }) => void;
   onWriteNew: () => void;
   onOpenArticle?: (article: any) => void;
+  openArticleId?: string | null;
   onClose: () => void;
 }) {
   // A chunk is "used by Fin" when its article has fin_service on. Responses are
@@ -1011,13 +1013,14 @@ function FinContenidoPickerModal({
                       {expanded && (
                         <div className="pl-12 pr-4 pb-1 flex flex-col gap-0.5">
                           {arts.map((a: any) => (
-                            <label
+                            <div
                               key={a.id}
-                              className="group flex items-center gap-2.5 h-8 px-2 rounded-[7px] hover:bg-[#f8f8f7] cursor-pointer select-none"
+                              onClick={() => toggleArticle(a.id)}
+                              role="button"
+                              className={`group flex items-center gap-2.5 h-8 px-2 rounded-[7px] cursor-pointer select-none ${a.id === openArticleId ? 'bg-[#ebebe8]' : 'hover:bg-[#f8f8f7]'}`}
                             >
                               <span
-                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center flex-shrink-0 transition-colors ${selectedIds.has(a.id) ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#c8c9c4] hover:border-[#1a1a1a]'}`}
-                                onClick={() => toggleArticle(a.id)}
+                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center flex-shrink-0 transition-colors ${selectedIds.has(a.id) ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#c8c9c4] group-hover:border-[#1a1a1a]'}`}
                               >
                                 {selectedIds.has(a.id) && <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="1.8"><path d="M1.5 5l2.5 2.5 4.5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                               </span>
@@ -1025,8 +1028,8 @@ function FinContenidoPickerModal({
                               <span className="flex-1 text-[13px] text-[#1a1a1a] truncate">{a.title || 'Sin título'}</span>
                               {onOpenArticle && (
                                 <button
-                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenArticle(a); }}
-                                  title="Abrir para ver el contenido"
+                                  onClick={(e) => { e.stopPropagation(); onOpenArticle(a); }}
+                                  title="Abrir para ver el contenido (no lo selecciona)"
                                   className="opacity-0 group-hover:opacity-100 flex items-center gap-1 h-6 px-2 rounded-[6px] border border-[#e9eae6] bg-white hover:bg-[#f3f3f1] hover:border-[#c8c9c4] text-[11px] font-medium text-[#1a1a1a] flex-shrink-0 transition-opacity"
                                 >
                                   <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><path d="M6.5 3.5H4A1.5 1.5 0 0 0 2.5 5v7A1.5 1.5 0 0 0 4 13.5h7A1.5 1.5 0 0 0 12.5 12V9.5" strokeLinecap="round"/><path d="M9 2.5h4.5V7M13 3l-6 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -1036,7 +1039,7 @@ function FinContenidoPickerModal({
                               <span className={`text-[10.5px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${a.status === 'published' ? 'bg-[#dcf2e3] text-[#1f7a3a]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
                                 {a.status === 'published' ? 'Pub.' : 'Bor.'}
                               </span>
-                            </label>
+                            </div>
                           ))}
                         </div>
                       )}
@@ -1630,6 +1633,7 @@ function FinContenidoContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubVi
           onConfirmSelection={handlePickerConfirm}
           onWriteNew={handlePickerWriteNew}
           onOpenArticle={openExistingArticle}
+          openArticleId={editorOpen ? (editorPrefill?.id ?? null) : null}
           onClose={() => setPickerOpen(false)}
         />
       )}
