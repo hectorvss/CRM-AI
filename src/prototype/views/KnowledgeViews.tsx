@@ -3,7 +3,7 @@
 // Extracted from the monolithic Prototype.tsx (auto-split, behavior-preserving).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { agentsApi, connectorsApi, knowledgeApi, workspacesApi } from '../../api/client';
 import { Dropdown, KH_TYPE_OPTIONS, KnowledgeArticleEditor, KnowledgeConnectAppWizard, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, LibraryIcon, TrialBanner, relativeTime, titleCase } from '../sharedUi';
@@ -151,10 +151,18 @@ function KhSection({
   );
 }
 
+// Icons reused by the folder kebab menu.
+const KH_MENU_ICONS = {
+  subfolder: <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.75 6.5A1.75 1.75 0 0 1 4.5 4.75h3l1.5 1.75h6.5a1.75 1.75 0 0 1 1.75 1.75V14a1.75 1.75 0 0 1-1.75 1.75h-11A1.75 1.75 0 0 1 2.75 14z"/><path d="M10 8.75v3.5M8.25 10.5h3.5"/></svg>,
+  edit: <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M13.4 3.6a1.6 1.6 0 0 1 2.3 0l.7.7a1.6 1.6 0 0 1 0 2.3L7.9 15.1l-3.4.9.9-3.4z"/><path d="M12.4 4.6l3 3"/></svg>,
+  move: <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.75 6A1.75 1.75 0 0 1 4.5 4.25h3L9 6h6.5A1.75 1.75 0 0 1 17.25 7.75V14a1.75 1.75 0 0 1-1.75 1.75h-11A1.75 1.75 0 0 1 2.75 14z"/><path d="M10 12.5l2.25-2.25L10 8M12 10.25H7.5"/></svg>,
+  trash: <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h12"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6"/><path d="M5.5 6l.6 9a1.5 1.5 0 0 0 1.5 1.4h4.8A1.5 1.5 0 0 0 13.9 15l.6-9"/><path d="M8.5 9v4.5M11.5 9v4.5"/></svg>,
+};
+
 // Recursive folder/subfolder row for the Knowledge sidebar tree.
 function SidebarFolderNode({
   folder, depth, childrenOf, expanded, toggleExpand, activeFolderId, sub, itemCls,
-  onSelectFolder, onCreateSubfolder, onEditFolder, onDeleteFolder,
+  onSelectFolder, onCreateSubfolder, onEditFolder, onMoveFolder, onDeleteFolder,
 }: {
   folder: any;
   depth: number;
@@ -167,14 +175,34 @@ function SidebarFolderNode({
   onSelectFolder?: (id: string) => void;
   onCreateSubfolder?: (parent: { id: string; name: string }) => void;
   onEditFolder?: (folder: { id: string; name: string; description?: string; icon?: string }) => void;
+  onMoveFolder?: (folder: any) => void;
   onDeleteFolder?: (folder: { id: string; name: string }) => void;
 }) {
   const kids = childrenOf(folder.id);
   const isOpen = expanded.has(folder.id);
   const active = sub === 'carpeta' && activeFolderId === folder.id;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [menuOpen]);
+
+  const MenuItem = ({ icon, label, danger, onClick }: { icon: ReactNode; label: string; danger?: boolean; onClick: () => void }) => (
+    <button
+      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onClick(); }}
+      className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] font-medium ${danger ? 'text-[#dc2626] hover:bg-[#fdecec]' : 'text-[#1a1a1a] hover:bg-[#f3f3f1]'}`}
+    >
+      <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">{icon}</span>
+      {label}
+    </button>
+  );
+
   return (
     <>
-      <div className="group relative">
+      <div className="group relative" ref={menuRef}>
         <div
           role="button"
           tabIndex={0}
@@ -198,53 +226,50 @@ function SidebarFolderNode({
               ? <span className="text-[13px] leading-none">{folder.icon}</span>
               : <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" /></svg>}
           </span>
-          <span className="flex-1 truncate pr-16">{folder.name}</span>
+          <span className="flex-1 truncate pr-8">{folder.name}</span>
         </div>
-        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 bg-white border border-[#e9eae6] rounded-lg shadow-[0px_1px_3px_rgba(20,20,20,0.12)] p-0.5">
-          {depth === 0 && onCreateSubfolder && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onCreateSubfolder({ id: folder.id, name: folder.name }); }}
-              title="Nueva subcarpeta"
-              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#f3f3f1] text-[#646462] hover:text-[#1a1a1a]"
-            >
-              {/* folder-plus */}
-              <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.75 6.5A1.75 1.75 0 0 1 4.5 4.75h3l1.5 1.75h6.5a1.75 1.75 0 0 1 1.75 1.75V14a1.75 1.75 0 0 1-1.75 1.75h-11A1.75 1.75 0 0 1 2.75 14z"/><path d="M10 8.75v3.5M8.25 10.5h3.5"/></svg>
-            </button>
-          )}
-          {onEditFolder && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onEditFolder({ id: folder.id, name: folder.name, description: folder.description, icon: folder.icon }); }}
-              title="Editar carpeta"
-              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#f3f3f1] text-[#646462] hover:text-[#1a1a1a]"
-            >
-              {/* pencil */}
-              <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M13.4 3.6a1.6 1.6 0 0 1 2.3 0l.7.7a1.6 1.6 0 0 1 0 2.3L7.9 15.1l-3.4.9.9-3.4z"/><path d="M12.4 4.6l3 3"/></svg>
-            </button>
-          )}
-          {onDeleteFolder && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDeleteFolder({ id: folder.id, name: folder.name }); }}
-              title="Borrar carpeta"
-              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#fdecec] text-[#646462] hover:text-[#dc2626]"
-            >
-              {/* trash */}
-              <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h12"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6"/><path d="M5.5 6l.6 9a1.5 1.5 0 0 0 1.5 1.4h4.8A1.5 1.5 0 0 0 13.9 15l.6-9"/><path d="M8.5 9v4.5M11.5 9v4.5"/></svg>
-            </button>
-          )}
-        </div>
+
+        {/* Kebab trigger — visible on hover or while its menu is open. */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
+          title="Opciones"
+          className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-md text-[#646462] hover:text-[#1a1a1a] hover:bg-[#e9eae6] transition-opacity ${menuOpen ? 'opacity-100 bg-[#e9eae6]' : 'opacity-0 group-hover:opacity-100'}`}
+        >
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
+        </button>
+
+        {menuOpen && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-1 top-[calc(100%-2px)] z-30 w-[184px] rounded-xl bg-white border border-[#e9eae6] shadow-[0px_12px_32px_rgba(20,20,20,0.18)] p-1"
+          >
+            {depth === 0 && onCreateSubfolder && (
+              <MenuItem icon={KH_MENU_ICONS.subfolder} label="Crear subcarpeta" onClick={() => onCreateSubfolder({ id: folder.id, name: folder.name })} />
+            )}
+            {onEditFolder && (
+              <MenuItem icon={KH_MENU_ICONS.edit} label="Editar carpeta" onClick={() => onEditFolder({ id: folder.id, name: folder.name, description: folder.description, icon: folder.icon })} />
+            )}
+            {onMoveFolder && (
+              <MenuItem icon={KH_MENU_ICONS.move} label="Mover a carpeta" onClick={() => onMoveFolder(folder)} />
+            )}
+            {onDeleteFolder && (
+              <MenuItem icon={KH_MENU_ICONS.trash} label="Eliminar carpeta" danger onClick={() => onDeleteFolder({ id: folder.id, name: folder.name })} />
+            )}
+          </div>
+        )}
       </div>
       {isOpen && kids.map((k: any) => (
         <SidebarFolderNode
           key={k.id} folder={k} depth={depth + 1} childrenOf={childrenOf} expanded={expanded} toggleExpand={toggleExpand}
           activeFolderId={activeFolderId} sub={sub} itemCls={itemCls}
-          onSelectFolder={onSelectFolder} onCreateSubfolder={onCreateSubfolder} onEditFolder={onEditFolder} onDeleteFolder={onDeleteFolder}
+          onSelectFolder={onSelectFolder} onCreateSubfolder={onCreateSubfolder} onEditFolder={onEditFolder} onMoveFolder={onMoveFolder} onDeleteFolder={onDeleteFolder}
         />
       ))}
     </>
   );
 }
 
-function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCreateFolder, onCreateSubfolder, onEditFolder, onDeleteFolder, refreshKey }: {
+function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCreateFolder, onCreateSubfolder, onEditFolder, onMoveFolder, onDeleteFolder, refreshKey }: {
   sub: KnowledgeSubView;
   onSelect: (s: KnowledgeSubView) => void;
   activeFolderId?: string | null;
@@ -252,6 +277,7 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
   onCreateFolder?: () => void;
   onCreateSubfolder?: (parent: { id: string; name: string }) => void;
   onEditFolder?: (folder: { id: string; name: string; description?: string; icon?: string }) => void;
+  onMoveFolder?: (folder: any) => void;
   onDeleteFolder?: (folder: { id: string; name: string }) => void;
   refreshKey?: number;
 }) {
@@ -347,7 +373,7 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
               <SidebarFolderNode
                 key={d.id} folder={d} depth={0} childrenOf={childrenOf} expanded={expanded} toggleExpand={toggleExpand}
                 activeFolderId={activeFolderId} sub={sub} itemCls={itemCls}
-                onSelectFolder={onSelectFolder} onCreateSubfolder={onCreateSubfolder} onEditFolder={onEditFolder} onDeleteFolder={onDeleteFolder}
+                onSelectFolder={onSelectFolder} onCreateSubfolder={onCreateSubfolder} onEditFolder={onEditFolder} onMoveFolder={onMoveFolder} onDeleteFolder={onDeleteFolder}
               />
             ))}
           </div>
@@ -1140,6 +1166,81 @@ function KnowledgeFolderModal({
         <div className="flex items-center justify-end gap-2 mt-4">
           <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
           <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? (editing ? 'Guardando…' : 'Creando…') : (editing ? 'Guardar' : parent ? 'Crear subcarpeta' : 'Crear carpeta')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// KnowledgeMoveFolderModal — move a folder to another parent (or to the top
+// level). Same chrome as KnowledgeFolderModal. NB: responses are camelCased.
+function KnowledgeMoveFolderModal({
+  folder,
+  onClose,
+  onMoved,
+  onAction,
+}: {
+  folder: any;
+  onClose: () => void;
+  onMoved: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
+  const domains = (Array.isArray(domainsData) ? domainsData : []) as any[];
+  const childIds = new Set(domains.filter((d: any) => d.parentId === folder.id).map((d: any) => d.id));
+  // Valid destinations: top-level folders that aren't this folder or its children.
+  const targets = domains.filter((d: any) => !d.parentId && d.id !== folder.id && !childIds.has(d.id));
+  const [busy, setBusy] = useState(false);
+  async function moveTo(parentId: string | null) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await knowledgeApi.updateDomain(folder.id, { parent_id: parentId });
+      onAction(parentId ? 'Carpeta movida' : 'Movida al nivel superior');
+      onMoved();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo mover la carpeta', 'error');
+    } finally { setBusy(false); }
+  }
+  const Row = ({ icon, label, selected, onClick }: { icon: ReactNode; label: string; selected?: boolean; onClick: () => void }) => (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-left ${selected ? 'bg-[#f3f3f1] font-semibold text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#f5f5f4]'}`}
+    >
+      <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{icon}</span>
+      <span className="flex-1 truncate">{label}</span>
+      {selected && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="2" strokeLinecap="round"><path d="M3 8l3.5 3.5L13 5"/></svg>}
+    </button>
+  );
+  return (
+    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5" onClick={e => e.stopPropagation()}>
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Mover carpeta</h3>
+        <p className="text-[12.5px] text-[#646462] mb-4">Elige dónde colocar <span className="font-medium text-[#1a1a1a]">{folder.name}</span>.</p>
+        <div className="flex flex-col gap-0.5 max-h-[280px] overflow-y-auto -mx-1 px-1">
+          <Row
+            icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v8M4.5 6.5L8 3l3.5 3.5M3 13h10"/></svg>}
+            label="Nivel superior (sin carpeta padre)"
+            selected={!folder.parentId}
+            onClick={() => moveTo(null)}
+          />
+          {targets.length > 0 && <div className="border-t border-[#f1f1ee] my-1" />}
+          {targets.map((d: any) => (
+            <Row
+              key={d.id}
+              icon={d.icon ? <span className="text-[15px] leading-none">{d.icon}</span> : <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/></svg>}
+              label={d.name}
+              selected={folder.parentId === d.id}
+              onClick={() => moveTo(d.id)}
+            />
+          ))}
+          {targets.length === 0 && !folder.parentId && (
+            <p className="px-3 py-3 text-[12.5px] text-[#646462] italic">No hay otras carpetas de nivel superior a las que mover.</p>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
         </div>
       </div>
     </div>
@@ -2096,6 +2197,7 @@ export function KnowledgeView() {
     | { mode: 'sub'; parent: { id: string; name: string } }
     | { mode: 'edit'; folder: { id: string; name: string; description?: string; icon?: string } };
   const [folderModal, setFolderModal] = useState<FolderModalState>(null);
+  const [moveFolder, setMoveFolder] = useState<any | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   async function deleteFolder(folder: { id: string; name: string }) {
     if (typeof window !== 'undefined' && !window.confirm(`¿Borrar la carpeta "${folder.name}"? Se borrarán también sus subcarpetas y los artículos quedarán sin carpeta.`)) return;
@@ -2195,6 +2297,7 @@ export function KnowledgeView() {
           onCreateFolder={() => setFolderModal({ mode: 'create' })}
           onCreateSubfolder={(parent) => setFolderModal({ mode: 'sub', parent })}
           onEditFolder={(folder) => setFolderModal({ mode: 'edit', folder })}
+          onMoveFolder={(folder) => setMoveFolder(folder)}
           onDeleteFolder={(folder) => deleteFolder(folder)}
           refreshKey={refreshKey}
         />
@@ -2218,6 +2321,14 @@ export function KnowledgeView() {
               showToast(folderModal.mode === 'sub' ? 'Subcarpeta creada' : 'Carpeta creada');
             }
           }}
+          onAction={showToast}
+        />
+      )}
+      {moveFolder && (
+        <KnowledgeMoveFolderModal
+          folder={moveFolder}
+          onClose={() => setMoveFolder(null)}
+          onMoved={() => { setRefreshKey(k => k + 1); setMoveFolder(null); }}
           onAction={showToast}
         />
       )}
