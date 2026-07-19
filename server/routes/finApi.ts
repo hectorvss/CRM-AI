@@ -24,6 +24,7 @@ import { requirePermission } from '../middleware/authorization.js';
 import { sendError } from '../http/errors.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { loadFinConfig, patchFinConfig, runFinPipeline, type FinScope } from '../agents/finAgent/index.js';
+import { getUtilityProvider } from '../agents/chatAgent/providers/index.js';
 
 const router = Router();
 router.use(extractMultiTenant);
@@ -132,6 +133,35 @@ router.delete('/guidance/:id', requirePermission('settings.write'), async (req: 
     res.status(204).send();
   } catch (err) {
     console.error('[finApi] guidance delete failed:', err);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// Improve a single guidance/pauta text with the utility LLM. Preserves meaning
+// and any {{attribute}} tokens; returns only the rewritten text.
+const GUIDANCE_OPTIMIZE_SYSTEM = `Eres un editor experto en pautas para un agente de soporte de IA (Fin).
+Reescribe la pauta que te den para que sea más clara, concreta y accionable, sin cambiar su intención.
+Reglas:
+- Mantén el MISMO idioma del texto original.
+- Conserva EXACTAMENTE cualquier token con formato {{...}} (atributos) tal cual.
+- Sé conciso; usa viñetas con "-" solo si aportan claridad.
+- Responde SOLO con la pauta mejorada, sin comillas, sin preámbulos ni explicaciones.`;
+const OptimizeBody = z.object({ text: z.string().trim().min(1).max(8000) });
+router.post('/guidance/optimize', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+  const scope = scopeOf(req);
+  if (!scope) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  const parsed = OptimizeBody.safeParse(req.body ?? {});
+  if (!parsed.success) return sendError(res, 400, 'INVALID_BODY', parsed.error.issues[0]?.message ?? 'Invalid body');
+  try {
+    const { text } = await getUtilityProvider().completeUtility({
+      system: GUIDANCE_OPTIMIZE_SYSTEM,
+      prompt: `Pauta original:\n${parsed.data.text}`,
+      maxTokens: 900,
+    });
+    const improved = (text || '').trim();
+    res.json({ data: { text: improved || parsed.data.text } });
+  } catch (err) {
+    console.error('[finApi] guidance optimize failed:', err);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });

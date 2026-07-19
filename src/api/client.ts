@@ -1699,6 +1699,8 @@ export const finApi = {
     request<{ data: FinGuidancePiece }>(`/fin/guidance/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }).then((r) => r.data),
   deleteGuidance: (id: string) =>
     request<any>(`/fin/guidance/${id}`, { method: 'DELETE' }),
+  optimizeGuidance: (text: string) =>
+    request<{ data: { text: string } }>('/fin/guidance/optimize', { method: 'POST', body: JSON.stringify({ text }) }).then((r) => (r as any).data?.text ?? (r as any).text ?? text),
 
   preview: (question: string) =>
     request<{ data: any }>('/fin/preview', { method: 'POST', body: JSON.stringify({ question }) }).then((r) => r.data),
