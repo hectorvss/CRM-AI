@@ -2043,15 +2043,21 @@ export function KnowledgeConnectAppWizard({
           {step === 'connect' && (
             <div className="min-h-full flex flex-col max-w-[560px] mx-auto px-8 py-9">
              <div className="flex flex-col gap-6">
-              {/* Brand tiles */}
-              <div className="flex items-center justify-center gap-4">
-                <span className="w-14 h-14 rounded-2xl bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center">
-                  <BrandIcon name={provider} size={28} />
-                </span>
-                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-[#ed621d]" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>
-                <span className="w-14 h-14 rounded-2xl bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center">
-                  <ClainMark size={26} />
-                </span>
+              {/* Brand tiles — Clain + the external app, each with its real logo. */}
+              <div className="flex items-start justify-center gap-4">
+                <div className="flex flex-col items-center gap-1.5">
+                  <span className="w-14 h-14 rounded-2xl bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center">
+                    <img src="/logos/clain-favicon.png" alt="Clain" className="w-8 h-8 object-contain" draggable={false} />
+                  </span>
+                  <span className="text-[11.5px] font-medium text-[#646462]">Clain</span>
+                </div>
+                <svg viewBox="0 0 24 24" className="w-5 h-5 mt-[18px] fill-none stroke-[#ed621d]" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>
+                <div className="flex flex-col items-center gap-1.5">
+                  <span className="w-14 h-14 rounded-2xl bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center">
+                    <BrandIcon name={provider} size={30} />
+                  </span>
+                  <span className="text-[11.5px] font-medium text-[#646462]">{spec.name}</span>
+                </div>
               </div>
               <h3 className="text-center text-[17px] font-semibold text-[#1a1a1a]">Conectarse a {spec.name}</h3>
 

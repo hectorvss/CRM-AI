@@ -2221,12 +2221,12 @@ export function KnowledgeView() {
     }
   }
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  // Pre-filled draft handed from Vacíos / Resumen / Fuentes → Articulos.
-  // Optional visibility lets the Resumen "Artículo público / interno" cards
-  // open the editor with the right field already set.
-  // A draft carries an `id` when we're opening an EXISTING article for edit
-  // (picked from the "Agregar artículo" modal); id-less drafts open create mode.
-  const [pendingDraft, setPendingDraft] = useState<Record<string, any> | null>(null);
+  // Article editor opened from OUTSIDE the Articulos view (Fuentes, Resumen,
+  // Vacíos). Mounted as an overlay at this level so closing it returns to the
+  // view the user was on — it does NOT switch the sidebar to Contenido.
+  const [articleEditor, setArticleEditor] = useState<Record<string, any> | null>(null);
+  const { data: kvDomainsData } = useApi(() => knowledgeApi.listDomains(), [refreshKey], []);
+  const kvDomains = (Array.isArray(kvDomainsData) ? kvDomainsData : []).map((d: any) => ({ id: d.id, name: d.name }));
   // Query handed from the Contenido search bar into Artículos (server-side `q`).
   const [articleSearch, setArticleSearch] = useState('');
   // Real ingestion flows, opened from Fuentes/Contenido and mounted once below.
@@ -2238,15 +2238,15 @@ export function KnowledgeView() {
     setToast({ message, type });
     window.setTimeout(() => setToast(null), 2500);
   }
-  // Open the editor in create mode from outside the Articulos view.
+  // Open the editor in create mode from outside the Articulos view — as an
+  // overlay, WITHOUT navigating away from the current sub-view.
   function startCreate(opts: { type?: string; visibility?: 'public' | 'internal' } = {}) {
-    setPendingDraft({
+    setArticleEditor({
       title: '',
       content: '',
       type: opts.type || 'ARTICLE',
       visibility: opts.visibility || 'public',
     });
-    setSub('articulos');
   }
   function draftFromGap(g: any) {
     const title = String(g?.topic || 'Nuevo artículo').trim();
@@ -2268,8 +2268,7 @@ export function KnowledgeView() {
       `- Dominio sugerido: ${g?.suggestedDomain || 'Sin clasificar'}`,
       `- Aprobaciones pendientes vinculadas: ${g?.pendingApprovals ?? 0}`,
     ];
-    setPendingDraft({ title, content: lines.join('\n'), type: 'ARTICLE' });
-    setSub('articulos');
+    setArticleEditor({ title, content: lines.join('\n'), type: 'ARTICLE' });
     showToast('Borrador preparado, revísalo antes de publicar');
   }
   function openCrmView(v: string) {
@@ -2285,8 +2284,8 @@ export function KnowledgeView() {
     switch (sub) {
       case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} onOpenExternalPicker={() => setExternalPickerOpen(true)} onConnectApp={(p) => setConnectApp(p)} />;
       case 'contenido':   return <KnowledgeContenido onCreate={startCreate} onNavigate={setSub} onAction={showToast} onSearch={(q) => { setArticleSearch(q); setSub('articulos'); }} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} />;
-      case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} initialSearch={articleSearch} />;
-      case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} onOpenFolder={(id) => { setActiveFolderId(id); setSub('carpeta'); }} onCreateSubfolder={(parent) => setFolderModal({ mode: 'sub', parent })} />;
+      case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} initialSearch={articleSearch} />;
+      case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} onOpenFolder={(id) => { setActiveFolderId(id); setSub('carpeta'); }} onCreateSubfolder={(parent) => setFolderModal({ mode: 'sub', parent })} />;
       case 'gaps':        return <KnowledgeGaps    onAction={showToast} onDraftFromGap={draftFromGap} />;
       case 'pruebas':     return <KnowledgePruebas onAction={showToast} />;
       case 'centroAyuda': return <KnowledgeCentroAyuda onAction={showToast} onNavigate={setSub} />;
@@ -2336,6 +2335,15 @@ export function KnowledgeView() {
           folder={moveFolder}
           onClose={() => setMoveFolder(null)}
           onMoved={() => { setRefreshKey(k => k + 1); setMoveFolder(null); }}
+          onAction={showToast}
+        />
+      )}
+      {articleEditor && (
+        <KnowledgeArticleEditor
+          initial={articleEditor}
+          domains={kvDomains}
+          onClose={() => setArticleEditor(null)}
+          onSaved={() => { setRefreshKey(k => k + 1); setArticleEditor(null); }}
           onAction={showToast}
         />
       )}

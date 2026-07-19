@@ -81,6 +81,14 @@ export function resolveBrandId(name: string | undefined | null): string | null {
   return null;
 }
 
+// Brand colours for apps whose official glyph isn't in simple-icons, so the
+// lettered fallback tile still reads as that brand instead of a neutral grey.
+const FALLBACK_COLORS: Record<string, string> = {
+  guru: '#FF5C5C', getguru: '#FF5C5C', freshdesk: '#25C16F', freshworks: '#FF5A1F',
+  box: '#0061D5', document360: '#EC1944', front: '#A857F0', klaviyo: '#111111',
+  pipedrive: '#017737', plaid: '#111111', segment: '#52BD95',
+};
+
 export interface BrandIconProps {
   /** App id or brand display name (e.g. 'intercom', 'Zendesk', 'Google Drive'). */
   name: string;
@@ -103,10 +111,12 @@ export function BrandIcon({ name, size = 20, color, monochrome = false, classNam
   const spec = id ? BRAND_ICONS[id] : null;
   if (!spec) {
     const letter = (String(name || '?').trim()[0] || '?').toUpperCase();
+    const key = String(name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const bg = FALLBACK_COLORS[key] ?? '#646462';
     return (
       <span
         className={className}
-        style={{ width: size, height: size, borderRadius: size * 0.22, background: '#646462', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, fontWeight: 700, ...style }}
+        style={{ width: size, height: size, borderRadius: size * 0.22, background: bg, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, fontWeight: 700, ...style }}
         aria-label={title || String(name)}
       >
         {letter}
