@@ -243,7 +243,7 @@ function SidebarFolderNode({
             onClick={(e) => e.stopPropagation()}
             className="absolute right-1 top-[calc(100%-2px)] z-30 w-[184px] rounded-xl bg-white border border-[#e9eae6] shadow-[0px_12px_32px_rgba(20,20,20,0.18)] p-1"
           >
-            {depth === 0 && onCreateSubfolder && (
+            {!folder.parentId && onCreateSubfolder && (
               <MenuItem icon={KH_MENU_ICONS.subfolder} label="Crear subcarpeta" onClick={() => onCreateSubfolder({ id: folder.id, name: folder.name })} />
             )}
             {onEditFolder && (
@@ -282,8 +282,8 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
   refreshKey?: number;
 }) {
   // Match Inbox sidebar UI: w-236, header 20px font-semibold tracking -0.4px, items text-13.
-  const [openContenido, setOpenContenido] = useState(sub === 'contenido' || sub === 'articulos' || sub === 'gaps' || sub === 'pruebas');
-  const [openCarpetas, setOpenCarpetas] = useState(true);
+  const [openContenido, setOpenContenido] = useState(sub === 'contenido' || sub === 'articulos' || sub === 'gaps' || sub === 'pruebas' || sub === 'carpeta');
+  const [openArticulos, setOpenArticulos] = useState(true);
   const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [refreshKey ?? 0], []);
   const domains = Array.isArray(domainsData) ? domainsData : [];
   // Folder tree: top-level folders (no parent) + their children.
@@ -332,66 +332,57 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
           <Chev open={openContenido} />
         </button>
         {openContenido && (
-          <div className="flex flex-col pl-5 mt-0.5 mb-0.5 gap-0.5">
-            <button onClick={() => onSelect('contenido')} className={itemCls(sub === 'contenido')}>
-              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                {/* Resumen — panel con cabecera + líneas */}
-                <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M2.4 6h11.2M5 9h6M5 11h4"/></svg>
-              </span>
-              <span className="flex-1">Resumen</span>
-            </button>
-            <button onClick={() => onSelect('articulos')} className={itemCls(sub === 'articulos')}>
-              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                {/* Artículos — documento con texto */}
-                <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2h5l3 3v8.5A1.5 1.5 0 0 1 10.5 15h-6A1.5 1.5 0 0 1 3 13.5v-10A1.5 1.5 0 0 1 4.5 2z"/><path d="M9 2v3h3M5.5 8h5M5.5 10.5h3.5"/></svg>
-              </span>
-              <span className="flex-1">Artículos</span>
-            </button>
-            <button onClick={() => onSelect('gaps')} className={itemCls(sub === 'gaps')}>
-              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                {/* Vacíos — lupa (análisis de huecos) */}
-                <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L14 14"/></svg>
-              </span>
-              <span className="flex-1">Vacíos</span>
-            </button>
-            <button onClick={() => onSelect('pruebas')} className={itemCls(sub === 'pruebas')}>
-              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                {/* Probar — matraz de laboratorio */}
-                <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6.5 2v4L3.6 11.4A1.4 1.4 0 0 0 4.85 13.5h6.3a1.4 1.4 0 0 0 1.25-2.1L9.5 6V2"/><path d="M5.5 2h5M5.4 9h5.2"/></svg>
-              </span>
-              <span className="flex-1">Probar</span>
-            </button>
-          </div>
-        )}
-        {/* Carpetas / Domains — collapsible group with + to create new */}
-        <div className="flex items-center gap-1 mt-2 pl-3 pr-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[#646462]">
-          <button onClick={() => setOpenCarpetas(o => !o)} className="flex-1 flex items-center gap-1.5 hover:text-[#1a1a1a] py-1.5">
-            <Chev open={openCarpetas} />
-            <span>Carpetas ({domains.length})</span>
-          </button>
-          {onCreateFolder && (
-            <button
-              onClick={onCreateFolder}
-              title="Nueva carpeta"
-              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#e9eae6] text-[#1a1a1a]"
-            >
-              {/* folder-plus */}
-              <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M2.75 6.5A1.75 1.75 0 0 1 4.5 4.75h3l1.5 1.75h6.5a1.75 1.75 0 0 1 1.75 1.75V14a1.75 1.75 0 0 1-1.75 1.75h-11A1.75 1.75 0 0 1 2.75 14z"/><path d="M10 8.75v3.5M8.25 10.5h3.5"/></svg>
-            </button>
-          )}
-        </div>
-        {openCarpetas && (
-          <div className="flex flex-col mt-0.5 gap-0.5">
-            {rootFolders.length === 0 && (
-              <p className="px-3 py-1.5 text-[12px] text-[#646462] italic">Sin carpetas todavía.</p>
+          <div className="flex flex-col mt-0.5 mb-0.5 gap-0.5">
+            {/* Artículos — navegable + expandible; contiene el árbol de carpetas */}
+            <div className="group relative">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelect('articulos')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect('articulos'); } }}
+                className={itemCls(sub === 'articulos')}
+                style={{ paddingLeft: 26 }}
+              >
+                {rootFolders.length > 0 ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setOpenArticulos(o => !o); }}
+                    className="w-3.5 h-3.5 -ml-0.5 flex items-center justify-center flex-shrink-0 text-[#646462] hover:text-[#1a1a1a]"
+                  >
+                    <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current transition-transform ${openArticulos ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                  </button>
+                ) : (
+                  <span className="w-3 flex-shrink-0" />
+                )}
+                <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+                  {/* Artículos — documento con texto */}
+                  <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2h5l3 3v8.5A1.5 1.5 0 0 1 10.5 15h-6A1.5 1.5 0 0 1 3 13.5v-10A1.5 1.5 0 0 1 4.5 2z"/><path d="M9 2v3h3M5.5 8h5M5.5 10.5h3.5"/></svg>
+                </span>
+                <span className="flex-1 truncate pr-8">Artículos</span>
+              </div>
+              {onCreateFolder && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onCreateFolder(); }}
+                  title="Nueva carpeta"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-md text-[#646462] hover:text-[#1a1a1a] hover:bg-[#e9eae6] opacity-0 group-hover:opacity-100"
+                >
+                  <svg viewBox="0 0 20 20" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M2.75 6.5A1.75 1.75 0 0 1 4.5 4.75h3l1.5 1.75h6.5a1.75 1.75 0 0 1 1.75 1.75V14a1.75 1.75 0 0 1-1.75 1.75h-11A1.75 1.75 0 0 1 2.75 14z"/><path d="M10 8.75v3.5M8.25 10.5h3.5"/></svg>
+                </button>
+              )}
+            </div>
+            {openArticulos && (
+              <>
+                {rootFolders.length === 0 && (
+                  <p className="py-1 text-[12px] text-[#646462] italic" style={{ paddingLeft: 40 }}>Sin carpetas todavía.</p>
+                )}
+                {rootFolders.map((d: any) => (
+                  <SidebarFolderNode
+                    key={d.id} folder={d} depth={2} childrenOf={childrenOf} expanded={expanded} toggleExpand={toggleExpand}
+                    activeFolderId={activeFolderId} sub={sub} itemCls={itemCls}
+                    onSelectFolder={onSelectFolder} onCreateSubfolder={onCreateSubfolder} onEditFolder={onEditFolder} onMoveFolder={onMoveFolder} onDeleteFolder={onDeleteFolder}
+                  />
+                ))}
+              </>
             )}
-            {rootFolders.map((d: any) => (
-              <SidebarFolderNode
-                key={d.id} folder={d} depth={0} childrenOf={childrenOf} expanded={expanded} toggleExpand={toggleExpand}
-                activeFolderId={activeFolderId} sub={sub} itemCls={itemCls}
-                onSelectFolder={onSelectFolder} onCreateSubfolder={onCreateSubfolder} onEditFolder={onEditFolder} onMoveFolder={onMoveFolder} onDeleteFolder={onDeleteFolder}
-              />
-            ))}
           </div>
         )}
         <button onClick={() => onSelect('centroAyuda')} className={`mt-2 ${itemCls(sub === 'centroAyuda')}`}>
