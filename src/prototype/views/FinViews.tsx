@@ -3402,7 +3402,6 @@ function FinAtributosContent() {
   const [editing, setEditing] = useState<FinAtributo | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   function openEdit(a: FinAtributo) {
@@ -3514,10 +3513,6 @@ function FinAtributosContent() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo</span>
             </button>
-            <button onClick={() => setShowPreview(true)} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg>
-              <span>Vista previa</span>
-            </button>
           </div>
         </div>
       </div>
@@ -3601,32 +3596,6 @@ function FinAtributosContent() {
           onPick={startNewFromTemplate}
           onClose={() => setShowTemplates(false)}
         />
-      )}
-      {showPreview && (
-        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-6" onClick={() => setShowPreview(false)}>
-          <div className="bg-white rounded-[16px] border border-[#e9eae6] shadow-xl w-full max-w-[560px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
-              <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Vista previa de detección</h3>
-              <button onClick={() => setShowPreview(false)} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-            <div className="px-6 py-5 overflow-y-auto flex flex-col gap-3">
-              <p className="text-[13px] text-[#646462]">Así verá tu equipo los atributos que Fin detecta en una conversación:</p>
-              {atributos.items.length === 0 ? (
-                <p className="text-[13px] text-[#a4a4a2] py-4 text-center">Aún no hay atributos que previsualizar.</p>
-              ) : atributos.items.map(a => (
-                <div key={a.id} className="rounded-[12px] border border-[#e9eae6] bg-[#fafaf8] p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#0fb87f] flex-shrink-0" />
-                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Fin detectó {a.name.trim() || 'Atributo'} como {a.values[0]?.name || '—'}</p>
-                  </div>
-                  {a.description && <p className="text-[12px] text-[#646462] mt-1 leading-[17px]">{a.description}</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
       )}
       {editorOpen && editing && (
         <FinAtributoEditor
