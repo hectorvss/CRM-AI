@@ -151,13 +151,104 @@ function KhSection({
   );
 }
 
-function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCreateFolder, onEditFolder, onDeleteFolder, refreshKey }: {
+// Recursive folder/subfolder row for the Knowledge sidebar tree.
+function SidebarFolderNode({
+  folder, depth, childrenOf, expanded, toggleExpand, activeFolderId, sub, itemCls,
+  onSelectFolder, onCreateSubfolder, onEditFolder, onDeleteFolder,
+}: {
+  folder: any;
+  depth: number;
+  childrenOf: (id: string) => any[];
+  expanded: Set<string>;
+  toggleExpand: (id: string) => void;
+  activeFolderId?: string | null;
+  sub: KnowledgeSubView;
+  itemCls: (isActive: boolean) => string;
+  onSelectFolder?: (id: string) => void;
+  onCreateSubfolder?: (parent: { id: string; name: string }) => void;
+  onEditFolder?: (folder: { id: string; name: string; description?: string; icon?: string }) => void;
+  onDeleteFolder?: (folder: { id: string; name: string }) => void;
+}) {
+  const kids = childrenOf(folder.id);
+  const isOpen = expanded.has(folder.id);
+  const active = sub === 'carpeta' && activeFolderId === folder.id;
+  return (
+    <>
+      <div className="group relative">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onSelectFolder?.(folder.id)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectFolder?.(folder.id); } }}
+          className={itemCls(active)}
+          style={{ paddingLeft: 12 + depth * 14 }}
+        >
+          {kids.length > 0 ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleExpand(folder.id); }}
+              className="w-3.5 h-3.5 -ml-0.5 flex items-center justify-center flex-shrink-0 text-[#646462] hover:text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current transition-transform ${isOpen ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+            </button>
+          ) : (
+            <span className="w-3 flex-shrink-0" />
+          )}
+          <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 leading-none">
+            {folder.icon
+              ? <span className="text-[13px] leading-none">{folder.icon}</span>
+              : <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" /></svg>}
+          </span>
+          <span className="flex-1 truncate pr-16">{folder.name}</span>
+        </div>
+        <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 bg-[#f8f8f7] rounded">
+          {depth === 0 && onCreateSubfolder && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCreateSubfolder({ id: folder.id, name: folder.name }); }}
+              title="Nueva subcarpeta"
+              className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#646462] hover:text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            </button>
+          )}
+          {onEditFolder && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEditFolder({ id: folder.id, name: folder.name, description: folder.description, icon: folder.icon }); }}
+              title="Editar carpeta"
+              className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#646462] hover:text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M11.5 1.5l3 3-9 9H2.5v-3z"/></svg>
+            </button>
+          )}
+          {onDeleteFolder && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDeleteFolder({ id: folder.id, name: folder.name }); }}
+              title="Borrar carpeta"
+              className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#fef7f7] text-[#646462] hover:text-[#b91c1c]"
+            >
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M5 3V2.5A1.5 1.5 0 016.5 1h3A1.5 1.5 0 0111 2.5V3h3v1.5h-1V13a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 014 13V4.5H3V3h2zm1.5 1.5V13h3V4.5h-3z"/></svg>
+            </button>
+          )}
+        </div>
+      </div>
+      {isOpen && kids.map((k: any) => (
+        <SidebarFolderNode
+          key={k.id} folder={k} depth={depth + 1} childrenOf={childrenOf} expanded={expanded} toggleExpand={toggleExpand}
+          activeFolderId={activeFolderId} sub={sub} itemCls={itemCls}
+          onSelectFolder={onSelectFolder} onCreateSubfolder={onCreateSubfolder} onEditFolder={onEditFolder} onDeleteFolder={onDeleteFolder}
+        />
+      ))}
+    </>
+  );
+}
+
+function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCreateFolder, onCreateSubfolder, onEditFolder, onDeleteFolder, refreshKey }: {
   sub: KnowledgeSubView;
   onSelect: (s: KnowledgeSubView) => void;
   activeFolderId?: string | null;
   onSelectFolder?: (id: string) => void;
   onCreateFolder?: () => void;
-  onEditFolder?: (folder: { id: string; name: string; description?: string }) => void;
+  onCreateSubfolder?: (parent: { id: string; name: string }) => void;
+  onEditFolder?: (folder: { id: string; name: string; description?: string; icon?: string }) => void;
   onDeleteFolder?: (folder: { id: string; name: string }) => void;
   refreshKey?: number;
 }) {
@@ -166,6 +257,17 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
   const [openCarpetas, setOpenCarpetas] = useState(true);
   const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [refreshKey ?? 0], []);
   const domains = Array.isArray(domainsData) ? domainsData : [];
+  // Folder tree: top-level folders (no parent) + their children.
+  // NB: the API client camelCases responses → `parent_id` becomes `parentId`.
+  const rootFolders = domains.filter((d: any) => !d.parentId);
+  const childrenOf = (id: string) => domains.filter((d: any) => d.parentId === id);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) => setExpanded(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // Auto-expand the ancestor of the active subfolder so it stays visible.
+  useEffect(() => {
+    const active = domains.find((d: any) => d.id === activeFolderId);
+    if (active?.parentId) setExpanded(s => new Set(s).add(active.parentId));
+  }, [activeFolderId, domainsData]);
   const itemCls = (isActive: boolean) =>
     `relative flex items-center gap-2 h-8 pl-3 pr-3 py-1 rounded-lg cursor-pointer text-[13px] w-full text-left transition-colors ${
       isActive
@@ -228,43 +330,15 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
         </div>
         {openCarpetas && (
           <div className="flex flex-col mt-0.5 gap-0.5">
-            {domains.length === 0 && (
+            {rootFolders.length === 0 && (
               <p className="px-3 py-1.5 text-[12px] text-[#646462] italic">Sin carpetas todavía.</p>
             )}
-            {domains.map((d: any) => (
-              <div key={d.id} className="group relative">
-                <button
-                  onClick={() => onSelectFolder?.(d.id)}
-                  className={itemCls(sub === 'carpeta' && activeFolderId === d.id)}
-                >
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.5">
-                    <path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" />
-                  </svg>
-                  <span className="flex-1 truncate pr-9">{d.name}</span>
-                </button>
-                {(onEditFolder || onDeleteFolder) && (
-                  <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 bg-[#f8f8f7] rounded">
-                    {onEditFolder && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onEditFolder({ id: d.id, name: d.name, description: d.description }); }}
-                        title="Renombrar carpeta"
-                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#646462] hover:text-[#1a1a1a]"
-                      >
-                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M11.5 1.5l3 3-9 9H2.5v-3z"/></svg>
-                      </button>
-                    )}
-                    {onDeleteFolder && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onDeleteFolder({ id: d.id, name: d.name }); }}
-                        title="Borrar carpeta"
-                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#fef7f7] text-[#646462] hover:text-[#b91c1c]"
-                      >
-                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M5 3V2.5A1.5 1.5 0 016.5 1h3A1.5 1.5 0 0111 2.5V3h3v1.5h-1V13a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 014 13V4.5H3V3h2zm1.5 1.5V13h3V4.5h-3z"/></svg>
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+            {rootFolders.map((d: any) => (
+              <SidebarFolderNode
+                key={d.id} folder={d} depth={0} childrenOf={childrenOf} expanded={expanded} toggleExpand={toggleExpand}
+                activeFolderId={activeFolderId} sub={sub} itemCls={itemCls}
+                onSelectFolder={onSelectFolder} onCreateSubfolder={onCreateSubfolder} onEditFolder={onEditFolder} onDeleteFolder={onDeleteFolder}
+              />
             ))}
           </div>
         )}
@@ -940,15 +1014,21 @@ function KnowledgeContenido({
   );
 }
 
-// KnowledgeFolderModal — create a new domain (carpeta) via knowledgeApi.createDomain.
+// Curated emoji set for folder icons (matches the Intercom folder-icon vibe).
+const KH_FOLDER_EMOJIS = ['📁','📂','🗂️','📚','📖','📝','💬','🛟','💳','📦','🚚','⚙️','🔧','🏷️','⭐','🎯','🧾','🔒','🧠','👋','😎','🚀','💡','✅','❤️','🌎'];
+
+// KnowledgeFolderModal — create/edit a domain (carpeta) or subfolder via knowledgeApi.
 function KnowledgeFolderModal({
   initial,
+  parent,
   onClose,
   onSaved,
   onAction,
 }: {
   // Pass a domain to enter edit mode; omit for create mode.
-  initial?: { id: string; name: string; description?: string } | null;
+  initial?: { id: string; name: string; description?: string; icon?: string } | null;
+  // Pass a parent to create a subfolder under it.
+  parent?: { id: string; name: string } | null;
   onClose: () => void;
   onSaved: (id: string) => void;
   onAction: (msg: string, type?: 'success' | 'error') => void;
@@ -956,6 +1036,7 @@ function KnowledgeFolderModal({
   const editing = !!initial?.id;
   const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState(initial?.description || '');
+  const [icon, setIcon] = useState(initial?.icon || '');
   const [busy, setBusy] = useState(false);
   async function submit() {
     const trimmed = name.trim();
@@ -963,36 +1044,65 @@ function KnowledgeFolderModal({
     setBusy(true);
     try {
       if (editing && initial?.id) {
-        await knowledgeApi.updateDomain(initial.id, { name: trimmed, description: description.trim() || null });
+        await knowledgeApi.updateDomain(initial.id, { name: trimmed, description: description.trim() || null, icon: icon || null });
         onAction('Carpeta actualizada');
         onSaved(initial.id);
       } else {
-        const created = await knowledgeApi.createDomain({ name: trimmed, description: description.trim() || undefined });
+        const created = await knowledgeApi.createDomain({ name: trimmed, description: description.trim() || undefined, icon: icon || null, parent_id: parent?.id ?? null });
         const id = created?.id || created?.domain?.id;
         if (id) onSaved(String(id));
-        else { onAction('Carpeta creada'); onClose(); }
+        else { onAction(parent ? 'Subcarpeta creada' : 'Carpeta creada'); onClose(); }
       }
     } catch (err: any) {
       onAction(err?.message || (editing ? 'No se pudo actualizar' : 'No se pudo crear la carpeta'), 'error');
     } finally { setBusy(false); }
   }
+  const title = editing ? 'Editar carpeta' : parent ? `Nueva subcarpeta` : 'Nueva carpeta de conocimiento';
   return (
     <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
       <div
-        className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
+        className="w-[460px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
         onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">{editing ? 'Renombrar carpeta' : 'Nueva carpeta de conocimiento'}</h3>
-        <p className="text-[12.5px] text-[#646462] mb-4">Las carpetas (dominios) agrupan artículos y políticas. Fin y Copilot pueden filtrar por carpeta.</p>
-        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Nombre</label>
-        <input
-          autoFocus
-          value={name}
-          onChange={e => setName(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && name.trim()) submit(); }}
-          placeholder="Reembolsos, Envíos, Facturación…"
-          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
-        />
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">{title}</h3>
+        <p className="text-[12.5px] text-[#646462] mb-4">
+          {parent
+            ? <>Subcarpeta dentro de <span className="font-medium text-[#1a1a1a]">{parent.name}</span>. Agrupa artículos y políticas.</>
+            : <>Las carpetas agrupan artículos y políticas. Fin y Copilot pueden filtrar por carpeta.</>}
+        </p>
+
+        {/* Icono + nombre en una fila */}
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1.5">Icono y nombre</label>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-9 h-9 rounded-lg border border-[#e9eae6] bg-[#f8f8f7] flex items-center justify-center text-[18px] leading-none flex-shrink-0">
+            {icon || <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" /></svg>}
+          </span>
+          <input
+            autoFocus
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && name.trim()) submit(); }}
+            placeholder="Reembolsos, Envíos, Facturación…"
+            className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+          />
+        </div>
+
+        {/* Emoji picker */}
+        <div className="flex flex-wrap gap-1 mb-3 max-h-[76px] overflow-y-auto">
+          <button
+            onClick={() => setIcon('')}
+            title="Sin icono"
+            className={`w-8 h-8 rounded-md flex items-center justify-center text-[12px] text-[#646462] border ${!icon ? 'border-[#1a1a1a] bg-[#f3f3f1]' : 'border-transparent hover:bg-[#f3f3f1]'}`}
+          >—</button>
+          {KH_FOLDER_EMOJIS.map(e => (
+            <button
+              key={e}
+              onClick={() => setIcon(e)}
+              className={`w-8 h-8 rounded-md flex items-center justify-center text-[17px] leading-none border ${icon === e ? 'border-[#1a1a1a] bg-[#f3f3f1]' : 'border-transparent hover:bg-[#f3f3f1]'}`}
+            >{e}</button>
+          ))}
+        </div>
+
         <label className="block text-[12px] font-semibold text-[#646462] mb-1">Descripción (opcional)</label>
         <textarea
           value={description}
@@ -1002,11 +1112,42 @@ function KnowledgeFolderModal({
         />
         <div className="flex items-center justify-end gap-2 mt-4">
           <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
-          <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? (editing ? 'Guardando…' : 'Creando…') : (editing ? 'Guardar' : 'Crear carpeta')}</button>
+          <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? (editing ? 'Guardando…' : 'Creando…') : (editing ? 'Guardar' : parent ? 'Crear subcarpeta' : 'Crear carpeta')}</button>
         </div>
       </div>
     </div>
   );
+}
+
+// Type badge with a leading glyph (Carpeta / Artículo público / interno / …),
+// mirroring Intercom's article-type chips.
+function KhTypeBadge({ kind }: { kind: string }) {
+  const folderIcon = <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/></svg>;
+  const bookIcon   = <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>;
+  const lockIcon   = <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5.5a2.5 2.5 0 015 0V7" strokeLinecap="round"/></svg>;
+  const docIcon    = <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 2h6l3 3v9H4z" strokeLinejoin="round"/><path d="M10 2v3h3"/></svg>;
+  const codeIcon   = <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M5 5L3 8l2 3M11 5l2 3-2 3M9 4l-2 8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const globeIcon  = <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>;
+  const K: Record<string, { label: string; cls: string; icon: ReactNode }> = {
+    folder:   { label: 'Carpeta',          cls: 'bg-[#eef1f6] text-[#3f5170]', icon: folderIcon },
+    public:   { label: 'Artículo público', cls: 'bg-[#e9f2ec] text-[#2f6b4f]', icon: bookIcon },
+    internal: { label: 'Artículo interno', cls: 'bg-[#fbf1e3] text-[#9a6a24]', icon: lockIcon },
+    snippet:  { label: 'Fragmento',        cls: 'bg-[#f3f3f1] text-[#646462]', icon: codeIcon },
+    document: { label: 'Documento',        cls: 'bg-[#f3f3f1] text-[#646462]', icon: docIcon },
+    website:  { label: 'Sitio web',        cls: 'bg-[#f3f3f1] text-[#646462]', icon: globeIcon },
+    policy:   { label: 'Política',         cls: 'bg-[#f3f3f1] text-[#646462]', icon: docIcon },
+  };
+  const m = K[kind] ?? { label: titleCase(kind), cls: 'bg-[#f3f3f1] text-[#646462]', icon: docIcon };
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-medium ${m.cls}`}>
+      {m.icon}<span>{m.label}</span>
+    </span>
+  );
+}
+function articleKind(a: any): string {
+  const t = String(a.type || 'article').toLowerCase();
+  if (t === 'article') return String(a.visibility || 'public') === 'internal' ? 'internal' : 'public';
+  return t;
 }
 
 // KnowledgeArticulos — list + filter + create + publish, optionally scoped to a folder.
@@ -1017,6 +1158,8 @@ function KnowledgeArticulos({
   externalDraft,
   onConsumeDraft,
   initialSearch,
+  onOpenFolder,
+  onCreateSubfolder,
 }: {
   onAction: (msg: string, type?: 'success' | 'error') => void;
   onRefresh: () => void;
@@ -1029,6 +1172,9 @@ function KnowledgeArticulos({
   onConsumeDraft?: () => void;
   // Seed the search box when arriving from the Contenido search bar.
   initialSearch?: string;
+  // Folder navigation (only meaningful inside a folder view).
+  onOpenFolder?: (id: string) => void;
+  onCreateSubfolder?: (parent: { id: string; name: string }) => void;
 }) {
   const [search, setSearch] = useState(initialSearch ?? '');
   // Adopt a new query handed in from Contenido (server-side `q` filter below).
@@ -1060,8 +1206,11 @@ function KnowledgeArticulos({
     }
   }, [externalDraft, domainFilter, onConsumeDraft]);
 
-  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
-  const domains = (Array.isArray(domainsData) ? domainsData : []).map((d: any) => ({ id: d.id, name: d.name }));
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [refreshKey, domainFilter], []);
+  const domains = (Array.isArray(domainsData) ? domainsData : []) as any[];
+  // Subfolders of the folder we're currently viewing (shown as rows on top).
+  // NB: the API client camelCases responses → `parent_id` becomes `parentId`.
+  const subfolders = domainFilter ? domains.filter((d: any) => d.parentId === domainFilter) : [];
 
   const { data: articlesData, loading } = useApi(
     () => {
@@ -1081,7 +1230,8 @@ function KnowledgeArticulos({
   const articles = healthFilter === 'all'
     ? allArticles
     : allArticles.filter((a: any) => String(a.health || 'ok').toLowerCase() === healthFilter);
-  const folderName = domainFilter ? (domains.find(d => d.id === domainFilter)?.name || 'Carpeta') : null;
+  const currentFolder = domainFilter ? domains.find((d: any) => d.id === domainFilter) : null;
+  const folderName = domainFilter ? (currentFolder?.name || 'Carpeta') : null;
 
   // Reset selection when filters change to avoid leaking ids the user can no
   // longer see in the list.
@@ -1139,14 +1289,25 @@ function KnowledgeArticulos({
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           {folderName && (
-            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5">
-              <path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/>
-            </svg>
+            currentFolder?.icon
+              ? <span className="text-[18px] leading-none flex-shrink-0">{currentFolder.icon}</span>
+              : <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5">
+                  <path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/>
+                </svg>
           )}
           <h1 className="text-[18px] font-bold text-[#1a1a1a] truncate">{folderName || 'Artículos'}</h1>
-          <span className="text-[12.5px] text-[#646462]">· {articles.length}</span>
+          <span className="text-[12.5px] text-[#646462]">· {articles.length + subfolders.length}</span>
         </div>
         <div className="flex items-center gap-2">
+          {domainFilter && onCreateSubfolder && (
+            <button
+              onClick={() => onCreateSubfolder({ id: domainFilter, name: folderName || 'Carpeta' })}
+              className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]"
+            >
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/><path d="M8 8v3M6.5 9.5h3" strokeLinecap="round"/></svg>
+              Nueva subcarpeta
+            </button>
+          )}
           <button
             onClick={() => setCreating(true)}
             className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black"
@@ -1213,7 +1374,7 @@ function KnowledgeArticulos({
       )}
       <div className="flex-1 overflow-y-auto min-h-0">
         {loading && <div className="px-6 py-8 text-[13px] text-[#646462]">Cargando artículos…</div>}
-        {!loading && articles.length === 0 && (
+        {!loading && articles.length === 0 && subfolders.length === 0 && (
           <div className="px-6 py-12 text-center">
             <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Sin artículos todavía</p>
             <p className="text-[13px] text-[#646462] mb-4">Crea el primer artículo {folderName ? `en "${folderName}"` : ''} para que Fin y Copilot puedan responder con tu conocimiento.</p>
@@ -1223,7 +1384,7 @@ function KnowledgeArticulos({
             >+ Crear artículo</button>
           </div>
         )}
-        {!loading && articles.length > 0 && (
+        {!loading && (articles.length > 0 || subfolders.length > 0) && (
           <table className="w-full">
             <thead className="bg-[#f8f8f7] sticky top-0">
               <tr className="text-[11px] font-semibold uppercase tracking-wide text-[#646462]">
@@ -1246,6 +1407,33 @@ function KnowledgeArticulos({
               </tr>
             </thead>
             <tbody>
+              {/* Subfolders first — rows of type "Carpeta" that drill in on click. */}
+              {subfolders.map((f: any) => (
+                <tr
+                  key={f.id}
+                  onClick={() => onOpenFolder?.(f.id)}
+                  className="border-t border-[#f1f1ee] hover:bg-[#f8f8f7] cursor-pointer"
+                >
+                  <td className="px-3 py-3 w-8" />
+                  <td className="px-3 py-3 text-[13px] text-[#1a1a1a] font-medium max-w-[300px] truncate">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="text-[15px] leading-none">{f.icon || '📁'}</span>
+                      {f.name}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3"><KhTypeBadge kind="folder" /></td>
+                  <td className="px-3 py-3 text-[12.5px] text-[#646462] truncate max-w-[140px]">{folderName || '—'}</td>
+                  <td className="px-3 py-3 text-[12px] text-[#646462]">—</td>
+                  <td className="px-3 py-3 text-[12px] text-[#646462]">—</td>
+                  <td className="px-3 py-3 text-[12px] text-[#646462]">{relativeTime(f.createdAt || f.created_at)}</td>
+                  <td className="px-6 py-3 text-right">
+                    <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#646462]">
+                      Abrir
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M6 4l4 4-4 4z"/></svg>
+                    </span>
+                  </td>
+                </tr>
+              ))}
               {articles.map((a: any) => {
                 const isStale = String(a.health || 'ok').toLowerCase() === 'stale';
                 return (
@@ -1259,7 +1447,7 @@ function KnowledgeArticulos({
                       />
                     </td>
                     <td className="px-3 py-3 text-[13px] text-[#1a1a1a] font-medium max-w-[300px] truncate">{a.title || 'Sin título'}</td>
-                    <td className="px-3 py-3 text-[12.5px] text-[#646462]">{titleCase(a.type || 'article')}</td>
+                    <td className="px-3 py-3"><KhTypeBadge kind={articleKind(a)} /></td>
                     <td className="px-3 py-3 text-[12.5px] text-[#646462] truncate max-w-[140px]">{a.domain_name || a.domain || '—'}</td>
                     <td className="px-3 py-3">
                       <span className={`text-[11px] px-2 py-0.5 rounded-full ${a.status === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
@@ -1874,11 +2062,16 @@ export function KnowledgeView() {
     replaceRoute({ view: 'knowledge', sub });
   }, [sub]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  // null = closed, 'create' = creating, { id, name, description } = editing.
-  const [folderModal, setFolderModal] = useState<null | 'create' | { id: string; name: string; description?: string }>(null);
+  // Folder modal: closed | new root folder | new subfolder under a parent | edit.
+  type FolderModalState =
+    | null
+    | { mode: 'create' }
+    | { mode: 'sub'; parent: { id: string; name: string } }
+    | { mode: 'edit'; folder: { id: string; name: string; description?: string; icon?: string } };
+  const [folderModal, setFolderModal] = useState<FolderModalState>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   async function deleteFolder(folder: { id: string; name: string }) {
-    if (typeof window !== 'undefined' && !window.confirm(`¿Borrar la carpeta "${folder.name}"? Los artículos quedarán sin carpeta.`)) return;
+    if (typeof window !== 'undefined' && !window.confirm(`¿Borrar la carpeta "${folder.name}"? Se borrarán también sus subcarpetas y los artículos quedarán sin carpeta.`)) return;
     try {
       await knowledgeApi.deleteDomain(folder.id);
       showToast('Carpeta borrada');
@@ -1957,7 +2150,7 @@ export function KnowledgeView() {
       case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} onOpenExternalPicker={() => setExternalPickerOpen(true)} onConnectApp={(p) => setConnectApp(p)} />;
       case 'contenido':   return <KnowledgeContenido onCreate={startCreate} onNavigate={setSub} onAction={showToast} onSearch={(q) => { setArticleSearch(q); setSub('articulos'); }} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} />;
       case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} initialSearch={articleSearch} />;
-      case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
+      case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} onOpenFolder={(id) => { setActiveFolderId(id); setSub('carpeta'); }} onCreateSubfolder={(parent) => setFolderModal({ mode: 'sub', parent })} />;
       case 'gaps':        return <KnowledgeGaps    onAction={showToast} onDraftFromGap={draftFromGap} />;
       case 'pruebas':     return <KnowledgePruebas onAction={showToast} />;
       case 'centroAyuda': return <KnowledgeCentroAyuda onAction={showToast} onNavigate={setSub} />;
@@ -1972,8 +2165,9 @@ export function KnowledgeView() {
           onSelect={(s) => { setSub(s); if (s !== 'carpeta') setActiveFolderId(null); }}
           activeFolderId={activeFolderId}
           onSelectFolder={(id) => { setActiveFolderId(id); setSub('carpeta'); }}
-          onCreateFolder={() => setFolderModal('create')}
-          onEditFolder={(folder) => setFolderModal(folder)}
+          onCreateFolder={() => setFolderModal({ mode: 'create' })}
+          onCreateSubfolder={(parent) => setFolderModal({ mode: 'sub', parent })}
+          onEditFolder={(folder) => setFolderModal({ mode: 'edit', folder })}
           onDeleteFolder={(folder) => deleteFolder(folder)}
           refreshKey={refreshKey}
         />
@@ -1983,17 +2177,18 @@ export function KnowledgeView() {
       </div>
       {folderModal && (
         <KnowledgeFolderModal
-          initial={folderModal === 'create' ? null : folderModal}
+          initial={folderModal.mode === 'edit' ? folderModal.folder : null}
+          parent={folderModal.mode === 'sub' ? folderModal.parent : null}
           onClose={() => setFolderModal(null)}
           onSaved={(id) => {
             setRefreshKey(k => k + 1);
-            // On create, deep-link into the new folder. On edit, just close.
-            if (folderModal === 'create') {
+            // On create/subfolder, deep-link into the new folder. On edit, close.
+            if (folderModal.mode === 'edit') {
+              setFolderModal(null);
+            } else {
               setActiveFolderId(id);
               setSub('carpeta');
-              showToast('Carpeta creada');
-            } else {
-              setFolderModal(null);
+              showToast(folderModal.mode === 'sub' ? 'Subcarpeta creada' : 'Carpeta creada');
             }
           }}
           onAction={showToast}

@@ -556,12 +556,27 @@ router.get('/policies', async (req: MultiTenantRequest, res) => {
  */
 router.post('/domains', async (req: MultiTenantRequest, res) => {
   try {
-    const { name, description } = req.body ?? {};
+    const { name, description, parent_id, icon } = req.body ?? {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: 'name is required' });
     }
 
     const supabase = getSupabaseAdmin();
+    // If a parent is given, verify it belongs to this tenant/workspace (prevents
+    // cross-tenant nesting) and cap the depth at one sub-level for a clean tree.
+    let parentId: string | null = null;
+    if (parent_id) {
+      const { data: parent } = await supabase
+        .from('knowledge_domains')
+        .select('id, parent_id')
+        .eq('id', parent_id)
+        .eq('tenant_id', req.tenantId!)
+        .eq('workspace_id', req.workspaceId!)
+        .maybeSingle();
+      if (!parent) return res.status(400).json({ error: 'parent_id not found in this workspace' });
+      if (parent.parent_id) return res.status(400).json({ error: 'Solo se permite un nivel de subcarpetas' });
+      parentId = parent.id;
+    }
     const { data, error } = await supabase
       .from('knowledge_domains')
       .insert({
@@ -570,6 +585,8 @@ router.post('/domains', async (req: MultiTenantRequest, res) => {
         workspace_id: req.workspaceId!,
         name: String(name).trim(),
         description: description ?? null,
+        parent_id: parentId,
+        icon: icon ?? null,
       })
       .select()
       .single();
@@ -590,12 +607,20 @@ router.patch('/domains/:id', async (req: MultiTenantRequest, res) => {
     const tenantId = req.tenantId!;
     const workspaceId = req.workspaceId!;
     const domainId = req.params.id;
-    const { name, description } = req.body ?? {};
+    const { name, description, icon, parent_id } = req.body ?? {};
 
     const supabase = getSupabaseAdmin();
     const updates: Record<string, any> = {};
     if (name !== undefined) updates.name = String(name).trim();
     if (description !== undefined) updates.description = description;
+    if (icon !== undefined) updates.icon = icon;
+    // Allow re-parenting (or moving to root with null). Guard against self-parent.
+    if (parent_id !== undefined) {
+      if (parent_id && parent_id === domainId) {
+        return res.status(400).json({ error: 'Una carpeta no puede ser su propia subcarpeta' });
+      }
+      updates.parent_id = parent_id || null;
+    }
     const { data, error } = await supabase
       .from('knowledge_domains')
       .update(updates)
