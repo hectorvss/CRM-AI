@@ -1941,8 +1941,10 @@ function FinPautaEditor({
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [attrOpen, setAttrOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(true);
   const [finAttrs, setFinAttrs] = useState<FinInsertAttr[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const savedRangeRef = useRef<Range | null>(null);
   const category = initial?.category || 'estilo_comunicacion';
   const templates = FIN_PAUTA_TEMPLATES[category] ?? [];
   const categoryTitle = FIN_PAUTA_CATEGORIES.find(c => c.id === category)?.title ?? 'Plantillas';
@@ -1961,6 +1963,15 @@ function FinPautaEditor({
     }).catch(() => {});
   }, []);
   function syncBody() { if (bodyRef.current) setBody(finSerializeBody(bodyRef.current)); }
+  // Remember the caret inside the body so we can insert an attribute exactly
+  // where it was, even after focus moves to the popover.
+  function rememberCaret() {
+    const el = bodyRef.current;
+    const sel = window.getSelection();
+    if (!el || !sel || sel.rangeCount === 0) return;
+    const r = sel.getRangeAt(0);
+    if (el.contains(r.commonAncestorContainer)) savedRangeRef.current = r.cloneRange();
+  }
   function applyTemplate(t: FinPautaTemplate) {
     const next = bodyEmpty ? t.body : `${body.replace(/\s+$/, '')}\n\n${t.body}`;
     if (bodyRef.current) bodyRef.current.innerHTML = finBodyToHtml(next);
@@ -1973,8 +1984,22 @@ function FinPautaEditor({
     const el = bodyRef.current;
     if (!el) return;
     el.focus();
+    // Restore the caret we saved before the popover stole focus.
+    const sel = window.getSelection();
+    if (sel) {
+      sel.removeAllRanges();
+      if (savedRangeRef.current) {
+        sel.addRange(savedRangeRef.current);
+      } else {
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        r.collapse(false); // caret at the end
+        sel.addRange(r);
+      }
+    }
     const pill = `<span class="fin-attr-pill" data-token="${finEscapeHtml(attr.token)}" contenteditable="false">${finEscapeHtml(attr.label)}</span>&nbsp;`;
     document.execCommand('insertHTML', false, pill);
+    savedRangeRef.current = null;
     setAttrOpen(false);
     syncBody();
   }
@@ -2048,11 +2073,12 @@ function FinPautaEditor({
   return (
     <div className="fixed inset-0 z-50" onClick={onClose}>
       <div
-        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
-          isFullscreen ? 'w-full max-w-none border-l-0 rounded-none' : 'w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]'
+        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex overflow-hidden transition-[width] duration-200 ease-out ${
+          isFullscreen ? 'w-full max-w-none border-l-0 rounded-none' : `${previewOpen ? 'w-[80%] max-w-[1600px]' : 'w-[70%] max-w-[1500px]'} min-w-[920px] rounded-l-[14px]`
         }`}
         onClick={e => e.stopPropagation()}
       >
+        <div className="flex-1 min-w-0 flex flex-col">
         {/* Header */}
         <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
           <input
@@ -2080,6 +2106,9 @@ function FinPautaEditor({
               </button>
             )}
             <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+            {!previewOpen && (
+              <button onClick={() => setPreviewOpen(true)} className="h-8 px-3 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Vista previa</button>
+            )}
             <span className="w-px h-6 bg-[#e9eae6]" />
             <button onClick={() => setIsFullscreen(v => !v)} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               {isFullscreen
@@ -2152,6 +2181,9 @@ function FinPautaEditor({
               contentEditable={!optimizing}
               suppressContentEditableWarning
               onInput={syncBody}
+              onKeyUp={rememberCaret}
+              onMouseUp={rememberCaret}
+              onBlur={rememberCaret}
               className={`w-full min-h-[72px] text-[16px] leading-[24px] focus:outline-none bg-transparent whitespace-pre-wrap break-words ${optimizing ? 'fin-optimizing' : 'text-[#1a1a1a]'}`}
             />
           </div>
@@ -2185,11 +2217,12 @@ function FinPautaEditor({
                 disabled={optimizing}
                 className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5 disabled:opacity-60"
               >
-                <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${optimizing ? 'animate-pulse' : ''}`} fill="url(#finGrad)"><defs><linearGradient id="finGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#7c3aed"/><stop offset="0.5" stopColor="#ec4899"/><stop offset="1" stopColor="#f59e0b"/></linearGradient></defs><path d="M8 1.5l1.4 3.6L13 6.5 9.4 7.9 8 11.5 6.6 7.9 3 6.5l3.6-1.4zM12.5 10l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+                <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#1a1a1a] ${optimizing ? 'animate-pulse' : ''}`}><path d="M8 1.5l1.4 3.6L13 6.5 9.4 7.9 8 11.5 6.6 7.9 3 6.5l3.6-1.4zM12.6 9.6l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"/></svg>
                 {optimizing ? 'Optimizando…' : 'Optimizar'}
               </button>
               <div className="relative">
                 <button
+                  onMouseDown={rememberCaret}
                   onClick={() => setAttrOpen(o => !o)}
                   className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5"
                 >
@@ -2217,6 +2250,24 @@ function FinPautaEditor({
           <span>Resuelto · {metrics.resolved ?? '-'}</span>
           <span>Canalizado · {metrics.routed ?? '-'}</span>
         </div>
+        </div>
+
+        {/* Vista previa (dentro del editor, conmutable) */}
+        {previewOpen && (
+          <div className="w-[360px] flex-shrink-0 border-l border-[#e9eae6] flex flex-col min-h-0">
+            <div className="flex-shrink-0 h-[60px] px-5 border-b border-[#e9eae6] flex items-center justify-between">
+              <h2 className="text-[16px] font-bold text-[#1a1a1a]">Vista previa</h2>
+              <button onClick={() => setPreviewOpen(false)} title="Cerrar la vista previa" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="flex-1 flex items-center justify-center p-8">
+              <p className="text-center text-[13px] text-[#646462] max-w-[240px] leading-[20px]">
+                Agrega contenido para probar Fin. Luego hazle preguntas para obtener una vista previa de sus respuestas.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
       {templatesOpen && (
         <FinPlantillasModal
