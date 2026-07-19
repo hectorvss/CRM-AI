@@ -3056,29 +3056,29 @@ function FinAtributoEditor({
           </div>
         )}
 
-        {/* Value editor sub-view (replaces tabs + body when active) */}
+        {/* Value editor sub-view (replaces tabs + body when active) — plano en blanco */}
         {valueEditor ? (
-          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
-            <div className="w-full px-8 py-8 flex flex-col gap-4">
-              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+          <div className="flex-1 overflow-y-auto min-h-0 bg-white">
+            <div className="w-full max-w-[760px] px-6 py-6 flex flex-col gap-6">
+              <div>
                 <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
                 <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Elige un nombre corto y claro que indique a Fin exactamente lo que representa este valor.</p>
                 <input
                   value={valueName}
                   onChange={e => { if (e.target.value.length <= 400) setValueName(e.target.value); }}
-                  placeholder="Ingresa un nombre, por ejemplo, Negativo"
+                  placeholder="Ingrese un nombre, por ejemplo, Negativo"
                   className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
                 />
                 <p className="mt-1.5 text-[11.5px] text-[#646462]">{valueNameRemaining} caracteres restantes</p>
               </div>
-              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+              <div>
                 <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
                 <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describe qué representa este valor y cuándo Fin debería elegirlo. Incluye los temas de conversación a los que se aplica, las palabras clave comunes de los clientes o preguntas, y cuándo debe elegirse en lugar de otros valores en el atributo.</p>
                 <textarea
                   value={valueDescription}
                   onChange={e => { if (e.target.value.length <= 2500) setValueDescription(e.target.value); }}
-                  placeholder={'Ingrese una descripción, por ejemplo,\n\nEste valor cubre todas las conversaciones en las que un cliente expresa un sentimiento negativo. Ejemplos comunes incluyen:\n• Opinión negativa sobre un producto\n• Frustración con el servicio a clientes recibido\n\nPalabras clave: infeliz, frustrado, reembolso, devolución, decepcionado'}
-                  className="w-full min-h-[420px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                  placeholder={'Ingrese una descripción, por ejemplo,\n\nEste valor cubre todas las conversaciones en las que un cliente expresa un sentimiento negativo. Ejemplos comunes incluyen:\n• Opinión negativa sobre un producto\n• Frustración con el servicio a clientes recibido\n\nPreguntas comunes:\n• ¿Por qué se retrasó mi pedido?\n\nPalabras clave: infeliz, frustrado, reembolso, devolución, decepcionado'}
+                  className="w-full min-h-[440px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] leading-[20px] resize-none focus:outline-none focus:border-[#1a1a1a]"
                 />
                 <p className="mt-1.5 text-[11.5px] text-[#646462]">{valueDescRemaining.toLocaleString('es-ES')} caracteres restantes</p>
               </div>
