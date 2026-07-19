@@ -2190,10 +2190,9 @@ function FinOrientacionContent() {
   ];
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Hero */}
-      <div className="flex-shrink-0 border-b border-[#e9eae6]">
-        <div className="px-6 py-6 flex gap-6 items-start">
+    <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2">
+      {/* Hero card (independiente) */}
+      <div className="flex-shrink-0 bg-white border border-[#e9eae6] rounded-[12px] px-6 py-6 flex gap-6 items-start">
           <div className="flex-1 min-w-0">
             <h1 className="text-[18px] font-bold text-[#1a1a1a] leading-[24px]">
               Personalice la forma en que Fin se comunica y responde
@@ -2231,12 +2230,11 @@ function FinOrientacionContent() {
           <div className="relative w-[388px] h-[160px] rounded-[10px] overflow-hidden flex-shrink-0">
             <img src={`${FIGMA_CDN}/b34636bd-eaf8-4d42-b0cf-c22a9b37d334`} alt="Ejemplos de orientación" className="absolute h-full top-0 left-0 w-full" />
           </div>
-        </div>
       </div>
 
-      {/* Pautas section header */}
-      <div className="flex-shrink-0 border-b border-[#e9eae6]">
-        <div className="px-6 h-14 flex items-center justify-between">
+      {/* Pautas card (independiente) */}
+      <div className="flex-shrink-0 bg-white border border-[#e9eae6] rounded-[12px] flex flex-col overflow-hidden">
+        <div className="px-6 h-14 flex items-center justify-between border-b border-[#e9eae6]">
           <div className="flex items-center gap-2">
             <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="1.2"/><path d="M5 5.5h6M5 8h6M5 10.5h4" strokeLinecap="round"/></svg>
             <h2 className="text-[16px] font-bold text-[#1a1a1a]">Pautas</h2>
@@ -2247,11 +2245,8 @@ function FinOrientacionContent() {
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
           </button>
         </div>
-      </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-6 py-4 flex flex-col gap-3 max-w-[880px]">
+        <div className="px-6 py-4 flex flex-col gap-3">
           <FinPautasBasicos />
           {/* Search + filtrar */}
           <div className="flex items-center gap-3">
@@ -7765,7 +7760,7 @@ export function FinAiView() {
         ) : (
           <FinSidebar sub={sub} onSelect={setSub} onCollapse={() => setSidebarCollapsed(true)} />
         )}
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+        <div className={`flex-1 min-w-0 flex flex-col min-h-0 ${sub === 'capGuidance' ? '' : 'bg-white rounded-[12px] border border-[#e9eae6] overflow-hidden'}`}>
           {renderSub()}
         </div>
         {showVistaPrevia && (previewCollapsed
