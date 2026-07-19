@@ -166,6 +166,57 @@ router.post('/guidance/optimize', requirePermission('settings.write'), async (re
   }
 });
 
+// Draft a whole procedure from a natural-language process description (the
+// "Permita que la IA redacte su procedimiento" flow). Returns a name, a trigger
+// sentence and numbered instructions.
+const PROCEDURE_DRAFT_SYSTEM = `Eres un experto en diseñar procedimientos para un agente de soporte de IA (Fin).
+A partir de la descripción de un proceso, redacta un primer borrador de procedimiento.
+Responde SOLO con un objeto JSON válido, sin texto adicional, con esta forma exacta:
+{
+  "name": string,           // título corto del procedimiento (máx 6 palabras)
+  "trigger": string,        // 1 frase: cuándo Fin debe usar este procedimiento, según lo que dice el cliente
+  "instructions": string[]  // 4-10 pasos claros y accionables, en imperativo, en el MISMO idioma de la descripción
+}
+Reglas: mantén el idioma de la descripción; los pasos deben ser deterministas y verificables; menciona conectores de datos o atributos si el proceso lo requiere; no inventes políticas concretas.`;
+const ProcedureDraftBody = z.object({
+  description: z.string().trim().min(1).max(8000),
+  context: z.string().trim().max(4000).optional(),
+});
+router.post('/procedures/draft', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+  const scope = scopeOf(req);
+  if (!scope) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  const parsed = ProcedureDraftBody.safeParse(req.body ?? {});
+  if (!parsed.success) return sendError(res, 400, 'INVALID_BODY', parsed.error.issues[0]?.message ?? 'Invalid body');
+  try {
+    const ctx = parsed.data.context ? `\n\nContexto adicional (conectores/atributos disponibles):\n${parsed.data.context}` : '';
+    const { text } = await getUtilityProvider().completeUtility({
+      system: PROCEDURE_DRAFT_SYSTEM,
+      prompt: `Descripción del proceso:\n${parsed.data.description}${ctx}`,
+      maxTokens: 1200,
+    });
+    let draft: { name: string; trigger: string; instructions: string[] } = { name: '', trigger: '', instructions: [] };
+    const m = (text || '').match(/\{[\s\S]*\}/);
+    if (m) {
+      try {
+        const j = JSON.parse(m[0]);
+        draft = {
+          name: typeof j.name === 'string' ? j.name : '',
+          trigger: typeof j.trigger === 'string' ? j.trigger : '',
+          instructions: Array.isArray(j.instructions) ? j.instructions.map((s: unknown) => String(s)).filter(Boolean) : [],
+        };
+      } catch { /* fall through to raw text */ }
+    }
+    if (draft.instructions.length === 0) {
+      // Fallback: split the raw text into lines as instructions.
+      draft.instructions = (text || '').split(/\r?\n/).map((l) => l.replace(/^\s*[-*\d.)]+\s*/, '').trim()).filter(Boolean);
+    }
+    res.json({ data: draft });
+  } catch (err) {
+    console.error('[finApi] procedure draft failed:', err);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
 // ── Preview (Pruebas screen) ──────────────────────────────────────────────────
 
 const PreviewBody = z.object({

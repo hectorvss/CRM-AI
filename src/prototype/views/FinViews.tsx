@@ -380,6 +380,9 @@ type FinProcedimientoStep = {
   title: string;
   body: string;
 };
+type FinProcEvent = { id: string; label: string };
+type FinSubprocedure = { id: string; name: string; instructions: string };
+type FinCodeBlock = { id: string; name: string; language: 'python'; code: string };
 type FinProcedimiento = {
   id: string;
   name: string;
@@ -388,6 +391,12 @@ type FinProcedimiento = {
   steps: FinProcedimientoStep[];
   enabled: boolean;
   createdAt: number;
+  // Reference model (document-style editor)
+  triggerClient?: string;             // "Según lo que dice el cliente"
+  events?: FinProcEvent[];            // "Basado en eventos"
+  instructions?: string;              // main instructions (Markdown-ish, "@" tool refs)
+  subprocedures?: FinSubprocedure[];
+  codeBlocks?: FinCodeBlock[];
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4608,7 +4617,123 @@ function FinEscalamientoContent({ previewCollapsed, onOpenPreview }: { previewCo
 }
 
 // ─── Capacitar > Procedimientos (Figma 1:9083) ───────────────────────────────
-// ─── FinProcedimientoEditor: full-drawer create/edit modal for one procedure ─
+// ─── Procedimientos: AI-draft modal + editor (documento estilo referencia) ────
+const FIN_PROC_AI_EXAMPLES: Record<string, string[]> = {
+  Ejemplos: [
+    'Cancelar o pausar una suscripción: confirme los detalles del plan y la próxima fecha de facturación antes de realizar cambios.',
+    'Resolver los pagos fallidos o pendientes: verifique el estado del pago, reintente o guíe al cliente para la actualización del método.',
+    'Actualice la dirección de entrega: verifique si se realizó el envío y actualícela si es elegible.',
+  ],
+  SaaS: [
+    'Restablecer el acceso de un usuario: verifique la identidad y reenvíe la invitación o restablezca la contraseña.',
+    'Cambiar de plan: confirme el plan actual, calcule la prorrateación y aplique el nuevo plan.',
+    'Gestionar límites de uso alcanzados: explique el límite y ofrezca ampliar el plan o esperar al reinicio.',
+  ],
+  'Comercio electrónico': [
+    'Procesar una devolución: compruebe la política, confirme el pedido y genere la etiqueta de devolución.',
+    'Rastrear un pedido: recupere el estado del envío y comparta el número de seguimiento.',
+    'Aplicar un cupón: valide el código, comprueba la elegibilidad y aplícalo al pedido.',
+  ],
+  'Empresa fintech': [
+    'Verificar una transacción sospechosa: confirme la identidad y marque la transacción para revisión.',
+    'Actualizar los datos bancarios: verifique la identidad antes de guardar la nueva cuenta.',
+    'Explicar un cargo: recupere el detalle del cargo y aclárelo al cliente.',
+  ],
+  Juegos: [
+    'Restaurar una compra dentro del juego: verifique el recibo y vuelva a otorgar el artículo.',
+    'Recuperar una cuenta bloqueada: confirme la propiedad y desbloquee la cuenta.',
+    'Reportar a un jugador: registre el reporte y confirme los siguientes pasos.',
+  ],
+};
+
+function FinProcAiModal({ onClose, onGenerate }: {
+  onClose: () => void;
+  onGenerate: (description: string, context: string) => Promise<void>;
+}) {
+  const [desc, setDesc] = useState('');
+  const [category, setCategory] = useState('Ejemplos');
+  const [contextOpen, setContextOpen] = useState(false);
+  const [context, setContext] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !busy) onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, busy]);
+  async function go() {
+    if (!desc.trim() || busy) return;
+    setBusy(true);
+    try { await onGenerate(desc.trim(), context.trim()); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/25 flex items-center justify-center p-4" onClick={() => { if (!busy) onClose(); }}>
+      <div className="w-full max-w-[820px] max-h-[88vh] bg-white rounded-2xl border border-[#e9eae6] shadow-[0px_24px_64px_rgba(20,20,20,0.24)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex-shrink-0 px-6 py-4 flex items-center justify-between border-b border-[#e9eae6]">
+          <h3 className="text-[16px] font-bold text-[#1a1a1a]">Permita que la IA redacte su procedimiento</h3>
+          <button onClick={() => { if (!busy) onClose(); }} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#ed621d]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0 p-5 flex flex-col gap-4">
+          <div className="relative border border-[#c8b8f0] rounded-[12px] p-3 focus-within:border-[#7c3aed]">
+            <textarea
+              autoFocus
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              placeholder="Describa un proceso y la IA extraerá el contexto de tu espacio de trabajo para crear un primer borrador. Pegue su SOP existente. Puede perfeccionar el borrador después de que se haya generado."
+              className="w-full min-h-[150px] text-[13.5px] text-[#1a1a1a] leading-[20px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none"
+            />
+            <div className="relative inline-block">
+              <button onClick={() => setContextOpen(o => !o)} className="h-8 px-3 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#ededea] flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                Añada contexto
+              </button>
+              {contextOpen && (
+                <div className="absolute top-full mt-1 left-0 z-10 w-[300px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_10px_30px_rgba(20,20,20,0.16)] py-1.5">
+                  <p className="px-3 pt-1 pb-1.5 text-[12px] text-[#646462]">Agregar contexto para mejorar la precisión del borrador.</p>
+                  {[
+                    { t: 'Conectores de datos', d: 'Conectores clave que Fin puede llamar', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 6h9M9 3l3 3-3 3M13 10H4M7 13l-3-3 3-3" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+                    { t: 'Atributos de Fin', d: 'Atributos clave que Fin debe usar', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M6 4L3 8l3 4M10 4l3 4-3 4" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+                  ].map(it => (
+                    <button key={it.t} onClick={() => { setContext(c => c ? c : it.t); setContextOpen(false); }} className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-[#f8f8f7]">
+                      <span className="w-5 h-5 flex items-center justify-center text-[#646462] flex-shrink-0 mt-0.5">{it.icon}</span>
+                      <span><span className="block text-[13px] text-[#1a1a1a]">{it.t}</span><span className="block text-[12px] text-[#646462]">{it.d}</span></span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.keys(FIN_PROC_AI_EXAMPLES).map(cat => (
+              <button key={cat} onClick={() => setCategory(cat)} className={`h-8 px-3 rounded-full border text-[13px] ${category === cat ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>{cat}</button>
+            ))}
+          </div>
+          <div className="border-t border-[#f1f1ee]">
+            {(FIN_PROC_AI_EXAMPLES[category] ?? []).map((ex, i) => (
+              <button key={i} onClick={() => setDesc(ex)} className="w-full flex items-center gap-3 py-3 border-b border-[#f1f1ee] text-left hover:bg-[#f8f8f7]/40">
+                <span className="flex-1 text-[13px] text-[#1a1a1a] leading-[19px]">{ex}</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.5"><path d="M8 13V3M4 7l4-4 4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex-shrink-0 px-6 py-3 flex items-center justify-between border-t border-[#e9eae6]">
+          <span className="text-[12.5px] text-[#646462]">Paso 1 de 2</span>
+          <button onClick={go} disabled={!desc.trim() || busy} className={`h-8 px-4 rounded-full text-[13px] font-semibold flex items-center gap-1.5 ${desc.trim() && !busy ? 'bg-[#1a1a1a] text-white hover:bg-black' : 'bg-[#f3f3f1] text-[#a4a4a2] cursor-not-allowed'}`}>
+            {busy && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+            {busy ? 'Generando…' : 'Continuar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FinProcedimientoEditor: editor documental a pantalla completa ────────────
+type FinProcSelection = { kind: 'main' } | { kind: 'sub'; id: string } | { kind: 'code'; id: string };
+
 function FinProcedimientoEditor({
   initial,
   onSave,
@@ -4622,351 +4747,276 @@ function FinProcedimientoEditor({
   onAction: (msg: string, type?: 'success' | 'error') => void;
   onToggleEnable: (next: boolean) => void;
 }) {
-  const isNew = !initial.name && initial.steps.length === 0 && !initial.prompt;
   const [name, setName] = useState(initial.name);
-  const [description, setDescription] = useState(initial.description);
-  const [prompt, setPrompt] = useState(initial.prompt);
-  const [steps, setSteps] = useState<FinProcedimientoStep[]>(initial.steps);
   const [enabled, setEnabled] = useState(initial.enabled);
-  const [aiView, setAiView] = useState<null | { running: boolean; produced: FinProcedimientoStep[] }>(null);
-  const aiCancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+  const [triggerClient, setTriggerClient] = useState(initial.triggerClient ?? initial.description ?? '');
+  const [events, setEvents] = useState<FinProcEvent[]>(initial.events ?? []);
+  const [instructions, setInstructions] = useState(initial.instructions ?? initial.prompt ?? '');
+  const [subprocedures, setSubprocedures] = useState<FinSubprocedure[]>(initial.subprocedures ?? []);
+  const [codeBlocks, setCodeBlocks] = useState<FinCodeBlock[]>(initial.codeBlocks ?? []);
+
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+  const [rightTab, setRightTab] = useState<'preview' | 'simulations'>('preview');
+  const [selected, setSelected] = useState<FinProcSelection>({ kind: 'main' });
+  const [triggerOpen, setTriggerOpen] = useState(true);
+  const [clientOpen, setClientOpen] = useState(true);
+  const [eventsOpen, setEventsOpen] = useState(true);
+  const [instrOpen, setInstrOpen] = useState(true);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       const t = e.target as HTMLElement | null;
       const tag = (t?.tagName || '').toUpperCase();
-      const editing = tag === 'INPUT' || tag === 'TEXTAREA';
-      if (!editing) onClose();
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !aiOpen && !addMenuOpen) onClose();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, aiOpen, addMenuOpen]);
 
-  function save() {
-    const next: FinProcedimiento = {
+  function buildNext(patch?: Partial<FinProcedimiento>): FinProcedimiento {
+    return {
       ...initial,
       name: name.trim(),
-      description,
-      prompt,
-      steps,
+      description: triggerClient,
+      prompt: instructions,
       enabled,
+      triggerClient,
+      events,
+      instructions,
+      subprocedures,
+      codeBlocks,
+      ...patch,
     };
-    onSave(next);
-    onAction('Procedimiento guardado');
   }
-  function handleToggleEnabled() {
-    const next = !enabled;
-    setEnabled(next);
-    onToggleEnable(next);
+  function save() { onSave(buildNext()); onAction('Procedimiento guardado'); }
+  function setLive() {
+    setEnabled(true);
+    onSave(buildNext({ enabled: true }));
+    onToggleEnable(true);
+    onAction('Procedimiento en vivo');
   }
-  function addStep(kind: FinProcedimientoStep['kind']) {
-    setSteps(s => [...s, {
-      id: `step_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-      kind,
-      title: '',
-      body: '',
-    }]);
+  function addEvent() {
+    const label = window.prompt('Nombre del evento activador (por ejemplo, "Pedido creado")');
+    if (!label || !label.trim()) return;
+    setEvents(e => [...e, { id: `evt_${Date.now()}`, label: label.trim() }]);
   }
-  function updateStep(id: string, patch: Partial<FinProcedimientoStep>) {
-    setSteps(s => s.map(it => it.id === id ? { ...it, ...patch } : it));
+  function addSubprocedure() {
+    const id = `sub_${Date.now()}`;
+    setSubprocedures(s => [...s, { id, name: '', instructions: '' }]);
+    setSelected({ kind: 'sub', id });
+    setAddMenuOpen(false);
   }
-  function removeStep(id: string) {
-    setSteps(s => s.filter(it => it.id !== id));
+  function addCodeBlock() {
+    const id = `code_${Date.now()}`;
+    setCodeBlocks(c => [...c, { id, name: '', language: 'python', code: '' }]);
+    setSelected({ kind: 'code', id });
+    setAddMenuOpen(false);
   }
-
-  function fallbackStepsFromPrompt(text: string): FinProcedimientoStep[] {
-    const sentences = text.split(/[\.!?\n]+/).map(s => s.trim()).filter(s => s.length > 4).slice(0, 4);
-    const arr: FinProcedimientoStep[] = (sentences.length ? sentences : [text]).slice(0, 4).map((s, i) => ({
-      id: `step_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
-      kind: 'verification',
-      title: `Verificación ${i + 1}`,
-      body: s,
-    }));
-    while (arr.length < 4) {
-      arr.push({
-        id: `step_${Date.now()}_${arr.length}_${Math.floor(Math.random() * 1000)}`,
-        kind: 'verification',
-        title: `Verificación ${arr.length + 1}`,
-        body: 'Define una comprobación adicional necesaria para completar el procedimiento.',
-      });
-    }
-    return arr;
-  }
-
-  async function startAiGeneration() {
-    if (prompt.trim().length < 10) {
-      onAction('Describe primero qué debe hacer el procedimiento', 'error');
-      return;
-    }
-    aiCancelRef.current = { cancelled: false };
-    setAiView({ running: true, produced: [] });
-    let generated: FinProcedimientoStep[] = [];
+  async function generateWithAi(description: string, context: string) {
     try {
-      const aiPrompt = `Eres un experto en automatización de soporte. A partir de la siguiente descripción de un procedimiento, devuelve un JSON con la forma {"steps":[{"kind":"verification|action|condition","title":"...","body":"..."}]}. Cada paso debe ser una verificación clara y accionable. Devuelve entre 3 y 7 pasos. Sólo JSON, sin markdown.\n\nDescripción: ${prompt.trim()}`;
-      const response: any = await aiApi.copilot('procedure-generator', aiPrompt, []);
-      const raw = String(response?.answer || response?.message || response?.content || '').trim();
-      const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-      const parsed = JSON.parse(cleaned);
-      const arr = Array.isArray(parsed?.steps) ? parsed.steps : [];
-      generated = arr.slice(0, 7).map((it: any, i: number): FinProcedimientoStep => {
-        const k = String(it?.kind || 'verification').toLowerCase();
-        const kind: FinProcedimientoStep['kind'] = k === 'action' ? 'action' : k === 'condition' ? 'condition' : 'verification';
-        return {
-          id: `step_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
-          kind,
-          title: String(it?.title || `Paso ${i + 1}`).slice(0, 200),
-          body: String(it?.body || '').slice(0, 1200),
-        };
-      });
-      if (generated.length === 0) generated = fallbackStepsFromPrompt(prompt);
+      const draft = await finApi.draftProcedure(description, context || undefined);
+      if (draft.name && !name.trim()) setName(draft.name);
+      if (draft.trigger) setTriggerClient(draft.trigger);
+      const body = (draft.instructions || []).map((s, i) => `${i + 1}. ${s}`).join('\n');
+      if (body) setInstructions(prev => prev.trim() ? `${prev.trim()}\n${body}` : body);
+      setSelected({ kind: 'main' });
+      setAiOpen(false);
+      onAction('Borrador generado con IA');
     } catch {
-      generated = fallbackStepsFromPrompt(prompt);
+      onAction('No se pudo generar el borrador', 'error');
     }
-
-    // Animate insertion
-    let i = 0;
-    function appendNext() {
-      if (aiCancelRef.current.cancelled) return;
-      if (i >= generated.length) {
-        setSteps(prev => [...prev, ...generated]);
-        setAiView(null);
-        onAction('Pasos generados con IA');
-        return;
-      }
-      setAiView(v => v ? { ...v, produced: [...v.produced, generated[i]] } : v);
-      i += 1;
-      window.setTimeout(appendNext, 600);
-    }
-    window.setTimeout(appendNext, 400);
   }
 
-  function cancelAi() {
-    aiCancelRef.current.cancelled = true;
-    setAiView(null);
-  }
+  const activeSub = selected.kind === 'sub' ? subprocedures.find(s => s.id === selected.id) : undefined;
+  const activeCode = selected.kind === 'code' ? codeBlocks.find(c => c.id === selected.id) : undefined;
+  const displayName = name.trim() || 'Untitled';
 
-  const titleText = isNew ? 'Nuevo procedimiento' : 'Editar procedimiento';
-
-  function kindBadgeClass(kind: FinProcedimientoStep['kind']) {
-    if (kind === 'action') return 'bg-[#ede9fe] text-[#6d28d9]';
-    if (kind === 'condition') return 'bg-[#fef3c7] text-[#92400e]';
-    return 'bg-[#dbeafe] text-[#1e40af]';
-  }
-  function kindLabel(kind: FinProcedimientoStep['kind']) {
-    if (kind === 'action') return 'Acción';
-    if (kind === 'condition') return 'Condición';
-    return 'Verificación';
-  }
+  const chev = (open: boolean) => (
+    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${open ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
+  );
+  const retIcon = (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#6d28d9]" strokeWidth="1.4"><path d="M5 5H9a3 3 0 0 1 0 6H4M6 3L4 5l2 2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  );
 
   return (
-    <div className="fixed inset-0 z-50" onClick={onClose}>
-      <div
-        className="absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]"
-        onClick={e => e.stopPropagation()}
-      >
-        {aiView ? (
-          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
-            <button
-              onClick={cancelAi}
-              title="Volver"
-              className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
-            >
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-            <div className="flex items-center gap-1.5 flex-1 min-w-0 text-[13px]">
-              <span className="text-[#646462]">Procedimiento</span>
-              <span className="text-[#a4a4a2]">›</span>
-              <span className="font-semibold text-[#1a1a1a] truncate">Generación con IA</span>
+    <div className="fixed inset-0 z-50 bg-white flex flex-col">
+      {/* Header */}
+      <div className="flex-shrink-0 h-[52px] border-b border-[#e9eae6] flex items-center px-4 gap-2">
+        <button onClick={() => setLeftOpen(o => !o)} title="Panel" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M6.5 3v10"/></svg>
+        </button>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Untitled" className="text-[15px] font-bold text-[#1a1a1a] placeholder:text-[#1a1a1a] focus:outline-none bg-transparent min-w-[90px] max-w-[220px]" />
+          {selected.kind === 'sub' && <><span className="text-[#a4a4a2]">›</span><span className="text-[14px] font-semibold text-[#1a1a1a] truncate max-w-[200px]">{activeSub?.name || 'Sin título'}</span></>}
+          {selected.kind === 'code' && <><span className="text-[#a4a4a2]">›</span><span className="text-[14px] font-semibold text-[#1a1a1a] truncate max-w-[200px]">{activeCode?.name || 'Sin título'}</span></>}
+          <span className={`ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 ${enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>{enabled ? 'En vivo' : 'Borrador'}</span>
+        </div>
+        <div className="flex-1" />
+        <div className="flex items-center gap-1.5">
+          <button title="Más" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><circle cx="4" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="12" cy="8" r="1.1"/></svg></button>
+          <button title="Historial" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M8 4.5v3.5l2.2 1.3" strokeLinecap="round"/><path d="M2.7 8a5.3 5.3 0 1 0 1.6-3.8M2.2 3v2.6h2.6"/></svg></button>
+          <button title="Ajustes" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4" strokeLinecap="round"/></svg></button>
+          <span className="w-px h-6 bg-[#e9eae6] mx-1" />
+          <button onClick={() => onAction('Revisión iniciada')} className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 2.5c2.8 0 5 2.2 5 5.5a5.5 5.5 0 0 1-5 5.5 5.5 5.5 0 0 1-5-5.5C3 4.7 5.2 2.5 8 2.5z"/><path d="M5.5 8l2 2 3-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Revisar
+          </button>
+          <button onClick={() => onAction('Modo de prueba')} className="h-8 px-3 rounded-full bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Probar</button>
+          <button onClick={save} className="h-8 px-3 rounded-full bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Guardar</button>
+          <button onClick={setLive} className="h-8 px-3.5 rounded-full bg-[#16a34a] text-white text-[13px] font-semibold hover:bg-[#15803d] flex items-center gap-1.5"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg> Establecer en vivo</button>
+          <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg></button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 flex min-h-0">
+        {/* Left panel */}
+        {leftOpen ? (
+          <div className="w-[248px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col min-h-0 overflow-y-auto">
+            <div className="flex-shrink-0 h-11 px-3 flex items-center justify-between">
+              <button onClick={() => setLeftOpen(false)} title="Ocultar panel" className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+              <div className="relative">
+                <button onClick={() => setAddMenuOpen(o => !o)} className="h-7 px-2.5 rounded-md hover:bg-[#f8f8f7] flex items-center gap-1 text-[13px] font-medium text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg> Agregar</button>
+                {addMenuOpen && (
+                  <div className="absolute top-full mt-1 right-0 z-10 w-[220px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.14)] py-1">
+                    <button onClick={addSubprocedure} className="w-full px-3 h-9 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Subprocedimiento</button>
+                    <button onClick={addCodeBlock} className="w-full px-3 h-9 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Bloque de código</button>
+                  </div>
+                )}
+              </div>
             </div>
-            <button onClick={cancelAi} className="h-8 px-4 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Cancelar</button>
-            <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-            </button>
+            <div className="px-3 pb-4 flex flex-col gap-1">
+              <p className="px-1 pt-1 pb-1 text-[11px] font-semibold text-[#a4a4a2]">Procedimiento principal</p>
+              <button onClick={() => setSelected({ kind: 'main' })} className={`h-8 px-2 rounded-[7px] text-left text-[13px] truncate ${selected.kind === 'main' ? 'bg-[#f1f1ee] text-[#1a1a1a] font-medium' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>{displayName}</button>
+              {subprocedures.length > 0 && <p className="px-1 pt-3 pb-1 text-[11px] font-semibold text-[#a4a4a2]">Subprocedimientos</p>}
+              {subprocedures.map(s => (
+                <button key={s.id} onClick={() => setSelected({ kind: 'sub', id: s.id })} className={`h-8 px-2 rounded-[7px] text-left text-[13px] flex items-center gap-2 truncate ${selected.kind === 'sub' && selected.id === s.id ? 'bg-[#f1f1ee] font-medium' : 'hover:bg-[#f8f8f7]'}`}><span className="text-[#c4c4c2] flex-shrink-0"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><circle cx="6" cy="4" r="1"/><circle cx="10" cy="4" r="1"/><circle cx="6" cy="8" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="10" cy="12" r="1"/></svg></span><span className="truncate">{s.name || 'Sin título'}</span></button>
+              ))}
+              {codeBlocks.length > 0 && <p className="px-1 pt-3 pb-1 text-[11px] font-semibold text-[#a4a4a2]">Bloques de código</p>}
+              {codeBlocks.map(c => (
+                <button key={c.id} onClick={() => setSelected({ kind: 'code', id: c.id })} className={`h-8 px-2 rounded-[7px] text-left text-[13px] flex items-center gap-2 truncate ${selected.kind === 'code' && selected.id === c.id ? 'bg-[#f1f1ee] font-medium' : 'hover:bg-[#f8f8f7]'}`}><span className="text-[#c4c4c2] flex-shrink-0"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><circle cx="6" cy="4" r="1"/><circle cx="10" cy="4" r="1"/><circle cx="6" cy="8" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="10" cy="12" r="1"/></svg></span><span className="truncate">{c.name || 'Sin título'}</span></button>
+              ))}
+            </div>
           </div>
         ) : (
-          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">{titleText}</h2>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
-                {enabled ? 'Habilitado' : 'Deshabilitado'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {enabled ? (
-                <button
-                  onClick={handleToggleEnabled}
-                  className="h-8 px-3 rounded-full bg-[#b91c1c] hover:bg-[#991b1b] text-white text-[13px] font-semibold flex items-center gap-1.5"
-                >
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
-                  Pausar
-                </button>
-              ) : (
-                <button
-                  onClick={handleToggleEnabled}
-                  className="h-8 px-3 rounded-full bg-[#15803d] hover:bg-[#166534] text-white text-[13px] font-semibold flex items-center gap-1.5"
-                >
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
-                  Habilitar
-                </button>
-              )}
-              <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
-              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-              </button>
-            </div>
+          <div className="w-10 flex-shrink-0 border-r border-[#e9eae6] flex flex-col items-center pt-2">
+            <button onClick={() => setLeftOpen(true)} title="Mostrar panel" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M6.5 3v10"/></svg></button>
           </div>
         )}
 
-        {aiView ? (
-          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
-            <div className="w-full px-8 py-12 flex flex-col items-center gap-6">
-              <div className="bg-white border border-[#e9eae6] rounded-[14px] p-8 w-full max-w-[640px] flex flex-col items-center gap-5">
-                <div className="w-12 h-12 rounded-full border-2 border-[#e9eae6] border-t-[#ed621d] animate-spin" />
-                <div className="text-center">
-                  <h3 className="text-[18px] font-bold text-[#1a1a1a]">Generando pasos…</h3>
-                  <p className="mt-1 text-[13px] text-[#646462]">La IA está analizando tu instrucción y dividiéndola en verificaciones.</p>
-                </div>
-                <div className="w-full flex flex-col gap-2 mt-2">
-                  {aiView.produced.map((step, idx) => (
-                    <div key={step.id} className="flex items-start gap-3 p-3 bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] animate-in fade-in" style={{ animation: 'fadeIn 0.3s ease' }}>
-                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#15803d] text-white text-[11px] font-bold flex-shrink-0">✓</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-[#1a1a1a]">Paso {idx + 1}: {step.title}</p>
-                        <p className="text-[12px] text-[#646462] mt-0.5 line-clamp-2">{step.body}</p>
-                      </div>
+        {/* Main content */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {selected.kind === 'main' && (
+            <div className="max-w-[720px] mx-auto px-8 py-8">
+              <button onClick={() => setTriggerOpen(o => !o)} className="flex items-center gap-1.5 text-[18px] font-bold text-[#1a1a1a] mb-3"><span>Cuándo se activa</span>{chev(triggerOpen)}</button>
+              {triggerOpen && (
+                <div className="mb-8">
+                  <button onClick={() => setClientOpen(o => !o)} className="flex items-center gap-1.5 text-[14px] font-semibold text-[#1a1a1a]"><span>Según lo que dice el cliente</span>{chev(clientOpen)}</button>
+                  {clientOpen && (
+                    <textarea value={triggerClient} onChange={e => setTriggerClient(e.target.value)} placeholder="Dile a Fin cuándo usar este procedimiento. Deje este campo en blanco para activarlo solo desde eventos." className="mt-1 w-full min-h-[44px] text-[13.5px] text-[#646462] leading-[20px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none" />
+                  )}
+                  <button onClick={() => setEventsOpen(o => !o)} className="mt-3 flex items-center gap-1.5 text-[14px] font-semibold text-[#1a1a1a]"><span>Basado en eventos ({events.length})</span>{chev(eventsOpen)}</button>
+                  {eventsOpen && (
+                    <div className="mt-1.5 flex flex-col gap-1">
+                      {events.map(ev => (
+                        <div key={ev.id} className="flex items-center gap-2 h-8 px-2.5 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] text-[13px] group">
+                          <span className="flex-1 truncate text-[#1a1a1a]">{ev.label}</span>
+                          <button onClick={() => setEvents(e => e.filter(x => x.id !== ev.id))} title="Quitar" className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-[#646462] hover:bg-[#e9eae6]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg></button>
+                        </div>
+                      ))}
+                      <button onClick={addEvent} className="mt-1 h-8 px-2.5 self-start rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#ededea] flex items-center gap-1.5"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg> Agregar</button>
                     </div>
-                  ))}
-                  {aiView.produced.length === 0 && (
-                    <p className="text-center text-[12.5px] text-[#a4a4a2]">Esperando primer paso…</p>
                   )}
                 </div>
-                <button
-                  onClick={cancelAi}
-                  className="mt-2 h-9 px-4 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
-            <div className="w-full px-8 py-8 flex flex-col gap-4">
-              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
-                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
-                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Da un nombre claro al procedimiento. Por ejemplo, "Reembolso por daños".</p>
-                <input
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="Reembolso por daños, Validación de cuenta…"
-                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-                />
-              </div>
-              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
-                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
-                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Resume brevemente cuándo Fin debe ejecutar este procedimiento.</p>
-                <textarea
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  placeholder="Por ejemplo, cuando el cliente reporte un producto recibido en mal estado…"
-                  className="w-full min-h-[100px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
-                />
-              </div>
-              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
-                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Instrucciones para Fin</h3>
-                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describe qué debe hacer Fin paso a paso. Si lo prefieres, deja que la IA lo redacte por ti.</p>
-                <textarea
-                  value={prompt}
-                  onChange={e => setPrompt(e.target.value)}
-                  placeholder="Por ejemplo: Si el cliente reporta un producto dañado, primero pídele el número de pedido, luego una foto del daño, comprueba si está dentro del plazo de devolución y si todo es correcto, ofrece un reembolso o un reemplazo."
-                  className="w-full min-h-[160px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
-                />
-                <div className="mt-3 flex items-center justify-between">
-                  <p className="text-[11.5px] text-[#646462]">{prompt.length} caracteres</p>
-                  <button
-                    onClick={startAiGeneration}
-                    className="h-9 px-4 rounded-full bg-[#ed621d] hover:bg-[#d4541a] text-white text-[13px] font-semibold flex items-center gap-1.5"
-                  >
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
-                    Escribir con IA
+              )}
+              <button onClick={() => setInstrOpen(o => !o)} className="flex items-center gap-1.5 text-[18px] font-bold text-[#1a1a1a] mb-3"><span>Instrucciones</span>{chev(instrOpen)}</button>
+              {instrOpen && (
+                <textarea value={instructions} onChange={e => setInstructions(e.target.value)} placeholder={'Indíquele a Fin qué debe hacer. Escriba "@" para herramientas...'} className="w-full min-h-[200px] text-[14px] text-[#1a1a1a] leading-[22px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none" />
+              )}
+              {!instructions.trim() && (
+                <div className="mt-6">
+                  <p className="text-[13px] text-[#646462] mb-2">Comenzar</p>
+                  <button onClick={() => setAiOpen(true)} className="h-9 px-4 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-2">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#ed621d]"><path d="M8 1.5l1.4 3.6L13 6.5 9.4 7.9 8 11.5 6.6 7.9 3 6.5l3.6-1.4zM12.6 9.6l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"/></svg>
+                    Permita que la IA redacte su procedimiento
                   </button>
                 </div>
-              </div>
-              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Pasos de verificación</h3>
-                    <p className="text-[12.5px] text-[#646462] leading-[18px]">Define cada comprobación o acción que Fin debe ejecutar en orden.</p>
-                  </div>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11.5px] text-[#646462]">{steps.length} {steps.length === 1 ? 'paso' : 'pasos'}</span>
-                </div>
-                {steps.length === 0 ? (
-                  <div className="border border-dashed border-[#e9eae6] rounded-[10px] px-4 py-6 text-center text-[12.5px] text-[#646462] bg-[#fafaf8]">
-                    Aún no hay pasos. Escribe instrucciones y pulsa "Escribir con IA", o agrega un paso manualmente.
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2.5">
-                    {steps.map((step, idx) => (
-                      <div key={step.id} className="bg-white border border-[#e9eae6] rounded-[10px] p-3 flex items-start gap-3 hover:border-[#1a1a1a]/30 transition-colors">
-                        <span className="text-[#a4a4a2] text-[14px] mt-1 cursor-grab select-none" title="Arrastrar">⋮⋮</span>
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#1a1a1a] text-white text-[11px] font-bold flex-shrink-0 mt-1">{idx + 1}</span>
-                        <div className="flex-1 min-w-0 flex flex-col gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${kindBadgeClass(step.kind)}`}>{kindLabel(step.kind)}</span>
-                            <Dropdown
-                              value={step.kind}
-                              items={[
-                                { value: 'verification', label: 'Verificación' },
-                                { value: 'action', label: 'Acción' },
-                                { value: 'condition', label: 'Condición' },
-                              ]}
-                              onChange={v => updateStep(step.id, { kind: v as FinProcedimientoStep['kind'] })}
-                              triggerClassName="h-7 px-2 rounded-md border border-[#e9eae6] bg-white flex items-center gap-1 text-[12px] text-[#646462] hover:bg-[#f8f8f7]"
-                            />
-                          </div>
-                          <input
-                            value={step.title}
-                            onChange={e => updateStep(step.id, { title: e.target.value })}
-                            placeholder="Título del paso (ej. Verificar número de pedido)"
-                            className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] font-medium focus:outline-none focus:border-[#1a1a1a]"
-                          />
-                          <textarea
-                            value={step.body}
-                            onChange={e => updateStep(step.id, { body: e.target.value })}
-                            placeholder="Describe qué debe verificar o ejecutar Fin en este paso."
-                            className="w-full min-h-[64px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]"
-                          />
-                        </div>
-                        <button
-                          onClick={() => removeStep(step.id)}
-                          title="Eliminar paso"
-                          className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0"
-                        >
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="mt-3 flex items-center gap-2">
-                  <Dropdown
-                    value=""
-                    items={[
-                      { value: 'verification', label: 'Verificación' },
-                      { value: 'action', label: 'Acción' },
-                      { value: 'condition', label: 'Condición' },
-                    ]}
-                    onChange={v => addStep(v as FinProcedimientoStep['kind'])}
-                    triggerLabel="+ Nuevo paso"
-                    triggerClassName="h-9 px-4 rounded-full border border-dashed border-[#1a1a1a]/40 bg-white flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
-                  />
-                </div>
-              </div>
+              )}
             </div>
+          )}
+          {selected.kind === 'sub' && activeSub && (
+            <div className="flex flex-col h-full min-h-0">
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <div className="max-w-[760px] w-full mx-auto px-8 py-8">
+                  <input value={activeSub.name} onChange={e => setSubprocedures(list => list.map(x => x.id === activeSub.id ? { ...x, name: e.target.value } : x))} placeholder="Sin título" className="w-full text-[16px] font-bold text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent mb-4" />
+                  <textarea value={activeSub.instructions} onChange={e => setSubprocedures(list => list.map(x => x.id === activeSub.id ? { ...x, instructions: e.target.value } : x))} placeholder={'Indíquele a Fin qué debe hacer. Escriba "@" para herramientas...'} className="w-full min-h-[320px] text-[14px] text-[#1a1a1a] leading-[22px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none" />
+                </div>
+              </div>
+              <div className="flex-shrink-0 border-t border-[#e9eae6] px-8 py-3 flex items-center justify-center gap-2 text-[13px] text-[#646462]">{retIcon} Una vez que este subprocedimiento termina, Fin regresa al paso que lo inició.</div>
+            </div>
+          )}
+          {selected.kind === 'code' && activeCode && (
+            <div className="flex flex-col h-full min-h-0">
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <div className="max-w-[920px] w-full mx-auto px-6 py-6">
+                  <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden bg-[#fafaf8]">
+                    <div className="h-11 px-4 border-b border-[#e9eae6] flex items-center justify-between bg-white">
+                      <span className="text-[13px] font-semibold text-[#1a1a1a]">Código en Python</span>
+                      <div className="flex items-center gap-4 text-[13px] text-[#646462]">
+                        <button className="flex items-center gap-1.5 hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg> Insertar atributo</button>
+                        <button className="flex items-center gap-1.5 hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M4 3l9 5-9 5z"/></svg> Código de prueba</button>
+                        <button className="flex items-center gap-1.5 hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1.5l1.4 3.6L13 6.5 9.4 7.9 8 11.5 6.6 7.9 3 6.5l3.6-1.4z"/></svg> Generar con IA</button>
+                      </div>
+                    </div>
+                    <div className="flex">
+                      <div className="w-10 py-3 text-right pr-2 text-[12px] text-[#a4a4a2] font-mono select-none leading-[18px]">{Array.from({ length: Math.max(1, activeCode.code.split('\n').length) }).map((_, i) => <div key={i}>{i + 1}</div>)}</div>
+                      <textarea value={activeCode.code} onChange={e => setCodeBlocks(list => list.map(x => x.id === activeCode.id ? { ...x, code: e.target.value } : x))} spellCheck={false} className="flex-1 min-h-[360px] py-3 pr-3 text-[13px] text-[#1a1a1a] font-mono leading-[18px] focus:outline-none resize-none bg-transparent" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex-shrink-0 border-t border-[#e9eae6] px-8 py-3 flex items-center justify-center gap-2 text-[13px] text-[#646462]">{retIcon} Una vez que este bloque de código finalice, Fin regresa al paso que lo llamó.</div>
+            </div>
+          )}
+        </div>
+
+        {/* Right panel */}
+        {rightOpen ? (
+          <div className="w-[360px] flex-shrink-0 border-l border-[#e9eae6] flex flex-col min-h-0">
+            <div className="flex-shrink-0 h-11 px-4 border-b border-[#e9eae6] flex items-center gap-4">
+              <button onClick={() => setRightTab('preview')} className={`text-[14px] font-semibold h-11 flex items-center border-b-2 ${rightTab === 'preview' ? 'text-[#1a1a1a] border-[#ed621d]' : 'text-[#646462] border-transparent'}`}>Vista previa</button>
+              <button onClick={() => setRightTab('simulations')} className={`text-[14px] font-semibold h-11 flex items-center border-b-2 ${rightTab === 'simulations' ? 'text-[#1a1a1a] border-[#ed621d]' : 'text-[#646462] border-transparent'}`}>Simulaciones</button>
+              <div className="flex-1" />
+              <button onClick={() => setRightOpen(false)} title="Cerrar" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg></button>
+            </div>
+            {rightTab === 'preview' ? (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <p className="text-center text-[13px] text-[#646462] max-w-[240px] leading-[20px]">Agrega contenido para probar Fin. Luego hazle preguntas para obtener una vista previa de sus respuestas.</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <button className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg> Nuevo</button>
+                  <button onClick={() => onAction('Ejecutando simulaciones…')} className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 3l9 5-9 5z"/></svg> Ejecute todo</button>
+                </div>
+                <p className="text-[12.5px] text-[#646462] leading-[18px]">Ejecute simulaciones para probar automáticamente distintas rutas en las instrucciones y evaluar las respuestas de Fin.</p>
+                <p className="text-[12px] text-[#646462] mt-2">Simulaciones sugeridas para su procedimiento</p>
+                <div className="border border-[#e9eae6] rounded-[10px] px-3 h-11 flex items-center justify-between"><span className="text-[13px] text-[#1a1a1a]">Empty instruction block</span><button onClick={() => onAction('Ejecutando…')} className="text-[#646462]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M4 3l9 5-9 5z"/></svg></button></div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="w-10 flex-shrink-0 border-l border-[#e9eae6] flex flex-col items-center pt-2">
+            <button onClick={() => setRightOpen(true)} title="Vista previa" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg></button>
           </div>
         )}
       </div>
+
+      {aiOpen && <FinProcAiModal onClose={() => setAiOpen(false)} onGenerate={generateWithAi} />}
     </div>
   );
 }

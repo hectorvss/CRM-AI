@@ -1701,6 +1701,8 @@ export const finApi = {
     request<any>(`/fin/guidance/${id}`, { method: 'DELETE' }),
   optimizeGuidance: (text: string) =>
     request<{ data: { text: string } }>('/fin/guidance/optimize', { method: 'POST', body: JSON.stringify({ text }) }).then((r) => (r as any).data?.text ?? (r as any).text ?? text),
+  draftProcedure: (description: string, context?: string) =>
+    request<{ data: { name: string; trigger: string; instructions: string[] } }>('/fin/procedures/draft', { method: 'POST', body: JSON.stringify({ description, context }) }).then((r) => (r as any).data ?? r),
 
   preview: (question: string) =>
     request<{ data: any }>('/fin/preview', { method: 'POST', body: JSON.stringify({ question }) }).then((r) => r.data),
