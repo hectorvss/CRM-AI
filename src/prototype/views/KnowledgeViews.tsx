@@ -400,7 +400,6 @@ function KhChecklist({ title, items }: { title: string; items: { label: string; 
 
 function KnowledgeFuentes({
   onCreate,
-  onAddArticle,
   onNavigate,
   onAction,
   onOpenView,
@@ -409,8 +408,6 @@ function KnowledgeFuentes({
   onConnectApp,
 }: {
   onCreate: (opts: { type?: string; visibility?: 'public' | 'internal' }) => void;
-  // "Agregar artículo" opens the folder-modal-styled picker (elegir/crear artículo).
-  onAddArticle: (opts: { visibility?: 'public' | 'internal' }) => void;
   onNavigate: (sub: KnowledgeSubView) => void;
   onAction: (msg: string, type?: 'success' | 'error') => void;
   // Top-level CRM views (e.g. 'fin', 'inbox', 'connectors') for "Configurar ahora" / "Ir a Inbox".
@@ -451,7 +448,7 @@ function KnowledgeFuentes({
   // pre-scoped to público vs interno.
   function actionHandler(it: { action: string; provider?: string; visibility?: 'public' | 'internal' }): (() => void) | undefined {
     const a = String(it.action || '').toLowerCase();
-    if (a.includes('agregar artículo') || a.includes('agregar articulo')) return () => onAddArticle({ visibility: it.visibility || 'public' });
+    if (a.includes('agregar artículo') || a.includes('agregar articulo')) return () => onCreate({ type: 'ARTICLE', visibility: it.visibility || 'public' });
     if (a.includes('fragmento'))       return () => onCreate({ type: 'SNIPPET' });
     if (a.includes('cargar documento')) return () => onCreate({ type: 'DOCUMENT' });
     // A connector row (Zendesk/Guru/Notion/Confluence…) → open that app's
@@ -993,78 +990,6 @@ function KnowledgeFolderModal({
         <div className="flex items-center justify-end gap-2 mt-4">
           <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
           <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? (editing ? 'Guardando…' : 'Creando…') : (editing ? 'Guardar' : 'Crear carpeta')}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// KnowledgeAddArticleModal — the "Agregar artículo" popup. Same chrome as
-// KnowledgeFolderModal (440px card, black/25 backdrop). Lets the user pick an
-// existing article to add to this source ("elegir el artículo que corresponde")
-// or jump into the editor to create a fresh one. Scoped to público vs interno.
-function KnowledgeAddArticleModal({
-  visibility,
-  onClose,
-  onPick,
-  onCreateNew,
-}: {
-  visibility: 'public' | 'internal';
-  onClose: () => void;
-  onPick: (article: any) => void;
-  onCreateNew: () => void;
-}) {
-  const [query, setQuery] = useState('');
-  const { data: articlesData, loading } = useApi(() => knowledgeApi.listArticles(), [], []);
-  const all = Array.isArray(articlesData) ? articlesData : [];
-  const scoped = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return all
-      .filter((a: any) => String(a.visibility || 'public') === visibility)
-      .filter((a: any) => !q || String(a.title || '').toLowerCase().includes(q));
-  }, [all, query, visibility]);
-  const label = visibility === 'internal' ? 'interno' : 'público';
-  return (
-    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
-      <div
-        className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
-        onClick={e => e.stopPropagation()}
-      >
-        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Agregar artículo</h3>
-        <p className="text-[12.5px] text-[#646462] mb-4">Elige un artículo {label} existente para esta fuente, o crea uno nuevo.</p>
-        <input
-          autoFocus
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Buscar artículos…"
-          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
-        />
-        <div className="max-h-[280px] overflow-y-auto -mx-1 px-1">
-          {loading && <p className="px-1 py-3 text-[12.5px] text-[#646462]">Cargando artículos…</p>}
-          {!loading && scoped.length === 0 && (
-            <p className="px-1 py-3 text-[12.5px] text-[#646462] italic">
-              {query.trim() ? 'Ningún artículo coincide con la búsqueda.' : `Todavía no hay artículos ${label}s. Crea el primero.`}
-            </p>
-          )}
-          {!loading && scoped.map((a: any) => (
-            <button
-              key={a.id}
-              onClick={() => onPick(a)}
-              className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left hover:bg-[#f5f5f4] transition-colors"
-            >
-              <span className="w-6 h-6 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 2h6l3 3v9H4z" strokeLinejoin="round"/><path d="M10 2v3h3M6 9h4M6 11.5h3"/></svg>
-              </span>
-              <span className="flex-1 min-w-0 text-[13px] text-[#1a1a1a] truncate">{a.title || 'Sin título'}</span>
-              <span className={`text-[11px] px-2 py-0.5 rounded-full flex-shrink-0 ${a.status === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
-                {a.status === 'published' ? 'Publicado' : 'Borrador'}
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center justify-between gap-2 mt-4 pt-4 border-t border-[#f1f1ee]">
-          <button onClick={onClose} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
-          <button onClick={onCreateNew} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Crear artículo nuevo</button>
         </div>
       </div>
     </div>
@@ -1965,8 +1890,6 @@ export function KnowledgeView() {
   // Real ingestion flows, opened from Fuentes/Contenido and mounted once below.
   const [websiteSyncOpen, setWebsiteSyncOpen] = useState(false);
   const [externalPickerOpen, setExternalPickerOpen] = useState(false);
-  // "Agregar artículo" picker (folder-modal styled). Holds the target visibility.
-  const [addArticleModal, setAddArticleModal] = useState<null | { visibility: 'public' | 'internal' }>(null);
   // Per-app connect wizard ("Sincronizar o importar"). Holds the provider name.
   const [connectApp, setConnectApp] = useState<string | null>(null);
   function showToast(message: string, type: 'success' | 'error' = 'success') {
@@ -2018,7 +1941,7 @@ export function KnowledgeView() {
   }
   function renderSub() {
     switch (sub) {
-      case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onAddArticle={(opts) => setAddArticleModal({ visibility: opts.visibility || 'public' })} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} onOpenExternalPicker={() => setExternalPickerOpen(true)} onConnectApp={(p) => setConnectApp(p)} />;
+      case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} onOpenExternalPicker={() => setExternalPickerOpen(true)} onConnectApp={(p) => setConnectApp(p)} />;
       case 'contenido':   return <KnowledgeContenido onCreate={startCreate} onNavigate={setSub} onAction={showToast} onSearch={(q) => { setArticleSearch(q); setSub('articulos'); }} onOpenWebsiteSync={() => setWebsiteSyncOpen(true)} />;
       case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} initialSearch={articleSearch} />;
       case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
@@ -2061,23 +1984,6 @@ export function KnowledgeView() {
             }
           }}
           onAction={showToast}
-        />
-      )}
-      {addArticleModal && (
-        <KnowledgeAddArticleModal
-          visibility={addArticleModal.visibility}
-          onClose={() => setAddArticleModal(null)}
-          onPick={(article) => {
-            // Open the chosen article in the editor (edit mode: draft carries id).
-            setPendingDraft(article);
-            setAddArticleModal(null);
-            setSub('articulos');
-          }}
-          onCreateNew={() => {
-            const vis = addArticleModal.visibility;
-            setAddArticleModal(null);
-            startCreate({ type: 'ARTICLE', visibility: vis });
-          }}
         />
       )}
       {connectApp && (
