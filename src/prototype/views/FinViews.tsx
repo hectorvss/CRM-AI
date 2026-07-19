@@ -3005,10 +3005,10 @@ function FinAtributoEditor({
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
             <div className="flex items-center gap-1.5 flex-1 min-w-0 text-[13px]">
-              <span className="text-[#646462]">{titleText}</span>
+              <span className="text-[#646462] truncate max-w-[220px]">{name.trim() || titleText}</span>
               <span className="text-[#a4a4a2]">›</span>
               <span className="font-semibold text-[#1a1a1a] truncate">
-                {valueEditor.mode === 'create' ? 'Nuevo valor' : (valueName || 'Editar valor')}
+                {valueEditor.mode === 'create' ? 'Nuevo valor' : 'Edite el valor'}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -3265,7 +3265,7 @@ function FinAtributoEditor({
                   </button>
                 </div>
                 <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
-                  <div className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] bg-[#f8f8f7]/40 text-[12px] font-semibold text-[#646462]">
+                  <div className="grid grid-cols-[24px_1fr_2fr_64px] gap-2 px-3 py-2 border-b border-[#e9eae6] bg-[#f8f8f7]/40 text-[12px] font-semibold text-[#646462]">
                     <div></div>
                     <div>Nombre</div>
                     <div>Descripción</div>
@@ -3276,19 +3276,30 @@ function FinAtributoEditor({
                   ) : filteredValues.map(v => (
                     <div
                       key={v.id}
-                      className="grid grid-cols-[24px_1fr_2fr_32px] gap-2 px-3 py-2 border-b border-[#e9eae6] last:border-b-0 items-center group hover:bg-[#f8f8f7]/30 cursor-pointer"
+                      className="grid grid-cols-[24px_1fr_2fr_64px] gap-2 px-3 py-2 border-b border-[#e9eae6] last:border-b-0 items-center group hover:bg-[#f8f8f7]/30 cursor-pointer"
                       onClick={() => openValueEdit(v.id)}
                     >
-                      <span className="text-[#a4a4a2] cursor-grab" title="Arrastrar" onClick={e => e.stopPropagation()}>⋮⋮</span>
+                      <span className="text-[#c4c4c2] cursor-grab flex items-center" title="Arrastrar" onClick={e => e.stopPropagation()}>
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><circle cx="6" cy="4" r="1.1"/><circle cx="10" cy="4" r="1.1"/><circle cx="6" cy="8" r="1.1"/><circle cx="10" cy="8" r="1.1"/><circle cx="6" cy="12" r="1.1"/><circle cx="10" cy="12" r="1.1"/></svg>
+                      </span>
                       <span className="text-[13px] text-[#1a1a1a] truncate">{v.name || <span className="text-[#a4a4a2]">Sin nombre</span>}</span>
                       <span className="text-[13px] text-[#646462] truncate">{v.description}</span>
-                      <button
-                        onClick={e => { e.stopPropagation(); removeValue(v.id); }}
-                        title="Eliminar"
-                        className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100"
-                      >
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </button>
+                      <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100">
+                        <button
+                          onClick={e => { e.stopPropagation(); openValueEdit(v.id); }}
+                          title="Editar"
+                          className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#f1f1ee] hover:text-[#1a1a1a]"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M11.5 2.5l2 2L6 12l-2.5.5L4 10l7.5-7.5z" strokeLinejoin="round"/></svg>
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); removeValue(v.id); }}
+                          title="Eliminar"
+                          className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -3301,11 +3312,15 @@ function FinAtributoEditor({
               <p className="text-[13px] text-[#646462] leading-[20px] max-w-[760px]">
                 Configura reglas condicionales para controlar cuándo Fin detecta un atributo. Una vez que se han definido las condiciones, Fin espera a que se cumplan antes de intentar la detección.
               </p>
-              {conditions.length === 0 ? (
-                <div className="bg-white border border-dashed border-[#e9eae6] rounded-[12px] px-4 py-10 text-center text-[13px] text-[#646462]">
-                  Aún no hay condiciones. Pulsa «Añadir condición» para crear una.
+              {conditions.length > 0 && (
+                <div className="grid grid-cols-[1fr_1fr_1fr_40px] gap-3 px-1">
+                  <div className="text-[12px] text-[#646462]">Si el atributo se detecta como...</div>
+                  <div className="text-[12px] text-[#646462]">Fin también detectará...</div>
+                  <div className="text-[12px] text-[#646462]">Utilizando valores...</div>
+                  <div></div>
                 </div>
-              ) : conditions.map(cond => {
+              )}
+              {conditions.map(cond => {
                 const thenAttr = otherAttributes.find(a => a.id === cond.thenAttributeId);
                 const thenValueItems: DropdownItem[] = thenAttr
                   ? [
@@ -3317,52 +3332,43 @@ function FinAtributoEditor({
                   ? 'Todos los valores'
                   : `${cond.usingValues.length} valor${cond.usingValues.length === 1 ? '' : 'es'}`;
                 return (
-                  <div key={cond.id} className="bg-white border border-[#e9eae6] rounded-[12px] p-4 grid grid-cols-[1fr_1fr_1fr_32px] gap-3 items-end">
-                    <div>
-                      <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Si el atributo se detecta como...</label>
-                      <Dropdown
-                        value={cond.whenValue}
-                        items={values.length === 0
-                          ? [{ value: '__none', label: 'Añade valores primero', disabled: true }]
-                          : values.map(v => ({ value: v.id, label: v.name || 'Sin nombre' }))}
-                        onChange={v => updateCondition(cond.id, { whenValue: v })}
-                        triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Fin también detectará...</label>
-                      <Dropdown
-                        value={cond.thenAttributeId}
-                        items={otherAttributes.length === 0
-                          ? [{ value: '__none', label: 'No hay otros atributos', disabled: true }]
-                          : otherAttributes.map(a => ({ value: a.id, label: a.name || 'Sin nombre' }))}
-                        onChange={v => updateCondition(cond.id, { thenAttributeId: v, usingValues: [] })}
-                        triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Utilizando valores...</label>
-                      <Dropdown
-                        value=""
-                        items={thenValueItems}
-                        onChange={v => {
-                          if (v === '__all') updateCondition(cond.id, { usingValues: [] });
-                          else if (v !== '__none') {
-                            const cur = cond.usingValues;
-                            updateCondition(cond.id, {
-                              usingValues: cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v],
-                            });
-                          }
-                        }}
-                        triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-                        renderTrigger={(_, open) => (
-                          <>
-                            <span className="truncate">{thenValueLabel}</span>
-                            <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
-                          </>
-                        )}
-                      />
-                    </div>
+                  <div key={cond.id} className="grid grid-cols-[1fr_1fr_1fr_40px] gap-3 items-center">
+                    <Dropdown
+                      value={cond.whenValue}
+                      items={values.length === 0
+                        ? [{ value: '__none', label: 'Añade valores primero', disabled: true }]
+                        : values.map(v => ({ value: v.id, label: v.name || 'Sin nombre' }))}
+                      onChange={v => updateCondition(cond.id, { whenValue: v })}
+                      triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                    />
+                    <Dropdown
+                      value={cond.thenAttributeId}
+                      items={otherAttributes.length === 0
+                        ? [{ value: '__none', label: 'No hay otros atributos', disabled: true }]
+                        : otherAttributes.map(a => ({ value: a.id, label: `${a.name || 'Sin nombre'}${a.enabled ? '' : '  ·  Deshabilitado'}` }))}
+                      onChange={v => updateCondition(cond.id, { thenAttributeId: v, usingValues: [] })}
+                      triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                    />
+                    <Dropdown
+                      value=""
+                      items={thenValueItems}
+                      onChange={v => {
+                        if (v === '__all') updateCondition(cond.id, { usingValues: [] });
+                        else if (v !== '__none') {
+                          const cur = cond.usingValues;
+                          updateCondition(cond.id, {
+                            usingValues: cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v],
+                          });
+                        }
+                      }}
+                      triggerClassName="w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center justify-between text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                      renderTrigger={(_, open) => (
+                        <>
+                          <span className="truncate">{thenValueLabel}</span>
+                          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+                        </>
+                      )}
+                    />
                     <button
                       onClick={() => removeCondition(cond.id)}
                       title="Eliminar"
@@ -3374,7 +3380,7 @@ function FinAtributoEditor({
                 );
               })}
               <div>
-                <button onClick={addCondition} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] flex items-center gap-1.5">
+                <button onClick={addCondition} className="h-9 px-3.5 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                   Añadir condición
                 </button>
@@ -4014,13 +4020,19 @@ function FinFieldPickerPopover({
   );
 }
 
-function FinOperatorPickerPopover({
+// Combined operator + value popover (as in the reference): a radio list of
+// operators, and the value field inline right under the selected operator.
+function FinConditionPopover({
+  operator,
   value,
-  onPick,
+  onOperator,
+  onValue,
   onClose,
 }: {
-  value: FinEscalationOperator;
-  onPick: (op: FinEscalationOperator) => void;
+  operator: FinEscalationOperator;
+  value: string;
+  onOperator: (op: FinEscalationOperator) => void;
+  onValue: (val: string) => void;
   onClose: () => void;
 }) {
   const popRef = useRef<HTMLDivElement>(null);
@@ -4039,22 +4051,33 @@ function FinOperatorPickerPopover({
   return (
     <div
       ref={popRef}
-      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[220px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1.5"
+      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[240px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1.5"
       onClick={e => e.stopPropagation()}
     >
       {FIN_ESCALATION_OPERATORS.map(op => {
-        const selected = op.value === value;
+        const selected = op.value === operator;
         return (
-          <button
-            key={op.value}
-            onClick={() => { onPick(op.value); }}
-            className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
-          >
-            <span className={`w-3.5 h-3.5 rounded-full border flex-shrink-0 flex items-center justify-center ${selected ? 'border-[#1a1a1a]' : 'border-[#a4a4a2]'}`}>
-              {selected && <span className="w-2 h-2 rounded-full bg-[#1a1a1a]" />}
-            </span>
-            <span className="flex-1 truncate">{op.label}</span>
-          </button>
+          <Fragment key={op.value}>
+            <button
+              onClick={() => onOperator(op.value)}
+              className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+            >
+              <span className={`w-3.5 h-3.5 rounded-full border flex-shrink-0 flex items-center justify-center ${selected ? 'border-[#3b59f6]' : 'border-[#a4a4a2]'}`}>
+                {selected && <span className="w-2 h-2 rounded-full bg-[#3b59f6]" />}
+              </span>
+              <span className="flex-1 truncate">{op.label}</span>
+            </button>
+            {selected && op.takesValue && (
+              <div className="px-3 pb-2 pt-0.5">
+                <input
+                  autoFocus
+                  value={value}
+                  onChange={e => onValue(e.target.value)}
+                  className="w-full h-8 rounded-[8px] border border-[#e9eae6] px-2.5 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+            )}
+          </Fragment>
         );
       })}
       <div className="border-t border-[#f1f1ee] mt-1 pt-1 px-3 pb-1 text-right">
@@ -4119,7 +4142,7 @@ function FinEscalationRuleRow({
   const [expanded, setExpanded] = useState<boolean>(!!startExpanded);
   const [draft, setDraft] = useState<FinEscalationRule>(rule);
   const [fieldPickerFor, setFieldPickerFor] = useState<string | null>(null);
-  const [opPickerFor, setOpPickerFor] = useState<string | null>(null);
+  const [condPopoverFor, setCondPopoverFor] = useState<string | null>(null);
 
   useEffect(() => { if (!expanded) setDraft(rule); }, [rule, expanded]);
 
@@ -4127,10 +4150,11 @@ function FinEscalationRuleRow({
     setDraft(d => ({ ...d, conditions: d.conditions.map(c => c.id === id ? { ...c, ...patch } : c) }));
   }
   function addCondition() {
-    setDraft(d => ({
-      ...d,
-      conditions: [...d.conditions, { id: `cond_${Date.now()}_${Math.floor(Math.random()*1000)}`, field: '', operator: 'is', value: '' }],
-    }));
+    const id = `cond_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    setDraft(d => ({ ...d, conditions: [...d.conditions, { id, field: '', operator: 'is', value: '' }] }));
+    // Open the data picker immediately, as in the reference.
+    setCondPopoverFor(null);
+    setFieldPickerFor(id);
   }
   function removeCondition(id: string) {
     setDraft(d => ({ ...d, conditions: d.conditions.filter(c => c.id !== id) }));
@@ -4172,87 +4196,58 @@ function FinEscalationRuleRow({
         <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] flex-shrink-0 ${draft.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{draft.enabled ? 'Habilitado' : 'No habilitado'}</span>
       </div>
 
-      <div className="flex flex-col gap-2">
-        {draft.conditions.length === 0 && (
-          <p className="text-[12.5px] text-[#646462]">Sin condiciones todavía. Añade una para comenzar.</p>
-        )}
+      <div className="flex flex-wrap items-center gap-2">
         {draft.conditions.map(cond => {
           const f = findFinEscField(cond.field);
           const op = FIN_ESCALATION_OPERATORS.find(o => o.value === cond.operator) || FIN_ESCALATION_OPERATORS[0];
+          const summary = f ? (op.takesValue ? (cond.value ? `${op.label} ${cond.value}` : op.label) : op.label) : '';
           return (
-            <div key={cond.id} className="flex items-center gap-2 flex-wrap">
-              <div className="relative">
+            <div key={cond.id} className="relative inline-flex items-center">
+              <div className={`inline-flex items-center h-8 rounded-full border bg-white pl-2.5 pr-1 gap-1.5 ${(fieldPickerFor === cond.id || condPopoverFor === cond.id) ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}>
                 <button
-                  onClick={() => { setFieldPickerFor(cond.id); setOpPickerFor(null); }}
-                  className={`h-8 px-3 rounded-[8px] border bg-white flex items-center gap-2 text-[13px] hover:bg-[#f8f8f7] ${fieldPickerFor === cond.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'} ${f ? 'text-[#1a1a1a]' : 'text-[#646462]'}`}
+                  onClick={() => { if (!f) { setFieldPickerFor(cond.id); setCondPopoverFor(null); } else { setCondPopoverFor(cond.id); setFieldPickerFor(null); } }}
+                  className="flex items-center gap-1.5 text-[13px] max-w-[380px]"
                 >
                   {f ? (
                     <>
-                      <span className="w-4 h-4 flex items-center justify-center text-[#646462]">{f.icon}</span>
-                      <span className="truncate">{f.label}</span>
+                      <span className="w-4 h-4 flex items-center justify-center text-[#646462] flex-shrink-0">{f.icon}</span>
+                      <span className="text-[#1a1a1a] flex-shrink-0">{f.label}</span>
+                      {summary && <span className="text-[#646462] truncate">· {summary}</span>}
                     </>
                   ) : (
-                    <span>Selecciona un campo</span>
+                    <span className="text-[#646462]">Selecciona un campo</span>
                   )}
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
                 </button>
-                {fieldPickerFor === cond.id && (
-                  <FinFieldPickerPopover
-                    onPick={(key) => patchCondition(cond.id, { field: key })}
-                    onClose={() => setFieldPickerFor(null)}
-                  />
-                )}
-              </div>
-
-              <div className="relative">
                 <button
-                  onClick={() => { setOpPickerFor(cond.id); setFieldPickerFor(null); }}
-                  className={`h-8 px-3 rounded-[8px] border bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${opPickerFor === cond.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}
+                  onClick={() => removeCondition(cond.id)}
+                  title="Quitar condición"
+                  className="w-5 h-5 rounded-full hover:bg-[#f3f3f1] flex items-center justify-center text-[#646462] flex-shrink-0"
                 >
-                  <span>{op.label}</span>
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
                 </button>
-                {opPickerFor === cond.id && (
-                  <FinOperatorPickerPopover
-                    value={cond.operator}
-                    onPick={(o) => { patchCondition(cond.id, { operator: o, value: FIN_ESCALATION_OPERATORS.find(x => x.value === o)?.takesValue ? cond.value : '' }); }}
-                    onClose={() => setOpPickerFor(null)}
-                  />
-                )}
               </div>
-
-              {op.takesValue ? (
-                <input
-                  value={cond.value}
-                  onChange={e => patchCondition(cond.id, { value: e.target.value })}
-                  placeholder="Valor"
-                  className="h-8 rounded-[8px] border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] min-w-[160px] flex-1"
-                />
-              ) : (
-                <input
-                  value=""
-                  disabled
-                  placeholder="—"
-                  className="h-8 rounded-[8px] border border-[#e9eae6] px-3 text-[13px] bg-[#f8f8f7] text-[#a4a4a2] min-w-[160px] flex-1 cursor-not-allowed"
+              {fieldPickerFor === cond.id && (
+                <FinFieldPickerPopover
+                  onPick={(key) => { patchCondition(cond.id, { field: key }); setFieldPickerFor(null); setCondPopoverFor(cond.id); }}
+                  onClose={() => setFieldPickerFor(null)}
                 />
               )}
-
-              <button
-                onClick={() => removeCondition(cond.id)}
-                title="Eliminar condición"
-                className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0"
-              >
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
+              {condPopoverFor === cond.id && f && (
+                <FinConditionPopover
+                  operator={cond.operator}
+                  value={cond.value}
+                  onOperator={(o) => patchCondition(cond.id, { operator: o, value: FIN_ESCALATION_OPERATORS.find(x => x.value === o)?.takesValue ? cond.value : '' })}
+                  onValue={(val) => patchCondition(cond.id, { value: val })}
+                  onClose={() => setCondPopoverFor(null)}
+                />
+              )}
             </div>
           );
         })}
-        <div>
-          <button onClick={addCondition} className="text-[13px] font-semibold text-[#ed621d] hover:underline flex items-center gap-1.5">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-            <span>Añadir condición</span>
-          </button>
-        </div>
+        <button onClick={addCondition} className="text-[13px] font-semibold text-[#ed621d] hover:underline flex items-center gap-1.5">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+          <span>Añadir condición</span>
+        </button>
       </div>
 
       <div className="mt-4 pt-3 border-t border-[#e9eae6] flex items-center gap-2 flex-wrap">
