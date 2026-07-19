@@ -2887,6 +2887,7 @@ function FinAtributoEditor({
   const [conditions, setConditions] = useState<FinAtributoCondition[]>(initial.conditions);
   const [enabled, setEnabled] = useState(initial.enabled);
   const [visibility, setVisibility] = useState<'all' | 'admins' | 'me'>('all');
+  const [requiresClose, setRequiresClose] = useState(false);
   const [tab, setTab] = useState<'general' | 'values' | 'conditions'>('general');
   const [valSearch, setValSearch] = useState('');
   const [valueEditor, setValueEditor] = useState<null | { mode: 'create' } | { mode: 'edit'; id: string }>(null);
@@ -3179,18 +3180,30 @@ function FinAtributoEditor({
                 </div>
                 <div className="flex items-start justify-between gap-4 py-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-[#1a1a1a]">Visibilidad de datos</p>
-                    <p className="text-[12px] text-[#646462] mt-0.5">Quién puede ver este atributo en Inbox</p>
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Visibilidad en Inbox</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5">Controla para qué buzones de equipo es visible este atributo</p>
                   </div>
                   <Dropdown
                     value={visibility}
                     items={[
-                      { value: 'all', label: 'Todos' },
-                      { value: 'admins', label: 'Solo administradores' },
-                      { value: 'me', label: 'Sólo yo' },
+                      { value: 'all', label: 'Todos los Inbox del equipo' },
+                      { value: 'admins', label: 'Inbox de administradores' },
+                      { value: 'me', label: 'Solo mis Inbox' },
                     ]}
                     onChange={v => setVisibility(v as 'all' | 'admins' | 'me')}
                   />
+                </div>
+                <div className="flex items-start justify-between gap-4 py-2 border-t border-[#f1f1ee] mt-2 pt-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a1a]">Requiere cerrar</p>
+                    <p className="text-[12px] text-[#646462] mt-0.5 leading-[16px]">Impide que los compañeros del equipo cierren la conversación<br/>hasta que este atributo tenga un valor</p>
+                  </div>
+                  <button
+                    onClick={() => setRequiresClose(v => !v)}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${requiresClose ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${requiresClose ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
                 </div>
               </div>
             </div>
@@ -3383,6 +3396,7 @@ function FinAtributosContent() {
   const [editing, setEditing] = useState<FinAtributo | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   function openEdit(a: FinAtributo) {
@@ -3494,19 +3508,26 @@ function FinAtributosContent() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo</span>
             </button>
+            <button onClick={() => setShowPreview(true)} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg>
+              <span>Vista previa</span>
+            </button>
           </div>
         </div>
       </div>
 
       {/* Hierarchical attribute list */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-6 pt-4 pb-8">
-          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-4 px-2 pb-3 border-b border-[#e9eae6] text-[13px] text-[#646462]">
+        <div className="px-6 pt-4 pb-8 overflow-x-auto">
+          <div className="min-w-[880px]">
+          <div className="grid grid-cols-[minmax(220px,2fr)_128px_108px_116px_144px_100px_100px] gap-4 px-2 pb-3 border-b border-[#e9eae6] text-[13px] text-[#646462]">
             <div>Atributo</div>
             <div>Estado</div>
+            <div>Condiciones</div>
             <div>Audiencia</div>
-            <div>Valores</div>
-            <div></div>
+            <div className="flex items-center gap-1">Conversaciones <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.4"><path d="M2 13V9M6 13V4M10 13V7M14 13V2"/></svg></div>
+            <div>Resuelto</div>
+            <div>Escalado</div>
           </div>
           {atributos.items.length === 0 ? (
             <div className="px-2 py-10 text-center text-[13px] text-[#646462]">Aún no hay atributos. Pulsa «Nuevo» para crear uno.</div>
@@ -3514,7 +3535,7 @@ function FinAtributosContent() {
             const open = !!expanded[a.id];
             return (
               <Fragment key={a.id}>
-                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-4 px-2 py-3 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]/40 cursor-pointer" onClick={() => openEdit(a)}>
+                <div className="group grid grid-cols-[minmax(220px,2fr)_128px_108px_116px_144px_100px_100px] gap-4 px-2 py-3 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]/50 cursor-pointer" onClick={() => openEdit(a)}>
                   <div className="flex items-center gap-2 min-w-0">
                     <button
                       onClick={e => { e.stopPropagation(); setExpanded(s => ({ ...s, [a.id]: !open })); }}
@@ -3524,28 +3545,37 @@ function FinAtributosContent() {
                     </button>
                     <span className="font-medium truncate">{a.name.trim() || 'Sin nombre'}</span>
                     <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462] flex-shrink-0">{a.values.length}</span>
+                    <button
+                      onClick={e => { e.stopPropagation(); openEdit(a); }}
+                      className="ml-1 opacity-0 group-hover:opacity-100 focus:opacity-100 h-6 px-2 rounded-md border border-[#e9eae6] bg-white text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7] inline-flex items-center gap-1 transition-opacity flex-shrink-0"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M11.5 2.5l2 2L6 12l-2.5.5L4 10l7.5-7.5z" strokeLinejoin="round"/></svg>
+                      Editar
+                    </button>
                   </div>
                   <div>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${a.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
                       {a.enabled ? 'Habilitado' : 'Deshabilitado'}
                     </span>
                   </div>
+                  <div className="text-[#646462]">{a.conditions.length > 0 ? a.conditions.length : '—'}</div>
                   <div className="text-[#646462]">{FIN_AUDIENCE_LABEL[a.audience] || 'Todos'}</div>
-                  <div className="text-[#646462]">{a.values.length}</div>
-                  <div className="flex justify-end">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
-                  </div>
+                  <div className="text-[#646462]">0</div>
+                  <div className="text-[#a4a4a2]">--</div>
+                  <div className="text-[#a4a4a2]">--</div>
                 </div>
                 {open && a.values.map(v => (
-                  <div key={v.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-4 px-2 py-2.5 border-b border-[#e9eae6] items-center text-[13px] text-[#646462] bg-[#fafafa]">
+                  <div key={v.id} className="grid grid-cols-[minmax(220px,2fr)_128px_108px_116px_144px_100px_100px] gap-4 px-2 py-2.5 border-b border-[#e9eae6] items-center text-[13px] text-[#646462] bg-[#fafafa]">
                     <div className="flex items-center gap-2 pl-7">
                       <span className="text-[#a4a4a2]">↳</span>
                       <span>{v.name || 'Sin nombre'}</span>
                     </div>
-                    <div className="text-[#a4a4a2]">—</div>
-                    <div className="text-[#a4a4a2] truncate">{v.description || '—'}</div>
-                    <div className="text-[#a4a4a2]">—</div>
                     <div></div>
+                    <div></div>
+                    <div></div>
+                    <div className="text-[#646462]">0</div>
+                    <div className="text-[#a4a4a2]">--</div>
+                    <div className="text-[#a4a4a2]">--</div>
                   </div>
                 ))}
                 {open && a.values.length === 0 && (
@@ -3556,6 +3586,7 @@ function FinAtributosContent() {
               </Fragment>
             );
           })}
+          </div>
         </div>
       </div>
 
@@ -3564,6 +3595,32 @@ function FinAtributosContent() {
           onPick={startNewFromTemplate}
           onClose={() => setShowTemplates(false)}
         />
+      )}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-6" onClick={() => setShowPreview(false)}>
+          <div className="bg-white rounded-[16px] border border-[#e9eae6] shadow-xl w-full max-w-[560px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+              <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Vista previa de detección</h3>
+              <button onClick={() => setShowPreview(false)} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="px-6 py-5 overflow-y-auto flex flex-col gap-3">
+              <p className="text-[13px] text-[#646462]">Así verá tu equipo los atributos que Fin detecta en una conversación:</p>
+              {atributos.items.length === 0 ? (
+                <p className="text-[13px] text-[#a4a4a2] py-4 text-center">Aún no hay atributos que previsualizar.</p>
+              ) : atributos.items.map(a => (
+                <div key={a.id} className="rounded-[12px] border border-[#e9eae6] bg-[#fafaf8] p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#0fb87f] flex-shrink-0" />
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">Fin detectó {a.name.trim() || 'Atributo'} como {a.values[0]?.name || '—'}</p>
+                  </div>
+                  {a.description && <p className="text-[12px] text-[#646462] mt-1 leading-[17px]">{a.description}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
       {editorOpen && editing && (
         <FinAtributoEditor
