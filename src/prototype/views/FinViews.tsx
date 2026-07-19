@@ -1242,7 +1242,7 @@ function FinContentMenu({ trigger, sections, align = 'left', width = 224 }: {
   );
 }
 
-function FinContenidoContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubView) => void } = {}) {
+function FinContenidoContent({ onNavigateSub, previewCollapsed, onOpenPreview }: { onNavigateSub?: (sub: FinSubView) => void; previewCollapsed?: boolean; onOpenPreview?: () => void } = {}) {
   const [refreshKey, setRefreshKey] = useState(0);
   const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
   const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
@@ -1448,6 +1448,7 @@ function FinContenidoContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubVi
               <span>Aprender</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
+            <FinVistaPreviaButton collapsed={previewCollapsed} onOpen={onOpenPreview} />
           </div>
         </div>
         <div className="px-6 pb-3 flex items-center gap-2.5">
@@ -2463,7 +2464,7 @@ function FinPautasBasicos() {
 }
 
 // ─── FinOrientacionContent: real CRUD over Pautas ────────────────────────────
-function FinOrientacionContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubView) => void } = {}) {
+function FinOrientacionContent({ onNavigateSub, previewCollapsed, onOpenPreview }: { onNavigateSub?: (sub: FinSubView) => void; previewCollapsed?: boolean; onOpenPreview?: () => void } = {}) {
   const pautas = useFinGuidanceResource(FIN_SEED_PAUTAS);
   const toast = useFinToast();
   const [editing, setEditing] = useState<FinPauta | null>(null);
@@ -2569,11 +2570,14 @@ function FinOrientacionContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSub
             <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="1.2"/><path d="M5 5.5h6M5 8h6M5 10.5h4" strokeLinecap="round"/></svg>
             <h2 className="text-[16px] font-bold text-[#1a1a1a]">Pautas</h2>
           </div>
-          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-            <span>Aprender</span>
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+              <span>Aprender</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <FinVistaPreviaButton collapsed={previewCollapsed} onOpen={onOpenPreview} />
+          </div>
         </div>
 
         <div className="px-6 py-4 flex flex-col gap-3">
@@ -3396,7 +3400,7 @@ function FinAtributoEditor({
 }
 
 // ─── Capacitar > Atributos (Figma 1:5966) ────────────────────────────────────
-function FinAtributosContent() {
+function FinAtributosContent({ previewCollapsed, onOpenPreview }: { previewCollapsed?: boolean; onOpenPreview?: () => void } = {}) {
   const atributos = useFinAttributesResource(FIN_SEED_ATRIBUTOS);
   const toast = useFinToast();
   const [editing, setEditing] = useState<FinAtributo | null>(null);
@@ -3513,6 +3517,7 @@ function FinAtributosContent() {
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo</span>
             </button>
+            <FinVistaPreviaButton collapsed={previewCollapsed} onOpen={onOpenPreview} />
           </div>
         </div>
       </div>
@@ -4427,7 +4432,7 @@ function FinEscalationGuidelineRow({
   );
 }
 
-function FinEscalamientoContent() {
+function FinEscalamientoContent({ previewCollapsed, onOpenPreview }: { previewCollapsed?: boolean; onOpenPreview?: () => void } = {}) {
   const IMG_ESCALATION_BANNER = `${FIGMA_CDN}/60cc0b0b-a88a-4cb7-9e9a-8459e11b535e`;
   const IMG_ESCALATION_LINK_BOOK = `${FIGMA_CDN}/34e259b7-ba78-42e5-9f7a-f48a3961b433`;
   const IMG_ESCALATION_CLOSE = `${FIGMA_CDN}/34dfc6d2-2f3f-4639-aa68-6573e7f751a7`;
@@ -4492,11 +4497,14 @@ function FinEscalamientoContent() {
             <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M5 7l3 3 3-3" strokeLinecap="round"/></svg>
             <h2 className="text-[16px] font-bold text-[#1a1a1a]">Escalamiento</h2>
           </div>
-          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-            <span>Aprender</span>
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+              <span>Aprender</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <FinVistaPreviaButton collapsed={previewCollapsed} onOpen={onOpenPreview} />
+          </div>
         </div>
       </div>
 
@@ -8071,6 +8079,18 @@ function FinVistaPreviaRail({ onExpand }: { onExpand: () => void }) {
   );
 }
 
+// Header "Vista previa" button — visible only when the panel is collapsed;
+// clicking it re-opens the shared side panel (which then hides this button).
+function FinVistaPreviaButton({ collapsed, onOpen }: { collapsed?: boolean; onOpen?: () => void }) {
+  if (!collapsed || !onOpen) return null;
+  return (
+    <button onClick={onOpen} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg>
+      <span>Vista previa</span>
+    </button>
+  );
+}
+
 function FinVistaPreviaPanel({ onClose }: { onClose?: () => void }) {
   return (
     <div className="w-[360px] flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
@@ -8115,6 +8135,8 @@ function readInitialFinSubFromUrl(): FinSubView {
 export function FinAiView() {
   const [sub, setSub] = useState<FinSubView>(() => readInitialFinSubFromUrl());
   const showVistaPrevia = sub === 'capContent' || sub === 'capGuidance' || sub === 'capAttributes' || sub === 'capEscalation' || sub === 'desplegar' || sub === 'depChat' || sub === 'depEmail';
+  // These sub-views render their own header "Vista previa" button (no rail).
+  const headerPreviewButton = sub === 'capContent' || sub === 'capGuidance' || sub === 'capAttributes' || sub === 'capEscalation';
   const isStudio = sub === 'studio' || sub === 'studioOverview' || sub === 'studioAgents' || sub === 'studioConnections' || sub === 'studioPermissions' || sub === 'studioKnowledge' || sub === 'studioReasoning' || sub === 'studioSafety' || sub === 'studioSuperAgent';
 
   // Persist sidebar + vista-previa collapse state per-Fin module (Inbox-style rail).
@@ -8196,10 +8218,10 @@ export function FinAiView() {
     switch (sub) {
       case 'allRoles':       return <FinAllRolesContent />;
       case 'capacitar':      return <FinPlaceholderContent title="Capacitar"   subtitle="Configura el contenido, las atribuciones y los procedimientos que entrenan a Fin." />;
-      case 'capContent':     return <FinContenidoContent onNavigateSub={setSub} />;
-      case 'capGuidance':    return <FinOrientacionContent onNavigateSub={setSub} />;
-      case 'capAttributes':  return <FinAtributosContent />;
-      case 'capEscalation':  return <FinEscalamientoContent />;
+      case 'capContent':     return <FinContenidoContent onNavigateSub={setSub} previewCollapsed={previewCollapsed} onOpenPreview={() => setPreviewCollapsed(false)} />;
+      case 'capGuidance':    return <FinOrientacionContent onNavigateSub={setSub} previewCollapsed={previewCollapsed} onOpenPreview={() => setPreviewCollapsed(false)} />;
+      case 'capAttributes':  return <FinAtributosContent previewCollapsed={previewCollapsed} onOpenPreview={() => setPreviewCollapsed(false)} />;
+      case 'capEscalation':  return <FinEscalamientoContent previewCollapsed={previewCollapsed} onOpenPreview={() => setPreviewCollapsed(false)} />;
       case 'capProcedures':  return <FinProcedimientosContent />;
       case 'probar':
       case 'pruebaTesting':  return <FinPruebasContent />;
@@ -8248,7 +8270,7 @@ export function FinAiView() {
           {renderSub()}
         </div>
         {showVistaPrevia && (previewCollapsed
-          ? <FinVistaPreviaRail onExpand={() => setPreviewCollapsed(false)} />
+          ? (headerPreviewButton ? null : <FinVistaPreviaRail onExpand={() => setPreviewCollapsed(false)} />)
           : <FinVistaPreviaPanel onClose={() => setPreviewCollapsed(true)} />)}
       </div>
       {showHelp && (
