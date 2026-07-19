@@ -7484,12 +7484,27 @@ function FinAutomatizacionesSimplesContent() {
 }
 
 // ─── Vista previa side panel (used by Contenido / Orientación / Atributos / Escalamiento) ───
-function FinVistaPreviaPanel() {
+// Collapsed rail: a slim bar on the right to bring the preview panel back.
+function FinVistaPreviaRail({ onExpand }: { onExpand: () => void }) {
+  return (
+    <div className="w-10 flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col items-center pt-3 gap-2">
+      <button
+        onClick={onExpand}
+        title="Mostrar la vista previa"
+        className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f8f8f7] text-[#646462]"
+      >
+        <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.7"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg>
+      </button>
+    </div>
+  );
+}
+
+function FinVistaPreviaPanel({ onClose }: { onClose?: () => void }) {
   return (
     <div className="w-[360px] flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-[#e9eae6]">
         <h2 className="text-[16px] font-bold text-[#1a1a1a]">Vista previa</h2>
-        <button className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f8f8f7]">
+        <button onClick={onClose} title="Cerrar la vista previa" className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f8f8f7]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
         </button>
       </div>
@@ -7530,7 +7545,7 @@ export function FinAiView() {
   const showVistaPrevia = sub === 'capContent' || sub === 'capGuidance' || sub === 'capAttributes' || sub === 'capEscalation' || sub === 'desplegar' || sub === 'depChat' || sub === 'depEmail';
   const isStudio = sub === 'studio' || sub === 'studioOverview' || sub === 'studioAgents' || sub === 'studioConnections' || sub === 'studioPermissions' || sub === 'studioKnowledge' || sub === 'studioReasoning' || sub === 'studioSafety' || sub === 'studioSuperAgent';
 
-  // Persist sidebar collapse state per-Fin module (Inbox-style rail).
+  // Persist sidebar + vista-previa collapse state per-Fin module (Inbox-style rail).
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     try {
@@ -7538,9 +7553,16 @@ export function FinAiView() {
       return raw ? Boolean(JSON.parse(raw).sidebar) : false;
     } catch { return false; }
   });
+  const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const raw = window.localStorage.getItem('clain.fin.panels');
+      return raw ? Boolean(JSON.parse(raw).preview) : false;
+    } catch { return false; }
+  });
   useEffect(() => {
-    try { window.localStorage.setItem('clain.fin.panels', JSON.stringify({ sidebar: sidebarCollapsed })); } catch { /* storage may be disabled */ }
-  }, [sidebarCollapsed]);
+    try { window.localStorage.setItem('clain.fin.panels', JSON.stringify({ sidebar: sidebarCollapsed, preview: previewCollapsed })); } catch { /* storage may be disabled */ }
+  }, [sidebarCollapsed, previewCollapsed]);
 
   // Sync /fin/:sub with current state so back/forward + reload work.
   useEffect(() => {
@@ -7653,7 +7675,9 @@ export function FinAiView() {
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           {renderSub()}
         </div>
-        {showVistaPrevia && <FinVistaPreviaPanel />}
+        {showVistaPrevia && (previewCollapsed
+          ? <FinVistaPreviaRail onExpand={() => setPreviewCollapsed(false)} />
+          : <FinVistaPreviaPanel onClose={() => setPreviewCollapsed(true)} />)}
       </div>
       {showHelp && (
         <div className="absolute inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowHelp(false)}>
