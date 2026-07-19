@@ -1836,6 +1836,7 @@ interface ConnectAppSpec {
 }
 
 const CONNECT_APPS: Record<string, ConnectAppSpec> = {
+  intercom:   { name: 'Intercom',   auth: ['oauth'], recommend: 'oauth' },
   zendesk:    { name: 'Zendesk',    domainSuffix: 'zendesk.com',      auth: ['api', 'oauth'], recommend: 'oauth', subdomainHelp: true },
   confluence: { name: 'Confluence', domainSuffix: 'atlassian.net',    auth: ['api', 'oauth'], recommend: 'oauth', subdomainHelp: true },
   freshdesk:  { name: 'Freshdesk',  domainSuffix: 'freshdesk.com',    auth: ['api'],          recommend: 'api',   subdomainHelp: true },

@@ -23,19 +23,25 @@ type KnowledgeSubView = 'fuentes' | 'contenido' | 'articulos' | 'gaps' | 'prueba
 // the same UI shell renders a single-folder filtered article list.
 
 type KhItem = { provider: string; status: string; action: string; configured: boolean; visibility?: 'public' | 'internal' };
+// Clain is the native/first-party source (create articles directly → "Agregar
+// artículo"). Every other provider — Intercom included — is an external
+// connector you sync/import from → "Sincronizar o importar".
 const KH_PUBLIC_ARTICLES: KhItem[] = [
-  { provider: 'Intercom', status: '1 artículo',     action: 'Agregar artículo',       configured: true,  visibility: 'public' },
-  { provider: 'Zendesk',  status: 'No configurado', action: 'Sincronizar o importar', configured: false, visibility: 'public' },
+  { provider: 'Clain',    status: '1 artículo',     action: 'Agregar artículo',       configured: true,  visibility: 'public' },
+  { provider: 'Intercom', status: 'No configurado', action: 'Sincronizar o importar', configured: false },
+  { provider: 'Zendesk',  status: 'No configurado', action: 'Sincronizar o importar', configured: false },
 ];
 const KH_INTERNAL_ARTICLES: KhItem[] = [
-  { provider: 'Intercom',   status: '1 artículo',     action: 'Agregar artículo',       configured: true,  visibility: 'internal' },
-  { provider: 'Guru',       status: 'No configurado', action: 'Sincronizar o importar', configured: false, visibility: 'internal' },
-  { provider: 'Notion',     status: 'No configurado', action: 'Sincronizar o importar', configured: false, visibility: 'internal' },
-  { provider: 'Confluence', status: 'No configurado', action: 'Sincronizar o importar', configured: false, visibility: 'internal' },
+  { provider: 'Clain',      status: '2 artículos',    action: 'Agregar artículo',       configured: true,  visibility: 'internal' },
+  { provider: 'Intercom',   status: 'No configurado', action: 'Sincronizar o importar', configured: false },
+  { provider: 'Guru',       status: 'No configurado', action: 'Sincronizar o importar', configured: false },
+  { provider: 'Notion',     status: 'No configurado', action: 'Sincronizar o importar', configured: false },
+  { provider: 'Confluence', status: 'No configurado', action: 'Sincronizar o importar', configured: false },
 ];
 const KH_CONVERSATIONS: KhItem[] = [
-  { provider: 'Intercom', status: 'No hay suficientes conversaciones', action: 'Administrar', configured: true },
-  { provider: 'Zendesk',  status: 'Importar los folios de atención de Zendesk (tarda entre 24 y 48 horas)', action: 'Sincronizar o importar', configured: false },
+  { provider: 'Clain',    status: 'No hay suficientes conversaciones', action: 'Administrar', configured: true },
+  { provider: 'Intercom', status: 'No configurado', action: 'Sincronizar o importar', configured: false },
+  { provider: 'Zendesk',  status: 'Importar los folios de atención (tarda entre 24 y 48 horas)', action: 'Sincronizar o importar', configured: false },
 ];
 
 // Some brands ship a very light official colour (e.g. Intercom #6AFDEF) that a
@@ -47,6 +53,10 @@ const KH_TILE_BG: Record<string, string> = {
 
 function KhProviderIcon({ name }: { name: string }) {
   const cls = "w-5 h-5 rounded-[4px] flex items-center justify-center flex-shrink-0";
+  if (name === 'Clain') {
+    // First-party source → the Clain brand mark.
+    return <img src="/logos/clain-favicon.png" alt="Clain" className="w-5 h-5 object-contain flex-shrink-0" draggable={false} />;
+  }
   const id = resolveBrandId(name);
   if (!id) {
     // Unknown brand (e.g. Guru) → neutral tile with the initial.
@@ -564,7 +574,7 @@ function KnowledgeFuentes({
         <KhSection
           title="Macros"
           description="Copilot recomendará macros que estén disponibles para tus compañeros de equipo."
-          items={withHandlers([{ provider: 'Intercom', status: '4 macros', action: 'Administrar', configured: true }])}
+          items={withHandlers([{ provider: 'Clain', status: '4 macros', action: 'Administrar', configured: true }])}
         />
         <KhSection
           title="Sitios web"
@@ -611,9 +621,10 @@ function KnowledgeFuentes({
                 <KhSection
                   title="Artículos públicos"
                   description="Permite que Fin AI Agent utilice artículos públicos de tu centro de ayuda."
-                  items={withHandlers([
-                    { provider: 'Intercom', status: 'No hay artículos…', action: 'Agregar artículo', configured: false },
-                    { provider: 'Zendesk',  status: 'No configurado',     action: 'Sincronizar o importar', configured: false },
+                  items={withHandlers<KhItem>([
+                    { provider: 'Clain',    status: 'No hay artículos…', action: 'Agregar artículo',       configured: false, visibility: 'public' },
+                    { provider: 'Intercom', status: 'No configurado',    action: 'Sincronizar o importar', configured: false },
+                    { provider: 'Zendesk',  status: 'No configurado',    action: 'Sincronizar o importar', configured: false },
                   ])}
                 />
                 <KhSection
@@ -659,14 +670,15 @@ function KnowledgeFuentes({
                 <KhSection
                   title="Macros"
                   description="Copilot recomendará macros que estén disponibles para tus compañeros de equipo."
-                  items={withHandlers([{ provider: 'Intercom', status: '4 macros para Copilot', action: 'Administrar', configured: true }])}
+                  items={withHandlers([{ provider: 'Clain', status: '4 macros para Copilot', action: 'Administrar', configured: true }])}
                 />
                 <KhSection
                   title="Artículos públicos"
                   description="Permite que Copilot utilice los artículos públicos del centro de ayuda."
-                  items={withHandlers([
-                    { provider: 'Intercom', status: 'No hay artículos…', action: 'Agregar artículo', configured: false },
-                    { provider: 'Zendesk',  status: 'No configurado',     action: 'Sincronizar o importar', configured: false },
+                  items={withHandlers<KhItem>([
+                    { provider: 'Clain',    status: 'No hay artículos…', action: 'Agregar artículo',       configured: false, visibility: 'public' },
+                    { provider: 'Intercom', status: 'No configurado',    action: 'Sincronizar o importar', configured: false },
+                    { provider: 'Zendesk',  status: 'No configurado',    action: 'Sincronizar o importar', configured: false },
                   ])}
                 />
                 <KhSection
@@ -724,9 +736,10 @@ function KnowledgeFuentes({
                 <KhSection
                   title="Artículos públicos"
                   description="Comparte artículos públicos en tu Centro de ayuda donde los clientes puedan recibir ayuda por cuenta propia."
-                  items={withHandlers([
-                    { provider: 'Intercom', status: 'No hay artículos…', action: 'Agregar artículo', configured: false },
-                    { provider: 'Zendesk',  status: 'No configurado',     action: 'Sincronizar o importar', configured: false },
+                  items={withHandlers<KhItem>([
+                    { provider: 'Clain',    status: 'No hay artículos…', action: 'Agregar artículo',       configured: false, visibility: 'public' },
+                    { provider: 'Intercom', status: 'No configurado',    action: 'Sincronizar o importar', configured: false },
+                    { provider: 'Zendesk',  status: 'No configurado',    action: 'Sincronizar o importar', configured: false },
                   ])}
                 />
               </div>
