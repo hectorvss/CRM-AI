@@ -332,17 +332,33 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
           <Chev open={openContenido} />
         </button>
         {openContenido && (
-          <div className="flex flex-col pl-7 mt-0.5 mb-0.5 gap-0.5">
+          <div className="flex flex-col pl-5 mt-0.5 mb-0.5 gap-0.5">
             <button onClick={() => onSelect('contenido')} className={itemCls(sub === 'contenido')}>
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                {/* Resumen — panel con cabecera + líneas */}
+                <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M2.4 6h11.2M5 9h6M5 11h4"/></svg>
+              </span>
               <span className="flex-1">Resumen</span>
             </button>
             <button onClick={() => onSelect('articulos')} className={itemCls(sub === 'articulos')}>
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                {/* Artículos — documento con texto */}
+                <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2h5l3 3v8.5A1.5 1.5 0 0 1 10.5 15h-6A1.5 1.5 0 0 1 3 13.5v-10A1.5 1.5 0 0 1 4.5 2z"/><path d="M9 2v3h3M5.5 8h5M5.5 10.5h3.5"/></svg>
+              </span>
               <span className="flex-1">Artículos</span>
             </button>
             <button onClick={() => onSelect('gaps')} className={itemCls(sub === 'gaps')}>
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                {/* Vacíos — lupa (análisis de huecos) */}
+                <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L14 14"/></svg>
+              </span>
               <span className="flex-1">Vacíos</span>
             </button>
             <button onClick={() => onSelect('pruebas')} className={itemCls(sub === 'pruebas')}>
+              <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                {/* Probar — matraz de laboratorio */}
+                <svg viewBox="0 0 16 16" className="w-[15px] h-[15px] fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6.5 2v4L3.6 11.4A1.4 1.4 0 0 0 4.85 13.5h6.3a1.4 1.4 0 0 0 1.25-2.1L9.5 6V2"/><path d="M5.5 2h5M5.4 9h5.2"/></svg>
+              </span>
               <span className="flex-1">Probar</span>
             </button>
           </div>
