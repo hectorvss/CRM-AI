@@ -949,7 +949,7 @@ function FinContenidoPickerModal({
 
           {/* Left — Knowledge folder tree */}
           <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6] flex items-center gap-3">
+            <div className="flex-shrink-0 h-[60px] px-5 border-b border-[#e9eae6] flex items-center gap-3">
               <div className="flex-1 h-8 rounded-[8px] border border-[#e9eae6] bg-white flex items-center px-3 gap-2 focus-within:border-[#1a1a1a] transition-colors">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
                 <input
@@ -967,13 +967,11 @@ function FinContenidoPickerModal({
               </div>
             </div>
 
-            <div className="flex-shrink-0 px-5 py-2.5 bg-[#fafaf9] border-b border-[#e9eae6]">
-              <p className="text-[12.5px] text-[#646462] leading-[18px]">
+            <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+              <p className="flex-shrink-0 px-5 pt-3 pb-2 text-[12.5px] text-[#646462] leading-[18px]">
                 Selecciona las carpetas o artículos de Knowledge que Fin podrá usar como fuente de conocimiento para responder preguntas.
               </p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto min-h-0 py-2">
+              <div className="flex-1 min-h-0 pb-2">
               {domainKeys.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-3 px-8 text-center">
                   <div className="w-10 h-10 rounded-full bg-[#f3f3f1] flex items-center justify-center">
@@ -1034,15 +1032,17 @@ function FinContenidoPickerModal({
                   );
                 })
               )}
+              </div>
             </div>
 
-            {/* Write from scratch */}
-            <div className="flex-shrink-0 px-5 py-3 border-t border-[#e9eae6] bg-[#fafaf9] flex items-center gap-3">
-              <div className="flex-1 h-px bg-[#e9eae6]"/>
-              <span className="text-[11.5px] text-[#a4a4a2] font-medium">O</span>
-              <div className="flex-1 h-px bg-[#e9eae6]"/>
-            </div>
-            <div className="flex-shrink-0 px-5 pb-4">
+            {/* Write from scratch — fixed-height footer so its top border lines
+                up with the right panel's "Guardar selección" footer. */}
+            <div className="flex-shrink-0 h-[92px] px-5 border-t border-[#e9eae6] flex flex-col justify-center gap-2.5">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-[#e9eae6]"/>
+                <span className="text-[11.5px] text-[#a4a4a2] font-medium">O</span>
+                <div className="flex-1 h-px bg-[#e9eae6]"/>
+              </div>
               <button
                 onClick={onWriteNew}
                 className="w-full h-9 rounded-[8px] border border-dashed border-[#c8c9c4] bg-white hover:bg-[#f8f8f7] hover:border-[#1a1a1a] text-[13px] font-medium text-[#1a1a1a] flex items-center justify-center gap-2 transition-colors"
@@ -1055,7 +1055,7 @@ function FinContenidoPickerModal({
 
           {/* Right — Selected items panel */}
           <div className="w-[272px] flex-shrink-0 border-l border-[#e9eae6] flex flex-col min-h-0">
-            <div className="flex-shrink-0 px-5 py-3 border-b border-[#e9eae6] bg-[#fafaf9]">
+            <div className="flex-shrink-0 h-[60px] px-5 border-b border-[#e9eae6] flex items-center">
               <p className="text-[13px] font-semibold text-[#1a1a1a]">
                 Seleccionado{' '}
                 {selectedArticles.length > 0 && (
@@ -1088,7 +1088,7 @@ function FinContenidoPickerModal({
               )}
             </div>
 
-            <div className="flex-shrink-0 px-4 py-4 border-t border-[#e9eae6] flex flex-col gap-2">
+            <div className="flex-shrink-0 h-[92px] px-4 border-t border-[#e9eae6] flex flex-col justify-center gap-2">
               <button
                 disabled={!dirty}
                 onClick={() => onConfirmSelection({ added, removed })}
