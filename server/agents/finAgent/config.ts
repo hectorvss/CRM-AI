@@ -82,7 +82,7 @@ export const FinConfigSchema = z.object({
   }).prefault({}),
   identity: z.object({
     name: z.string().default('Fin'),
-    tone: z.enum(['professional', 'friendly', 'humorous']).default('friendly'),
+    tone: z.enum(['friendly', 'neutral', 'factual', 'professional', 'humorous']).default('friendly'),
     answer_length: z.enum(['concise', 'balanced', 'thorough']).default('balanced'),
     formality: z.enum(['tú', 'usted']).default('tú'),
     languages: z.array(z.string()).default(['es', 'en']),

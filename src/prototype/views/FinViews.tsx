@@ -2032,47 +2032,92 @@ const FIN_SEED_PROCEDIMIENTOS: FinProcedimiento[] = [
   },
 ];
 
-// ─── "Básicos" card: quick tono + longitud (identity config), collapsible ────
-const FIN_TONE_ES: Record<string, string> = { professional: 'profesional', friendly: 'amistoso', humorous: 'distendido' };
-const FIN_LEN_ES: Record<string, string> = { concise: 'corta', balanced: 'estándar', thorough: 'detallada' };
+// ─── "Básicos" card: tono de voz + longitud de respuesta (identity config) ────
+type FinChoice = { value: string; label: string; icon: ReactNode };
+const _bi = (paths: ReactNode) => <svg viewBox="0 0 16 16" className="w-full h-full fill-none stroke-current" strokeWidth="1.4">{paths}</svg>;
+const FIN_TONE_OPTIONS: FinChoice[] = [
+  { value: 'friendly',     label: 'Amistoso',    icon: <svg viewBox="0 0 16 16" className="w-full h-full fill-current"><path d="M8 13.5C4.2 11.1 2 8.6 2 6a3 3 0 0 1 5.5-1.7A3 3 0 0 1 14 6c0 2.6-2.2 5.1-6 7.5z"/></svg> },
+  { value: 'neutral',      label: 'Neutro',      icon: _bi(<g fill="currentColor" stroke="none"><circle cx="4" cy="4" r="1"/><circle cx="8" cy="4" r="1"/><circle cx="12" cy="4" r="1"/><circle cx="4" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/></g>) },
+  { value: 'factual',      label: 'Hechos',      icon: _bi(<><rect x="3" y="2.5" width="10" height="11" rx="1.2"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" strokeLinecap="round"/></>) },
+  { value: 'professional', label: 'Profesional', icon: _bi(<><rect x="2.5" y="5" width="11" height="8" rx="1.2"/><path d="M6 5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1" strokeLinecap="round"/></>) },
+  { value: 'humorous',     label: 'Humorístico', icon: _bi(<><circle cx="8" cy="8" r="6"/><path d="M5.5 9.5c.6 1 1.4 1.5 2.5 1.5s1.9-.5 2.5-1.5" strokeLinecap="round"/><circle cx="6" cy="6.5" r=".6" fill="currentColor" stroke="none"/><circle cx="10" cy="6.5" r=".6" fill="currentColor" stroke="none"/></>) },
+];
+const FIN_LEN_OPTIONS: FinChoice[] = [
+  { value: 'concise',  label: 'Conciso',  icon: _bi(<path d="M3 6h6M3 10h4" strokeLinecap="round"/>) },
+  { value: 'balanced', label: 'Estándar', icon: _bi(<path d="M3 5h10M3 8h10M3 11h6" strokeLinecap="round"/>) },
+  { value: 'thorough', label: 'A fondo',  icon: _bi(<path d="M3 4h10M3 7h10M3 10h10M3 13h7" strokeLinecap="round"/>) },
+];
+const FIN_TONE_LABEL: Record<string, string> = Object.fromEntries(FIN_TONE_OPTIONS.map(o => [o.value, o.label]));
+const FIN_LEN_LABEL: Record<string, string> = Object.fromEntries(FIN_LEN_OPTIONS.map(o => [o.value, o.label]));
+
+function FinChoicePill({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`h-8 pl-2.5 pr-3 rounded-full border text-[13px] flex items-center gap-1.5 transition-colors ${active ? 'bg-[#f3f3f1] border-[#1a1a1a] text-[#1a1a1a] font-semibold' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+    >
+      <span className="w-3.5 h-3.5 flex items-center justify-center text-[#646462]">{icon}</span>
+      {label}
+    </button>
+  );
+}
+
 function FinPautasBasicos() {
-  const [cfg, setCfg] = useState<any | null>(null);
+  const [savedTone, setSavedTone] = useState('friendly');
+  const [savedLen, setSavedLen] = useState('balanced');
+  const [tone, setTone] = useState('friendly');
+  const [len, setLen] = useState('balanced');
   const [open, setOpen] = useState(false);
-  useEffect(() => { finApi.getConfig().then((c: any) => setCfg(c && typeof c === 'object' ? c : {})).catch(() => setCfg({})); }, []);
-  const id = cfg?.identity ?? {};
-  const tone = id.tone ?? 'friendly';
-  const len = id.answer_length ?? 'balanced';
-  const set = (patch: Record<string, any>) => {
-    setCfg((p: any) => ({ ...p, identity: { ...(p?.identity ?? {}), ...patch } }));
-    finApi.patchConfig({ identity: patch }).catch(() => {});
-  };
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    finApi.getConfig().then((c: any) => {
+      const id = (c && typeof c === 'object' ? c.identity : null) ?? {};
+      const t = id.tone ?? 'friendly'; const l = id.answer_length ?? 'balanced';
+      setSavedTone(t); setSavedLen(l); setTone(t); setLen(l); setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, []);
+  const dirty = tone !== savedTone || len !== savedLen;
+  function save() {
+    finApi.patchConfig({ identity: { tone, answer_length: len } }).catch(() => {});
+    setSavedTone(tone); setSavedLen(len);
+  }
+  function cancel() { setTone(savedTone); setLen(savedLen); }
+
   return (
     <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
       <button onClick={() => setOpen(o => !o)} className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[#f8f8f7]/40">
         <div className="flex items-baseline gap-2 min-w-0">
           <span className="text-[14px] font-semibold text-[#1a1a1a]">Básicos</span>
-          <span className="text-[13px] text-[#646462] truncate">Tono {FIN_TONE_ES[tone] ?? tone}, Longitud {FIN_LEN_ES[len] ?? len}</span>
+          {!open && <span className="text-[13px] text-[#646462] truncate">Tono {FIN_TONE_LABEL[savedTone] ?? savedTone}, Longitud {FIN_LEN_LABEL[savedLen] ?? savedLen}</span>}
         </div>
         <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] flex-shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
       </button>
       {open && (
-        <div className="px-4 pb-4 pt-3 border-t border-[#e9eae6] grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <label className="flex flex-col gap-1">
-            <span className="text-[12px] font-semibold text-[#646462]">Tono</span>
-            <select value={tone} onChange={e => set({ tone: e.target.value })} className="h-9 px-2 rounded-lg border border-[#e9eae6] bg-white text-[13px] focus:outline-none focus:border-[#1a1a1a]">
-              <option value="professional">Profesional</option>
-              <option value="friendly">Amistoso</option>
-              <option value="humorous">Distendido</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[12px] font-semibold text-[#646462]">Longitud de respuesta</span>
-            <select value={len} onChange={e => set({ answer_length: e.target.value })} className="h-9 px-2 rounded-lg border border-[#e9eae6] bg-white text-[13px] focus:outline-none focus:border-[#1a1a1a]">
-              <option value="concise">Corta</option>
-              <option value="balanced">Estándar</option>
-              <option value="thorough">Detallada</option>
-            </select>
-          </label>
+        <div className="border-t border-[#e9eae6]">
+          <div className="px-4 py-4">
+            <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-2.5">El tono de voz de Fin</p>
+            <div className="flex flex-wrap gap-2">
+              {FIN_TONE_OPTIONS.map(o => (
+                <Fragment key={o.value}><FinChoicePill active={tone === o.value} icon={o.icon} label={o.label} onClick={() => setTone(o.value)} /></Fragment>
+              ))}
+            </div>
+            <p className="text-[13.5px] font-semibold text-[#1a1a1a] mt-4 mb-2.5">Longitud de la respuesta de Fin</p>
+            <div className="flex flex-wrap gap-2">
+              {FIN_LEN_OPTIONS.map(o => (
+                <Fragment key={o.value}><FinChoicePill active={len === o.value} icon={o.icon} label={o.label} onClick={() => setLen(o.value)} /></Fragment>
+              ))}
+            </div>
+          </div>
+          <div className="px-4 py-3 border-t border-[#e9eae6] flex items-center justify-between gap-3">
+            <span className="text-[12.5px] text-[#646462]">Estos ajustes se aplican a los canales de correo electrónico y chat</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={cancel} disabled={!dirty} className="h-8 px-4 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50">Cancelar</button>
+              <button onClick={save} disabled={!dirty || !loaded} className={`h-8 px-4 rounded-full text-[13px] font-semibold flex items-center gap-1.5 ${dirty ? 'bg-[#1a1a1a] text-white hover:bg-black' : 'bg-[#f3f3f1] text-[#a4a4a2] cursor-not-allowed'}`}>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.7"><path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Guardar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -6782,10 +6827,12 @@ function FinSettingsContent() {
                   />
                 </FinSettingField>
                 <FinSettingField label="Tono" hint="Estilo general de las respuestas.">
-                  <select className={`${FIN_SETTINGS_INPUT} w-full max-w-[320px]`} value={id.tone ?? 'professional'} onChange={(e) => setIdentity({ tone: e.target.value })}>
+                  <select className={`${FIN_SETTINGS_INPUT} w-full max-w-[320px]`} value={id.tone ?? 'friendly'} onChange={(e) => setIdentity({ tone: e.target.value })}>
+                    <option value="friendly">Amistoso</option>
+                    <option value="neutral">Neutro</option>
+                    <option value="factual">Hechos</option>
                     <option value="professional">Profesional</option>
-                    <option value="friendly">Cercano</option>
-                    <option value="humorous">Distendido</option>
+                    <option value="humorous">Humorístico</option>
                   </select>
                 </FinSettingField>
                 <FinSettingField label="Longitud de respuesta" hint="Cuánto se extiende Fin al responder.">
