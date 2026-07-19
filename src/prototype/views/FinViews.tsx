@@ -2622,9 +2622,11 @@ function FinOrientacionContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSub
                   onClick={() => setOpenCats(s => ({ ...s, [cat.id]: !isOpen }))}
                   className="w-full flex items-center gap-3 py-1.5 text-left"
                 >
-                  <span className="w-8 h-8 rounded-full bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">{cat.icon}</span>
+                  <span className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center flex-shrink-0">
+                    <span className="flex" style={{ filter: 'brightness(0) invert(1)' }}>{cat.icon}</span>
+                  </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[14px] font-semibold text-[#1a1a1a]">
+                    <p className="text-[16px] font-bold text-[#1a1a1a]">
                       {cat.title} <span className="text-[#646462] font-normal">({items.length})</span>
                     </p>
                     <p className="text-[13px] text-[#646462] mt-0.5">{cat.description}</p>
