@@ -1874,8 +1874,8 @@ function FinAttributePopover({ groups, onPick, onClose }: {
 }
 
 // Galería de plantillas (botón "…" → "Todas las plantillas") para la categoría actual.
-function FinPlantillasModal({ categoryTitle, templates, onPick, onClose }: {
-  categoryTitle: string;
+function FinPlantillasModal({ title, templates, onPick, onClose }: {
+  title: string;
   templates: FinPautaTemplate[];
   onPick: (t: FinPautaTemplate) => void;
   onClose: () => void;
@@ -1889,7 +1889,7 @@ function FinPlantillasModal({ categoryTitle, templates, onPick, onClose }: {
     <div className="fixed inset-0 z-[60] bg-black/25 flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); onClose(); }}>
       <div className="w-full max-w-[1000px] max-h-[86vh] bg-white rounded-2xl border border-[#e9eae6] shadow-[0px_24px_64px_rgba(20,20,20,0.24)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex-shrink-0 px-6 py-4 flex items-center justify-between border-b border-[#e9eae6]">
-          <h3 className="text-[16px] font-bold text-[#1a1a1a]">{categoryTitle} plantillas</h3>
+          <h3 className="text-[16px] font-bold text-[#1a1a1a]">{title}</h3>
           <button onClick={onClose} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#ed621d]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
           </button>
@@ -2271,7 +2271,7 @@ function FinPautaEditor({
       </div>
       {templatesOpen && (
         <FinPlantillasModal
-          categoryTitle={categoryTitle}
+          title={`${categoryTitle} plantillas`}
           templates={templates}
           onPick={applyTemplate}
           onClose={() => setTemplatesOpen(false)}
@@ -3687,6 +3687,38 @@ const FIN_SEED_ESCALATION_RULES: FinEscalationRule[] = [
   },
 ];
 
+// ── Pautas de escalamiento (guías en lenguaje natural) ─────────────────────────
+type FinEscGuideline = {
+  id: string;
+  title: string;
+  body: string;
+  enabled: boolean;
+  audience: 'all' | 'users' | 'leads' | 'visitors';
+  channels: string[];
+  metrics?: { used?: number; resolved?: number; routed?: number };
+};
+
+const FIN_ESCALATION_TEMPLATES: FinPautaTemplate[] = [
+  { title: 'Escala las solicitudes de reembolso', body: 'Si un cliente solicita el reembolso de un pedido fuera del período estándar de la política de reembolso, o si desea un reembolso por un caso especial que requiere una revisión adicional, transfiérele la responsabilidad a un agente humano.' },
+  { title: 'Transfiere los retrasos en el estado de los pedidos a un nivel superior', body: 'Si un cliente informa que el estado de su pedido no se ha actualizado más allá del plazo que prometimos para su envío o entrega, transfiere la conversación a un agente humano para que solucione el problema.' },
+  { title: 'Transfiere las solicitudes de asesoría financiera a un nivel superior', body: 'No brindes asesoría financiera. Si un cliente solicita orientación financiera, canaliza la conversación a un agente humano de inmediato.' },
+  { title: 'Transfiere los reportes de fraude a un nivel superior', body: 'Si un cliente reporta una transacción fraudulenta desde el enlace de conversación o a través de cualquier otro canal, transfiere inmediatamente la conversación a un agente humano para que la atienda adecuadamente.' },
+  { title: 'Escala las solicitudes de cambio de correo electrónico', body: 'Si un cliente pregunta cómo cambiar la dirección de correo electrónico asociada con su cuenta y se requiere verificación, por motivos de seguridad, debes canalizar la conversación a un agente humano para asegurar un manejo adecuado.' },
+  { title: 'Transfiere los casos urgentes o de clientes frustrados a un nivel superior', body: 'Si un cliente parece frustrado, acosado o enojado, o si necesita que su problema se resuelva urgentemente y expresa que es apremiante, significativo para el producto o que afecta su vida, transfiérele la conversación a un agente humano de inmediato.' },
+  { title: 'Transfiere las solicitudes de consejos médicos a un nivel superior', body: 'No brindes consejos médicos ni de salud. Si un cliente solicita orientación médica, transfiere la conversación a un agente humano de inmediato.' },
+  { title: 'Transfiere las solicitudes de VPN o de elusión a un nivel superior', body: 'Si un cliente solicita ayuda para usar una VPN o eludir restricciones geográficas o de seguridad, no le ayudes y transfiere la conversación a un agente humano.' },
+  { title: 'Escala cancelaciones de inicio de sesión', body: 'Si un cliente no puede iniciar sesión y ha agotado los pasos habituales de recuperación, transfiere la conversación a un agente humano para una verificación adicional.' },
+  { title: 'Escala las preocupaciones sobre los datos', body: 'Si un cliente expresa preocupación sobre la privacidad, el uso o la eliminación de sus datos personales, transfiere la conversación a un agente humano para gestionarla adecuadamente.' },
+];
+
+const FIN_SEED_ESC_GUIDELINES: FinEscGuideline[] = [
+  {
+    id: 'seed_escg_1', title: 'Escala las solicitudes de cambio de correo electrónico',
+    body: 'Si un cliente pregunta cómo cambiar la dirección de correo electrónico asociada con su cuenta y se requiere verificación, por motivos de seguridad, debes canalizar la conversación a un agente humano para asegurar un manejo adecuado.',
+    enabled: false, audience: 'all', channels: [], metrics: { used: 0 },
+  },
+];
+
 const FIN_ESC_FIELD_ICON_PERSON = (
   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13c1-2.5 3-3.5 5-3.5s4 1 5 3.5"/></svg>
 );
@@ -4297,56 +4329,160 @@ function FinEscalationRuleRow({
 }
 
 // ─── Capacitar > Escalamiento (Figma 1:7382) ─────────────────────────────────
+// Editor inline de una "Pauta de escalamiento" (guía en lenguaje natural).
+function FinEscalationGuidelineRow({
+  guideline,
+  startExpanded,
+  onSave,
+  onDelete,
+  onToggleEnabled,
+}: {
+  guideline: FinEscGuideline;
+  startExpanded?: boolean;
+  onSave: (next: FinEscGuideline) => void;
+  onDelete: () => void;
+  onToggleEnabled: () => void;
+}) {
+  const [expanded, setExpanded] = useState<boolean>(!!startExpanded);
+  const [draft, setDraft] = useState<FinEscGuideline>(guideline);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  useEffect(() => { if (!expanded) setDraft(guideline); }, [guideline, expanded]);
+
+  function applyTemplate(t: FinPautaTemplate) {
+    setDraft(d => ({ ...d, body: t.body, title: d.title.trim() ? d.title : t.title }));
+  }
+  function save() { onSave(draft); setExpanded(false); }
+  function cancel() { setDraft(guideline); setExpanded(false); }
+
+  const audienceLabel = FIN_AUDIENCE_LABEL[guideline.audience] || 'Todos';
+  const channelsLabel = guideline.channels.length === 0 ? 'Todos los canales' : `${guideline.channels.length} canal${guideline.channels.length === 1 ? '' : 'es'}`;
+  const used = guideline.metrics?.used ?? 0;
+  const isNew = used === 0;
+
+  if (!expanded) {
+    return (
+      <div className="w-full bg-white border border-[#e9eae6] rounded-[12px] px-5 py-3.5 flex items-center gap-3 hover:bg-[#f8f8f7]/30 cursor-pointer" onClick={() => setExpanded(true)}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[14px] font-semibold text-[#1a1a1a] truncate">{guideline.title || 'Ingresa un título'}</p>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] flex-shrink-0 ${guideline.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{guideline.enabled ? 'Habilitado' : 'No habilitado'}</span>
+            {isNew && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#eef2ff] border border-[#dbe4ff] text-[12px] text-[#3b59f6] flex-shrink-0">Nuevo</span>}
+          </div>
+          <p className="text-[12px] text-[#646462] mt-1">Usado: {used} · Resuelto: {guideline.metrics?.resolved ?? '–'} · Escalado: {guideline.metrics?.routed ?? '–'}</p>
+        </div>
+        <span className="text-[12px] text-[#646462] flex-shrink-0">{audienceLabel} en {channelsLabel}</span>
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4-4 4z"/></svg>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full bg-white border border-[#e9eae6] rounded-[12px]">
+      <div className="px-5 pt-4 pb-3 flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              value={draft.title}
+              onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+              placeholder="Ingresa un título"
+              className="text-[15px] font-semibold text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent border-b border-transparent focus:border-[#1a1a1a] min-w-[200px]"
+            />
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] flex-shrink-0 ${draft.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>{draft.enabled ? 'Habilitado' : 'No habilitado'}</span>
+            {isNew && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#eef2ff] border border-[#dbe4ff] text-[12px] text-[#3b59f6] flex-shrink-0">Nuevo</span>}
+          </div>
+          <p className="text-[12px] text-[#646462] mt-1">Usado: {used} · Resuelto: {guideline.metrics?.resolved ?? '–'} · Escalado: {guideline.metrics?.routed ?? '–'}</p>
+        </div>
+        <button onClick={cancel} title="Cerrar" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462] flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+
+      <div className="px-5 py-4 border-t border-[#e9eae6]">
+        <textarea
+          value={draft.body}
+          onChange={e => setDraft(d => ({ ...d, body: e.target.value }))}
+          placeholder="Escribe tu pauta aquí; enfócate en un tema para cada pieza. Puedes probar esta pauta en la vista previa sin necesidad de guardarla ni habilitarla."
+          className="w-full min-h-[60px] text-[14px] text-[#1a1a1a] leading-[21px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {FIN_ESCALATION_TEMPLATES.slice(0, 3).map(t => (
+            <button key={t.title} onClick={() => applyTemplate(t)} title={t.body} className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] max-w-[320px] truncate">
+              {t.title}
+            </button>
+          ))}
+          <button onClick={() => setTemplatesOpen(true)} title="Todas las plantillas" className="w-8 h-8 rounded-full border border-[#e9eae6] bg-white text-[#646462] hover:bg-[#f8f8f7] flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><circle cx="4" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="12" cy="8" r="1.1"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="px-5 py-3 border-t border-[#e9eae6] flex items-center gap-2 flex-wrap">
+        <Dropdown
+          value={draft.audience}
+          items={FIN_AUDIENCE_ITEMS}
+          onChange={v => setDraft(d => ({ ...d, audience: v as FinEscGuideline['audience'] }))}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+        />
+        <FinEscalationChannelsDropdown channels={draft.channels} onChange={ch => setDraft(d => ({ ...d, channels: ch }))} />
+        <div className="flex-1" />
+        <button onClick={onDelete} title="Eliminar pauta" className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        {draft.enabled ? (
+          <button onClick={onToggleEnabled} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] text-[#1a1a1a] text-[13px] font-semibold hover:bg-[#ededea] flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+            Pausar
+          </button>
+        ) : (
+          <button onClick={onToggleEnabled} className="h-8 px-3 rounded-[8px] bg-[#16a34a] text-white text-[13px] font-semibold hover:bg-[#15803d] flex items-center gap-1.5">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+            Habilitar
+          </button>
+        )}
+        <button onClick={cancel} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Cancelar</button>
+        <button onClick={save} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.7"><path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Guardar
+        </button>
+      </div>
+
+      {templatesOpen && (
+        <FinPlantillasModal
+          title="Plantillas de transferencia y escalamiento"
+          templates={FIN_ESCALATION_TEMPLATES}
+          onPick={applyTemplate}
+          onClose={() => setTemplatesOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 function FinEscalamientoContent() {
   const IMG_ESCALATION_BANNER = `${FIGMA_CDN}/60cc0b0b-a88a-4cb7-9e9a-8459e11b535e`;
   const IMG_ESCALATION_LINK_BOOK = `${FIGMA_CDN}/34e259b7-ba78-42e5-9f7a-f48a3961b433`;
   const IMG_ESCALATION_CLOSE = `${FIGMA_CDN}/34dfc6d2-2f3f-4639-aa68-6573e7f751a7`;
-  const { data: rulesData, refetch } = useApi<any[]>(
-    () => policyRulesApi.list({ entity_type: 'fin_escalation' }),
-    [],
-    [],
-  );
   const escalationRules = useFinEscalationRulesResource(FIN_SEED_ESCALATION_RULES);
+  const guidelines = useFinResource<FinEscGuideline>('escalation_guidelines', FIN_SEED_ESC_GUIDELINES);
   const [search, setSearch] = useState('');
-  const [modal, setModal] = useState<null | 'rule' | 'guideline'>(null);
   const [justCreated, setJustCreated] = useState<string | null>(null);
+  const [justCreatedGuideline, setJustCreatedGuideline] = useState<string | null>(null);
   const toast = useFinToast();
-  const all = useMemo(() => Array.isArray(rulesData) ? rulesData : [], [rulesData]);
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? all.filter((r: any) => String(r.name || r.title || '').toLowerCase().includes(q)) : all;
-  }, [all, search]);
-  const pautas = filtered.filter((r: any) => (r.category || r.subtype) === 'guideline');
   const filteredRules = useMemo(() => {
     const q = search.trim().toLowerCase();
     return q ? escalationRules.items.filter(r => r.title.toLowerCase().includes(q)) : escalationRules.items;
   }, [escalationRules.items, search]);
+  const filteredGuidelines = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? guidelines.items.filter(g => g.title.toLowerCase().includes(q) || g.body.toLowerCase().includes(q)) : guidelines.items;
+  }, [guidelines.items, search]);
   function createBlankRule() {
-    const created = escalationRules.create({
-      title: '',
-      enabled: false,
-      audience: 'all',
-      channels: [],
-      conditions: [],
-      metrics: { used: 0 },
-    });
+    const created = escalationRules.create({ title: '', enabled: false, audience: 'all', channels: [], conditions: [], metrics: { used: 0 } });
     setJustCreated(created.id);
   }
-  async function createEscalation(category: 'rule' | 'guideline', payload: { name: string; description: string }) {
-    try {
-      await policyRulesApi.create({
-        entityType: 'fin_escalation',
-        category,
-        name: payload.name,
-        description: payload.description || undefined,
-        isActive: true,
-      });
-      toast.show(category === 'rule' ? 'Regla creada' : 'Pauta creada');
-      setModal(null);
-      refetch();
-    } catch (err: any) {
-      toast.show(err?.message || 'No se pudo crear', 'error');
-    }
+  function createBlankGuideline() {
+    const created = guidelines.create({ title: '', body: '', enabled: false, audience: 'all', channels: [], metrics: { used: 0 } });
+    setJustCreatedGuideline(created.id);
   }
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -4467,34 +4603,28 @@ function FinEscalamientoContent() {
                 </p>
               </div>
             </div>
-            <div className="mt-3 ml-9 flex items-center gap-2 flex-wrap">
-              <button onClick={() => setModal('guideline')} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-                <span>Nuevo</span>
-              </button>
-              {pautas.length === 0 ? (
-                <span className="text-[12.5px] text-[#646462]">Aún no hay pautas.</span>
-              ) : pautas.map((p: any) => (
-                <span key={p.id} className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px]">
-                  {p.name || p.title || 'Pauta'}
-                </span>
+            <div className="mt-3 ml-9 flex flex-col gap-2">
+              {filteredGuidelines.map(g => (
+                <Fragment key={g.id}>
+                  <FinEscalationGuidelineRow
+                    guideline={g}
+                    startExpanded={justCreatedGuideline === g.id}
+                    onSave={(next) => { guidelines.update(g.id, next); if (justCreatedGuideline === g.id) setJustCreatedGuideline(null); toast.show('Pauta guardada'); }}
+                    onDelete={() => { guidelines.remove(g.id); toast.show('Pauta eliminada'); }}
+                    onToggleEnabled={() => { guidelines.update(g.id, { enabled: !g.enabled }); toast.show(g.enabled ? 'Pauta pausada' : 'Pauta habilitada'); }}
+                  />
+                </Fragment>
               ))}
+              <div>
+                <button onClick={createBlankGuideline} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                  <span>Nuevo</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      {modal && (
-        <FinSimpleCreateModal
-          title={modal === 'rule' ? 'Nueva regla de escalamiento' : 'Nueva pauta de escalamiento'}
-          description={modal === 'rule'
-            ? 'Define una condición determinista (atributos + datos del cliente) que dispare un escalamiento.'
-            : 'Describe en lenguaje natural cuándo Fin debe transferir la conversación.'}
-          namePlaceholder={modal === 'rule' ? 'Escalar pagos > $1000' : 'Transfiere solicitudes de VPN…'}
-          submitLabel={modal === 'rule' ? 'Crear regla' : 'Crear pauta'}
-          onClose={() => setModal(null)}
-          onSubmit={(payload) => createEscalation(modal, payload)}
-        />
-      )}
       {toast.node}
     </div>
   );
