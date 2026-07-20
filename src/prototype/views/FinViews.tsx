@@ -9,7 +9,7 @@ import { agentsApi, aiApi, auditApi, casesApi, connectorsApi, finApi, knowledgeA
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../../components/Workflows';
 import AIStudio from '../../components/AIStudio';
 import SuperAgent from '../../components/SuperAgent';
-import { FIGMA_CDN, IMG_FIN_DEPLOY_CHAT, IMG_FIN_DEPLOY_EMAIL, IMG_FIN_PRO_TRIAL_BANNER, IMG_FIN_VOICE_BANNER } from '../assets';
+import { FIGMA_CDN, IMG_FIN_DEPLOY_CHAT, IMG_FIN_DEPLOY_EMAIL, IMG_FIN_PRO_TRIAL_BANNER } from '../assets';
 import { Dropdown, IMG_FIN_LOGO_MARK, KnowledgeArticleEditor, KnowledgeContentLibrary, KnowledgeExternalSourcePicker, KnowledgeWebsiteSyncWizard, SettingsSidebar, TrialBanner } from '../sharedUi';
 import finRoleServiceGradient from '../media/fin-role-service.jpg';
 import finRoleSalesGradient from '../media/fin-role-sales.jpg';
@@ -7238,51 +7238,70 @@ function FinDespliegueEmailContent({ onNavigateSub }: { onNavigateSub?: (sub: Fi
 
 
 // ─── Desplegar / Teléfono (Figma 1:14559) ────────────────────────────────────
-function FinDespliegueTelefonoContent() {
-  const status = useChannelDeploymentStatus(['phone', 'voice', 'aircall', 'twilio', 'telnyx', 'voip']);
+/** The in-call mock shown inside the Fin Voice hero. */
+function FinVoiceCallMock() {
+  // Deterministic pseudo-waveform: no Math.random so it renders identically.
+  const bars = Array.from({ length: 26 }, (_, i) => 4 + Math.round(22 * Math.abs(Math.sin(i * 1.7))));
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Top section header */}
-      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
-          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Teléfono</h2>
-        </div>
-        <button className={`h-7 px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[12px] ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-white border-[#e9eae6] text-[#1a1a1a]'}`}>
-          {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
-          <span>{status.label}</span>
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-        </button>
+    <div className="flex-shrink-0 rounded-[10px] bg-[#bdeab6] px-5 py-6 flex items-center gap-4" style={{ width: 400 }}>
+      <div className="flex items-center gap-[2px] h-16 flex-shrink-0">
+        {bars.map((h, i) => (
+          <span key={i} className="w-[2px] rounded-full bg-[#1a1a1a]/45" style={{ height: h }} />
+        ))}
       </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-2">
+        <div className="bg-white rounded-[8px] px-3.5 py-3 flex items-center gap-3">
+          <span className="w-7 h-7 rounded-full bg-[#f1f1ee] flex items-center justify-center flex-shrink-0">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
+          </span>
+          <span className="min-w-0">
+            <span className="block text-[13.5px] font-semibold text-[#1a1a1a] leading-[18px] truncate">Inbound call</span>
+            <span className="block text-[13px] text-[#646462] leading-[17px]">3:09</span>
+          </span>
+        </div>
+        <div className="bg-white rounded-[8px] px-3.5 py-3 flex items-center gap-3">
+          <FinDotMark className="w-5 h-5 flex-shrink-0" />
+          <span className="text-[13.5px] text-[#1a1a1a] leading-[18px] truncate">Call is in progress with Fin</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-6 py-6">
-          {/* Green hero */}
-          <div className="bg-[#a3df9a] rounded-[16px] px-7 py-7 flex items-center gap-6 overflow-hidden">
+function FinDespliegueTelefonoContent() {
+  return (
+    <div className="flex flex-col h-full min-h-0 px-6 py-5">
+      <div className="flex-1 min-h-0 bg-white border border-[#e9eae6] rounded-[14px] flex flex-col overflow-hidden">
+        <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-14 flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.2" y="3" width="11.6" height="10" rx="1.4"/><path d="M6.2 3v10"/></svg>
+          <h2 className="text-[17px] font-bold text-[#1a1a1a]">Teléfono</h2>
+        </div>
+
+        <div className="flex-1 overflow-y-auto min-h-0 p-6">
+          <div className="bg-[#a3e2a0] rounded-[14px] px-8 py-8 flex items-center gap-8">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.6px] text-[#1a1a1a] uppercase">
+              <div className="flex items-center gap-2 text-[11.5px] font-bold tracking-[1px] text-[#1a1a1a] uppercase">
                 <span className="w-2 h-2 bg-[#1a1a1a]" />
                 <span>Disponibilidad gestionada</span>
               </div>
-              <h2 className="mt-3 text-[26px] font-bold text-[#1a1a1a] leading-[32px] tracking-[-0.4px] max-w-[420px]">
-                Usa Fin Voice para manejar las llamadas de asistencia
-              </h2>
-              <p className="mt-3 text-[13px] text-[#1a1a1a]/85 leading-[20px] max-w-[480px]">
-                Fin responde las llamadas al instante, contesta con precisión y mantiene las conversaciones fluidas con seguimientos relevantes, lo que le ayuda a resolver más problemas en más canales, 24 horas al día, los 7 días de la semana.<br/>
-                La voz de Fin está en <a href="#" className="underline">disponibilidad gestionada.</a>
+              <h3 className="mt-5 text-[34px] font-bold text-[#1a1a1a] leading-[40px] tracking-[-0.5px] max-w-[440px]" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+                Responda las llamadas de sus clientes con Fin Voice
+              </h3>
+              <p className="mt-4 text-[13.5px] text-[#1a1a1a] leading-[21px] max-w-[540px]">
+                Fin responde las llamadas al instante, contesta con precisión y mantiene las conversaciones fluidas con seguimientos relevantes, lo que te ayuda a resolver más problemas en más canales, 24 horas al día, los 7 días de la semana.<br/>
+                La voz de Fin está en <a href="#" className="underline hover:no-underline">disponibilidad gestionada.</a>
               </p>
-              <div className="mt-5 flex items-center gap-4">
-                <button className="h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">
+              <div className="mt-6 flex items-center gap-5">
+                <button className="h-9 px-4 rounded-full bg-white text-[#1a1a1a] text-[13.5px] font-semibold hover:bg-[#f8f8f7]">
                   Registre su interés
                 </button>
-                <a href="#" className="text-[13px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1.5">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <a href="#" className="text-[13.5px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-2">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
                   <span>Más información</span>
                 </a>
               </div>
             </div>
-            <img src={IMG_FIN_VOICE_BANNER} alt="" className="flex-shrink-0 rounded-[8px] object-cover" style={{ width: 400, height: 260 }} />
+            <FinVoiceCallMock />
           </div>
         </div>
       </div>
