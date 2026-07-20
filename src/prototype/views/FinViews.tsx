@@ -5299,7 +5299,7 @@ function buildFinAgentContext(articles: any[]): {
 
 // ─── Probar / Pruebas (Figma 1:10409) ───────────────────────────────────────
 function FinPruebasContent() {
-  type TestQ = { id: string; q: string; rating?: 'good' | 'ok' | 'bad' | null; result?: any; status?: 'idle' | 'running' | 'done' | 'error'; error?: string };
+  type TestQ = { id: string; q: string; rating?: 'good' | 'ok' | 'bad' | null; result?: any; status?: 'idle' | 'running' | 'done' | 'error'; error?: string; note?: string };
   // Starts empty so the "Comencemos agregando preguntas" screen shows first.
   const [questions, setQuestions] = useState<TestQ[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
@@ -5312,6 +5312,7 @@ function FinPruebasContent() {
   const [addText, setAddText] = useState('');
   const [generating, setGenerating] = useState(false);
   const [bannerOpen, setBannerOpen] = useState(true);
+  const [usesOpen, setUsesOpen] = useState<Record<string, boolean>>({});
   const csvRef = useRef<HTMLInputElement>(null);
   void rightTab; void setRightTab; void promptCopied; void newQ; void setNewQ;
 
@@ -5425,6 +5426,27 @@ function FinPruebasContent() {
   function rate(id: string, rating: 'good' | 'ok' | 'bad') {
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, rating } : q));
   }
+  function setQuestionNote(id: string, note: string) {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, note } : q));
+  }
+  // Keyboard shortcuts G / A / P to rate the selected answer (as in the reference).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      const tag = (t?.tagName || '').toUpperCase();
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || t?.isContentEditable) return;
+      const k = e.key.toLowerCase();
+      const map: Record<string, 'good' | 'ok' | 'bad'> = { g: 'good', a: 'ok', p: 'bad' };
+      const r = map[k];
+      if (!r || !selectedId) return;
+      const cur = questions.find(q => q.id === selectedId);
+      if (!cur || cur.status !== 'done') return;
+      e.preventDefault();
+      rate(selectedId, r);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedId, questions]);
   const ratingLabel = (r?: 'good' | 'ok' | 'bad' | null) =>
     r === 'good' ? { txt: 'Buena',     dot: '#0fb87f' } :
     r === 'ok'   ? { txt: 'Aceptable', dot: '#f4d35e' } :
@@ -5669,52 +5691,105 @@ function FinPruebasContent() {
                   <p className="text-center text-[13px] text-[#646462] max-w-[240px]">Selecciona una pregunta de la lista para ver y evaluar la respuesta de Fin.</p>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto min-h-0 p-5 flex flex-col gap-4">
-                  <div className="flex justify-end">
-                    <div className="max-w-[85%] rounded-[14px] bg-[#1a1a1a] text-white px-4 py-2.5 text-[13.5px] leading-[19px]">{selected.q}</div>
-                  </div>
-                  {selected.status === 'running' && (
-                    <div className="flex justify-start">
-                      <div className="rounded-[14px] bg-[#f1f1ee] px-4 py-3 flex items-center gap-1">
-                        {[0, 1, 2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full bg-[#a4a4a2] animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}
-                      </div>
+                <>
+                  <div className="flex-1 overflow-y-auto min-h-0 p-5 flex flex-col gap-4">
+                    <div className="flex justify-end">
+                      <div className="max-w-[85%] rounded-[14px] bg-[#1a1a1a] text-white px-4 py-2.5 text-[13.5px] leading-[19px]">{selected.q}</div>
                     </div>
-                  )}
-                  {selected.status === 'error' && (
-                    <div className="rounded-[12px] bg-[#fef2f2] border border-[#fecaca] px-4 py-3 text-[13px] text-[#b91c1c]">{selected.error || 'Error al ejecutar'}</div>
-                  )}
-                  {selected.status === 'done' && (
-                    <>
+                    {selected.status === 'running' && (
                       <div className="flex justify-start">
-                        <div className="max-w-[92%] rounded-[14px] bg-[#f1f1ee] px-4 py-3 text-[13.5px] text-[#1a1a1a] leading-[20px] whitespace-pre-wrap">{selected.result?.answer || '(sin respuesta)'}</div>
-                      </div>
-                      {Array.isArray(selected.result?.sources) && selected.result.sources.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {selected.result.sources.slice(0, 6).map((s: any, i: number) => (
-                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#eef2ff] text-[#3b59f6] text-[11.5px]">{String(s.title || s.id).slice(0, 40)}</span>
-                          ))}
-                        </div>
-                      )}
-                      {typeof selected.result?.confidence === 'number' && (
-                        <p className="text-[12px] text-[#646462]">Confianza: {Math.round(selected.result.confidence * 100)}%</p>
-                      )}
-                      <div className="pt-1 border-t border-[#f1f1ee]">
-                        <p className="text-[12.5px] font-semibold text-[#1a1a1a] mb-2">Calificación de respuesta</p>
-                        <div className="flex items-center gap-2">
-                          {([['good', 'Buena'], ['ok', 'Aceptable'], ['bad', 'Malo']] as const).map(([val, label]) => (
-                            <button key={val} onClick={() => rate(selected.id, val)} className={`h-8 px-3 rounded-full border text-[13px] ${selected.rating === val ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>{label}</button>
-                          ))}
+                        <div className="rounded-[14px] bg-[#f1f1ee] px-4 py-3 flex items-center gap-1">
+                          {[0, 1, 2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full bg-[#a4a4a2] animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}
                         </div>
                       </div>
-                    </>
-                  )}
-                  {selected.status !== 'running' && selected.status !== 'done' && selected.status !== 'error' && (
-                    <button onClick={() => runOne(selected.id)} className="self-start h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
-                      Ejecutar
-                    </button>
-                  )}
-                </div>
+                    )}
+                    {selected.status === 'error' && (
+                      <div className="rounded-[12px] bg-[#fef2f2] border border-[#fecaca] px-4 py-3 text-[13px] text-[#b91c1c]">{selected.error || 'Error al ejecutar'}</div>
+                    )}
+                    {selected.status === 'done' && (() => {
+                      const sources: any[] = Array.isArray(selected.result?.sources) ? selected.result.sources : [];
+                      const uses: Array<{ key: string; label: string; items: string[] }> = [];
+                      if (agentCtx.activePautas.length > 0) uses.push({ key: 'pautas', label: 'Pautas', items: agentCtx.activePautas.map((p: any) => p.title || 'Pauta') });
+                      if (sources.length > 0) uses.push({ key: 'contenido', label: 'Contenido', items: sources.map((s: any) => String(s.title || s.id)) });
+                      if (agentCtx.activeAtributos.length > 0) uses.push({ key: 'atributos', label: 'Atributos', items: agentCtx.activeAtributos.map((a: any) => a.name || 'Atributo') });
+                      return (
+                        <>
+                          <div className="rounded-[12px] border border-[#e9eae6] bg-[#fafafa] px-4 py-3">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="4" cy="4" r="1.2"/><circle cx="8" cy="4" r="1.2"/><circle cx="12" cy="4" r="1.2"/><circle cx="4" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12" cy="8" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="8" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/></svg>
+                              <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin</span>
+                              <span className="text-[13px] text-[#646462]">•</span>
+                              <span className="text-[13px] text-[#646462]">AI Agent</span>
+                            </div>
+                            <p className="text-[13.5px] text-[#1a1a1a] leading-[20px] whitespace-pre-wrap">{selected.result?.answer || '(sin respuesta)'}</p>
+                          </div>
+                          {uses.length > 0 && (
+                            <div>
+                              <p className="text-[13px] text-[#646462] mb-2">Esta respuesta utiliza:</p>
+                              <div className="flex flex-col gap-2">
+                                {uses.map(u => {
+                                  const open = !!usesOpen[`${selected.id}:${u.key}`];
+                                  return (
+                                    <div key={u.key} className="rounded-[10px] border border-[#e9eae6] overflow-hidden">
+                                      <button
+                                        onClick={() => setUsesOpen(s => ({ ...s, [`${selected.id}:${u.key}`]: !open }))}
+                                        className="w-full h-11 px-4 flex items-center justify-between text-left hover:bg-[#f8f8f7]"
+                                      >
+                                        <span className="text-[13.5px] text-[#1a1a1a]">{u.label} ({u.items.length})</span>
+                                        <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${open ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                                      </button>
+                                      {open && (
+                                        <div className="px-4 pb-3 pt-1 border-t border-[#f1f1ee] flex flex-col gap-1">
+                                          {u.items.slice(0, 12).map((it, i) => (
+                                            <p key={i} className="text-[12.5px] text-[#646462] leading-[18px] truncate">· {it}</p>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          {typeof selected.result?.confidence === 'number' && (
+                            <p className="text-[12px] text-[#646462]">Confianza: {Math.round(selected.result.confidence * 100)}%</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {selected.status !== 'running' && selected.status !== 'done' && selected.status !== 'error' && (
+                      <button onClick={() => runOne(selected.id)} className="self-start h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                        Ejecutar
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Footer — Califica la respuesta de Fin */}
+                  <div className="flex-shrink-0 border-t border-[#e9eae6] px-5 py-4">
+                    <p className="text-[13.5px] font-bold text-[#1a1a1a]">Califica la respuesta de Fin</p>
+                    <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">Tu calificación se guardará en la descarga del informe. También puedes agregar una nota para ti o para tu equipo.</p>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {([['good', 'Buena', 'G', '#22c55e'], ['ok', 'Aceptable', 'A', '#facc15'], ['bad', 'Malo', 'P', '#f87171']] as const).map(([val, label, key, dot]) => (
+                        <button
+                          key={val}
+                          onClick={() => rate(selected.id, val)}
+                          className={`h-9 px-2 rounded-[8px] border text-[13px] flex items-center justify-center gap-1.5 ${selected.rating === val ? 'bg-[#f1f1ee] border-[#c8c9c4] font-medium' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}
+                        >
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: dot }} />
+                          <span className="text-[#1a1a1a] truncate">{label}</span>
+                          <span className="ml-0.5 px-1 rounded border border-[#e9eae6] bg-white text-[10px] text-[#646462] font-mono flex-shrink-0">{key}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      value={selected.note ?? ''}
+                      onChange={e => setQuestionNote(selected.id, e.target.value)}
+                      placeholder="Agregar nota interna"
+                      className="mt-2 w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
+                    />
+                  </div>
+                </>
               )}
             </div>
           </div>
