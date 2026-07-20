@@ -6103,10 +6103,112 @@ function DeploySectionLabel({ children }: { children: ReactNode }) {
   return <h5 className="text-[14px] font-bold text-[#1a1a1a] leading-[20px]">{children}</h5>;
 }
 
+/**
+ * An audience filter chip: `field is value`. Stored serialized as
+ * "field:value" inside fin…deploy.audience alongside the base segment keys.
+ */
+type FinAudienceFilter = { field: string; value: string };
+
+const FIN_AUDIENCE_FIELDS: Record<string, { label: string; options: string[] }> = {
+  owner: { label: 'Owner', options: [] },       // options filled from the agents API
+  type: { label: 'Type', options: ['users', 'leads', 'visitors'] },
+  'teammate-assigned': { label: 'Teammate assigned', options: [] },
+  'team-assigned': { label: 'Team assigned', options: [] },
+  'has-attachments': { label: 'Has attachments', options: ['true', 'false'] },
+  'copilot-used': { label: 'Copilot used', options: ['true', 'false'] },
+};
+
+function finFilterLabel(f: FinAudienceFilter): string {
+  const field = FIN_AUDIENCE_FIELDS[f.field]?.label ?? (f.field.startsWith('attr.') ? f.field.slice(5) : f.field);
+  return `${field} is ${f.value || '…'}`;
+}
+
+/** Radio list + Done, anchored under a chip. */
+function FinAudienceFilterPopover({ field, value, options, onPick, onClose }: {
+  field: string;
+  value: string;
+  options: string[];
+  onPick: (v: string) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('mousedown', onDoc); window.removeEventListener('keydown', onKey); };
+  }, [onClose]);
+  const label = FIN_AUDIENCE_FIELDS[field]?.label ?? field;
+  return (
+    <div ref={ref} className="absolute left-0 top-[calc(100%+8px)] z-40 w-[280px] bg-white rounded-[10px] border border-[#e9eae6] shadow-[0_10px_36px_rgba(20,20,20,0.18)] overflow-hidden">
+      <div className="py-2 max-h-[220px] overflow-y-auto">
+        {options.length === 0 && <p className="px-4 py-2 text-[13px] text-[#a4a4a2]">Sin valores disponibles.</p>}
+        {options.map(o => (
+          <button key={o} onClick={() => onPick(o)} className="w-full h-9 px-4 flex items-center gap-2.5 text-left hover:bg-[#f8f8f7]">
+            <span className={`w-[15px] h-[15px] rounded-full border flex items-center justify-center flex-shrink-0 ${value === o ? 'border-[#3b59f6]' : 'border-[#c8c9c4]'}`}>
+              {value === o && <span className="w-[7px] h-[7px] rounded-full bg-[#3b59f6]" />}
+            </span>
+            <span className="text-[13.5px] text-[#1a1a1a] truncate">is {o}</span>
+          </button>
+        ))}
+      </div>
+      <button onClick={onClose} className="w-full h-10 border-t border-[#e9eae6] text-[13.5px] font-medium text-[#f4643f] hover:bg-[#fdf6f3]">
+        Done
+      </button>
+    </div>
+  );
+}
+
+/**
+ * One intro bubble. Uncontrolled contenteditable so the caret survives typing;
+ * `{{token}}` renders as an attribute pill via the shared guidance helpers.
+ */
+function FinIntroMessageEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const lastPushed = useRef(value);
+  useEffect(() => {
+    // Only rewrite the DOM when the change came from outside (reset/seed),
+    // otherwise the caret would jump to the start on every keystroke.
+    if (!ref.current || value === lastPushed.current) return;
+    ref.current.innerHTML = finBodyToHtml(value);
+    lastPushed.current = value;
+  }, [value]);
+  useEffect(() => {
+    if (ref.current) ref.current.innerHTML = finBodyToHtml(value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div
+      ref={ref}
+      contentEditable
+      suppressContentEditableWarning
+      onInput={() => {
+        if (!ref.current) return;
+        const text = finSerializeBody(ref.current);
+        lastPushed.current = text;
+        onChange(text);
+      }}
+      className="fin-intro-body w-full text-[13.5px] text-[#1a1a1a] leading-[21px] focus:outline-none whitespace-pre-wrap break-words"
+    />
+  );
+}
+
 const FIN_DEPLOY_DEFAULT_INTRO = [
   'Hola {{first_name}}, estás hablando con {{agent_name}}, un AI Agent. Estoy listo para ayudarte.',
   '¿En qué puedo ayudarte?',
 ];
+
+/** Pill styling for the intro composer (neutral, with the ↔ token glyph). */
+const FIN_INTRO_PILL_CSS = `
+.fin-intro-body .fin-attr-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px 1px 5px; margin: 0 2px;
+  border: 1px solid #e0e0dc; border-radius: 6px; background: #fff;
+  color: #1a1a1a; font-size: 12.5px; line-height: 18px; white-space: nowrap;
+}
+.fin-intro-body .fin-attr-pill::before { content: '↔'; color: #a4a4a2; font-size: 11px; }
+`;
 
 const FIN_FOLLOWUP_LABEL: Record<'confirm' | 'escalate' | 'none', string> = {
   confirm: 'Fin confirmará si el usuario aún necesita asistencia.',
@@ -6222,6 +6324,8 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterQuery, setFilterQuery] = useState('');
   const [surfaceMenu, setSurfaceMenu] = useState(false);
+  const [chipOpen, setChipOpen] = useState<number | null>(null);
+  const [heroOpen, setHeroOpen] = useState(true);
 
   const seed = useCallback((d: any) => {
     setDAudience(d?.audience ?? ['Users, Leads, and Visitors']);
@@ -6265,7 +6369,7 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
     [agentsData],
   );
 
-  const audienceFilterGroups: Array<{ header?: string; items: Array<{ label: string; icon: ReactNode; disabled?: boolean }> }> = useMemo(() => {
+  const audienceFilterGroups: Array<{ header?: string; items: Array<{ field: string; label: string; icon: ReactNode; disabled?: boolean }> }> = useMemo(() => {
     let atributos: FinAtributo[] = [];
     try {
       const raw = window.localStorage.getItem('clain.fin.atributos');
@@ -6274,26 +6378,28 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
     return [
       {
         items: [
-          { label: 'Teammate assigned', icon: FIN_MI.person },
-          { label: 'Team assigned', icon: FIN_MI.people },
-          { label: 'Has attachments', icon: _dsi(<path d="M9.5 4.5L5.8 8.2a1.9 1.9 0 0 0 2.7 2.7l4-4a3.1 3.1 0 0 0-4.4-4.4l-4 4a4.3 4.3 0 0 0 6.1 6.1l3.3-3.3" strokeLinecap="round"/>) },
-          { label: 'Copilot used', icon: FIN_MI.logo },
+          { field: 'owner', label: 'Owner', icon: FIN_MI.person },
+          { field: 'type', label: 'Type', icon: FIN_MI.person },
+          { field: 'teammate-assigned', label: 'Teammate assigned', icon: FIN_MI.person },
+          { field: 'team-assigned', label: 'Team assigned', icon: FIN_MI.people },
+          { field: 'has-attachments', label: 'Has attachments', icon: _dsi(<path d="M9.5 4.5L5.8 8.2a1.9 1.9 0 0 0 2.7 2.7l4-4a3.1 3.1 0 0 0-4.4-4.4l-4 4a4.3 4.3 0 0 0 6.1 6.1l3.3-3.3" strokeLinecap="round"/>) },
+          { field: 'copilot-used', label: 'Copilot used', icon: FIN_MI.logo },
         ],
       },
       {
         header: 'Fin Attributes',
         items: atributos.length > 0
-          ? atributos.map(a => ({ label: a.name, icon: FIN_MI.logo, disabled: !a.enabled }))
+          ? atributos.map(a => ({ field: `attr.${a.name}`, label: a.name, icon: FIN_MI.logo, disabled: !a.enabled }))
           : [
-              { label: 'Issue Type', icon: FIN_MI.logo, disabled: true },
-              { label: 'Sentiment', icon: FIN_MI.logo, disabled: true },
+              { field: 'attr.issue-type', label: 'Issue Type', icon: FIN_MI.logo, disabled: true },
+              { field: 'attr.sentiment', label: 'Sentiment', icon: FIN_MI.logo, disabled: true },
             ],
       },
     ];
   }, []);
 
-  // `audience` holds the base segment keys plus any attribute filters added on
-  // top. The pill shows the segment; the filters render as removable chips.
+  // `audience` holds the base segment keys ('users') plus filters serialized as
+  // "field:value". The pill shows the segment; filters render as chips.
   const AUDIENCE_BASE: Record<string, string> = { users: 'Users', leads: 'Leads', visitors: 'Visitors' };
   const audienceLabel = useMemo(() => {
     const named = dAudience.filter(a => AUDIENCE_BASE[a]).map(a => AUDIENCE_BASE[a]);
@@ -6301,7 +6407,35 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
     if (named.length === 1) return named[0];
     return `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`;
   }, [dAudience]);
-  const audienceFilters = useMemo(() => dAudience.filter(a => !AUDIENCE_BASE[a]), [dAudience]);
+  const audienceFilters: FinAudienceFilter[] = useMemo(
+    () => dAudience.filter(a => !AUDIENCE_BASE[a] && a.includes(':')).map(a => {
+      const [field, ...rest] = a.split(':');
+      return { field, value: rest.join(':') };
+    }),
+    [dAudience],
+  );
+  const fieldOptions = useCallback((field: string) => {
+    const def = FIN_AUDIENCE_FIELDS[field];
+    if (def && def.options.length > 0) return def.options;
+    if (field.startsWith('attr.')) {
+      // Fin attribute filters offer that attribute's configured values.
+      try {
+        const raw = window.localStorage.getItem('clain.fin.atributos');
+        const list = raw ? (JSON.parse(raw) as FinAtributo[]) : [];
+        const found = list.find(a => `attr.${a.name}` === field);
+        if (found) return found.values.map(v => v.name);
+      } catch { /* ignore */ }
+      return [];
+    }
+    // Owner / assignee fields resolve against the real teammate list.
+    return teamOptions.map(t => t.name);
+  }, [teamOptions]);
+  const addAudienceFilter = useCallback((field: string) => {
+    const first = (FIN_AUDIENCE_FIELDS[field]?.options ?? [])[0] ?? teamOptions[0]?.name ?? '';
+    setDAudience(list => list.includes(`${field}:${first}`) ? list : [...list, `${field}:${first}`]);
+    setFilterOpen(false);
+    setChipOpen(audienceFilters.length); // open the new chip's popover
+  }, [teamOptions, audienceFilters.length]);
   const surfaceLabel = useMemo(() => {
     const all = FIN_DEPLOY_SURFACES.flatMap(g => g.items);
     return dSurfaces.map(k => all.find(i => i.key === k)?.label ?? k).join(', ');
@@ -6322,46 +6456,50 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Hero card */}
-      <div className="flex-shrink-0 px-6 pt-5 pb-3">
-        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
-          <div className="flex-1 min-w-0 pr-2">
-            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
-              Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales
-            </h2>
-            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
-              Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
-              <button
-                onClick={fin.toggle}
-                disabled={fin.busy || fin.enabled === null}
-                className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold disabled:opacity-50"
-              >
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                <span>
-                  {fin.enabled === null ? 'Comprobando…' : fin.enabled ? 'Fin activo en chat — desactivar' : 'Activar Fin para chat'}
-                </span>
-                {fin.enabled && <span className="inline-block w-2 h-2 rounded-full bg-[#3ba55d]" />}
-              </button>
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                <span>Usa Fin en los flujos de trabajo</span>
-              </a>
+      {/* Hero — its own card, separate from the Chat card below */}
+      {heroOpen && (
+        <div className="flex-shrink-0 px-6 pt-5 pb-3">
+          <div className="relative bg-white border border-[#e9eae6] rounded-[14px] flex gap-5 items-start overflow-hidden pl-6 pr-0 py-5">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
+                Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales
+              </h2>
+              <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
+                Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  onClick={fin.toggle}
+                  disabled={fin.busy || fin.enabled === null}
+                  className="h-9 px-3.5 rounded-full bg-[#f1f1ee] hover:bg-[#e6e6e2] flex items-center gap-2 text-[13.5px] font-semibold text-[#1a1a1a] disabled:opacity-50"
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                  <span>
+                    {fin.enabled === null ? 'Comprobando…' : fin.enabled ? 'Fin activo en chat — desactivar' : 'Activar Fin para chat'}
+                  </span>
+                  {fin.enabled && <span className="inline-block w-2 h-2 rounded-full bg-[#3ba55d]" />}
+                </button>
+                <a href="#" className="h-9 px-3.5 rounded-full bg-[#f1f1ee] hover:bg-[#e6e6e2] flex items-center gap-2 text-[13.5px] font-semibold text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                  <span>Usa Fin en los flujos de trabajo</span>
+                </a>
+              </div>
             </div>
+            <img src={IMG_FIN_DEPLOY_CHAT} alt="" className="object-cover object-top rounded-l-[10px] flex-shrink-0 self-stretch" style={{ width: 388 }} />
+            <button onClick={() => setHeroOpen(false)} className="absolute top-3 right-3 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
           </div>
-          <img src={IMG_FIN_DEPLOY_CHAT} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
-          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-          </button>
         </div>
-      </div>
+      )}
 
-      {/* Section divider with title */}
-      <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
-        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.2" y="3" width="11.6" height="10" rx="1.4"/><path d="M6.2 3v10"/></svg>
-        <h3 className="text-[17px] font-bold text-[#1a1a1a]">Chat</h3>
-      </div>
+      {/* Chat — its own card */}
+      <div className="flex-1 min-h-0 px-6 pb-6 pt-2 flex flex-col">
+        <div className="flex-1 min-h-0 bg-white border border-[#e9eae6] rounded-[14px] flex flex-col overflow-hidden">
+          <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-14 flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.2" y="3" width="11.6" height="10" rx="1.4"/><path d="M6.2 3v10"/></svg>
+            <h3 className="text-[17px] font-bold text-[#1a1a1a]">Chat</h3>
+          </div>
 
       {/* Body: accordion */}
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -6397,79 +6535,105 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
               </p>
               <div className="mt-4">
                 <DeploySectionLabel>Audiencia</DeploySectionLabel>
-                <div className="mt-2.5 flex items-center gap-3 flex-wrap">
-                  <span className="inline-flex items-center gap-2 h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13.5px] text-[#1a1a1a]">
+                <div className="mt-2.5 flex items-center gap-2.5 flex-wrap">
+                  <span className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full border border-[#e9eae6] bg-white text-[13.5px] text-[#1a1a1a]">
                     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3"><circle cx="6" cy="6" r="2"/><path d="M2.5 12.5c.4-1.9 1.8-3 3.5-3s3.1 1.1 3.5 3"/><path d="M10.5 5a2 2 0 0 1 0 3.9M11 12.5c-.2-1.3-.8-2.3-1.7-3"/></svg>
                     {audienceLabel}
                   </span>
-                  <div className="relative">
-                    <button onClick={() => setFilterOpen(o => !o)} className="flex items-center gap-1.5 text-[13.5px] text-[#f4643f] font-medium hover:underline">
-                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-                      Add filter
-                    </button>
-                    {filterOpen && (
-                      <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-[272px] bg-white rounded-[12px] shadow-[0_10px_36px_rgba(20,20,20,0.18)] border border-[#e9eae6] overflow-hidden">
-                        <div className="p-2 border-b border-[#f1f1ee]">
-                          <div className="flex items-center gap-2 h-9 px-2.5 rounded-[8px] border border-[#1a1a1a]">
-                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14" strokeLinecap="round"/></svg>
-                            <input
-                              autoFocus
-                              value={filterQuery}
-                              onChange={e => setFilterQuery(e.target.value)}
-                              placeholder="Buscar datos de personas o empresas"
-                              className="flex-1 min-w-0 text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none"
-                            />
-                          </div>
-                        </div>
-                        <div className="max-h-[220px] overflow-y-auto py-1">
-                          {audienceFilterGroups.map(g => {
-                            const items = g.items.filter(it => it.label.toLowerCase().includes(filterQuery.toLowerCase()));
-                            if (items.length === 0) return null;
-                            return (
-                              <div key={g.header ?? 'root'}>
-                                {g.header && <div className="px-3 pt-2 pb-1 text-[12.5px] font-semibold text-[#646462]">{g.header}</div>}
-                                {items.map(it => (
-                                  <button
-                                    key={it.label}
-                                    onClick={() => { if (!it.disabled) { setDAudience(a => a.includes(it.label) ? a : [...a, it.label]); setFilterOpen(false); } }}
-                                    className={`w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] ${it.disabled ? 'text-[#a4a4a2] cursor-default' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
-                                  >
-                                    <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 text-[#646462]">{it.icon}</span>
-                                    <span className="flex-1 truncate">{it.label}</span>
-                                    {it.disabled && <span className="px-1.5 h-[19px] rounded-[5px] bg-[#f1f1ee] text-[11.5px] text-[#646462] flex items-center flex-shrink-0">Deshabilitado</span>}
-                                  </button>
-                                ))}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="px-3 h-10 flex items-center gap-2 border-t border-[#f1f1ee] text-[13px] text-[#a4a4a2]">
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><path d="M4.5 12a3 3 0 0 1 .5-5.96 4 4 0 0 1 7.6-.9A2.75 2.75 0 0 1 12 12z" strokeLinejoin="round"/></svg>
-                          <span className="flex-1">Filter audience from CSV</span>
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M8 4.5v4M8 11v.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/></svg>
+                  {audienceFilters.map((f, i) => (
+                    <Fragment key={`${f.field}-${i}`}>
+                      <div className="relative">
+                        <span className={`inline-flex items-center gap-2 h-9 pl-3.5 pr-2 rounded-full border bg-white text-[13.5px] text-[#1a1a1a] ${chipOpen === i ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}>
+                          <span className="w-3.5 h-3.5 flex items-center justify-center text-[#646462] flex-shrink-0">{FIN_MI.person}</span>
+                          <button onClick={() => setChipOpen(o => o === i ? null : i)} className="max-w-[190px] truncate">{finFilterLabel(f)}</button>
+                          <button
+                            onClick={() => { setChipOpen(null); setDAudience(list => list.filter(x => x !== `${f.field}:${f.value}`)); }}
+                            title="Quitar filtro"
+                            className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${chipOpen === i ? 'bg-[#1a1a1a] text-white' : 'text-[#646462] hover:bg-[#f1f1ee]'}`}
+                          >
+                            <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-none stroke-current" strokeWidth="2"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                          </button>
+                        </span>
+                        {chipOpen === i && (
+                          <FinAudienceFilterPopover
+                            field={f.field}
+                            value={f.value}
+                            options={fieldOptions(f.field)}
+                            onPick={v => setDAudience(list => list.map(x => x === `${f.field}:${f.value}` ? `${f.field}:${v}` : x))}
+                            onClose={() => setChipOpen(null)}
+                          />
+                        )}
+                      </div>
+                      {i < audienceFilters.length - 1 && <span className="text-[13.5px] text-[#646462]">y</span>}
+                    </Fragment>
+                  ))}
+                </div>
+                <div className="relative mt-2.5 inline-block">
+                  <button onClick={() => setFilterOpen(o => !o)} className="flex items-center gap-1.5 text-[13.5px] text-[#f4643f] font-medium hover:underline">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Add filter
+                  </button>
+                  {filterOpen && (
+                    <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-[272px] bg-white rounded-[12px] shadow-[0_10px_36px_rgba(20,20,20,0.18)] border border-[#e9eae6] overflow-hidden">
+                      <div className="p-2 border-b border-[#f1f1ee]">
+                        <div className="flex items-center gap-2 h-9 px-2.5 rounded-[8px] border border-[#1a1a1a]">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14" strokeLinecap="round"/></svg>
+                          <input
+                            autoFocus
+                            value={filterQuery}
+                            onChange={e => setFilterQuery(e.target.value)}
+                            placeholder="Buscar datos de personas o empresas"
+                            className="flex-1 min-w-0 text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none"
+                          />
                         </div>
                       </div>
-                    )}
-                  </div>
+                      <div className="max-h-[220px] overflow-y-auto py-1">
+                        {audienceFilterGroups.map(g => {
+                          const items = g.items.filter(it => it.label.toLowerCase().includes(filterQuery.toLowerCase()));
+                          if (items.length === 0) return null;
+                          return (
+                            <div key={g.header ?? 'root'}>
+                              {g.header && <div className="px-3 pt-2 pb-1 text-[12.5px] font-semibold text-[#646462]">{g.header}</div>}
+                              {items.map(it => (
+                                <button
+                                  key={it.label}
+                                  onClick={() => { if (!it.disabled) addAudienceFilter(it.field); }}
+                                  className={`w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] ${it.disabled ? 'text-[#a4a4a2] cursor-default' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                                >
+                                  <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 text-[#646462]">{it.icon}</span>
+                                  <span className="flex-1 truncate">{it.label}</span>
+                                  {it.disabled && <span className="px-1.5 h-[19px] rounded-[5px] bg-[#f1f1ee] text-[11.5px] text-[#646462] flex items-center flex-shrink-0">Deshabilitado</span>}
+                                </button>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="px-3 h-10 flex items-center gap-2 border-t border-[#f1f1ee] text-[13px] text-[#a4a4a2]">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><path d="M4.5 12a3 3 0 0 1 .5-5.96 4 4 0 0 1 7.6-.9A2.75 2.75 0 0 1 12 12z" strokeLinejoin="round"/></svg>
+                        <span className="flex-1">Filter audience from CSV</span>
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M8 4.5v4M8 11v.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/></svg>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {audienceFilters.length > 0 && (
-                  <div className="mt-2.5 flex flex-wrap gap-2">
-                    {audienceFilters.map(a => (
-                      <span key={a} className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-full bg-[#f1f1ee] text-[13px] text-[#1a1a1a]">
-                        {a}
-                        <button onClick={() => setDAudience(list => list.filter(x => x !== a))} className="text-[#646462] hover:text-[#1a1a1a]">
-                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-                        </button>
-                      </span>
-                    ))}
+
+                {audienceFilters.length > 0 ? (
+                  <div className="mt-8 mb-2 flex flex-col items-center">
+                    <svg viewBox="0 0 40 28" className="w-10 h-7 fill-none stroke-[#c8c9c4]" strokeWidth="1.6" strokeLinejoin="round">
+                      <path d="M8 4h24a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z"/>
+                      <path d="M5 12h9l2 4h8l2-4h9"/>
+                    </svg>
+                    <p className="mt-2 text-[15px] font-bold text-[#646462]">No people match these rules yet</p>
                   </div>
+                ) : (
+                  <p className="mt-4 text-[13.5px] text-[#1a1a1a]">
+                    Obtén una vista previa de aproximadamente{' '}
+                    <span className="font-semibold">{audienceReach}</span>{' '}
+                    personas de esta audiencia en este momento{' '}
+                    <span className="text-[#646462]">▸</span>
+                  </p>
                 )}
-                <p className="mt-4 text-[13.5px] text-[#1a1a1a]">
-                  Obtén una vista previa de aproximadamente{' '}
-                  <span className="font-semibold">{audienceReach}</span>{' '}
-                  personas de esta audiencia en este momento{' '}
-                  <span className="text-[#646462]">▸</span>
-                </p>
               </div>
             </DeployRow>
             <DeployConnector />
@@ -6543,46 +6707,46 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
                 </p>
               </div>
 
-              <div className="mt-4 max-w-[420px] border border-[#e9eae6] rounded-[10px] p-4">
-                <div className="flex items-center gap-2.5 mb-3">
-                  <FinDotMark className="w-6 h-6" />
+              <div className="mt-4 max-w-[520px] border border-[#e9eae6] rounded-[12px] p-5">
+                <style>{FIN_INTRO_PILL_CSS}</style>
+                <div className="flex items-center gap-3 mb-4">
+                  <FinDotMark className="w-7 h-7" />
                   <div>
-                    <p className="text-[13.5px] font-bold text-[#1a1a1a] leading-[17px]">Fin</p>
-                    <p className="text-[12.5px] text-[#646462] leading-[16px]">El equipo también puede ayudar</p>
+                    <p className="text-[14.5px] font-bold text-[#1a1a1a] leading-[18px]">Fin</p>
+                    <p className="text-[13px] text-[#646462] leading-[17px]">El equipo también puede ayudar</p>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-3">
                   {dIntro.map((msg, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <div className="flex-1 min-w-0 bg-[#f1f1ee] rounded-[8px] px-3 py-2.5">
-                        <textarea
-                          rows={2}
-                          value={msg}
-                          onChange={e => setDIntro(list => list.map((m, j) => j === i ? e.target.value : m))}
-                          className="w-full bg-transparent text-[13px] text-[#1a1a1a] leading-[19px] resize-none focus:outline-none"
-                        />
-                        <div className="flex items-center gap-2 mt-1 text-[#646462]">
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.8 9.5c.5.7 1.3 1.1 2.2 1.1s1.7-.4 2.2-1.1M6 6.5v.1M10 6.5v.1" strokeLinecap="round"/></svg>
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.2"><rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M5 7.5h1.5M9.5 7.5H11M5 9.5h6"/></svg>
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.2"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2 10l3-2.5 2.5 2 3-3L14 9.5"/></svg>
+                    <div key={i} className="flex items-start gap-2.5">
+                      {/* Fin avatar sits beside the last bubble, as in the reference */}
+                      <div className="w-7 flex-shrink-0 self-end pb-2.5">
+                        {i === dIntro.length - 1 && dIntro.length > 1 && <FinDotMark className="w-7 h-7" />}
+                      </div>
+                      <div className="flex-1 min-w-0 bg-[#f1f1ee] rounded-[10px] px-3.5 py-3">
+                        <FinIntroMessageEditor value={msg} onChange={v => setDIntro(list => list.map((m, j) => j === i ? v : m))} />
+                        <div className="flex items-center gap-2.5 mt-2 text-[#646462]">
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.8 9.5c.5.7 1.3 1.1 2.2 1.1s1.7-.4 2.2-1.1M6 6.5v.1M10 6.5v.1" strokeLinecap="round"/></svg>
+                          <span className="px-1 h-[15px] rounded-[3px] border border-current text-[9px] font-bold leading-[13px] tracking-tight">GIF</span>
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.2"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2 10l3-2.5 2.5 2 3-3L14 9.5"/></svg>
                         </div>
                       </div>
-                      <div className="flex flex-col items-center gap-1.5 pt-1">
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#a4a4a2]"><circle cx="5" cy="4" r="1"/><circle cx="8" cy="4" r="1"/><circle cx="11" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="11" cy="8" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="11" cy="12" r="1"/></svg>
+                      <div className="flex flex-col items-center gap-2.5 pt-1.5 flex-shrink-0">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#a4a4a2] cursor-grab"><circle cx="5" cy="4" r="1"/><circle cx="8" cy="4" r="1"/><circle cx="11" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="11" cy="8" r="1"/></svg>
                         <button onClick={() => setDIntro(list => list.filter((_, j) => j !== i))} title="Quitar" className="text-[#e5484d] hover:text-[#b91c1c]">
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 flex items-center gap-4">
-                  <button onClick={() => setDIntro(list => [...list, ''])} className="flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] hover:underline">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                <div className="mt-4 flex items-center gap-5">
+                  <button onClick={() => setDIntro(list => [...list, ''])} className="flex items-center gap-2 text-[13.5px] font-medium text-[#1a1a1a] hover:underline">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                     Agregar mensaje
                   </button>
-                  <button onClick={() => setDIntro(FIN_DEPLOY_DEFAULT_INTRO)} className="flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] hover:underline">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <button onClick={() => setDIntro(FIN_DEPLOY_DEFAULT_INTRO)} className="flex items-center gap-2 text-[13.5px] font-medium text-[#1a1a1a] hover:underline">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2v3h3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     Restablecer introducción
                   </button>
                 </div>
@@ -6946,6 +7110,8 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
               Gestionar procedimientos
             </button>
           </div>
+        </div>
+      </div>
         </div>
       </div>
     </div>
