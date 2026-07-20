@@ -1181,8 +1181,10 @@ function FinReindexButton() {
 // ── Contenido header dropdowns (Audiencia / Filtros) ─────────────────────────
 // Small popover menus with per-item icons. Copilot/Fin rows use our own logo
 // mark (the Fin star) instead of a generic glyph.
-type FinMenuItem = { key: string; label: string; icon: ReactNode; onClick: () => void; checked?: boolean };
-type FinMenuSection = { header?: string; items: FinMenuItem[] };
+type FinMenuItem = { key: string; label: string; icon?: ReactNode; onClick: () => void; checked?: boolean; disabled?: boolean };
+/** `headerPlain` renders the section header as dark sentence case (the
+ *  "Agregar preguntas" menu) instead of the small gray caps used by filters. */
+type FinMenuSection = { header?: string; headerPlain?: boolean; items: FinMenuItem[] };
 
 // 16px monochrome glyphs used across the Contenido filter menus.
 const _mi = (paths: ReactNode) => (
@@ -1230,15 +1232,20 @@ function FinContentMenu({ trigger, sections, align = 'left', width = 224 }: {
           {sections.map((sec, si) => (
             <div key={si}>
               {si > 0 && <div className="my-1.5 border-t border-[#f1f1ee]" />}
-              {sec.header && <div className="px-3 pt-1 pb-1.5 text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide">{sec.header}</div>}
+              {sec.header && (
+                sec.headerPlain
+                  ? <div className="px-4 pt-2 pb-1.5 text-[14px] font-bold text-[#1a1a1a]">{sec.header}</div>
+                  : <div className="px-3 pt-1 pb-1.5 text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide">{sec.header}</div>
+              )}
               {sec.items.map(it => (
                 <button
                   key={it.key}
                   role="menuitem"
-                  onClick={() => { it.onClick(); setOpen(false); }}
-                  className="w-full flex items-center gap-2.5 px-3 h-8 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                  disabled={it.disabled}
+                  onClick={() => { if (it.disabled) return; it.onClick(); setOpen(false); }}
+                  className={`w-full flex items-center gap-2.5 text-left ${sec.headerPlain ? 'px-4 h-9 text-[13.5px]' : 'px-3 h-8 text-[13px]'} ${it.disabled ? 'text-[#a4a4a2] cursor-default' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
                 >
-                  <span className="w-4 h-4 flex items-center justify-center text-[#646462] flex-shrink-0">{it.icon}</span>
+                  {it.icon && <span className="w-4 h-4 flex items-center justify-center text-[#646462] flex-shrink-0">{it.icon}</span>}
                   <span className="flex-1 truncate">{it.label}</span>
                   {it.checked && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.7"><path d="M3 8.5l3.3 3.3L13 4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                 </button>
@@ -5602,11 +5609,35 @@ function FinPruebasContent() {
                     {batchRunning ? 'Ejecutando…' : 'Administrar'}
                     <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
                   </button>
-                  <button onClick={() => { setAddRows(['']); setShowAdd(true); }} className="h-8 px-3.5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-                    Agregar preguntas
-                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z"/></svg>
-                  </button>
+                  <FinContentMenu
+                    align="right"
+                    width={356}
+                    sections={[
+                      {
+                        header: 'Inbox',
+                        headerPlain: true,
+                        items: [
+                          { key: 'inbox-all', label: 'Generar más a partir de todas las conversaciones', onClick: generateFromInbox, disabled: generating },
+                          { key: 'inbox-topic', label: 'Generar más por tema', onClick: () => {}, disabled: true },
+                        ],
+                      },
+                      {
+                        header: 'Otros',
+                        headerPlain: true,
+                        items: [
+                          { key: 'csv', label: 'Carga un archivo CSV', onClick: () => csvRef.current?.click() },
+                          { key: 'manual', label: 'Agrega más preguntas manualmente', onClick: () => { setAddRows(['']); setShowAdd(true); } },
+                        ],
+                      },
+                    ]}
+                    trigger={() => (
+                      <span className="h-8 px-3.5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                        Agregar preguntas
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z"/></svg>
+                      </span>
+                    )}
+                  />
                 </div>
               </div>
 
