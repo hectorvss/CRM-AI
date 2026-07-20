@@ -771,7 +771,7 @@ function FinPlaceholderContent({ title, subtitle }: { title: string; subtitle: s
     <div className="flex-1 flex items-center justify-center min-h-0">
       <div className="flex flex-col items-center gap-3 text-center max-w-[420px] px-8">
         <div className="w-12 h-12 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center">
-          <img src={IMG_FIN_LOGO_MARK} alt="" className="w-6 h-6 object-contain" />
+          <FinDotMark className="w-6 h-6" />
         </div>
         <p className="text-[18px] font-semibold text-[#1a1a1a]">{title}</p>
         <p className="text-[13.5px] text-[#646462]">{subtitle}</p>
@@ -5921,12 +5921,12 @@ function DeployStepHeader({ kind, label }: { kind: 'polygon' | 'dark' | 'green' 
   return (
     <div className="flex items-start gap-2">
       {kind === 'polygon' && (
-        <div className="relative w-9 h-9 flex-shrink-0">
+        <div className="relative w-8 h-9 flex-shrink-0">
           <svg viewBox="0 0 32 36" className="absolute inset-0 w-8 h-9" preserveAspectRatio="none">
             <path d="M16 0 L32 9 L32 27 L16 36 L0 27 L0 9 Z" fill="#FFCF33" />
           </svg>
           {/* Waving hand */}
-          <svg viewBox="0 0 16 16" className="absolute left-[9px] top-[9px] w-[15px] h-[15px] fill-none stroke-[#1a1a1a]" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 16 16" className="absolute left-[8.5px] top-[10.5px] w-[15px] h-[15px] fill-none stroke-[#1a1a1a]" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round">
             <path d="M6.4 7.1V3.5a.85.85 0 0 1 1.7 0v3.1"/>
             <path d="M8.1 6.6V2.9a.85.85 0 0 1 1.7 0v3.7"/>
             <path d="M9.8 7V4.4a.85.85 0 0 1 1.7 0V9c0 2.3-1.5 4.2-3.6 4.2-1.9 0-3-1-3.6-2.5L3.3 8.4a.85.85 0 0 1 1.4-.95l.9 1.25V5.6a.85.85 0 0 1 1.7 0"/>
@@ -5935,7 +5935,7 @@ function DeployStepHeader({ kind, label }: { kind: 'polygon' | 'dark' | 'green' 
       )}
       {kind === 'dark' && (
         <div className="w-8 h-8 rounded-[7px] bg-[#222] flex items-center justify-center flex-shrink-0">
-          <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4 object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
+          <FinDotMark className="w-[17px] h-[17px]" fill="#ffffff" />
         </div>
       )}
       {kind === 'green' && (
@@ -5971,7 +5971,17 @@ function DeployStepHeader({ kind, label }: { kind: 'polygon' | 'dark' | 'green' 
 
 // Dashed vertical connector between rows
 function DeployConnector() {
-  return <div className="ml-[31px] h-4 border-l border-dashed border-[#e9eae6]" />;
+  // 16px = half of the 32px step icons, so the dashes run through their centre.
+  return <div className="ml-4 h-4 border-l border-dashed border-[#e9eae6]" />;
+}
+
+/** The Fin mark: a 3×3 dot grid. `IMG_FIN_LOGO_MARK` is a star, not this. */
+function FinDotMark({ className = 'w-4 h-4', fill = '#1a1a1a' }: { className?: string; fill?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} fill={fill}>
+      {[3.4, 8, 12.6].map(y => [3.4, 8, 12.6].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.35" />))}
+    </svg>
+  );
 }
 
 // Configurable row card (label + optional sub-value or pill + chevron)
@@ -6282,7 +6292,16 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
     ];
   }, []);
 
-  const audienceLabel = dAudience[0] ?? 'Users, Leads, and Visitors';
+  // `audience` holds the base segment keys plus any attribute filters added on
+  // top. The pill shows the segment; the filters render as removable chips.
+  const AUDIENCE_BASE: Record<string, string> = { users: 'Users', leads: 'Leads', visitors: 'Visitors' };
+  const audienceLabel = useMemo(() => {
+    const named = dAudience.filter(a => AUDIENCE_BASE[a]).map(a => AUDIENCE_BASE[a]);
+    if (named.length === 0) return 'Nadie';
+    if (named.length === 1) return named[0];
+    return `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`;
+  }, [dAudience]);
+  const audienceFilters = useMemo(() => dAudience.filter(a => !AUDIENCE_BASE[a]), [dAudience]);
   const surfaceLabel = useMemo(() => {
     const all = FIN_DEPLOY_SURFACES.flatMap(g => g.items);
     return dSurfaces.map(k => all.find(i => i.key === k)?.label ?? k).join(', ');
@@ -6346,7 +6365,7 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
 
       {/* Body: accordion */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-8 py-6 max-w-[720px]">
+        <div className="px-8 py-6">
           {/* Accordion 1 — Implementación sencilla (expanded) */}
           <div className="pb-6 border-b border-[#e9eae6]">
             <div className="flex items-center gap-3 pb-2">
@@ -6433,9 +6452,9 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
                     )}
                   </div>
                 </div>
-                {dAudience.length > 1 && (
+                {audienceFilters.length > 0 && (
                   <div className="mt-2.5 flex flex-wrap gap-2">
-                    {dAudience.slice(1).map(a => (
+                    {audienceFilters.map(a => (
                       <span key={a} className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-full bg-[#f1f1ee] text-[13px] text-[#1a1a1a]">
                         {a}
                         <button onClick={() => setDAudience(list => list.filter(x => x !== a))} className="text-[#646462] hover:text-[#1a1a1a]">
@@ -6526,7 +6545,7 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
 
               <div className="mt-4 max-w-[420px] border border-[#e9eae6] rounded-[10px] p-4">
                 <div className="flex items-center gap-2.5 mb-3">
-                  <img src={IMG_FIN_LOGO_MARK} alt="" className="w-6 h-6 object-contain" />
+                  <FinDotMark className="w-6 h-6" />
                   <div>
                     <p className="text-[13.5px] font-bold text-[#1a1a1a] leading-[17px]">Fin</p>
                     <p className="text-[12.5px] text-[#646462] leading-[16px]">El equipo también puede ayudar</p>
@@ -6761,7 +6780,7 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
                     </p>
                     <div className="mt-3 bg-[#f8f8f7] rounded-[8px] p-3.5">
                       <div className="flex items-center gap-2 mb-1.5">
-                        <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4 object-contain" />
+                        <FinDotMark className="w-4 h-4" />
                         <span className="text-[13px] font-bold text-[#1a1a1a]">Fin</span>
                       </div>
                       <p className="text-[13px] text-[#1a1a1a] leading-[19px]">
