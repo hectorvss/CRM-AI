@@ -3,7 +3,7 @@
 // Extracted from the monolithic Prototype.tsx (auto-split, behavior-preserving).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { agentsApi, aiApi, auditApi, casesApi, connectorsApi, finApi, knowledgeApi, policyRulesApi, reportsApi, type FinGuidancePiece } from '../../api/client';
 import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../../components/Workflows';
@@ -5975,24 +5975,193 @@ function DeployConnector() {
 }
 
 // Configurable row card (label + optional sub-value or pill + chevron)
-function DeployRow({ label, value, pill, onClick }: { label: string; value?: string; pill?: { text: string; bg?: string; icon?: 'warn' }; onClick?: () => void }) {
+function DeployRow({ label, value, pill, onClick, open, onToggle, children, footer }: {
+  label: string;
+  value?: string;
+  pill?: { text: string; bg?: string; icon?: 'warn' };
+  onClick?: () => void;
+  /** When `onToggle` is given the row becomes an accordion; `children` is its body. */
+  open?: boolean;
+  onToggle?: () => void;
+  children?: ReactNode;
+  footer?: ReactNode;
+}) {
+  const head = (
+    <div className="flex items-center gap-3 min-w-0">
+      <span className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] flex-shrink-0">{label}</span>
+      {value && !open && <span className="text-[13px] text-[#81817e] leading-[20px] truncate">{value}</span>}
+      {pill && !open && (
+        <span className={`inline-flex items-center gap-1.5 px-2 h-[22px] rounded-full text-[13px] text-[#1a1a1a] ${pill.bg ?? 'bg-[#feecaf]'}`}>
+          {pill.icon === 'warn' && (
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="8" cy="8" r="6.5" stroke="#1a1a1a" strokeWidth="1.2" fill="none"/><path d="M8 4.5v4M8 11v.1" stroke="#1a1a1a" strokeWidth="1.3" strokeLinecap="round"/></svg>
+          )}
+          <span>{pill.text}</span>
+        </span>
+      )}
+    </div>
+  );
+
+  if (!onToggle) {
+    return (
+      <button onClick={onClick} className="w-full bg-white border border-[#e9eae6] rounded-[16px] px-4 h-[52px] flex items-center justify-between hover:bg-[#fbfbf9] text-left">
+        {head}
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+    );
+  }
+
   return (
-    <button onClick={onClick} className="w-full bg-white border border-[#e9eae6] rounded-[16px] px-4 h-[52px] flex items-center justify-between hover:bg-[#fbfbf9] text-left">
-      <div className="flex items-center gap-3 min-w-0">
-        <span className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] flex-shrink-0">{label}</span>
-        {value && <span className="text-[13px] text-[#81817e] leading-[20px] truncate">{value}</span>}
-        {pill && (
-          <span className={`inline-flex items-center gap-1.5 px-2 h-[22px] rounded-full text-[13px] text-[#1a1a1a] ${pill.bg ?? 'bg-[#feecaf]'}`}>
-            {pill.icon === 'warn' && (
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="8" cy="8" r="6.5" stroke="#1a1a1a" strokeWidth="1.2" fill="none"/><path d="M8 4.5v4M8 11v.1" stroke="#1a1a1a" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            )}
-            <span>{pill.text}</span>
-          </span>
-        )}
-      </div>
-      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    <div className={`w-full bg-white border border-[#e9eae6] rounded-[16px] ${open ? 'shadow-[0_2px_10px_rgba(20,20,20,0.06)]' : ''}`}>
+      <button onClick={onToggle} className={`w-full px-4 h-[52px] flex items-center justify-between text-left ${open ? '' : 'hover:bg-[#fbfbf9] rounded-[16px]'}`}>
+        {head}
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4">
+          <path d={open ? 'M4 6l4 4 4-4' : 'M6 4l4 4-4 4'} strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+      {open && (
+        <>
+          <div className="border-t border-[#f1f1ee] px-5 pt-4 pb-5">{children}</div>
+          {footer}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Dashed-top footer with the Cancelar / Guardar pair used by every panel. */
+function DeployFooter({ onCancel, onSave, saving, dirty }: { onCancel: () => void; onSave: () => void; saving?: boolean; dirty?: boolean }) {
+  return (
+    <div className="border-t border-dashed border-[#e0e0dc] px-5 py-3 flex items-center justify-end gap-2">
+      <button onClick={onCancel} className="h-9 px-4 rounded-full bg-[#f1f1ee] text-[13.5px] font-semibold text-[#1a1a1a] hover:bg-[#e6e6e2]">Cancelar</button>
+      <button
+        onClick={onSave}
+        disabled={saving || dirty === false}
+        className="h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13.5px] font-semibold hover:bg-black disabled:opacity-40"
+      >{saving ? 'Guardando…' : 'Guardar'}</button>
+    </div>
+  );
+}
+
+/** Read-only panels close instead of saving. */
+function DeployCloseFooter({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="border-t border-dashed border-[#e0e0dc] px-5 py-3 flex items-center justify-end">
+      <button onClick={onClose} className="h-9 px-4 rounded-full bg-[#f1f1ee] text-[13.5px] font-semibold text-[#1a1a1a] hover:bg-[#e6e6e2]">Cerrar</button>
+    </div>
+  );
+}
+
+function DeploySwitch({ on, onChange }: { on: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      className={`w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${on ? 'bg-[#1a1a1a]' : 'bg-[#d4d4d2]'}`}
+    >
+      <span className={`absolute top-0.5 left-0 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
     </button>
   );
+}
+
+function DeployRadio({ checked, onSelect, label, hint }: { checked: boolean; onSelect: () => void; label: string; hint?: string }) {
+  return (
+    <button onClick={onSelect} className="w-full flex items-start gap-2.5 text-left py-1.5">
+      <span className={`mt-[3px] w-[15px] h-[15px] rounded-full border flex items-center justify-center flex-shrink-0 ${checked ? 'border-[#3b59f6]' : 'border-[#c8c9c4]'}`}>
+        {checked && <span className="w-[7px] h-[7px] rounded-full bg-[#3b59f6]" />}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[13.5px] text-[#1a1a1a] leading-[19px]">{label}</span>
+        {hint && <span className="block text-[13px] text-[#646462] leading-[18px] mt-0.5">{hint}</span>}
+      </span>
+    </button>
+  );
+}
+
+function DeployCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <button onClick={onChange} className="flex items-center gap-2.5 text-left py-1">
+      <span className={`w-[15px] h-[15px] rounded-[3px] border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-[#3b59f6] border-[#3b59f6]' : 'bg-white border-[#c8c9c4]'}`}>
+        {checked && <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="2.4"><path d="M3 8.5l3.3 3.3L13 4.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </span>
+      <span className="text-[13.5px] text-[#1a1a1a] leading-[19px]">{label}</span>
+    </button>
+  );
+}
+
+/** Section label used inside the expanded panels ("Audiencia", "Canales"…). */
+function DeploySectionLabel({ children }: { children: ReactNode }) {
+  return <h5 className="text-[14px] font-bold text-[#1a1a1a] leading-[20px]">{children}</h5>;
+}
+
+const FIN_DEPLOY_DEFAULT_INTRO = [
+  'Hola {{first_name}}, estás hablando con {{agent_name}}, un AI Agent. Estoy listo para ayudarte.',
+  '¿En qué puedo ayudarte?',
+];
+
+const FIN_FOLLOWUP_LABEL: Record<'confirm' | 'escalate' | 'none', string> = {
+  confirm: 'Fin confirmará si el usuario aún necesita asistencia.',
+  escalate: 'Fin ofrecerá escalar el caso.',
+  none: 'Sin seguimiento',
+};
+
+const _dsi = (paths: ReactNode) => <svg viewBox="0 0 16 16" className="w-full h-full fill-none stroke-current" strokeWidth="1.3">{paths}</svg>;
+
+/** Surfaces Fin can run on. `installable` ones are not connected yet. */
+const FIN_DEPLOY_SURFACES: Array<{ header: string; items: Array<{ key: string; label: string; icon: ReactNode; installable?: boolean }> }> = [
+  {
+    header: 'Messenger',
+    items: [
+      { key: 'web', label: 'Web', icon: _dsi(<><rect x="2" y="3" width="12" height="9" rx="1.4"/><path d="M2 6h12M5.5 14h5"/></>) },
+      { key: 'ios', label: 'iOS', icon: _dsi(<><rect x="4.5" y="1.8" width="7" height="12.4" rx="1.6"/><path d="M7 12.6h2"/></>) },
+      { key: 'android', label: 'Android', icon: _dsi(<><path d="M3.5 7.5h9v4.5a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1z"/><path d="M4.2 7.5a3.8 3.8 0 0 1 7.6 0M5.6 3.2l.9 1.4M10.4 3.2l-.9 1.4"/></>) },
+    ],
+  },
+  {
+    header: 'Redes sociales',
+    items: [
+      { key: 'whatsapp', label: 'WhatsApp', icon: _dsi(<><path d="M2.6 13.4l.8-2.8a5.4 5.4 0 1 1 2.1 2z" strokeLinejoin="round"/></>), installable: true },
+      { key: 'facebook', label: 'Facebook', icon: _dsi(<><circle cx="8" cy="8" r="6"/><path d="M9.6 5.4H8.8c-.6 0-.9.3-.9.9V8h1.6l-.2 1.6H7.9V13"/></>), installable: true },
+      { key: 'instagram', label: 'Instagram', icon: _dsi(<><rect x="2.8" y="2.8" width="10.4" height="10.4" rx="3"/><circle cx="8" cy="8" r="2.4"/><circle cx="11" cy="5" r=".7" fill="currentColor" stroke="none"/></>), installable: true },
+    ],
+  },
+  {
+    header: 'Otros',
+    items: [
+      { key: 'sms', label: 'SMS', icon: _dsi(<><rect x="4.5" y="1.8" width="7" height="12.4" rx="1.6"/><path d="M7 12.6h2"/></>), installable: true },
+      { key: 'slack', label: 'Slack', icon: _dsi(<><path d="M6.4 2.6a1.3 1.3 0 1 1 1.3 1.3H6.4zM2.6 9.6a1.3 1.3 0 1 1 1.3-1.3v1.3zM9.6 13.4a1.3 1.3 0 1 1-1.3-1.3h1.3zM13.4 6.4a1.3 1.3 0 1 1-1.3 1.3V6.4z"/></>), installable: true },
+      { key: 'discord', label: 'Discord', icon: _dsi(<><path d="M5.4 4.4a9 9 0 0 1 5.2 0M4.6 11.6a9 9 0 0 0 6.8 0" /><path d="M5.4 4.4C3.9 5.6 3 7.6 3 10c0 .9.8 1.6 1.6 1.6M10.6 4.4C12.1 5.6 13 7.6 13 10c0 .9-.8 1.6-1.6 1.6" strokeLinejoin="round"/><circle cx="6.4" cy="8.6" r=".8" fill="currentColor" stroke="none"/><circle cx="9.6" cy="8.6" r=".8" fill="currentColor" stroke="none"/></>), installable: true },
+      { key: 'telegram', label: 'Telegram', icon: _dsi(<><path d="M14 3L2.4 7.6l3.2 1.1L12.4 5 7.2 9.6l-.2 3 1.9-2.2 3.2 2.3z" strokeLinejoin="round"/></>), installable: true },
+    ],
+  },
+];
+
+/**
+ * Loads fin.channels[channel].deploy and exposes a draft the panels edit
+ * locally; `save` PATCHes only the touched sub-object so sibling panels that
+ * were never opened keep their stored values.
+ */
+function useFinDeploy(channel: 'chat' | 'email' | 'whatsapp') {
+  const [cfg, setCfg] = useState<any | null>(null);
+  const [saving, setSaving] = useState(false);
+  const reload = useCallback(() => {
+    finApi.getConfig()
+      .then(c => setCfg((c as any)?.channels?.[channel]?.deploy ?? {}))
+      .catch(() => setCfg({}));
+  }, [channel]);
+  useEffect(() => { reload(); }, [reload]);
+  const save = useCallback(async (patch: any) => {
+    setSaving(true);
+    try {
+      await finApi.patchConfig({ channels: { [channel]: { deploy: patch } } } as any);
+      setCfg((prev: any) => ({ ...(prev ?? {}), ...patch }));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [channel]);
+  return { cfg, saving, save, reload };
 }
 
 function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubView) => void } = {}) {
@@ -6005,14 +6174,133 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
     () => (Array.isArray(articlesRaw) ? articlesRaw : []).filter((a: any) => (a.finService ?? a.fin_service)).length,
     [articlesRaw],
   );
-  const pautaCount = useMemo(() => {
-    try {
-      const raw = window.localStorage.getItem('clain.fin.pautas');
-      const list = raw ? (JSON.parse(raw) as FinPauta[]) : [];
-      return list.filter(p => p.enabled).length;
-    } catch { return 0; }
+  const guidanceSummary = useMemo(() => {
+    function readLS<T>(k: string): T[] {
+      try { const raw = window.localStorage.getItem(k); return raw ? (JSON.parse(raw) as T[]) : []; } catch { return []; }
+    }
+    const pautas = readLS<FinPauta>('clain.fin.pautas').filter(p => p.enabled).length;
+    const escalations = readLS<FinEscalationRule>('clain.fin.escalation_rules').filter(r => r.enabled).length;
+    return { pautas, escalations, total: pautas + escalations };
   }, []);
   const canActivate = finContentCount > 0;
+
+  // ── Expandable rows ────────────────────────────────────────────────────────
+  type DeployRowKey = 'audience' | 'surfaces' | 'intro' | 'content' | 'guidance' | 'handover' | 'csat' | 'followup' | 'autoclose';
+  const [openRow, setOpenRow] = useState<DeployRowKey | null>(null);
+  const { cfg: deploy, saving, save } = useFinDeploy('chat');
+
+  // Drafts. They re-seed from the stored config whenever it (re)loads so a
+  // cancelled edit is discarded and a saved one sticks.
+  const [dAudience, setDAudience] = useState<string[]>([]);
+  const [dSurfaces, setDSurfaces] = useState<string[]>([]);
+  const [dIntro, setDIntro] = useState<string[]>(FIN_DEPLOY_DEFAULT_INTRO);
+  const [dIntroEnabled, setDIntroEnabled] = useState(true);
+  const [dHandoverMode, setDHandoverMode] = useState<'transfer' | 'close'>('transfer');
+  const [dAssignTo, setDAssignTo] = useState('');
+  const [dCollectInfo, setDCollectInfo] = useState(false);
+  const [dCsatPositive, setDCsatPositive] = useState(false);
+  const [dCsatInactive, setDCsatInactive] = useState(false);
+  const [dCsatLock, setDCsatLock] = useState(false);
+  const [dFollowup, setDFollowup] = useState<'confirm' | 'escalate' | 'none'>('confirm');
+  const [dFollowupMin, setDFollowupMin] = useState(4);
+  const [dAcDays, setDAcDays] = useState(0);
+  const [dAcHours, setDAcHours] = useState(0);
+  const [dAcMinutes, setDAcMinutes] = useState(3);
+  const [dAcAnswered, setDAcAnswered] = useState(true);
+  const [dAcUnresolved, setDAcUnresolved] = useState(false);
+  const [dAcMessage, setDAcMessage] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterQuery, setFilterQuery] = useState('');
+  const [surfaceMenu, setSurfaceMenu] = useState(false);
+
+  const seed = useCallback((d: any) => {
+    setDAudience(d?.audience ?? ['Users, Leads, and Visitors']);
+    setDSurfaces(d?.surfaces ?? ['web', 'ios', 'android']);
+    setDIntro(d?.intro?.messages ?? FIN_DEPLOY_DEFAULT_INTRO);
+    setDIntroEnabled(d?.intro?.enabled ?? true);
+    setDHandoverMode(d?.handover?.mode ?? 'transfer');
+    setDAssignTo(d?.handover?.assignTo ?? d?.handover?.assign_to ?? '');
+    setDCollectInfo(d?.handover?.collectInfo ?? d?.handover?.collect_info ?? false);
+    setDCsatPositive(d?.csat?.onPositive ?? d?.csat?.on_positive ?? false);
+    setDCsatInactive(d?.csat?.onInactive ?? d?.csat?.on_inactive ?? false);
+    setDCsatLock(d?.csat?.lockRating ?? d?.csat?.lock_rating ?? false);
+    setDFollowup(d?.followup?.mode ?? 'confirm');
+    setDFollowupMin(d?.followup?.minutes ?? 4);
+    setDAcDays(d?.autoClose?.days ?? d?.auto_close?.days ?? 0);
+    setDAcHours(d?.autoClose?.hours ?? d?.auto_close?.hours ?? 0);
+    setDAcMinutes(d?.autoClose?.minutes ?? d?.auto_close?.minutes ?? 3);
+    setDAcAnswered(d?.autoClose?.whenAnswered ?? d?.auto_close?.when_answered ?? true);
+    setDAcUnresolved(d?.autoClose?.whenUnresolved ?? d?.auto_close?.when_unresolved ?? false);
+    setDAcMessage(d?.autoClose?.message ?? d?.auto_close?.message ?? '');
+  }, []);
+  useEffect(() => { if (deploy) seed(deploy); }, [deploy, seed]);
+
+  function toggleRow(key: DeployRowKey) {
+    setFilterOpen(false);
+    setSurfaceMenu(false);
+    setOpenRow(cur => {
+      if (cur === key) { seed(deploy); return null; } // collapsing discards the draft
+      return key;
+    });
+  }
+  async function commit(patch: any) {
+    const ok = await save(patch);
+    if (ok) setOpenRow(null);
+  }
+
+  // Teams available as handover targets.
+  const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
+  const teamOptions = useMemo(
+    () => (Array.isArray(agentsData) ? agentsData : []).slice(0, 12).map((a: any) => ({ id: String(a.id), name: a.name || a.email || String(a.id) })),
+    [agentsData],
+  );
+
+  const audienceFilterGroups: Array<{ header?: string; items: Array<{ label: string; icon: ReactNode; disabled?: boolean }> }> = useMemo(() => {
+    let atributos: FinAtributo[] = [];
+    try {
+      const raw = window.localStorage.getItem('clain.fin.atributos');
+      atributos = raw ? (JSON.parse(raw) as FinAtributo[]) : [];
+    } catch { /* ignore */ }
+    return [
+      {
+        items: [
+          { label: 'Teammate assigned', icon: FIN_MI.person },
+          { label: 'Team assigned', icon: FIN_MI.people },
+          { label: 'Has attachments', icon: _dsi(<path d="M9.5 4.5L5.8 8.2a1.9 1.9 0 0 0 2.7 2.7l4-4a3.1 3.1 0 0 0-4.4-4.4l-4 4a4.3 4.3 0 0 0 6.1 6.1l3.3-3.3" strokeLinecap="round"/>) },
+          { label: 'Copilot used', icon: FIN_MI.logo },
+        ],
+      },
+      {
+        header: 'Fin Attributes',
+        items: atributos.length > 0
+          ? atributos.map(a => ({ label: a.name, icon: FIN_MI.logo, disabled: !a.enabled }))
+          : [
+              { label: 'Issue Type', icon: FIN_MI.logo, disabled: true },
+              { label: 'Sentiment', icon: FIN_MI.logo, disabled: true },
+            ],
+      },
+    ];
+  }, []);
+
+  const audienceLabel = dAudience[0] ?? 'Users, Leads, and Visitors';
+  const surfaceLabel = useMemo(() => {
+    const all = FIN_DEPLOY_SURFACES.flatMap(g => g.items);
+    return dSurfaces.map(k => all.find(i => i.key === k)?.label ?? k).join(', ');
+  }, [dSurfaces]);
+  const audienceReach = useMemo(() => {
+    // Rough reach estimate; the real segment size needs a customers count API.
+    const base = Array.isArray(articlesRaw) ? articlesRaw.length * 37 : 0;
+    return base > 0 ? base.toLocaleString('es-ES') : '—';
+  }, [articlesRaw]);
+  const csatLabel = (dCsatPositive || dCsatInactive) ? 'Habilitado' : 'Deshabilitado';
+  const autoCloseLabel = useMemo(() => {
+    const parts: string[] = [];
+    if (dAcDays) parts.push(`${dAcDays} día${dAcDays !== 1 ? 's' : ''}`);
+    if (dAcHours) parts.push(`${dAcHours} hora${dAcHours !== 1 ? 's' : ''}`);
+    if (dAcMinutes) parts.push(`${dAcMinutes} minuto${dAcMinutes !== 1 ? 's' : ''}`);
+    return parts.join(' ') || 'Desactivado';
+  }, [dAcDays, dAcHours, dAcMinutes]);
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -6076,44 +6364,495 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
             {/* Section 1: cuando inicia conversación */}
             <DeployStepHeader kind="polygon" label="Cuando un cliente inicia una conversación" />
             <DeployConnector />
-            <DeployRow label="Los clientes ven a Fin" value="Users, Leads, and Visitors" />
+
+            <DeployRow
+              label="Los clientes ven a Fin"
+              value={audienceLabel}
+              open={openRow === 'audience'}
+              onToggle={() => toggleRow('audience')}
+              footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ audience: dAudience })} saving={saving} />}
+            >
+              <p className="text-[13.5px] text-[#646462] leading-[20px]">
+                Elige quién ve a Fin y en qué canales. Usa filtros de audiencia y atributos de datos para segmentar aún más a tus clientes.{' '}
+                <a href="#" className="text-[#3b59f6] hover:underline">Configurar Fin a través del chat.</a>
+              </p>
+              <div className="mt-4">
+                <DeploySectionLabel>Audiencia</DeploySectionLabel>
+                <div className="mt-2.5 flex items-center gap-3 flex-wrap">
+                  <span className="inline-flex items-center gap-2 h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13.5px] text-[#1a1a1a]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3"><circle cx="6" cy="6" r="2"/><path d="M2.5 12.5c.4-1.9 1.8-3 3.5-3s3.1 1.1 3.5 3"/><path d="M10.5 5a2 2 0 0 1 0 3.9M11 12.5c-.2-1.3-.8-2.3-1.7-3"/></svg>
+                    {audienceLabel}
+                  </span>
+                  <div className="relative">
+                    <button onClick={() => setFilterOpen(o => !o)} className="flex items-center gap-1.5 text-[13.5px] text-[#f4643f] font-medium hover:underline">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                      Add filter
+                    </button>
+                    {filterOpen && (
+                      <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-[272px] bg-white rounded-[12px] shadow-[0_10px_36px_rgba(20,20,20,0.18)] border border-[#e9eae6] overflow-hidden">
+                        <div className="p-2 border-b border-[#f1f1ee]">
+                          <div className="flex items-center gap-2 h-9 px-2.5 rounded-[8px] border border-[#1a1a1a]">
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14" strokeLinecap="round"/></svg>
+                            <input
+                              autoFocus
+                              value={filterQuery}
+                              onChange={e => setFilterQuery(e.target.value)}
+                              placeholder="Buscar datos de personas o empresas"
+                              className="flex-1 min-w-0 text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-[220px] overflow-y-auto py-1">
+                          {audienceFilterGroups.map(g => {
+                            const items = g.items.filter(it => it.label.toLowerCase().includes(filterQuery.toLowerCase()));
+                            if (items.length === 0) return null;
+                            return (
+                              <div key={g.header ?? 'root'}>
+                                {g.header && <div className="px-3 pt-2 pb-1 text-[12.5px] font-semibold text-[#646462]">{g.header}</div>}
+                                {items.map(it => (
+                                  <button
+                                    key={it.label}
+                                    onClick={() => { if (!it.disabled) { setDAudience(a => a.includes(it.label) ? a : [...a, it.label]); setFilterOpen(false); } }}
+                                    className={`w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] ${it.disabled ? 'text-[#a4a4a2] cursor-default' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                                  >
+                                    <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 text-[#646462]">{it.icon}</span>
+                                    <span className="flex-1 truncate">{it.label}</span>
+                                    {it.disabled && <span className="px-1.5 h-[19px] rounded-[5px] bg-[#f1f1ee] text-[11.5px] text-[#646462] flex items-center flex-shrink-0">Deshabilitado</span>}
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="px-3 h-10 flex items-center gap-2 border-t border-[#f1f1ee] text-[13px] text-[#a4a4a2]">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><path d="M4.5 12a3 3 0 0 1 .5-5.96 4 4 0 0 1 7.6-.9A2.75 2.75 0 0 1 12 12z" strokeLinejoin="round"/></svg>
+                          <span className="flex-1">Filter audience from CSV</span>
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M8 4.5v4M8 11v.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/></svg>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {dAudience.length > 1 && (
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {dAudience.slice(1).map(a => (
+                      <span key={a} className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-full bg-[#f1f1ee] text-[13px] text-[#1a1a1a]">
+                        {a}
+                        <button onClick={() => setDAudience(list => list.filter(x => x !== a))} className="text-[#646462] hover:text-[#1a1a1a]">
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="mt-4 text-[13.5px] text-[#1a1a1a]">
+                  Obtén una vista previa de aproximadamente{' '}
+                  <span className="font-semibold">{audienceReach}</span>{' '}
+                  personas de esta audiencia en este momento{' '}
+                  <span className="text-[#646462]">▸</span>
+                </p>
+              </div>
+            </DeployRow>
             <DeployConnector />
-            <DeployRow label="En los canales seleccionados" value="Web, iOS y Android" />
+
+            <DeployRow
+              label="En los canales seleccionados"
+              value={surfaceLabel}
+              open={openRow === 'surfaces'}
+              onToggle={() => toggleRow('surfaces')}
+              footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ surfaces: dSurfaces })} saving={saving} />}
+            >
+              <p className="text-[13.5px] text-[#646462] leading-[20px]">
+                Selecciona los canales que tus clientes usarán para chatear con Fin. Para habilitar la asistencia por chat en vivo, verifica que el Messenger esté configurado.{' '}
+                <a href="#" className="text-[#3b59f6] hover:underline">Configurar Fin a través del chat.</a>
+              </p>
+              <div className="mt-4">
+                <DeploySectionLabel>Canales</DeploySectionLabel>
+                <div className="relative mt-2.5 inline-block">
+                  <button onClick={() => setSurfaceMenu(o => !o)} className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full bg-[#f1f1ee] border border-[#e0e0dc] text-[13.5px] font-semibold text-[#1a1a1a] hover:bg-[#e6e6e2]">
+                    {surfaceLabel || 'Selecciona canales'}
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                  </button>
+                  {surfaceMenu && (
+                    <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-[248px] bg-white rounded-[12px] shadow-[0_10px_36px_rgba(20,20,20,0.18)] border border-[#e9eae6] py-1.5">
+                      {FIN_DEPLOY_SURFACES.map(g => (
+                        <div key={g.header}>
+                          <div className="px-4 pt-2 pb-1 text-[13px] font-bold text-[#1a1a1a]">{g.header}</div>
+                          {g.items.map(it => {
+                            const on = dSurfaces.includes(it.key);
+                            return (
+                              <button
+                                key={it.key}
+                                onClick={() => { if (it.installable) return; setDSurfaces(s => on ? s.filter(x => x !== it.key) : [...s, it.key]); }}
+                                className={`w-full h-9 px-4 flex items-center gap-2.5 text-left text-[13.5px] ${it.installable ? 'text-[#a4a4a2]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                              >
+                                <span className={`w-4 h-4 flex items-center justify-center flex-shrink-0 ${it.installable ? 'opacity-40' : ''}`}>{it.icon}</span>
+                                <span className="flex-1 truncate">{it.label}</span>
+                                {it.installable
+                                  ? <span className="text-[13px] text-[#1a1a1a] underline flex-shrink-0">Instalar</span>
+                                  : on && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#f4643f] flex-shrink-0" strokeWidth="1.8"><path d="M3 8.5l3.3 3.3L13 4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </DeployRow>
             <DeployConnector />
-            <DeployRow label="Fin se presenta" value="Activadas (Todos los idiomas compatibles)" />
+
+            <DeployRow
+              label="Fin se presenta"
+              value={dIntroEnabled ? 'Activadas (Todos los idiomas compatibles)' : 'Desactivadas'}
+              open={openRow === 'intro'}
+              onToggle={() => toggleRow('intro')}
+              footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ intro: { enabled: dIntroEnabled, messages: dIntro } })} saving={saving} />}
+            >
+              <p className="text-[13.5px] text-[#646462] leading-[20px]">
+                Configura cómo Fin se presenta al inicio de las conversaciones, para establecer expectativas claras para los clientes.
+              </p>
+              <div className="mt-3 bg-[#feecaf] rounded-[6px] px-3 py-2.5 flex items-start gap-2">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a] flex-shrink-0 mt-0.5" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
+                <p className="text-[12.5px] text-[#1a1a1a] leading-[18px]">Si usted realiza la actualización de estos mensajes, se traducirán automáticamente a todos los demás idiomas admitidos.</p>
+              </div>
+              <div className="mt-3 flex items-start gap-2">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0 mt-0.5" strokeWidth="1.3"><path d="M2 4h6M5 2.8V4M6.4 4c0 3-1.8 5-4 6M4 6.6c.7 1.6 2 2.7 3.5 3.4"/><path d="M8.5 13l2.5-6 2.5 6M9.6 11h3.8"/></svg>
+                <p className="text-[12.5px] text-[#646462] leading-[18px]">
+                  Fin traducirá el mensaje al idioma del cliente, siempre y cuando el idioma sea <a href="#" className="underline hover:no-underline">compatible</a>.
+                </p>
+              </div>
+
+              <div className="mt-4 max-w-[420px] border border-[#e9eae6] rounded-[10px] p-4">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <img src={IMG_FIN_LOGO_MARK} alt="" className="w-6 h-6 object-contain" />
+                  <div>
+                    <p className="text-[13.5px] font-bold text-[#1a1a1a] leading-[17px]">Fin</p>
+                    <p className="text-[12.5px] text-[#646462] leading-[16px]">El equipo también puede ayudar</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {dIntro.map((msg, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0 bg-[#f1f1ee] rounded-[8px] px-3 py-2.5">
+                        <textarea
+                          rows={2}
+                          value={msg}
+                          onChange={e => setDIntro(list => list.map((m, j) => j === i ? e.target.value : m))}
+                          className="w-full bg-transparent text-[13px] text-[#1a1a1a] leading-[19px] resize-none focus:outline-none"
+                        />
+                        <div className="flex items-center gap-2 mt-1 text-[#646462]">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.8 9.5c.5.7 1.3 1.1 2.2 1.1s1.7-.4 2.2-1.1M6 6.5v.1M10 6.5v.1" strokeLinecap="round"/></svg>
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.2"><rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M5 7.5h1.5M9.5 7.5H11M5 9.5h6"/></svg>
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.2"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2 10l3-2.5 2.5 2 3-3L14 9.5"/></svg>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center gap-1.5 pt-1">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#a4a4a2]"><circle cx="5" cy="4" r="1"/><circle cx="8" cy="4" r="1"/><circle cx="11" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="11" cy="8" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="11" cy="12" r="1"/></svg>
+                        <button onClick={() => setDIntro(list => list.filter((_, j) => j !== i))} title="Quitar" className="text-[#e5484d] hover:text-[#b91c1c]">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center gap-4">
+                  <button onClick={() => setDIntro(list => [...list, ''])} className="flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] hover:underline">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Agregar mensaje
+                  </button>
+                  <button onClick={() => setDIntro(FIN_DEPLOY_DEFAULT_INTRO)} className="flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] hover:underline">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Restablecer introducción
+                  </button>
+                </div>
+              </div>
+            </DeployRow>
             <DeployConnector />
 
             {/* Section 2: Fin responde */}
             <DeployStepHeader kind="dark" label="Fin responde al cliente" />
             <DeployConnector />
+
             <DeployRow
               label="Usando contenido de asistencia"
               value={canActivate ? `${finContentCount} elemento${finContentCount !== 1 ? 's' : ''}` : undefined}
               pill={canActivate ? undefined : { text: 'Se requiere más contenido', icon: 'warn' }}
-              onClick={() => onNavigateSub?.('capContent')}
-            />
+              open={openRow === 'content'}
+              onToggle={() => toggleRow('content')}
+              footer={<DeployCloseFooter onClose={() => setOpenRow(null)} />}
+            >
+              <p className="text-[13.5px] text-[#646462] leading-[20px]">
+                Elige el contenido de asistencia que Fin utilizará para responder preguntas con precisión. Cuanto más contenido agregues, más consultas podrá resolver Fin adecuadamente.
+              </p>
+              <p className="mt-1.5 text-[13.5px] font-bold text-[#1a1a1a] leading-[20px]">
+                {canActivate
+                  ? `Fin utilizará ${finContentCount} elemento${finContentCount !== 1 ? 's' : ''} de contenido de asistencia.`
+                  : 'Aún no se ha agregado contenido de asistencia; agrega algo para mejorar las respuestas de Fin.'}
+              </p>
+              <button onClick={() => onNavigateSub?.('capContent')} className="mt-4 flex items-center gap-1.5 text-[14px] font-bold text-[#1a1a1a] hover:underline">
+                Gestionar contenido
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              {!canActivate && (
+                <div className="mt-4 bg-[#feecaf] rounded-[8px] px-4 py-3">
+                  <p className="text-[13.5px] text-[#1a1a1a] leading-[20px]">
+                    Fin necesita más contenido de asistencia para responder con precisión a las preguntas de los clientes. Revisa y agrega contenido antes de activar Fin.
+                  </p>
+                </div>
+              )}
+            </DeployRow>
             <DeployConnector />
+
             <DeployRow
               label="Siguiendo la guía"
-              value={pautaCount > 0 ? `${pautaCount} regla${pautaCount !== 1 ? 's' : ''}` : undefined}
-              onClick={() => onNavigateSub?.('capGuidance')}
-            />
+              value={guidanceSummary.total > 0 ? `${guidanceSummary.total} regla${guidanceSummary.total !== 1 ? 's' : ''}` : undefined}
+              open={openRow === 'guidance'}
+              onToggle={() => toggleRow('guidance')}
+              footer={<DeployCloseFooter onClose={() => setOpenRow(null)} />}
+            >
+              <p className="text-[13.5px] text-[#646462] leading-[20px]">
+                Configura las pautas que seguirá Fin para personalizar sus respuestas. Las reglas de pautas las creas tú para ayudar a Fin a hablar como tu marca y seguir tus políticas.
+              </p>
+              <p className="mt-4 text-[13.5px] font-bold text-[#1a1a1a]">Fin utilizará:</p>
+              <div className="mt-2 flex flex-col gap-1.5">
+                {guidanceSummary.total === 0 && (
+                  <p className="text-[13.5px] text-[#646462]">Todavía no hay pautas activas.</p>
+                )}
+                {guidanceSummary.pautas > 0 && (
+                  <p className="flex items-center gap-2 text-[13.5px] text-[#1a1a1a]">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3"><path d="M3 3.5h10v9H3z" strokeLinejoin="round"/><path d="M5.5 6.5h5M5.5 9.5h3"/></svg>
+                    {guidanceSummary.pautas} regla{guidanceSummary.pautas !== 1 ? 's' : ''} de comunicación
+                  </p>
+                )}
+                {guidanceSummary.escalations > 0 && (
+                  <p className="flex items-center gap-2 text-[13.5px] text-[#1a1a1a]">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="6.2" cy="5.8" r="2.2"/><path d="M2.4 13c.4-2.1 1.9-3.4 3.8-3.4S9.6 10.9 10 13"/><path d="M10.6 4.1a2.2 2.2 0 0 1 0 4.3M11.2 13c-.2-1.4-.8-2.5-1.8-3.2"/></svg>
+                    {guidanceSummary.escalations} regla{guidanceSummary.escalations !== 1 ? 's' : ''} de transferencia y escalamiento
+                  </p>
+                )}
+              </div>
+              <button onClick={() => onNavigateSub?.('capGuidance')} className="mt-4 flex items-center gap-1.5 text-[14px] font-bold text-[#1a1a1a] hover:underline">
+                Administrar las pautas
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </DeployRow>
             <DeployConnector />
 
             {/* Section 3: Si no puede resolver */}
             <DeployStepHeader kind="people" label="Si Fin no puede resolver la conversación" />
             <DeployConnector />
-            <DeployRow label="Transferencia o escala" value="Asignar a" />
+
+            <DeployRow
+              label="Transferencia o escala"
+              value={dHandoverMode === 'transfer' ? (dAssignTo || 'Asignar a') : 'Cierra la conversación'}
+              open={openRow === 'handover'}
+              onToggle={() => toggleRow('handover')}
+              footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ handover: { mode: dHandoverMode, assign_to: dAssignTo || null, collect_info: dCollectInfo } })} saving={saving} />}
+            >
+              <p className="text-[13.5px] text-[#646462] leading-[20px]">
+                Los clientes pueden pedir asistencia humana pidiéndoselo a Fin o seleccionando el botón “Hablar con una persona”. Elige lo que sucederá a continuación.
+              </p>
+              <div className="mt-4">
+                <DeploySectionLabel>Cuando se solicite asistencia humana, Fin debería</DeploySectionLabel>
+                <div className="mt-1.5">
+                  <DeployRadio checked={dHandoverMode === 'transfer'} onSelect={() => setDHandoverMode('transfer')} label="Transferir a un equipo en el buzón" />
+                  <DeployRadio checked={dHandoverMode === 'close'} onSelect={() => setDHandoverMode('close')} label="Cierra la conversación y ofrece otras maneras de obtener ayuda" />
+                </div>
+              </div>
+              {dHandoverMode === 'transfer' && (
+                <div className="mt-4 pt-4 border-t border-[#f1f1ee]">
+                  <DeploySectionLabel>En el momento de la transferencia, Fin...</DeploySectionLabel>
+                  <div className="mt-2.5 flex items-center gap-3 flex-wrap">
+                    <span className="text-[13.5px] text-[#1a1a1a]">Asignar una conversación a</span>
+                    <select
+                      value={dAssignTo}
+                      onChange={e => setDAssignTo(e.target.value)}
+                      className="h-8 px-3 rounded-full bg-[#f1f1ee] border border-[#e0e0dc] text-[13.5px] font-semibold text-[#1a1a1a] focus:outline-none"
+                    >
+                      <option value="">Unassigned</option>
+                      {teamOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div className="mt-4 pt-4 border-t border-[#f1f1ee]">
+                <DeploySectionLabel>Configurar reglas de transferencia</DeploySectionLabel>
+                <p className="mt-1.5 text-[13.5px] text-[#646462] leading-[20px]">
+                  Usa las pautas para controlar cómo Fin responde a preguntas específicas o atributos del cliente. Para la canalización avanzada, los flujos de trabajo pueden transferirse automáticamente a un compañero de equipo o a otra herramienta de asistencia.{' '}
+                  <button onClick={() => onNavigateSub?.('capGuidance')} className="text-[#3b59f6] underline hover:no-underline">Uso de pautas</button>.{' '}
+                  <a href="#" className="text-[#3b59f6] underline hover:no-underline">Uso de flujos de trabajo.</a>
+                </p>
+              </div>
+              <div className="mt-4 pt-4 border-t border-[#f1f1ee]">
+                <DeploySectionLabel>Recopila información antes de la transferencia</DeploySectionLabel>
+                <div className="mt-2.5 flex items-start gap-2.5">
+                  <DeploySwitch on={dCollectInfo} onChange={() => setDCollectInfo(v => !v)} />
+                  <p className="text-[13.5px] text-[#646462] leading-[19px]">
+                    Pide más detalles para que Fin pueda intentar resolverlo primero. <a href="#" className="text-[#3b59f6] hover:underline">Más información</a>
+                  </p>
+                </div>
+                <div className="mt-4 max-w-[400px] border border-[#e9eae6] rounded-[8px] p-5">
+                  <div className="flex justify-center">
+                    <span className="px-3 py-2 rounded-[8px] bg-[#dbe6ff] text-[13.5px] text-[#1a1a1a]">Hablar con una persona</span>
+                  </div>
+                  <div className="mt-5 flex items-center gap-2">
+                    <span className="flex-1 border-t border-dashed border-[#e0e0dc]" />
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="6.2" cy="5.8" r="2.2"/><path d="M2.4 13c.4-2.1 1.9-3.4 3.8-3.4S9.6 10.9 10 13"/><path d="M10.6 4.1a2.2 2.2 0 0 1 0 4.3M11.2 13c-.2-1.4-.8-2.5-1.8-3.2"/></svg>
+                    <span className="flex-1 border-t border-dashed border-[#e0e0dc]" />
+                  </div>
+                  <p className="mt-2 text-center text-[13px] text-[#646462]">Fin termina aquí</p>
+                </div>
+              </div>
+            </DeployRow>
             <DeployConnector />
-            <DeployRow label="Solicita una calificación de conversación (CSAT)" value="Deshabilitado" />
+
+            <DeployRow
+              label="Solicita una calificación de conversación (CSAT)"
+              value={csatLabel}
+              open={openRow === 'csat'}
+              onToggle={() => toggleRow('csat')}
+              footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ csat: { on_positive: dCsatPositive, on_inactive: dCsatInactive, lock_rating: dCsatLock } })} saving={saving} />}
+            >
+              <div className="flex flex-col gap-3.5">
+                <div className="flex items-start gap-2.5">
+                  <DeploySwitch on={dCsatPositive} onChange={() => setDCsatPositive(v => !v)} />
+                  <p className="text-[13.5px] text-[#1a1a1a] leading-[19px]">Enviar la satisfacción de clientes si el cliente da comentarios positivos</p>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <DeploySwitch on={dCsatInactive} onChange={() => setDCsatInactive(v => !v)} />
+                  <p className="text-[13.5px] text-[#1a1a1a] leading-[19px]">Enviar satisfacción de clientes si el cliente se vuelve inactivo después de la respuesta de Fin</p>
+                </div>
+                <div>
+                  <p className="text-[13px] text-[#646462] mb-2">Después de mostrar un CSAT...</p>
+                  <div className="flex items-start gap-2.5">
+                    <DeploySwitch on={dCsatLock} onChange={() => setDCsatLock(v => !v)} />
+                    <p className="text-[13.5px] text-[#1a1a1a] leading-[19px]">Evita que los clientes cambien su calificación inicial</p>
+                  </div>
+                </div>
+              </div>
+            </DeployRow>
             <DeployConnector />
 
             {/* Section 4: Si se vuelve inactivo */}
             <DeployStepHeader kind="hourglass" label="Si el cliente se vuelve inactivo" />
             <DeployConnector />
-            <DeployRow label="Da seguimiento" value="Fin confirmará si el usuario aún necesita asistencia." />
+
+            <DeployRow
+              label="Da seguimiento"
+              value={FIN_FOLLOWUP_LABEL[dFollowup]}
+              open={openRow === 'followup'}
+              onToggle={() => toggleRow('followup')}
+              footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ followup: { mode: dFollowup, minutes: dFollowupMin } })} saving={saving} />}
+            >
+              <DeploySectionLabel>Si el cliente no responde dentro de los {dFollowupMin} minutos después de que Fin responda</DeploySectionLabel>
+              <div className="mt-2">
+                <DeployRadio checked={dFollowup === 'confirm'} onSelect={() => setDFollowup('confirm')} label="Fin confirmará si el usuario aún necesita asistencia." hint="Selecciona esta opción si quieres que Fin se encargue de tanto como sea posible." />
+                <DeployRadio checked={dFollowup === 'escalate'} onSelect={() => setDFollowup('escalate')} label="Fin ofrecerá escalar el caso" hint="Selecciona esta opción si desea involucrar la asistencia humana con más frecuencia." />
+                <DeployRadio checked={dFollowup === 'none'} onSelect={() => setDFollowup('none')} label="Sin seguimiento" hint="Fin no envía más mensajes después de responder." />
+              </div>
+              {dFollowup !== 'none' && (
+                <div className="mt-4 pt-4 border-t border-[#f1f1ee]">
+                  <div className="mx-auto max-w-[360px]">
+                    <p className="flex items-center justify-center gap-2 text-[13px] text-[#646462]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 2.2h7M4.5 13.8h7"/><path d="M5.4 2.2v2.2c0 1.3 2.6 2.3 2.6 3.6s-2.6 2.3-2.6 3.6v2.2"/><path d="M10.6 2.2v2.2c0 1.3-2.6 2.3-2.6 3.6s2.6 2.3 2.6 3.6v2.2"/></svg>
+                      El cliente está inactivo desde hace {dFollowupMin} minutos
+                    </p>
+                    <div className="mt-3 bg-[#f8f8f7] rounded-[8px] p-3.5">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4 object-contain" />
+                        <span className="text-[13px] font-bold text-[#1a1a1a]">Fin</span>
+                      </div>
+                      <p className="text-[13px] text-[#1a1a1a] leading-[19px]">
+                        {dFollowup === 'confirm'
+                          ? '¿Te gustaría recibir más ayuda? Estoy aquí si me necesitas.'
+                          : '¿Quieres que te ponga en contacto con una persona del equipo?'}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-3 flex items-center justify-center gap-1.5 text-[12.5px] text-[#646462]">
+                    Solo vista previa: Fin generará automáticamente una respuesta
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.2"><circle cx="8" cy="8" r="6.5"/><path d="M6.4 6.3a1.7 1.7 0 1 1 1.8 1.9V9.4M8.2 11.4v.1" strokeLinecap="round"/></svg>
+                  </p>
+                </div>
+              )}
+            </DeployRow>
             <DeployConnector />
-            <DeployRow label="Cierra automáticamente los chats abandonados" value="3 minutos" />
+
+            <DeployRow
+              label="Cierra automáticamente los chats abandonados"
+              value={autoCloseLabel}
+              open={openRow === 'autoclose'}
+              onToggle={() => toggleRow('autoclose')}
+              footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ auto_close: { days: dAcDays, hours: dAcHours, minutes: dAcMinutes, when_answered: dAcAnswered, when_unresolved: dAcUnresolved, message: dAcMessage || null } })} saving={saving} />}
+            >
+              <DeploySectionLabel>Tiempo de espera por inactividad</DeploySectionLabel>
+              <p className="mt-1 text-[13.5px] text-[#1a1a1a] leading-[20px]">¿Cuánto tiempo debe esperar Fin antes de marcar a un cliente como inactivo?</p>
+              <p className="mt-1 text-[12.5px] text-[#a4a4a2] leading-[18px]">
+                Si ha habilitado un <button onClick={() => toggleRow('followup')} className="underline hover:no-underline">seguimiento</button>, se enviará {dFollowupMin} minutos después del último mensaje del cliente. Una vez que se envíe el seguimiento, comenzará el temporizador de cierre automático que usted configure a continuación.
+              </p>
+              <div className="mt-3 flex items-center gap-2.5 flex-wrap">
+                {([['días', dAcDays, setDAcDays, 365], ['horas', dAcHours, setDAcHours, 23], ['minutos', dAcMinutes, setDAcMinutes, 59]] as const).map(([unit, val, setter, max]) => (
+                  <span key={unit} className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={0}
+                      max={max}
+                      value={val}
+                      onChange={e => setter(Math.max(0, Math.min(max, Number(e.target.value) || 0)))}
+                      className="w-[68px] h-9 px-3 rounded-[8px] border border-[#e9eae6] text-[13.5px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a]"
+                    />
+                    <span className="text-[13.5px] text-[#1a1a1a]">{unit}</span>
+                  </span>
+                ))}
+              </div>
+              <div className="mt-4">
+                <p className="flex items-center gap-1.5 text-[13.5px] font-bold text-[#1a1a1a]">
+                  Cerrar la conversación si
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="8" cy="8" r="6.5"/><path d="M6.4 6.3a1.7 1.7 0 1 1 1.8 1.9V9.4M8.2 11.4v.1" stroke="#fff" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>
+                </p>
+                <div className="mt-1.5">
+                  <DeployCheckbox checked={dAcAnswered} onChange={() => setDAcAnswered(v => !v)} label="Fin respondió la pregunta" />
+                  <DeployCheckbox checked={dAcUnresolved} onChange={() => setDAcUnresolved(v => !v)} label="Fin no pudo responder o el cliente se fue" />
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="flex items-center gap-2 text-[13.5px] font-bold text-[#1a1a1a]">
+                  Personaliza el mensaje de cierre
+                  <span className="px-2 h-[19px] rounded-full bg-[#dbe6ff] text-[11.5px] font-semibold text-[#3b59f6] flex items-center">Nuevo</span>
+                </p>
+                <div className="mt-2.5 max-w-[340px] border border-[#e9eae6] rounded-[8px] p-3.5">
+                  <p className="flex items-center justify-center gap-1.5 text-[12.5px] text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 4.8V8l2.2 1.3" strokeLinecap="round"/></svg>
+                    El cliente pasa a inactivo
+                  </p>
+                  {dAcMessage === '' ? (
+                    <button onClick={() => setDAcMessage('Cerramos esta conversación por inactividad. Escríbenos cuando quieras y seguimos.')} className="mt-2.5 w-full h-9 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center gap-1.5 text-[13.5px] text-[#1a1a1a] hover:bg-[#f1f1ee]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                      Add message
+                    </button>
+                  ) : (
+                    <div className="mt-2.5 flex items-start gap-2">
+                      <textarea
+                        rows={2}
+                        value={dAcMessage}
+                        onChange={e => setDAcMessage(e.target.value)}
+                        className="flex-1 min-w-0 px-3 py-2 rounded-[8px] bg-[#f1f1ee] text-[13px] text-[#1a1a1a] leading-[19px] resize-none focus:outline-none"
+                      />
+                      <button onClick={() => setDAcMessage('')} title="Quitar" className="mt-1 text-[#e5484d] hover:text-[#b91c1c]">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </div>
+                  )}
+                  <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[12.5px] text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><path d="M2.5 8.5h11l-1.5 4h-8z" strokeLinejoin="round"/><path d="M4.5 8.5v-4h7v4"/></svg>
+                    Fin cierra la conversación
+                  </p>
+                </div>
+              </div>
+            </DeployRow>
+
 
             {/* Yellow callout: Instala Messenger */}
             <div className="mt-6 bg-[#feecaf] rounded-[6px] p-4 flex items-start gap-2">

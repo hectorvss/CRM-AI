@@ -18,6 +18,46 @@ const ChannelConfig = z.object({
   enabled: z.boolean().default(false),
   /** Per ticket-type override; '*' is the fallback. */
   reply_modes: z.record(z.string(), ReplyMode).prefault({ '*': 'draft_only' }),
+  /** Deployment behaviour edited from Desplegar › {canal}. */
+  deploy: z.object({
+    /** Who sees Fin: audience segment keys. */
+    audience: z.array(z.string()).default(['users', 'leads', 'visitors']),
+    /** Surfaces Fin runs on (web/ios/android/whatsapp/…). */
+    surfaces: z.array(z.string()).default(['web', 'ios', 'android']),
+    /** Fin's opening messages. */
+    intro: z.object({
+      enabled: z.boolean().default(true),
+      messages: z.array(z.string()).default([
+        'Hola {{first_name}}, estás hablando con {{agent_name}}, un AI Agent. Estoy listo para ayudarte.',
+        '¿En qué puedo ayudarte?',
+      ]),
+    }).prefault({}),
+    /** What happens when the customer asks for a human. */
+    handover: z.object({
+      mode: z.enum(['transfer', 'close']).default('transfer'),
+      assign_to: z.string().nullable().default(null),
+      collect_info: z.boolean().default(false),
+    }).prefault({}),
+    csat: z.object({
+      on_positive: z.boolean().default(false),
+      on_inactive: z.boolean().default(false),
+      lock_rating: z.boolean().default(false),
+    }).prefault({}),
+    /** Nudge sent when the customer goes quiet. */
+    followup: z.object({
+      mode: z.enum(['confirm', 'escalate', 'none']).default('confirm'),
+      minutes: z.number().int().min(1).max(1440).default(4),
+    }).prefault({}),
+    /** Auto-close timer for abandoned conversations. */
+    auto_close: z.object({
+      days: z.number().int().min(0).max(365).default(0),
+      hours: z.number().int().min(0).max(23).default(0),
+      minutes: z.number().int().min(0).max(59).default(3),
+      when_answered: z.boolean().default(true),
+      when_unresolved: z.boolean().default(false),
+      message: z.string().nullable().default(null),
+    }).prefault({}),
+  }).prefault({}),
 });
 
 const GuidancePiece = z.object({
