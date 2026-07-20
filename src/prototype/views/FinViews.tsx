@@ -5917,7 +5917,7 @@ function useChannelDeploymentStatus(matchKeywords: string[]) {
 }
 
 // Step-section header (icon polygon/square + text)
-function DeployStepHeader({ kind, label }: { kind: 'polygon' | 'dark' | 'green'; label: string }) {
+function DeployStepHeader({ kind, label }: { kind: 'polygon' | 'dark' | 'green' | 'people' | 'hourglass'; label: string }) {
   return (
     <div className="flex items-start gap-2">
       {kind === 'polygon' && (
@@ -5925,16 +5925,17 @@ function DeployStepHeader({ kind, label }: { kind: 'polygon' | 'dark' | 'green';
           <svg viewBox="0 0 32 36" className="absolute inset-0 w-8 h-9" preserveAspectRatio="none">
             <path d="M16 0 L32 9 L32 27 L16 36 L0 27 L0 9 Z" fill="#FFCF33" />
           </svg>
-          <svg viewBox="0 0 16 16" className="absolute left-[10px] top-[10px] w-4 h-4 fill-[#1a1a1a]">
-            <path d="M3 8c0-2.8 2.2-5 5-5s5 2.2 5 5h-1.5c0-1.9-1.6-3.5-3.5-3.5S4.5 6.1 4.5 8H3zm0 0c0 1.4.6 2.7 1.5 3.5l-1 1.5c.7.4 1.5.6 2.3.6.6 0 1.2-.1 1.7-.3l-.5-1.4c-.4.2-.8.2-1.2.2-.5 0-1-.1-1.4-.4l.7-1.1c.3.2.7.3 1 .3v-1.5c-.6 0-1.1-.5-1.1-1.4z"/>
+          {/* Waving hand */}
+          <svg viewBox="0 0 16 16" className="absolute left-[9px] top-[9px] w-[15px] h-[15px] fill-none stroke-[#1a1a1a]" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6.4 7.1V3.5a.85.85 0 0 1 1.7 0v3.1"/>
+            <path d="M8.1 6.6V2.9a.85.85 0 0 1 1.7 0v3.7"/>
+            <path d="M9.8 7V4.4a.85.85 0 0 1 1.7 0V9c0 2.3-1.5 4.2-3.6 4.2-1.9 0-3-1-3.6-2.5L3.3 8.4a.85.85 0 0 1 1.4-.95l.9 1.25V5.6a.85.85 0 0 1 1.7 0"/>
           </svg>
         </div>
       )}
       {kind === 'dark' && (
         <div className="w-8 h-8 rounded-[7px] bg-[#222] flex items-center justify-center flex-shrink-0">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#FFCF33]">
-            <path d="M8 1.6l1.7 4.7 4.7 1.7-4.7 1.7L8 14.4l-1.7-4.7L1.6 8l4.7-1.7z"/>
-          </svg>
+          <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4 object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
         </div>
       )}
       {kind === 'green' && (
@@ -5942,6 +5943,24 @@ function DeployStepHeader({ kind, label }: { kind: 'polygon' | 'dark' | 'green';
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
             <path d="M3 8c1.5-3 4-4.5 5-4.5s3.5 1.5 5 4.5c-1.5 3-4 4.5-5 4.5S4.5 11 3 8z" strokeLinejoin="round"/>
             <circle cx="8" cy="8" r="1.5" fill="#1a1a1a" stroke="none"/>
+          </svg>
+        </div>
+      )}
+      {kind === 'people' && (
+        <div className="w-8 h-8 rounded-[7px] bg-[#b1e7d0] flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="6.2" cy="5.8" r="2.2"/>
+            <path d="M2.4 13c.4-2.1 1.9-3.4 3.8-3.4S9.6 10.9 10 13"/>
+            <path d="M10.6 4.1a2.2 2.2 0 0 1 0 4.3M11.2 13c-.2-1.4-.8-2.5-1.8-3.2"/>
+          </svg>
+        </div>
+      )}
+      {kind === 'hourglass' && (
+        <div className="w-8 h-8 rounded-[7px] bg-[#b1e7d0] flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4.5 2.2h7M4.5 13.8h7"/>
+            <path d="M5.4 2.2v2.2c0 1.3 2.6 2.3 2.6 3.6s-2.6 2.3-2.6 3.6v2.2"/>
+            <path d="M10.6 2.2v2.2c0 1.3-2.6 2.3-2.6 3.6s2.6 2.3 2.6 3.6v2.2"/>
           </svg>
         </div>
       )}
@@ -5956,9 +5975,9 @@ function DeployConnector() {
 }
 
 // Configurable row card (label + optional sub-value or pill + chevron)
-function DeployRow({ label, value, pill }: { label: string; value?: string; pill?: { text: string; bg?: string; icon?: 'warn' } }) {
+function DeployRow({ label, value, pill, onClick }: { label: string; value?: string; pill?: { text: string; bg?: string; icon?: 'warn' }; onClick?: () => void }) {
   return (
-    <button className="w-full bg-white border border-[#e9eae6] rounded-[16px] px-4 h-12 flex items-center justify-between hover:bg-[#fbfbf9] text-left">
+    <button onClick={onClick} className="w-full bg-white border border-[#e9eae6] rounded-[16px] px-4 h-[52px] flex items-center justify-between hover:bg-[#fbfbf9] text-left">
       <div className="flex items-center gap-3 min-w-0">
         <span className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] flex-shrink-0">{label}</span>
         {value && <span className="text-[13px] text-[#81817e] leading-[20px] truncate">{value}</span>}
@@ -5976,9 +5995,24 @@ function DeployRow({ label, value, pill }: { label: string; value?: string; pill
   );
 }
 
-function FinDespliegueChatContent() {
+function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubView) => void } = {}) {
   const status = useChannelDeploymentStatus(['chat', 'messenger', 'slack', 'whatsapp', 'sms', 'facebook', 'instagram']);
   const fin = useFinChannelToggle('chat');
+  // "Siguiendo la guía" and the Activar Fin gate read the same sources the
+  // agent does: active pautas (local) and articles flagged for Fin (API).
+  const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const finContentCount = useMemo(
+    () => (Array.isArray(articlesRaw) ? articlesRaw : []).filter((a: any) => (a.finService ?? a.fin_service)).length,
+    [articlesRaw],
+  );
+  const pautaCount = useMemo(() => {
+    try {
+      const raw = window.localStorage.getItem('clain.fin.pautas');
+      const list = raw ? (JSON.parse(raw) as FinPauta[]) : [];
+      return list.filter(p => p.enabled).length;
+    } catch { return 0; }
+  }, []);
+  const canActivate = finContentCount > 0;
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
@@ -5997,10 +6031,11 @@ function FinDespliegueChatContent() {
                 disabled={fin.busy || fin.enabled === null}
                 className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold disabled:opacity-50"
               >
-                <span className={`inline-block w-2 h-2 rounded-full ${fin.enabled ? 'bg-[#3ba55d]' : 'bg-[#c9c9c5]'}`} />
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
                 <span>
                   {fin.enabled === null ? 'Comprobando…' : fin.enabled ? 'Fin activo en chat — desactivar' : 'Activar Fin para chat'}
                 </span>
+                {fin.enabled && <span className="inline-block w-2 h-2 rounded-full bg-[#3ba55d]" />}
               </button>
               <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
@@ -6017,8 +6052,8 @@ function FinDespliegueChatContent() {
 
       {/* Section divider with title */}
       <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
-        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.5h11v8h-7l-4 3v-11z" strokeLinejoin="round"/></svg>
-        <h3 className="text-[15px] font-bold text-[#1a1a1a]">Chat</h3>
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.2" y="3" width="11.6" height="10" rx="1.4"/><path d="M6.2 3v10"/></svg>
+        <h3 className="text-[17px] font-bold text-[#1a1a1a]">Chat</h3>
       </div>
 
       {/* Body: accordion */}
@@ -6051,13 +6086,22 @@ function FinDespliegueChatContent() {
             {/* Section 2: Fin responde */}
             <DeployStepHeader kind="dark" label="Fin responde al cliente" />
             <DeployConnector />
-            <DeployRow label="Usando contenido de asistencia" pill={{ text: 'Se requiere más contenido', icon: 'warn' }} />
+            <DeployRow
+              label="Usando contenido de asistencia"
+              value={canActivate ? `${finContentCount} elemento${finContentCount !== 1 ? 's' : ''}` : undefined}
+              pill={canActivate ? undefined : { text: 'Se requiere más contenido', icon: 'warn' }}
+              onClick={() => onNavigateSub?.('capContent')}
+            />
             <DeployConnector />
-            <DeployRow label="Siguiendo la guía" />
+            <DeployRow
+              label="Siguiendo la guía"
+              value={pautaCount > 0 ? `${pautaCount} regla${pautaCount !== 1 ? 's' : ''}` : undefined}
+              onClick={() => onNavigateSub?.('capGuidance')}
+            />
             <DeployConnector />
 
             {/* Section 3: Si no puede resolver */}
-            <DeployStepHeader kind="green" label="Si Fin no puede resolver la conversación" />
+            <DeployStepHeader kind="people" label="Si Fin no puede resolver la conversación" />
             <DeployConnector />
             <DeployRow label="Transferencia o escala" value="Asignar a" />
             <DeployConnector />
@@ -6065,7 +6109,7 @@ function FinDespliegueChatContent() {
             <DeployConnector />
 
             {/* Section 4: Si se vuelve inactivo */}
-            <DeployStepHeader kind="green" label="Si el cliente se vuelve inactivo" />
+            <DeployStepHeader kind="hourglass" label="Si el cliente se vuelve inactivo" />
             <DeployConnector />
             <DeployRow label="Da seguimiento" value="Fin confirmará si el usuario aún necesita asistencia." />
             <DeployConnector />
@@ -6085,10 +6129,22 @@ function FinDespliegueChatContent() {
 
             {/* Grey rounded module: Tus clientes verán */}
             <div className="mt-6 bg-[#fbfbf9] border border-[#e9eae6] rounded-[16px] p-6 flex flex-col items-center">
-              <button className="bg-[#f8f8f7] rounded-full px-3 h-8 flex items-center gap-2 text-[14px] font-semibold text-[#1a1a1a] mb-4">
-                <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
-                <span>Establecer en vivo</span>
+              <button
+                onClick={fin.toggle}
+                disabled={!canActivate || fin.busy || fin.enabled === null}
+                title={canActivate ? undefined : 'Para activar Fin, necesitas agregar contenido a este espacio de trabajo'}
+                className={`rounded-full px-3.5 h-9 flex items-center gap-2 text-[14px] font-semibold mb-4 ${canActivate ? 'bg-[#1a1a1a] text-white hover:bg-black' : 'bg-[#f1f1ee] text-[#a4a4a2] cursor-not-allowed'}`}
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                <span>{fin.enabled ? 'Pausar Fin' : 'Activar Fin'}</span>
               </button>
+              {!canActivate && (
+                <p className="-mt-2 mb-3 text-[13px] text-[#646462] leading-[19px] text-center max-w-[300px]">
+                  Para activar Fin, necesitas{' '}
+                  <button onClick={() => onNavigateSub?.('capContent')} className="underline hover:no-underline">agregar contenido</button>{' '}
+                  a este espacio de trabajo
+                </p>
+              )}
               <p className="text-[14px] text-[#646462] leading-[20px] text-center">
                 Tus clientes verán a Fin cuando se pongan en contacto contigo para chatear.<br/>
                 Puedes pausar Fin en cualquier momento.
@@ -6120,6 +6176,17 @@ function FinDespliegueChatContent() {
             <p className="text-[14px] text-[#646462] leading-[20px]">
               Personalízalo: automatiza con precisión lo que Fin debe hacer y cuándo.
             </p>
+          </div>
+
+          {/* Accordion 3 — Implementar mediante procedimientos */}
+          <div className="pt-6">
+            <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[20px] pb-2">Implementar mediante procedimientos</h4>
+            <p className="text-[14px] text-[#646462] leading-[20px]">
+              Configure el comportamiento de Fin en los procedimientos activados mediante un clic en un botón de su sitio o por un miembro del equipo desde Inbox. Cada procedimiento puede tener su propio comportamiento de Fin —modo bot, respuestas de IA, tipo de agente— que se aplica cada vez que Fin participa en una conversación nueva.
+            </p>
+            <button onClick={() => onNavigateSub?.('capProcedures')} className="mt-3 text-[14px] text-[#3b59f6] hover:underline">
+              Gestionar procedimientos
+            </button>
           </div>
         </div>
       </div>
@@ -8438,7 +8505,7 @@ export function FinAiView() {
       case 'probar':
       case 'pruebaTesting':  return <FinPruebasContent />;
       case 'desplegar':
-      case 'depChat':        return <FinDespliegueChatContent />;
+      case 'depChat':        return <FinDespliegueChatContent onNavigateSub={setSub} />;
       case 'depEmail':       return <FinDespliegueEmailContent />;
       case 'depPhone':       return <FinDespliegueTelefonoContent />;
       case 'anaGetStarted':  return <FinComenzarContent />;
