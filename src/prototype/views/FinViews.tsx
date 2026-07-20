@@ -6276,9 +6276,34 @@ function useFinDeploy(channel: 'chat' | 'email' | 'whatsapp') {
   return { cfg, saving, save, reload };
 }
 
-function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubView) => void } = {}) {
-  const status = useChannelDeploymentStatus(['chat', 'messenger', 'slack', 'whatsapp', 'sms', 'facebook', 'instagram']);
-  const fin = useFinChannelToggle('chat');
+function DeployLinkIcon({ kind }: { kind: 'book' | 'mail' }) {
+  return kind === 'mail'
+    ? <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
+    : <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>;
+}
+
+/** Per-channel copy for the shared Desplegar screen. */
+type FinDeployCopy = {
+  channel: 'chat' | 'email';
+  connectorKeywords: string[];
+  hero: { title: string; body: string; image: string; toggleOn: string; toggleOff: string; links: Array<{ label: string; icon: 'book' | 'mail' }> };
+  section: { title: string; icon: ReactNode };
+  lead: string;
+  step1Label: string;
+  audienceRow: string;
+  /** Chat picks surfaces; email runs on the single email channel. */
+  surfacesRow: { label: string; kind: 'surfaces' | 'email' };
+  /** Email shows "Fin se presenta" under "Fin responde", chat under step 1. */
+  introInStep2: boolean;
+  followupRow: string;
+  autoCloseRow: string;
+  callout: { title: string; body: string; cta: string; href?: string };
+  activation: { body: string };
+};
+
+function FinDespliegueChannelContent({ copy, onNavigateSub }: { copy: FinDeployCopy; onNavigateSub?: (sub: FinSubView) => void }) {
+  const status = useChannelDeploymentStatus(copy.connectorKeywords);
+  const fin = useFinChannelToggle(copy.channel);
   // "Siguiendo la guía" and the Activar Fin gate read the same sources the
   // agent does: active pautas (local) and articles flagged for Fin (API).
   const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [], []);
@@ -6299,7 +6324,7 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
   // ── Expandable rows ────────────────────────────────────────────────────────
   type DeployRowKey = 'audience' | 'surfaces' | 'intro' | 'content' | 'guidance' | 'handover' | 'csat' | 'followup' | 'autoclose';
   const [openRow, setOpenRow] = useState<DeployRowKey | null>(null);
-  const { cfg: deploy, saving, save } = useFinDeploy('chat');
+  const { cfg: deploy, saving, save } = useFinDeploy(copy.channel);
 
   // Drafts. They re-seed from the stored config whenever it (re)loads so a
   // cancelled edit is discarded and a saved one sticks.
@@ -6454,6 +6479,77 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
     return parts.join(' ') || 'Desactivado';
   }, [dAcDays, dAcHours, dAcMinutes]);
 
+  // "Fin se presenta" sits under step 1 for chat and under step 2 for email,
+  // so it is built once here and placed by the copy flag.
+  const introRow = (
+    <DeployRow
+      label="Fin se presenta"
+      value={dIntroEnabled ? 'Activadas (Todos los idiomas compatibles)' : 'Desactivadas'}
+      open={openRow === 'intro'}
+      onToggle={() => toggleRow('intro')}
+      footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ intro: { enabled: dIntroEnabled, messages: dIntro } })} saving={saving} />}
+    >
+              <p className="text-[13.5px] text-[#646462] leading-[20px]">
+                Configura cómo Fin se presenta al inicio de las conversaciones, para establecer expectativas claras para los clientes.
+              </p>
+              <div className="mt-3 bg-[#feecaf] rounded-[6px] px-3 py-2.5 flex items-start gap-2">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a] flex-shrink-0 mt-0.5" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
+                <p className="text-[12.5px] text-[#1a1a1a] leading-[18px]">Si usted realiza la actualización de estos mensajes, se traducirán automáticamente a todos los demás idiomas admitidos.</p>
+              </div>
+              <div className="mt-3 flex items-start gap-2">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0 mt-0.5" strokeWidth="1.3"><path d="M2 4h6M5 2.8V4M6.4 4c0 3-1.8 5-4 6M4 6.6c.7 1.6 2 2.7 3.5 3.4"/><path d="M8.5 13l2.5-6 2.5 6M9.6 11h3.8"/></svg>
+                <p className="text-[12.5px] text-[#646462] leading-[18px]">
+                  Fin traducirá el mensaje al idioma del cliente, siempre y cuando el idioma sea <a href="#" className="underline hover:no-underline">compatible</a>.
+                </p>
+              </div>
+
+              <div className="mt-4 max-w-[520px] border border-[#e9eae6] rounded-[12px] p-5">
+                <style>{FIN_INTRO_PILL_CSS}</style>
+                <div className="flex items-center gap-3 mb-4">
+                  <FinDotMark className="w-7 h-7" />
+                  <div>
+                    <p className="text-[14.5px] font-bold text-[#1a1a1a] leading-[18px]">Fin</p>
+                    <p className="text-[13px] text-[#646462] leading-[17px]">El equipo también puede ayudar</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {dIntro.map((msg, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      {/* Fin avatar sits beside the last bubble, as in the reference */}
+                      <div className="w-7 flex-shrink-0 self-end pb-2.5">
+                        {i === dIntro.length - 1 && dIntro.length > 1 && <FinDotMark className="w-7 h-7" />}
+                      </div>
+                      <div className="flex-1 min-w-0 bg-[#f1f1ee] rounded-[10px] px-3.5 py-3">
+                        <FinIntroMessageEditor value={msg} onChange={v => setDIntro(list => list.map((m, j) => j === i ? v : m))} />
+                        <div className="flex items-center gap-2.5 mt-2 text-[#646462]">
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.8 9.5c.5.7 1.3 1.1 2.2 1.1s1.7-.4 2.2-1.1M6 6.5v.1M10 6.5v.1" strokeLinecap="round"/></svg>
+                          <span className="px-1 h-[15px] rounded-[3px] border border-current text-[9px] font-bold leading-[13px] tracking-tight">GIF</span>
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.2"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2 10l3-2.5 2.5 2 3-3L14 9.5"/></svg>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center gap-2.5 pt-1.5 flex-shrink-0">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#a4a4a2] cursor-grab"><circle cx="5" cy="4" r="1"/><circle cx="8" cy="4" r="1"/><circle cx="11" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="11" cy="8" r="1"/></svg>
+                        <button onClick={() => setDIntro(list => list.filter((_, j) => j !== i))} title="Quitar" className="text-[#e5484d] hover:text-[#b91c1c]">
+                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 flex items-center gap-5">
+                  <button onClick={() => setDIntro(list => [...list, ''])} className="flex items-center gap-2 text-[13.5px] font-medium text-[#1a1a1a] hover:underline">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Agregar mensaje
+                  </button>
+                  <button onClick={() => setDIntro(FIN_DEPLOY_DEFAULT_INTRO)} className="flex items-center gap-2 text-[13.5px] font-medium text-[#1a1a1a] hover:underline">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2v3h3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Restablecer introducción
+                  </button>
+                </div>
+              </div>
+    </DeployRow>
+  );
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero — its own card, separate from the Chat card below */}
@@ -6461,31 +6557,27 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
         <div className="flex-shrink-0 px-6 pt-5 pb-3">
           <div className="relative bg-white border border-[#e9eae6] rounded-[14px] flex gap-5 items-start overflow-hidden pl-6 pr-0 py-5">
             <div className="flex-1 min-w-0">
-              <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
-                Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales
-              </h2>
-              <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
-                Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
-              </p>
+              <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">{copy.hero.title}</h2>
+              <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">{copy.hero.body}</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   onClick={fin.toggle}
                   disabled={fin.busy || fin.enabled === null}
                   className="h-9 px-3.5 rounded-full bg-[#f1f1ee] hover:bg-[#e6e6e2] flex items-center gap-2 text-[13.5px] font-semibold text-[#1a1a1a] disabled:opacity-50"
                 >
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                  <span>
-                    {fin.enabled === null ? 'Comprobando…' : fin.enabled ? 'Fin activo en chat — desactivar' : 'Activar Fin para chat'}
-                  </span>
+                  <DeployLinkIcon kind="book" />
+                  <span>{fin.enabled === null ? 'Comprobando…' : fin.enabled ? copy.hero.toggleOn : copy.hero.toggleOff}</span>
                   {fin.enabled && <span className="inline-block w-2 h-2 rounded-full bg-[#3ba55d]" />}
                 </button>
-                <a href="#" className="h-9 px-3.5 rounded-full bg-[#f1f1ee] hover:bg-[#e6e6e2] flex items-center gap-2 text-[13.5px] font-semibold text-[#1a1a1a]">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                  <span>Usa Fin en los flujos de trabajo</span>
-                </a>
+                {copy.hero.links.map(l => (
+                  <a key={l.label} href="#" className="h-9 px-3.5 rounded-full bg-[#f1f1ee] hover:bg-[#e6e6e2] flex items-center gap-2 text-[13.5px] font-semibold text-[#1a1a1a]">
+                    <DeployLinkIcon kind={l.icon} />
+                    <span>{l.label}</span>
+                  </a>
+                ))}
               </div>
             </div>
-            <img src={IMG_FIN_DEPLOY_CHAT} alt="" className="object-cover object-top rounded-l-[10px] flex-shrink-0 self-stretch" style={{ width: 388 }} />
+            <img src={copy.hero.image} alt="" className="object-cover object-top rounded-l-[10px] flex-shrink-0 self-stretch" style={{ width: 388 }} />
             <button onClick={() => setHeroOpen(false)} className="absolute top-3 right-3 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
             </button>
@@ -6497,8 +6589,8 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
       <div className="flex-1 min-h-0 px-6 pb-6 pt-2 flex flex-col">
         <div className="flex-1 min-h-0 bg-white border border-[#e9eae6] rounded-[14px] flex flex-col overflow-hidden">
           <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-14 flex items-center gap-2">
-            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.2" y="3" width="11.6" height="10" rx="1.4"/><path d="M6.2 3v10"/></svg>
-            <h3 className="text-[17px] font-bold text-[#1a1a1a]">Chat</h3>
+            {copy.section.icon}
+            <h3 className="text-[17px] font-bold text-[#1a1a1a]">{copy.section.title}</h3>
           </div>
 
       {/* Body: accordion */}
@@ -6514,16 +6606,14 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
                 <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
               </button>
             </div>
-            <p className="text-[14px] text-[#646462] leading-[20px] pb-8">
-              Comienza rápidamente: Elige cómo se comportará Fin en Messenger, Slack, WhatsApp, Facebook e Instagram.
-            </p>
+            <p className="text-[14px] text-[#646462] leading-[20px] pb-8">{copy.lead}</p>
 
             {/* Section 1: cuando inicia conversación */}
-            <DeployStepHeader kind="polygon" label="Cuando un cliente inicia una conversación" />
+            <DeployStepHeader kind="polygon" label={copy.step1Label} />
             <DeployConnector />
 
             <DeployRow
-              label="Los clientes ven a Fin"
+              label={copy.audienceRow}
               value={audienceLabel}
               open={openRow === 'audience'}
               onToggle={() => toggleRow('audience')}
@@ -6639,12 +6729,27 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
             <DeployConnector />
 
             <DeployRow
-              label="En los canales seleccionados"
-              value={surfaceLabel}
+              label={copy.surfacesRow.label}
+              value={copy.surfacesRow.kind === 'surfaces' ? surfaceLabel : undefined}
               open={openRow === 'surfaces'}
               onToggle={() => toggleRow('surfaces')}
               footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ surfaces: dSurfaces })} saving={saving} />}
             >
+              {copy.surfacesRow.kind === 'email' ? (
+                <>
+                  <p className="text-[13.5px] text-[#646462] leading-[20px]">
+                    Fin responde a los correos que llegan a tu dirección de asistencia. Verifica que el dominio esté configurado y el reenvío automático activo para que Fin pueda leerlos y responderlos.
+                  </p>
+                  <div className="mt-4">
+                    <DeploySectionLabel>Canal</DeploySectionLabel>
+                    <span className="mt-2.5 inline-flex items-center gap-2 h-9 px-3.5 rounded-full bg-[#f1f1ee] border border-[#e0e0dc] text-[13.5px] font-semibold text-[#1a1a1a]">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
+                      Correo electrónico
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
               <p className="text-[13.5px] text-[#646462] leading-[20px]">
                 Selecciona los canales que tus clientes usarán para chatear con Fin. Para habilitar la asistencia por chat en vivo, verifica que el Messenger esté configurado.{' '}
                 <a href="#" className="text-[#3b59f6] hover:underline">Configurar Fin a través del chat.</a>
@@ -6683,80 +6788,19 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
                   )}
                 </div>
               </div>
+                </>
+              )}
             </DeployRow>
-            <DeployConnector />
+            {!copy.introInStep2 && <DeployConnector />}
 
-            <DeployRow
-              label="Fin se presenta"
-              value={dIntroEnabled ? 'Activadas (Todos los idiomas compatibles)' : 'Desactivadas'}
-              open={openRow === 'intro'}
-              onToggle={() => toggleRow('intro')}
-              footer={<DeployFooter onCancel={() => setOpenRow(null)} onSave={() => commit({ intro: { enabled: dIntroEnabled, messages: dIntro } })} saving={saving} />}
-            >
-              <p className="text-[13.5px] text-[#646462] leading-[20px]">
-                Configura cómo Fin se presenta al inicio de las conversaciones, para establecer expectativas claras para los clientes.
-              </p>
-              <div className="mt-3 bg-[#feecaf] rounded-[6px] px-3 py-2.5 flex items-start gap-2">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a] flex-shrink-0 mt-0.5" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
-                <p className="text-[12.5px] text-[#1a1a1a] leading-[18px]">Si usted realiza la actualización de estos mensajes, se traducirán automáticamente a todos los demás idiomas admitidos.</p>
-              </div>
-              <div className="mt-3 flex items-start gap-2">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0 mt-0.5" strokeWidth="1.3"><path d="M2 4h6M5 2.8V4M6.4 4c0 3-1.8 5-4 6M4 6.6c.7 1.6 2 2.7 3.5 3.4"/><path d="M8.5 13l2.5-6 2.5 6M9.6 11h3.8"/></svg>
-                <p className="text-[12.5px] text-[#646462] leading-[18px]">
-                  Fin traducirá el mensaje al idioma del cliente, siempre y cuando el idioma sea <a href="#" className="underline hover:no-underline">compatible</a>.
-                </p>
-              </div>
-
-              <div className="mt-4 max-w-[520px] border border-[#e9eae6] rounded-[12px] p-5">
-                <style>{FIN_INTRO_PILL_CSS}</style>
-                <div className="flex items-center gap-3 mb-4">
-                  <FinDotMark className="w-7 h-7" />
-                  <div>
-                    <p className="text-[14.5px] font-bold text-[#1a1a1a] leading-[18px]">Fin</p>
-                    <p className="text-[13px] text-[#646462] leading-[17px]">El equipo también puede ayudar</p>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-3">
-                  {dIntro.map((msg, i) => (
-                    <div key={i} className="flex items-start gap-2.5">
-                      {/* Fin avatar sits beside the last bubble, as in the reference */}
-                      <div className="w-7 flex-shrink-0 self-end pb-2.5">
-                        {i === dIntro.length - 1 && dIntro.length > 1 && <FinDotMark className="w-7 h-7" />}
-                      </div>
-                      <div className="flex-1 min-w-0 bg-[#f1f1ee] rounded-[10px] px-3.5 py-3">
-                        <FinIntroMessageEditor value={msg} onChange={v => setDIntro(list => list.map((m, j) => j === i ? v : m))} />
-                        <div className="flex items-center gap-2.5 mt-2 text-[#646462]">
-                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.8 9.5c.5.7 1.3 1.1 2.2 1.1s1.7-.4 2.2-1.1M6 6.5v.1M10 6.5v.1" strokeLinecap="round"/></svg>
-                          <span className="px-1 h-[15px] rounded-[3px] border border-current text-[9px] font-bold leading-[13px] tracking-tight">GIF</span>
-                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.2"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2 10l3-2.5 2.5 2 3-3L14 9.5"/></svg>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-center gap-2.5 pt-1.5 flex-shrink-0">
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#a4a4a2] cursor-grab"><circle cx="5" cy="4" r="1"/><circle cx="8" cy="4" r="1"/><circle cx="11" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="11" cy="8" r="1"/></svg>
-                        <button onClick={() => setDIntro(list => list.filter((_, j) => j !== i))} title="Quitar" className="text-[#e5484d] hover:text-[#b91c1c]">
-                          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 flex items-center gap-5">
-                  <button onClick={() => setDIntro(list => [...list, ''])} className="flex items-center gap-2 text-[13.5px] font-medium text-[#1a1a1a] hover:underline">
-                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-                    Agregar mensaje
-                  </button>
-                  <button onClick={() => setDIntro(FIN_DEPLOY_DEFAULT_INTRO)} className="flex items-center gap-2 text-[13.5px] font-medium text-[#1a1a1a] hover:underline">
-                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2v3h3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    Restablecer introducción
-                  </button>
-                </div>
-              </div>
-            </DeployRow>
+            {!copy.introInStep2 && introRow}
             <DeployConnector />
 
             {/* Section 2: Fin responde */}
             <DeployStepHeader kind="dark" label="Fin responde al cliente" />
             <DeployConnector />
+
+            {copy.introInStep2 && <>{introRow}<DeployConnector /></>}
 
             <DeployRow
               label="Usando contenido de asistencia"
@@ -6923,7 +6967,7 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
             <DeployConnector />
 
             <DeployRow
-              label="Da seguimiento"
+              label={copy.followupRow}
               value={FIN_FOLLOWUP_LABEL[dFollowup]}
               open={openRow === 'followup'}
               onToggle={() => toggleRow('followup')}
@@ -6964,7 +7008,7 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
             <DeployConnector />
 
             <DeployRow
-              label="Cierra automáticamente los chats abandonados"
+              label={copy.autoCloseRow}
               value={autoCloseLabel}
               open={openRow === 'autoclose'}
               onToggle={() => toggleRow('autoclose')}
@@ -7041,11 +7085,11 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
             <div className="mt-6 bg-[#feecaf] rounded-[6px] p-4 flex items-start gap-2">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0 mt-0.5" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
               <div className="flex-1 min-w-0">
-                <h5 className="text-[14px] font-semibold text-[#1a1a1a] leading-[24px]">Instala Messenger para empezar a chatear con Fin</h5>
-                <p className="text-[14px] text-[#1a1a1a] leading-[20px] font-medium mb-4">Con nuestros ejemplos e integraciones sin código, solo te tomará unos minutos</p>
-                <button className="bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] px-3 h-8 rounded-full">
-                  Instalar Messenger
-                </button>
+                <h5 className="text-[14px] font-semibold text-[#1a1a1a] leading-[24px]">{copy.callout.title}</h5>
+                <p className="text-[14px] text-[#1a1a1a] leading-[20px] font-medium mb-4">{copy.callout.body}</p>
+                {copy.callout.href
+                  ? <a href={copy.callout.href} target="_blank" rel="noreferrer" className="inline-flex items-center bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] px-3 h-8 rounded-full">{copy.callout.cta}</a>
+                  : <button className="bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] px-3 h-8 rounded-full">{copy.callout.cta}</button>}
               </div>
             </div>
 
@@ -7068,7 +7112,7 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
                 </p>
               )}
               <p className="text-[14px] text-[#646462] leading-[20px] text-center">
-                Tus clientes verán a Fin cuando se pongan en contacto contigo para chatear.<br/>
+                {copy.activation.body}<br/>
                 Puedes pausar Fin en cualquier momento.
               </p>
             </div>
@@ -7119,169 +7163,79 @@ function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: Fin
 }
 
 // ─── Desplegar / Correo electrónico (Figma 1:13680) ──────────────────────────
-function FinDespliegueEmailContent() {
-  const status = useChannelDeploymentStatus(['email', 'mail', 'gmail', 'outlook', 'imap', 'smtp']);
-  const fin = useFinChannelToggle('email');
-  return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Hero card */}
-      <div className="flex-shrink-0 px-6 pt-5 pb-3">
-        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
-          <div className="flex-1 min-w-0 pr-2">
-            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
-              Implementa Fin por correo electrónico para obtener respuestas precisas al instante
-            </h2>
-            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
-              Fin AI Agent interpreta los correos electrónicos entrantes, proporciona respuestas utilizando tu contenido de asistencia y escala los problemas complejos cuando es necesario, ampliando la asistencia más allá del chat en vivo.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
-              <button
-                onClick={fin.toggle}
-                disabled={fin.busy || fin.enabled === null}
-                className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold disabled:opacity-50"
-              >
-                <span className={`inline-block w-2 h-2 rounded-full ${fin.enabled ? 'bg-[#3ba55d]' : 'bg-[#c9c9c5]'}`} />
-                <span>
-                  {fin.enabled === null ? 'Comprobando…' : fin.enabled ? 'Fin activo en email — desactivar' : 'Activar Fin para email'}
-                </span>
-              </button>
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                <span>Aprende cómo Fin responde a los correos electrónicos</span>
-              </a>
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                <span>Usa Fin en los flujos de trabajo</span>
-              </a>
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
-                <span>Desplegar Fin por correo electrónico</span>
-              </a>
-            </div>
-          </div>
-          <img src={IMG_FIN_DEPLOY_EMAIL} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
-          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-          </button>
-        </div>
-      </div>
+const FIN_DEPLOY_COPY_CHAT: FinDeployCopy = {
+  channel: 'chat',
+  connectorKeywords: ['chat', 'messenger', 'slack', 'whatsapp', 'sms', 'facebook', 'instagram'],
+  hero: {
+    title: 'Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales',
+    body: 'Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.',
+    image: IMG_FIN_DEPLOY_CHAT,
+    toggleOn: 'Fin activo en chat — desactivar',
+    toggleOff: 'Activar Fin para chat',
+    links: [{ label: 'Usa Fin en los flujos de trabajo', icon: 'book' }],
+  },
+  section: {
+    title: 'Chat',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.2" y="3" width="11.6" height="10" rx="1.4"/><path d="M6.2 3v10"/></svg>,
+  },
+  lead: 'Comienza rápidamente: Elige cómo se comportará Fin en Messenger, Slack, WhatsApp, Facebook e Instagram.',
+  step1Label: 'Cuando un cliente inicia una conversación',
+  audienceRow: 'Los clientes ven a Fin',
+  surfacesRow: { label: 'En los canales seleccionados', kind: 'surfaces' },
+  introInStep2: false,
+  followupRow: 'Da seguimiento',
+  autoCloseRow: 'Cierra automáticamente los chats abandonados',
+  callout: {
+    title: 'Instala Messenger para empezar a chatear con Fin',
+    body: 'Con nuestros ejemplos e integraciones sin código, solo te tomará unos minutos',
+    cta: 'Instalar Messenger',
+  },
+  activation: { body: 'Tus clientes verán a Fin cuando se pongan en contacto contigo para chatear.' },
+};
 
-      {/* Section divider with title */}
-      <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
-        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
-        <h3 className="text-[15px] font-bold text-[#1a1a1a]">Correo electrónico</h3>
-      </div>
+const FIN_DEPLOY_COPY_EMAIL: FinDeployCopy = {
+  channel: 'email',
+  connectorKeywords: ['email', 'mail', 'gmail', 'outlook', 'imap', 'smtp'],
+  hero: {
+    title: 'Implementa Fin por correo electrónico para obtener respuestas precisas al instante',
+    body: 'Fin AI Agent interpreta los correos electrónicos entrantes, proporciona respuestas utilizando tu contenido de asistencia y escala los problemas complejos cuando es necesario, ampliando la asistencia más allá del chat en vivo.',
+    image: IMG_FIN_DEPLOY_EMAIL,
+    toggleOn: 'Fin activo en email — desactivar',
+    toggleOff: 'Activar Fin para email',
+    links: [
+      { label: 'Aprende cómo Fin responde a los correos electrónicos', icon: 'book' },
+      { label: 'Usa Fin en los flujos de trabajo', icon: 'book' },
+      { label: 'Desplegar Fin por correo electrónico', icon: 'mail' },
+    ],
+  },
+  section: {
+    title: 'Correo electrónico',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>,
+  },
+  lead: 'Comienza rápidamente: elige cómo se comportará Fin por correo electrónico.',
+  step1Label: 'Cuando un cliente envía su primer mensaje',
+  audienceRow: 'Fin responderá a',
+  surfacesRow: { label: 'A través del canal de correo electrónico', kind: 'email' },
+  introInStep2: true,
+  followupRow: 'Da seguimiento a los clientes inactivos',
+  autoCloseRow: 'Cierre automáticamente las conversaciones abandonadas',
+  callout: {
+    title: 'Configurar tu dirección de correo electrónico para que Fin responda desde esta',
+    body: 'Se debe agregar un dominio de correo electrónico personalizado y verificar el correo electrónico de Fin, con el reenvío automático habilitado, para que los correos enviados a esa dirección se canalicen a Clain, donde Fin pueda leerlos y responderlos.',
+    cta: 'Mostrarme cómo',
+    href: 'https://www.intercom.com/help/en/articles/6288581-mapping-email-replies-to-inbound-address-using-custom-domains',
+  },
+  activation: { body: 'Tus clientes interactuarán con Fin cuando se comuniquen contigo por correo electrónico.' },
+};
 
-      {/* Body: accordion */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-8 py-6 max-w-[720px]">
-          {/* Accordion 1 — Implementación sencilla (expanded) */}
-          <div className="pb-6 border-b border-[#e9eae6]">
-            <div className="flex items-center gap-3 pb-2">
-              <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[20px]">Implementación sencilla</h4>
-              <button className={`h-[20px] px-[7px] rounded-full border flex items-center gap-1.5 text-[13px] font-medium ${status.live ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f8f8f7] border-[#e9eae6] text-[#1a1a1a]'}`}>
-                {status.live && <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />}
-                <span>{status.live ? status.label : 'No establecer en vivo'}</span>
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-              </button>
-            </div>
-            <p className="text-[14px] text-[#646462] leading-[20px] pb-8">
-              Comienza rápidamente: elige cómo se comportará Fin por correo electrónico.
-            </p>
-
-            {/* Section 1: cuando envía primer mensaje (polygon yellow) */}
-            <DeployStepHeader kind="polygon" label="Cuando un cliente envía su primer mensaje" />
-            <DeployConnector />
-            <DeployRow label="Fin responderá a" value="Users, Leads, and Visitors" />
-            <DeployConnector />
-            <DeployRow label="A través del canal de correo electrónico" />
-            <DeployConnector />
-
-            {/* Section 2: Fin responde (dark) */}
-            <DeployStepHeader kind="dark" label="Fin responde al cliente" />
-            <DeployConnector />
-            <DeployRow label="Fin se presenta" value="Activadas (Todos los idiomas compatibles)" />
-            <DeployConnector />
-            <DeployRow label="Usando contenido de asistencia" pill={{ text: 'Se requiere más contenido', icon: 'warn' }} />
-            <DeployConnector />
-            <DeployRow label="Siguiendo la guía" />
-            <DeployConnector />
-
-            {/* Section 3: Si no puede resolver (green) */}
-            <DeployStepHeader kind="green" label="Si Fin no puede resolver la conversación" />
-            <DeployConnector />
-            <DeployRow label="Transferencia o escala" value="Asignar a" />
-            <DeployConnector />
-            <DeployRow label="Solicita una calificación de conversación (CSAT)" value="Deshabilitado" />
-            <DeployConnector />
-
-            {/* Section 4: Si el cliente se vuelve inactivo (green) — Figma 1:13560 */}
-            <DeployStepHeader kind="green" label="Si el cliente se vuelve inactivo" />
-            <DeployConnector />
-            <DeployRow label="Da seguimiento a los clientes inactivos" value="Fin hará un seguimiento" />
-            <DeployConnector />
-            <DeployRow label="Cierre automáticamente las conversaciones abandonadas" value="6 horas" />
-
-            {/* Yellow callout: Configurar dirección de correo — Figma 1:13609 */}
-            <div className="mt-6 bg-[#feecaf] rounded-[6px] p-4 flex items-start gap-2">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0 mt-0.5" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
-              <div className="flex-1 min-w-0 pl-2">
-                <h5 className="text-[14px] font-semibold text-[#1a1a1a] leading-[24px]">Configurar tu dirección de correo electrónico para que Fin responda desde esta</h5>
-                <p className="text-[14px] text-[#1a1a1a] leading-[20px] font-medium mt-1 mb-4">Se debe agregar un dominio de correo electrónico personalizado y verificar el correo electrónico de Fin, con el reenvío automático habilitado, para que los correos electrónicos enviados a esta dirección se canalicen a Intercom, donde Fin pueda leerlos y responderlos.</p>
-                <a
-                  href="https://www.intercom.com/help/en/articles/6288581-mapping-email-replies-to-inbound-address-using-custom-domains"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex bg-[#222] hover:bg-black text-[#f8f8f7] text-[14px] font-semibold leading-[16px] px-3 h-8 rounded-full items-center"
-                >
-                  Mostrarme cómo
-                </a>
-              </div>
-            </div>
-
-            {/* Grey rounded module — Figma 1:13601 */}
-            <div className="mt-6 bg-[#fbfbf9] border border-[#e9eae6] rounded-[16px] p-6 flex flex-col items-center">
-              <button className="bg-[#f8f8f7] rounded-full px-3 h-8 flex items-center gap-2 text-[14px] font-semibold text-[#1a1a1a] mb-4">
-                <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
-                <span>Establecer en vivo</span>
-              </button>
-              <p className="text-[14px] text-[#646462] leading-[20px] text-center">
-                Tus clientes interactuarán con Fin cuando se comuniquen contigo por correo electrónico.<br/>
-                Puedes pausar Fin en cualquier momento.
-              </p>
-            </div>
-
-            {/* Footnote */}
-            <div className="mt-4 flex items-start justify-center gap-2">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0 mt-1" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
-              <div className="text-[13px] text-[#646462] leading-[20px]">
-                Puede ser necesario informar a las personas que están interactuando con un AI Agent.
-                <a href="https://www.intercom.com/help/en/articles/11712008-ai-agent-disclosure" target="_blank" rel="noreferrer" className="block text-[14px] underline hover:no-underline mt-0.5">Más información</a>
-              </div>
-            </div>
-          </div>
-
-          {/* Accordion 2 — Implementación avanzada (collapsed) */}
-          <div className="pt-6">
-            <div className="flex items-center justify-between gap-3 pb-2">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[20px]">Implementación avanzada con flujos de trabajo</h4>
-                <button className="h-[20px] px-[7px] rounded-full border bg-[#f8f8f7] border-[#e9eae6] text-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-medium">
-                  <span>No establecer en vivo</span>
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-                </button>
-              </div>
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </div>
-            <p className="text-[14px] text-[#646462] leading-[20px]">
-              Personalízalo: automatiza con precisión lo que Fin debe hacer y cuándo.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+function FinDespliegueChatContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubView) => void } = {}) {
+  return <FinDespliegueChannelContent copy={FIN_DEPLOY_COPY_CHAT} onNavigateSub={onNavigateSub} />;
 }
+
+function FinDespliegueEmailContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubView) => void } = {}) {
+  return <FinDespliegueChannelContent copy={FIN_DEPLOY_COPY_EMAIL} onNavigateSub={onNavigateSub} />;
+}
+
 
 // ─── Desplegar / Teléfono (Figma 1:14559) ────────────────────────────────────
 function FinDespliegueTelefonoContent() {
@@ -9430,7 +9384,7 @@ export function FinAiView() {
       case 'pruebaTesting':  return <FinPruebasContent />;
       case 'desplegar':
       case 'depChat':        return <FinDespliegueChatContent onNavigateSub={setSub} />;
-      case 'depEmail':       return <FinDespliegueEmailContent />;
+      case 'depEmail':       return <FinDespliegueEmailContent onNavigateSub={setSub} />;
       case 'depPhone':       return <FinDespliegueTelefonoContent />;
       case 'anaGetStarted':  return <FinComenzarContent />;
       case 'analizar':
