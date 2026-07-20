@@ -5309,7 +5309,8 @@ function FinPruebasContent() {
   const [note, setNote] = useState('');
   const [rightTab, setRightTab] = useState<'response' | 'config' | 'prompt'>('response');
   const [promptCopied, setPromptCopied] = useState(false);
-  const [addText, setAddText] = useState('');
+  /** "Agregar manualmente": one editable row per question, as in the reference. */
+  const [addRows, setAddRows] = useState<string[]>(['']);
   const [generating, setGenerating] = useState(false);
   const [bannerOpen, setBannerOpen] = useState(true);
   const [usesOpen, setUsesOpen] = useState<Record<string, boolean>>({});
@@ -5486,7 +5487,7 @@ function FinPruebasContent() {
       title: 'Agregar manualmente',
       body: 'Copia y pega una lista de preguntas o agrégalas una por una manualmente.',
       cta: 'Agregar',
-      onClick: () => { setAddText(''); setShowAdd(true); },
+      onClick: () => { setAddRows(['']); setShowAdd(true); },
       icon: <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M16.5 3.5l4 4L8 20l-5 1 1-5z" strokeLinejoin="round"/></svg>,
     },
     {
@@ -5601,7 +5602,7 @@ function FinPruebasContent() {
                     {batchRunning ? 'Ejecutando…' : 'Administrar'}
                     <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
                   </button>
-                  <button onClick={() => { setAddText(''); setShowAdd(true); }} className="h-8 px-3.5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+                  <button onClick={() => { setAddRows(['']); setShowAdd(true); }} className="h-8 px-3.5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
                     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                     Agregar preguntas
                     <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z"/></svg>
@@ -5674,7 +5675,7 @@ function FinPruebasContent() {
             </div>
 
             {/* Right panel — Evaluar la respuesta */}
-            <div className="w-[420px] flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0">
+            <div className="w-[38%] min-w-[520px] max-w-[680px] flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0">
               <div className="flex-shrink-0 h-14 px-5 flex items-center justify-between border-b border-[#e9eae6]">
                 <h3 className="text-[16px] font-bold text-[#1a1a1a]">Evaluar la respuesta</h3>
                 <div className="flex items-center gap-1">
@@ -5769,16 +5770,16 @@ function FinPruebasContent() {
                   <div className="flex-shrink-0 border-t border-[#e9eae6] px-5 py-4">
                     <p className="text-[13.5px] font-bold text-[#1a1a1a]">Califica la respuesta de Fin</p>
                     <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">Tu calificación se guardará en la descarga del informe. También puedes agregar una nota para ti o para tu equipo.</p>
-                    <div className="mt-3 grid grid-cols-3 gap-2">
+                    <div className="mt-3 grid grid-cols-3 gap-2.5">
                       {([['good', 'Buena', 'G', '#22c55e'], ['ok', 'Aceptable', 'A', '#facc15'], ['bad', 'Malo', 'P', '#f87171']] as const).map(([val, label, key, dot]) => (
                         <button
                           key={val}
                           onClick={() => rate(selected.id, val)}
-                          className={`h-9 px-2 rounded-[8px] border text-[13px] flex items-center justify-center gap-1.5 ${selected.rating === val ? 'bg-[#f1f1ee] border-[#c8c9c4] font-medium' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}
+                          className={`h-10 px-3 rounded-[10px] border text-[13.5px] flex items-center justify-center gap-2 transition-colors ${selected.rating === val ? 'bg-[#f1f1ee] border-[#1a1a1a] font-semibold' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}
                         >
-                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: dot }} />
+                          <span className="w-[13px] h-[13px] rounded-full flex-shrink-0 border" style={{ background: dot, borderColor: 'rgba(0,0,0,0.12)' }} />
                           <span className="text-[#1a1a1a] truncate">{label}</span>
-                          <span className="ml-0.5 px-1 rounded border border-[#e9eae6] bg-white text-[10px] text-[#646462] font-mono flex-shrink-0">{key}</span>
+                          <span className="ml-auto w-[18px] h-[18px] rounded-[4px] bg-[#f1f1ee] text-[10.5px] text-[#646462] font-medium flex items-center justify-center flex-shrink-0">{key}</span>
                         </button>
                       ))}
                     </div>
@@ -5786,7 +5787,7 @@ function FinPruebasContent() {
                       value={selected.note ?? ''}
                       onChange={e => setQuestionNote(selected.id, e.target.value)}
                       placeholder="Agregar nota interna"
-                      className="mt-2 w-full h-9 px-3 rounded-[8px] border border-[#e9eae6] text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
+                      className="mt-2.5 w-full h-10 px-3.5 rounded-[10px] border border-[#e9eae6] text-[13.5px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
                     />
                   </div>
                 </>
@@ -5799,30 +5800,54 @@ function FinPruebasContent() {
       {/* Add questions modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center p-4" onClick={() => setShowAdd(false)}>
-          <div className="w-full max-w-[560px] bg-white rounded-2xl border border-[#e9eae6] shadow-[0px_24px_64px_rgba(20,20,20,0.24)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 flex items-center justify-between border-b border-[#e9eae6]">
-              <h3 className="text-[16px] font-bold text-[#1a1a1a]">Agregar preguntas</h3>
+          <div className="w-full max-w-[640px] bg-white rounded-[16px] shadow-[0px_24px_64px_rgba(20,20,20,0.24)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-7 pt-6 pb-4 flex items-center justify-between">
+              <h3 className="text-[19px] font-bold text-[#1a1a1a]">Agregar manualmente</h3>
               <button onClick={() => setShowAdd(false)} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
               </button>
             </div>
-            <div className="p-5">
-              <p className="text-[12.5px] text-[#646462] mb-2">Escribe o pega una pregunta por línea (máximo 50).</p>
-              <textarea
-                autoFocus
-                value={addText}
-                onChange={e => setAddText(e.target.value)}
-                placeholder={'¿Cómo puedo actualizar mi plan?\n¿Cuál es la política de reembolsos?'}
-                className="w-full min-h-[180px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] leading-[20px] resize-none focus:outline-none focus:border-[#1a1a1a]"
-              />
-            </div>
-            <div className="px-6 py-3 border-t border-[#e9eae6] flex items-center justify-end gap-2">
-              <button onClick={() => setShowAdd(false)} className="h-8 px-4 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+            <div className="border-t border-dashed border-[#e0e0dc]" />
+            <div className="px-7 py-5 max-h-[52vh] overflow-y-auto">
+              <div className="flex flex-col gap-2.5">
+                {addRows.map((row, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <textarea
+                      autoFocus={i === 0}
+                      rows={1}
+                      value={row}
+                      onChange={e => setAddRows(r => r.map((v, j) => j === i ? e.target.value : v))}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); setAddRows(r => [...r.slice(0, i + 1), '', ...r.slice(i + 1)]); }
+                      }}
+                      placeholder="Ingresa la pregunta..."
+                      className="flex-1 min-h-[42px] px-3.5 py-2.5 rounded-[10px] border border-[#1a1a1a] text-[13.5px] leading-[20px] text-[#1a1a1a] placeholder:text-[#a4a4a2] resize-y focus:outline-none"
+                    />
+                    <button
+                      onClick={() => setAddRows(r => r.length === 1 ? [''] : r.filter((_, j) => j !== i))}
+                      title="Quitar"
+                      className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0"
+                    >
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
               <button
-                onClick={() => { addMany(addText.split(/\r?\n/)); setShowAdd(false); }}
-                disabled={!addText.trim()}
-                className={`h-8 px-4 rounded-full text-[13px] font-semibold ${addText.trim() ? 'bg-[#1a1a1a] text-white hover:bg-black' : 'bg-[#f3f3f1] text-[#a4a4a2] cursor-not-allowed'}`}
-              >Agregar</button>
+                onClick={() => setAddRows(r => [...r, ''])}
+                className="mt-3 -ml-1 h-8 px-2 rounded-md flex items-center gap-2 text-[13.5px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                Agregar otra
+              </button>
+            </div>
+            <div className="px-7 py-4 flex items-center justify-end gap-2">
+              <button onClick={() => setShowAdd(false)} className="h-9 px-4 rounded-[8px] text-[13.5px] font-semibold text-[#1a1a1a] hover:bg-[#f1f1ee]">Cancelar</button>
+              <button
+                onClick={() => { addMany(addRows); setShowAdd(false); }}
+                disabled={!addRows.some(r => r.trim())}
+                className={`h-9 px-4 rounded-[8px] text-[13.5px] font-semibold ${addRows.some(r => r.trim()) ? 'bg-[#1a1a1a] text-white hover:bg-black' : 'bg-[#f3f3f1] text-[#a4a4a2] cursor-not-allowed'}`}
+              >Guardar</button>
             </div>
           </div>
         </div>
