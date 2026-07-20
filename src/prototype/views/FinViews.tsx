@@ -5300,18 +5300,20 @@ function buildFinAgentContext(articles: any[]): {
 // ─── Probar / Pruebas (Figma 1:10409) ───────────────────────────────────────
 function FinPruebasContent() {
   type TestQ = { id: string; q: string; rating?: 'good' | 'ok' | 'bad' | null; result?: any; status?: 'idle' | 'running' | 'done' | 'error'; error?: string };
-  const [questions, setQuestions] = useState<TestQ[]>([
-    { id: 'q1', q: '¿Cómo puedo actualizar mi plan de suscripción?', status: 'idle', rating: null },
-    { id: 'q2', q: '¿Cuál es la política de reembolsos?', status: 'idle', rating: null },
-    { id: 'q3', q: 'No puedo acceder a mi cuenta, ¿qué hago?', status: 'idle', rating: null },
-  ]);
-  const [selectedId, setSelectedId] = useState<string>('q1');
+  // Starts empty so the "Comencemos agregando preguntas" screen shows first.
+  const [questions, setQuestions] = useState<TestQ[]>([]);
+  const [selectedId, setSelectedId] = useState<string>('');
   const [newQ, setNewQ] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [note, setNote] = useState('');
   const [rightTab, setRightTab] = useState<'response' | 'config' | 'prompt'>('response');
   const [promptCopied, setPromptCopied] = useState(false);
+  const [addText, setAddText] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [bannerOpen, setBannerOpen] = useState(true);
+  const csvRef = useRef<HTMLInputElement>(null);
+  void rightTab; void setRightTab; void promptCopied; void newQ; void setNewQ;
 
   const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
   const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [], []);
@@ -5382,6 +5384,44 @@ function FinPruebasContent() {
       return next;
     });
   }
+  // Bulk add (manual paste / CSV / inbox generation). Caps at 50 like the reference.
+  function addMany(list: string[]) {
+    const items: TestQ[] = list
+      .map(s => s.trim()).filter(Boolean).slice(0, 50)
+      .map((q, i) => ({ id: `q${Date.now()}_${i}`, q, status: 'idle' as const, rating: null }));
+    if (items.length === 0) { setNote('No se encontraron preguntas válidas.'); return; }
+    setQuestions(prev => [...prev, ...items]);
+    setSelectedId(items[0].id);
+    setNote(`${items.length} pregunta${items.length === 1 ? '' : 's'} añadida${items.length === 1 ? '' : 's'}`);
+  }
+  async function generateFromInbox() {
+    if (generating) return;
+    setGenerating(true);
+    setNote('');
+    try {
+      const res: any = await casesApi.list();
+      const rows: any[] = Array.isArray(res) ? res : (res?.data ?? res?.items ?? []);
+      const qs = rows.map((c: any) => String(c.subject || c.title || c.summary || '').trim()).filter(Boolean);
+      if (qs.length === 0) { setNote('No hay conversaciones previas de las que generar preguntas.'); return; }
+      addMany(qs);
+    } catch {
+      setNote('No se pudieron generar preguntas desde el buzón.');
+    } finally { setGenerating(false); }
+  }
+  function onCsvFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      const lines = text.split(/\r?\n/)
+        .map(l => (l.split(',')[0] ?? '').replace(/^"|"$/g, '').trim())
+        .filter(l => l && l.toLowerCase() !== 'question' && l.toLowerCase() !== 'pregunta');
+      addMany(lines);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
   function rate(id: string, rating: 'good' | 'ok' | 'bad') {
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, rating } : q));
   }
@@ -5405,322 +5445,313 @@ function FinPruebasContent() {
     { key: 'procedures', count: agentCtx.stats.procedures, label: 'procs',     color: '#b91c1c', bg: '#fef2f2' },
   ];
 
+  const statusLabel = (q: TestQ) =>
+    q.status === 'running' ? 'Ejecutando' :
+    q.status === 'done' ? (q.result?.fin_status ? String(q.result.fin_status) : 'Respondida') :
+    q.status === 'error' ? 'Error' : 'Sin ejecutar';
+
+  const addCards = [
+    {
+      key: 'inbox',
+      title: 'Generar desde el buzón',
+      body: 'Genera hasta 50 preguntas basadas en tus conversaciones anteriores',
+      cta: generating ? 'Generando…' : 'Generar',
+      onClick: generateFromInbox,
+      icon: <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M3 13h4l1.5 2.5h7L17 13h4" strokeLinecap="round" strokeLinejoin="round"/><path d="M4.5 6.5h15L21 13v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4z" strokeLinejoin="round"/></svg>,
+    },
+    {
+      key: 'manual',
+      title: 'Agregar manualmente',
+      body: 'Copia y pega una lista de preguntas o agrégalas una por una manualmente.',
+      cta: 'Agregar',
+      onClick: () => { setAddText(''); setShowAdd(true); },
+      icon: <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M16.5 3.5l4 4L8 20l-5 1 1-5z" strokeLinejoin="round"/></svg>,
+    },
+    {
+      key: 'csv',
+      title: 'Cargar archivo CSV',
+      body: 'Importa hasta 50 preguntas a la vez subiendo un archivo CSV',
+      cta: 'Subir',
+      onClick: () => csvRef.current?.click(),
+      icon: <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M7 17.5a4 4 0 0 1 .6-7.95 5.5 5.5 0 0 1 10.6-1.2A3.75 3.75 0 0 1 18 17.5z" strokeLinejoin="round"/><path d="M12 10v6M9.5 12.5L12 10l2.5 2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+    },
+  ];
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Top bar */}
-      <div className="flex-shrink-0 h-[50px] px-6 flex items-center justify-between border-b border-[#e9eae6]">
-        <h2 className="text-[14px] font-semibold text-[#1a1a1a]">
-          Prueba por lotes las respuestas de Fin para activarlas con confianza
-        </h2>
-        <button
-          onClick={runBatch}
-          disabled={batchRunning || questions.length === 0}
-          className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:bg-[#a4a4a2]"
-        >
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M5 3l8 5-8 5z"/></svg>
-          {batchRunning ? 'Ejecutando…' : `Probar todas (${questions.length})`}
-        </button>
-      </div>
+      <input ref={csvRef} type="file" accept=".csv,text/csv" onChange={onCsvFile} className="hidden" />
 
-      {/* Body */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left column */}
-        <div className="flex-1 min-w-0 flex flex-col border-r border-[#e9eae6] overflow-hidden">
-
-          {/* ── Config summary bar ── */}
-          <div className="flex-shrink-0 px-6 py-2.5 border-b border-[#e9eae6] bg-[#fafafa]">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[11.5px] font-medium text-[#646462]">Config activa:</span>
-              {configPills.map(p => (
-                <span key={p.key} className="inline-flex items-center h-[22px] px-2.5 rounded-full text-[11px] font-semibold"
-                  style={p.count > 0 ? { background: p.bg, color: p.color } : { background: '#f1f1ee', color: '#9a9a98' }}>
-                  {p.count} {p.label}
-                </span>
-              ))}
-              {(agentCtx.stats.content + agentCtx.stats.pautas + agentCtx.stats.atributos + agentCtx.stats.escalations + agentCtx.stats.procedures) === 0 && (
-                <span className="text-[11px] text-[#b91c1c]">⚠ Sin configuración activa — ve a Capacitar para añadir contenido</span>
-              )}
-            </div>
-          </div>
-
-          {/* Test name + actions */}
-          <div className="flex-shrink-0 px-6 pt-5 pb-2">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <button className="flex items-center gap-2 text-[22px] font-bold text-[#1a1a1a] tracking-[-0.2px] hover:bg-[#f8f8f7] -mx-1 px-1 rounded">
-                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4">
-                    <rect x="2.5" y="2.5" width="11" height="11" rx="1.4" />
-                    <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" strokeLinecap="round" />
-                  </svg>
-                  <span className="truncate">Creado mediante entrada manual</span>
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z" /></svg>
-                </button>
-                <div className="mt-2 flex items-center gap-1.5 text-[12.5px] text-[#646462]">
-                  <span>Actualizado hace hace 10 horas por</span>
-                  <span className="w-4 h-4 rounded-full bg-[#f1c5a8] flex items-center justify-center text-[8px] font-bold text-[#1a1a1a]">H</span>
-                  <span>Hector Vidal Sanchez</span>
+      {questions.length === 0 ? (
+        <>
+          {/* Hero */}
+          {bannerOpen && (
+            <div className="flex-shrink-0 px-4 pt-4">
+              <div className="relative bg-white rounded-[16px] border border-[#e9eae6] px-6 py-5 flex gap-6 items-start">
+                <div className="flex-1 min-w-0 max-w-[660px] flex flex-col gap-3">
+                  <h2 className="text-[20px] font-semibold text-[#1a1a1a] leading-[26px] tracking-[-0.3px]">Prueba por lotes las respuestas de Fin para activarlas con confianza</h2>
+                  <p className="text-[14px] text-[#646462] leading-[20px]">Ve cómo Fin gestiona las conversaciones reales. Refina las respuestas antes de activarlas para asegurar una asistencia de alta calidad.</p>
+                  <div className="mt-1 flex flex-wrap gap-x-5 gap-y-2 text-[14px] font-semibold text-[#1a1a1a]">
+                    <a className="inline-flex items-center gap-2 hover:underline" href="#">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
+                      Obtén más información sobre las pruebas de lotes de Fin
+                    </a>
+                    <a className="inline-flex items-center gap-2 hover:underline" href="#">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M5.5 6.5h5M5.5 9.5h3"/></svg>
+                      Dar opinión
+                    </a>
+                    <a className="inline-flex items-center gap-2 hover:underline" href="#">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><path d="M8 2.5L14.5 6 8 9.5 1.5 6z" strokeLinejoin="round"/><path d="M4 7.5v3.2c0 .9 1.8 1.8 4 1.8s4-.9 4-1.8V7.5"/></svg>
+                      Prueba Fin y mejora su forma de responder
+                    </a>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                  <span>{finAgent?.name || finAgent?.slug || 'Fin'}</span>
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
-                </button>
-                <button onClick={() => setShowAdd(s => !s)} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
-                  <span>Agregar preguntas</span>
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z" /></svg>
+                <div className="relative w-[400px] h-[168px] rounded-[10px] overflow-hidden flex-shrink-0 bg-[#f3f3f1] border border-[#e9eae6] p-3">
+                  <div className="flex items-center justify-between text-[10px] font-semibold text-[#646462] pb-1.5 border-b border-[#e9eae6]"><span>Question</span><span>Answer rating</span></div>
+                  {[
+                    { q: 'How do payments work?', r: 'Good', c: 'bg-[#dcf2e3] text-[#1f7a3a]' },
+                    { q: 'How can I update my payment method?', r: 'Poor', c: 'bg-[#fde8e8] text-[#b91c1c]' },
+                    { q: 'Are there any late payment penalties?', r: 'Unrated', c: 'bg-[#f1f1ee] text-[#646462]' },
+                  ].map(row => (
+                    <div key={row.q} className="flex items-center justify-between gap-2 py-1.5 border-b border-[#e9eae6] last:border-b-0">
+                      <span className="text-[10.5px] text-[#1a1a1a] truncate">{row.q}</span>
+                      <span className={`text-[9.5px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${row.c}`}>{row.r}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setBannerOpen(false)} aria-label="Cerrar" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
                 </button>
               </div>
             </div>
-            {showAdd && (
-              <div className="mt-3 flex gap-2">
-                <input
-                  autoFocus
-                  value={newQ}
-                  onChange={e => setNewQ(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && newQ.trim()) addQuestion(); if (e.key === 'Escape') { setShowAdd(false); setNewQ(''); } }}
-                  placeholder="Escribe una pregunta para probar Fin…"
-                  className="flex-1 h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] outline-none focus:border-[#1a1a1a]"
-                />
-                <button onClick={addQuestion} disabled={!newQ.trim()} className="h-9 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#a4a4a2]">Añadir</button>
-              </div>
-            )}
-          </div>
+          )}
 
-          {/* Probando como + filter pills */}
-          <div className="flex-shrink-0 px-6 pt-4 pb-3 flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-[13px] text-[#1a1a1a]">Probando como</span>
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.5 13c.6-2 2.3-3.2 4.5-3.2S12 11 12.6 13" strokeLinecap="round"/></svg>
-                <span>Vista previa del usuario</span>
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
+          {/* Prueba por lotes card */}
+          <div className="flex-1 min-h-0 px-4 py-4">
+            <div className="h-full bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0">
+              <div className="flex-shrink-0 h-14 px-6 flex items-center gap-2 border-b border-[#e9eae6]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M6.5 3v10"/></svg>
+                <h2 className="text-[16px] font-bold text-[#1a1a1a]">Prueba por lotes</h2>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center px-6 py-10">
+                <p className="text-[16px] font-semibold text-[#1a1a1a] mb-6">Comencemos agregando preguntas:</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-[1000px]">
+                  {addCards.map(c => (
+                    <div key={c.key} className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex flex-col">
+                      <span className="w-6 h-6 mb-3">{c.icon}</span>
+                      <p className="text-[15px] font-semibold text-[#1a1a1a] mb-1.5">{c.title}</p>
+                      <p className="text-[13px] text-[#646462] leading-[19px] flex-1">{c.body}</p>
+                      <button onClick={c.onClick} disabled={c.key === 'inbox' && generating} className="mt-4 h-9 w-full rounded-[8px] bg-[#f3f3f1] hover:bg-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] disabled:opacity-60">{c.cta}</button>
+                    </div>
+                  ))}
+                </div>
+                {note && <p className="mt-5 text-[12.5px] text-[#646462]">{note}</p>}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Thin banner */}
+          {bannerOpen && (
+            <div className="flex-shrink-0 h-11 px-6 flex items-center justify-between border-b border-[#e9eae6]">
+              <span className="text-[14px] font-semibold text-[#1a1a1a]">Prueba por lotes las respuestas de Fin para activarlas con confianza</span>
+              <button onClick={() => setBannerOpen(false)} className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
               </button>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white border border-[#e9eae6] text-[12.5px] text-[#1a1a1a]">
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5" strokeLinecap="round"/></svg>
-                <span>El estado de la respuesta es <span className="font-semibold">Cualquiera</span></span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white border border-[#e9eae6] text-[12.5px] text-[#1a1a1a]">
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 2.5l1.7 3.5 3.8.5-2.7 2.6.6 3.7L8 11.1l-3.4 1.7.6-3.7L2.5 6.5l3.8-.5z" strokeLinejoin="round"/></svg>
-                <span>La calificación de la respuesta es <span className="font-semibold">Cualquiera</span></span>
-              </span>
-            </div>
-          </div>
+          )}
 
-          {/* Question count */}
-          <div className="flex-shrink-0 px-6 py-3 text-[13px] text-[#646462]">{questions.length} {questions.length === 1 ? 'pregunta' : 'preguntas'}</div>
+          <div className="flex-1 min-h-0 flex gap-2 p-2">
+            {/* Left card */}
+            <div className="flex-1 min-w-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0">
+              <div className="flex-shrink-0 px-6 pt-4 pb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M6.5 3v10"/></svg>
+                    <h2 className="text-[18px] font-bold text-[#1a1a1a] truncate">Creado mediante entrada manual</h2>
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+                  </div>
+                  <p className="mt-1 text-[12.5px] text-[#646462]">Actualizado hace unos segundos</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button onClick={runBatch} disabled={batchRunning} className="h-8 px-3 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] flex items-center gap-1.5 disabled:opacity-60">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M10.5 2.8l2.7 2.7L6 12.6l-3.4.9.9-3.4 7-7.3z" strokeLinejoin="round"/></svg>
+                    {batchRunning ? 'Ejecutando…' : 'Administrar'}
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                  </button>
+                  <button onClick={() => { setAddText(''); setShowAdd(true); }} className="h-8 px-3.5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                    Agregar preguntas
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z"/></svg>
+                  </button>
+                </div>
+              </div>
 
-          {/* Table */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <table className="w-full text-[13px]">
-              <thead className="sticky top-0 bg-white">
-                <tr className="border-b border-[#e9eae6] text-[12px] text-[#646462]">
-                  <th className="w-10 pl-6 py-3 text-left"></th>
-                  <th className="py-3 pr-3 text-left font-medium">Pregunta</th>
-                  <th className="py-3 pr-3 text-left font-medium">Estado de la respuesta</th>
-                  <th className="py-3 pr-6 text-left font-medium">Calificación de respuesta</th>
-                </tr>
-              </thead>
-              <tbody>
+              {/* Filters */}
+              <div className="flex-shrink-0 px-6 pb-3 flex flex-wrap items-center gap-2">
+                <span className="text-[13px] text-[#646462]">Probando como</span>
+                <span className="h-8 px-3 rounded-full bg-[#f8f8f7] border border-[#e9eae6] inline-flex items-center gap-1.5 text-[13px] text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 6h11"/></svg>
+                  Vista previa del usuario
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                </span>
+                <span className="h-8 px-3 rounded-full bg-[#f8f8f7] border border-[#e9eae6] inline-flex items-center gap-1.5 text-[13px] text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M6.4 6.4c.3-.9 1.1-1.5 2-1.5 1.1 0 2 .8 2 1.8 0 1-.8 1.5-1.7 1.7-.3 0-.5.3-.5.5v.4M8 11.2v.01" strokeLinecap="round"/></svg>
+                  El estado de la respuesta es Cualquiera
+                </span>
+                <span className="h-8 px-3 rounded-full bg-[#f8f8f7] border border-[#e9eae6] inline-flex items-center gap-1.5 text-[13px] text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M8 1.8l1.8 4 4.2.4-3.2 2.8 1 4.1L8 10.9 4.2 13.1l1-4.1L2 6.2l4.2-.4z"/></svg>
+                  La calificación de la respuesta es Cualquiera
+                </span>
+              </div>
+
+              {/* Count */}
+              <div className="flex-shrink-0 px-6 pb-2 text-[13px] text-[#1a1a1a]">{questions.length} question{questions.length === 1 ? '' : 's'}</div>
+
+              {/* Table header */}
+              <div className="flex-shrink-0 px-6">
+                <div className="grid grid-cols-[28px_1fr_180px_190px] gap-3 items-center py-2 border-b border-[#e9eae6] text-[12.5px] text-[#646462]">
+                  <span className="flex items-center justify-center"><span className="w-3.5 h-3.5 rounded-[3px] border border-[#c8c9c4] bg-[#f1f1ee]" /></span>
+                  <span>Pregunta</span>
+                  <span className="flex items-center gap-1">Estado de la respuesta <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.3"><circle cx="8" cy="8" r="5.5"/><path d="M6.4 6.4c.3-.9 1.1-1.5 2-1.5 1.1 0 2 .8 2 1.8 0 1-.8 1.5-1.7 1.7v.4M8 11.2v.01" strokeLinecap="round"/></svg></span>
+                  <span className="flex items-center gap-1">Calificación de respuesta <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#a4a4a2]" strokeWidth="1.3"><circle cx="8" cy="8" r="5.5"/><path d="M6.4 6.4c.3-.9 1.1-1.5 2-1.5 1.1 0 2 .8 2 1.8 0 1-.8 1.5-1.7 1.7v.4M8 11.2v.01" strokeLinecap="round"/></svg></span>
+                </div>
+              </div>
+
+              {/* Rows */}
+              <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-4">
                 {questions.map(q => {
                   const rl = ratingLabel(q.rating);
-                  const isSel = q.id === selectedId;
+                  const active = q.id === selectedId;
                   return (
-                    <tr
+                    <div
                       key={q.id}
                       onClick={() => setSelectedId(q.id)}
-                      className={`border-b border-[#e9eae6] cursor-pointer ${isSel ? 'bg-[#f8f8f7]' : 'hover:bg-[#fafafa]'}`}
+                      className={`group grid grid-cols-[28px_1fr_180px_190px] gap-3 items-center py-3 border-b border-[#f1f1ee] cursor-pointer rounded-[8px] ${active ? 'bg-[#f8f8f7]' : 'hover:bg-[#f8f8f7]/60'}`}
                     >
-                      <td className="w-10 pl-6 py-4 align-top">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); runOne(q.id); }}
-                          title="Probar de nuevo"
-                          className="w-5 h-5 rounded hover:bg-[#e9eae6] flex items-center justify-center"
-                        >
-                          {q.status === 'running'
-                            ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462] animate-spin" strokeWidth="1.6"><path d="M8 2a6 6 0 0 1 6 6" strokeLinecap="round"/></svg>
-                            : <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M5 3l8 5-8 5z"/></svg>}
-                        </button>
-                      </td>
-                      <td className="py-4 pr-3 text-[#1a1a1a]">{q.q}</td>
-                      <td className="py-4 pr-3 text-[#646462]">
-                        {q.status === 'done' && <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0fb87f]"/>Respondida</span>}
-                        {q.status === 'running' && <span className="text-[12px]">Ejecutando…</span>}
-                        {q.status === 'error' && <span className="inline-flex items-center gap-1.5 text-[#b91c1c]"><span className="w-2 h-2 rounded-full bg-[#b91c1c]"/>Error</span>}
-                        {(!q.status || q.status === 'idle') && <span className="text-[12px]">Pendiente</span>}
-                      </td>
-                      <td className="py-4 pr-6">
+                      <span className="flex items-center justify-center">
+                        {q.status === 'running'
+                          ? <span className="w-3.5 h-3.5 rounded-full border-2 border-[#e9eae6] border-t-[#646462] animate-spin" />
+                          : <span className="w-3.5 h-3.5 rounded-[3px] border border-[#c8c9c4] bg-white" />}
+                      </span>
+                      <span className="text-[13.5px] text-[#1a1a1a] leading-[19px]">{q.q}</span>
+                      <span className="text-[13px] text-[#646462]">{statusLabel(q)}</span>
+                      <span className="flex items-center gap-2">
                         {rl
-                          ? <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]"><span className="w-2 h-2 rounded-full" style={{ background: rl.dot }}/>{rl.txt}</span>
-                          : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]">Sin calificación</span>}
-                      </td>
-                    </tr>
+                          ? <span className="inline-flex items-center gap-1.5 text-[13px] text-[#1a1a1a]"><span className="w-2 h-2 rounded-full" style={{ background: rl.dot }} />{rl.txt}</span>
+                          : <span className="text-[13px] text-[#a4a4a2]">Sin calificar</span>}
+                        <button onClick={e => { e.stopPropagation(); removeQuestion(q.id); }} title="Quitar" className="ml-auto opacity-0 group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]">
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      </span>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Right column */}
-        <div className="w-[456px] flex-shrink-0 flex flex-col bg-[#fbfbfa] overflow-hidden">
-
-          {/* Tabs header */}
-          <div className="flex-shrink-0 border-b border-[#e9eae6] px-4">
-            <div className="flex items-center">
-              {([
-                { id: 'response' as const, label: 'Respuesta' },
-                { id: 'config'   as const, label: 'Config activa' },
-                { id: 'prompt'   as const, label: 'Prompt del sistema' },
-              ]).map(t => (
-                <button key={t.id} onClick={() => setRightTab(t.id)}
-                  className={`h-11 px-3 text-[12.5px] font-semibold border-b-2 transition-colors whitespace-nowrap ${rightTab === t.id ? 'text-[#1a1a1a] border-[#1a1a1a]' : 'text-[#646462] border-transparent hover:text-[#1a1a1a]'}`}>
-                  {t.label}
-                </button>
-              ))}
+                {note && <p className="pt-3 text-[12.5px] text-[#646462]">{note}</p>}
+              </div>
             </div>
-          </div>
 
-          {/* Tab: Respuesta */}
-          {rightTab === 'response' && (<>
-            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
-              {selected ? (<>
-                <div className="flex justify-end">
-                  <div className="max-w-[78%] bg-[#1a1a1a] text-white text-[13px] leading-[18px] px-3.5 py-2.5 rounded-[14px] rounded-tr-[4px]">{selected.q}</div>
+            {/* Right panel — Evaluar la respuesta */}
+            <div className="w-[420px] flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0">
+              <div className="flex-shrink-0 h-14 px-5 flex items-center justify-between border-b border-[#e9eae6]">
+                <h3 className="text-[16px] font-bold text-[#1a1a1a]">Evaluar la respuesta</h3>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => selected && runOne(selected.id)} title="Volver a ejecutar" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                  <button onClick={() => setSelectedId('')} title="Cerrar" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+                  </button>
                 </div>
-                {selected.status === 'running' && (
-                  <div className="flex items-start">
-                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462] flex items-center gap-1.5">
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462] animate-spin flex-shrink-0" strokeWidth="1.6"><path d="M8 2a6 6 0 0 1 6 6" strokeLinecap="round"/></svg>
-                      Ejecutando con configuración activa…
-                    </div>
+              </div>
+              {!selected ? (
+                <div className="flex-1 flex items-center justify-center p-8">
+                  <p className="text-center text-[13px] text-[#646462] max-w-[240px]">Selecciona una pregunta de la lista para ver y evaluar la respuesta de Fin.</p>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto min-h-0 p-5 flex flex-col gap-4">
+                  <div className="flex justify-end">
+                    <div className="max-w-[85%] rounded-[14px] bg-[#1a1a1a] text-white px-4 py-2.5 text-[13.5px] leading-[19px]">{selected.q}</div>
                   </div>
-                )}
-                {selected.status === 'error' && (
-                  <div className="flex items-start">
-                    <div className="max-w-[88%] bg-[#fef2f2] border border-[#fecaca] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#b91c1c]">{selected.error}</div>
-                  </div>
-                )}
-                {selected.status === 'done' && selected.result && (
-                  <div className="flex items-start">
-                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3">
-                      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#1a1a1a]">
-                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
-                        <span>Fin</span><span className="text-[#646462] font-normal">· AI Agent</span>
+                  {selected.status === 'running' && (
+                    <div className="flex justify-start">
+                      <div className="rounded-[14px] bg-[#f1f1ee] px-4 py-3 flex items-center gap-1">
+                        {[0, 1, 2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full bg-[#a4a4a2] animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}
                       </div>
-                      <p className="mt-1.5 text-[13px] leading-[18px] text-[#1a1a1a] whitespace-pre-wrap">
-                        {selected.result.answer || selected.result.message || selected.result.content || JSON.stringify(selected.result, null, 2)}
-                      </p>
                     </div>
-                  </div>
-                )}
-                {(!selected.status || selected.status === 'idle') && (
-                  <div className="flex items-start">
-                    <div className="max-w-[88%] bg-[#f8f8f7] border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462]">
-                      Pulsa ▶ en la fila o «Probar todas» para evaluar la respuesta de Fin.
-                    </div>
-                  </div>
-                )}
-                {selected.status === 'done' && selected.result?.sources?.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-[12px] text-[#646462] mb-2">Esta respuesta utiliza:</p>
-                    <div className="flex flex-col gap-1.5">
-                      {selected.result.sources.map((s: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between px-3.5 py-2 bg-white border border-[#e9eae6] rounded-[10px]">
-                          <span className="text-[13px] font-medium text-[#1a1a1a] truncate">{s.title || s.id || 'Fuente'}</span>
-                          {typeof s.score === 'number' && <span className="text-[11px] text-[#646462]">{Math.round(s.score * 100)}%</span>}
+                  )}
+                  {selected.status === 'error' && (
+                    <div className="rounded-[12px] bg-[#fef2f2] border border-[#fecaca] px-4 py-3 text-[13px] text-[#b91c1c]">{selected.error || 'Error al ejecutar'}</div>
+                  )}
+                  {selected.status === 'done' && (
+                    <>
+                      <div className="flex justify-start">
+                        <div className="max-w-[92%] rounded-[14px] bg-[#f1f1ee] px-4 py-3 text-[13.5px] text-[#1a1a1a] leading-[20px] whitespace-pre-wrap">{selected.result?.answer || '(sin respuesta)'}</div>
+                      </div>
+                      {Array.isArray(selected.result?.sources) && selected.result.sources.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {selected.result.sources.slice(0, 6).map((s: any, i: number) => (
+                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#eef2ff] text-[#3b59f6] text-[11.5px]">{String(s.title || s.id).slice(0, 40)}</span>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>) : (
-                <p className="text-[13px] text-[#646462]">Añade preguntas para empezar a probar Fin.</p>
+                      )}
+                      {typeof selected.result?.confidence === 'number' && (
+                        <p className="text-[12px] text-[#646462]">Confianza: {Math.round(selected.result.confidence * 100)}%</p>
+                      )}
+                      <div className="pt-1 border-t border-[#f1f1ee]">
+                        <p className="text-[12.5px] font-semibold text-[#1a1a1a] mb-2">Calificación de respuesta</p>
+                        <div className="flex items-center gap-2">
+                          {([['good', 'Buena'], ['ok', 'Aceptable'], ['bad', 'Malo']] as const).map(([val, label]) => (
+                            <button key={val} onClick={() => rate(selected.id, val)} className={`h-8 px-3 rounded-full border text-[13px] ${selected.rating === val ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>{label}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {selected.status !== 'running' && selected.status !== 'done' && selected.status !== 'error' && (
+                    <button onClick={() => runOne(selected.id)} className="self-start h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black flex items-center gap-1.5">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                      Ejecutar
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-            <div className="flex-shrink-0 border-t border-[#e9eae6] px-5 pt-4 pb-5">
-              <h4 className="text-[14px] font-bold text-[#1a1a1a]">Califica la respuesta de Fin</h4>
-              <div className="mt-3 flex gap-2">
-                {([
-                  { id: 'good' as const, label: 'Buena',     color: '#0fb87f', key: 'G' },
-                  { id: 'ok'   as const, label: 'Aceptable', color: '#f4d35e', key: 'A' },
-                  { id: 'bad'  as const, label: 'Malo',      color: '#ff5f3f', key: 'P' },
-                ]).map(r => {
-                  const active = selected?.rating === r.id;
-                  return (
-                    <button key={r.id} onClick={() => selected && rate(selected.id, r.id)}
-                      className={`h-8 px-3 rounded-[8px] border flex items-center gap-1.5 text-[13px] text-[#1a1a1a] ${active ? 'bg-[#f8f8f7] border-[#1a1a1a]' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}>
-                      <span className="w-3.5 h-3.5 rounded-full" style={{ background: r.color }} />
-                      <span>{r.label}</span>
-                      <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">{r.key}</span>
-                    </button>
-                  );
-                })}
-                {selected && (
-                  <button onClick={() => removeQuestion(selected.id)} className="ml-auto h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#b91c1c] hover:bg-[#fef2f2]">Eliminar</button>
-                )}
-              </div>
-              <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Agregar nota interna"
-                className="mt-3 w-full h-9 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] placeholder:text-[#646462] outline-none focus:border-[#1a1a1a]" />
-            </div>
-          </>)}
+          </div>
+        </>
+      )}
 
-          {/* Tab: Config activa */}
-          {rightTab === 'config' && (
-            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-5">
-              {([
-                { label: 'Contenido', items: agentCtx.stats.content > 0 ? [{ title: `${agentCtx.stats.content} artículos habilitados para Fin`, sub: '' }] : [], empty: 'Sin artículos habilitados. Ve a Capacitar → Contenido.' },
-                { label: 'Pautas', items: agentCtx.activePautas.map(p => ({ title: p.title, sub: p.body.split('\n')[0] })), empty: 'Sin pautas activas. Ve a Capacitar → Pautas.' },
-                { label: 'Atributos', items: agentCtx.activeAtributos.map(a => ({ title: a.name, sub: a.values.map(v => v.name).join(' · ') })), empty: 'Sin atributos activos. Ve a Capacitar → Atributos.' },
-                { label: 'Escalada', items: agentCtx.activeRules.map(r => ({ title: r.title, sub: r.conditions.length > 0 ? `${r.conditions.length} condición${r.conditions.length > 1 ? 'es' : ''}` : 'Sin condiciones' })), empty: 'Sin reglas de escalada activas. Ve a Capacitar → Escalada.' },
-                { label: 'Procedimientos', items: agentCtx.activeProcs.map(p => ({ title: p.name, sub: p.description })), empty: 'Sin procedimientos activos. Ve a Capacitar → Procedimientos.' },
-              ]).map((section, si) => (
-                <div key={si}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[11px] font-semibold text-[#646462] uppercase tracking-[0.6px]">{section.label}</span>
-                    {section.items.length > 0 && <span className="text-[11px] text-[#0fb87f] font-medium">{section.items.length} activo{section.items.length > 1 ? 's' : ''}</span>}
-                  </div>
-                  {section.items.length === 0
-                    ? <p className="text-[12px] text-[#9a9a98] italic">{section.empty}</p>
-                    : section.items.map((item, ii) => (
-                      <div key={ii} className="mb-2 px-3 py-2.5 bg-white border border-[#e9eae6] rounded-[10px]">
-                        <p className="text-[12.5px] font-semibold text-[#1a1a1a]">{item.title}</p>
-                        {item.sub && <p className="text-[11.5px] text-[#646462] mt-0.5 line-clamp-2">{item.sub}</p>}
-                      </div>
-                    ))
-                  }
-                  {si < 4 && <div className="mt-1 h-px bg-[#e9eae6]" />}
-                </div>
-              ))}
+      {/* Add questions modal */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center p-4" onClick={() => setShowAdd(false)}>
+          <div className="w-full max-w-[560px] bg-white rounded-2xl border border-[#e9eae6] shadow-[0px_24px_64px_rgba(20,20,20,0.24)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 flex items-center justify-between border-b border-[#e9eae6]">
+              <h3 className="text-[16px] font-bold text-[#1a1a1a]">Agregar preguntas</h3>
+              <button onClick={() => setShowAdd(false)} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
             </div>
-          )}
-
-          {/* Tab: Prompt del sistema */}
-          {rightTab === 'prompt' && (
-            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-[12px] text-[#646462] leading-[17px]">
-                  Este prompt se envía automáticamente con cada pregunta. Se construye a partir de tu configuración en Capacitar.
-                </p>
-                <button onClick={copyPrompt}
-                  className="flex-shrink-0 h-7 px-3 rounded-[7px] bg-white border border-[#e9eae6] text-[11.5px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                  {promptCopied ? '✓ Copiado' : 'Copiar'}
-                </button>
-              </div>
-              {agentCtx.systemPrompt
-                ? <pre className="text-[10.5px] text-[#1a1a1a] whitespace-pre-wrap font-mono bg-white border border-[#e9eae6] rounded-[10px] p-4 leading-[15px]">
-                    {agentCtx.systemPrompt}
-                  </pre>
-                : <div className="bg-[#fef2f2] border border-[#fecaca] rounded-[10px] p-4">
-                    <p className="text-[12.5px] text-[#b91c1c]">Sin configuración activa. Activa pautas, atributos o procedimientos en las secciones de Capacitar para que Fin use tu configuración al responder.</p>
-                  </div>}
+            <div className="p-5">
+              <p className="text-[12.5px] text-[#646462] mb-2">Escribe o pega una pregunta por línea (máximo 50).</p>
+              <textarea
+                autoFocus
+                value={addText}
+                onChange={e => setAddText(e.target.value)}
+                placeholder={'¿Cómo puedo actualizar mi plan?\n¿Cuál es la política de reembolsos?'}
+                className="w-full min-h-[180px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] leading-[20px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+              />
             </div>
-          )}
+            <div className="px-6 py-3 border-t border-[#e9eae6] flex items-center justify-end gap-2">
+              <button onClick={() => setShowAdd(false)} className="h-8 px-4 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+              <button
+                onClick={() => { addMany(addText.split(/\r?\n/)); setShowAdd(false); }}
+                disabled={!addText.trim()}
+                className={`h-8 px-4 rounded-full text-[13px] font-semibold ${addText.trim() ? 'bg-[#1a1a1a] text-white hover:bg-black' : 'bg-[#f3f3f1] text-[#a4a4a2] cursor-not-allowed'}`}
+              >Agregar</button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
