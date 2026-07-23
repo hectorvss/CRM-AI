@@ -1689,7 +1689,7 @@ function ReportsSlasContent({ period, channel }: { period: string; channel: stri
             <KpiTimeSeries labels={MOCK_WEEKS} series={[
               { label: 'Cumplidos', data: mockSeries(150, 24, 4, 121), fill: true },
               { label: 'Incumplidos', data: mockSeries(14, 6, -0.3, 122) },
-            ]} type="bar" stacked />
+            ]} type="bar" />
           </KpiChartCard>
         </Section>
         <Section title="Desglose de SLA">
