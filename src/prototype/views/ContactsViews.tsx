@@ -592,168 +592,177 @@ function parseLocationCity(locationStr: string): string {
   return parts[0].trim();
 }
 
-function ContactsMapView({ customers }: { customers: any[] }) {
+// Country centroids (names + ISO2) so a contact with only a country still maps.
+const COUNTRY_COORDS: Record<string, [number, number]> = {
+  'Spain': [40.4, -3.7], 'ES': [40.4, -3.7],
+  'United States': [39.8, -98.6], 'USA': [39.8, -98.6], 'US': [39.8, -98.6],
+  'United Kingdom': [54.0, -2.0], 'UK': [54.0, -2.0], 'GB': [54.0, -2.0],
+  'France': [46.6, 2.2], 'FR': [46.6, 2.2],
+  'Germany': [51.1, 10.4], 'DE': [51.1, 10.4],
+  'Italy': [42.8, 12.8], 'IT': [42.8, 12.8],
+  'Portugal': [39.5, -8.0], 'PT': [39.5, -8.0],
+  'Netherlands': [52.1, 5.3], 'NL': [52.1, 5.3],
+  'Ireland': [53.4, -8.2], 'IE': [53.4, -8.2],
+  'Canada': [56.1, -106.3], 'CA': [56.1, -106.3],
+  'Mexico': [23.6, -102.5], 'MX': [23.6, -102.5],
+  'Brazil': [-14.2, -51.9], 'BR': [-14.2, -51.9],
+  'Argentina': [-38.4, -63.6], 'AR': [-38.4, -63.6],
+  'Colombia': [4.6, -74.3], 'CO': [4.6, -74.3],
+  'Chile': [-35.7, -71.5], 'CL': [-35.7, -71.5],
+  'Japan': [36.2, 138.3], 'JP': [36.2, 138.3],
+  'China': [35.9, 104.2], 'CN': [35.9, 104.2],
+  'India': [20.6, 78.9], 'IN': [20.6, 78.9],
+  'Australia': [-25.3, 133.8], 'AU': [-25.3, 133.8],
+  'Singapore': [1.35, 103.8], 'SG': [1.35, 103.8],
+  'United Arab Emirates': [23.4, 53.8], 'AE': [23.4, 53.8],
+  'South Africa': [-30.6, 22.9], 'ZA': [-30.6, 22.9],
+  'Nigeria': [9.1, 8.7], 'NG': [9.1, 8.7],
+  'Egypt': [26.8, 30.8], 'EG': [26.8, 30.8],
+  'Russia': [61.5, 105.3], 'RU': [61.5, 105.3],
+  'Sweden': [60.1, 18.6], 'SE': [60.1, 18.6],
+  'Poland': [51.9, 19.1], 'PL': [51.9, 19.1],
+  'Switzerland': [46.8, 8.2], 'CH': [46.8, 8.2],
+  'Belgium': [50.5, 4.5], 'BE': [50.5, 4.5],
+};
+
+export type ContactMapPoint = { id: string; label: string; sublabel: string; lat: number; lng: number; color: string };
+
+/** Resolve coordinates for a record from explicit lat/lng, then city, then country. */
+function geoForRecord(o: any): [number, number] | null {
+  const lat = Number(o.lat ?? o.latitude), lng = Number(o.lng ?? o.longitude);
+  if (!Number.isNaN(lat) && !Number.isNaN(lng) && (lat !== 0 || lng !== 0)) return [lat, lng];
+  const city = parseLocationCity(o.location || o.city || '');
+  if (city && CITY_COORDS[city]) return CITY_COORDS[city];
+  const country = String(o.country || '').trim();
+  if (country && COUNTRY_COORDS[country]) return COUNTRY_COORDS[country];
+  const cc = String(o.location || '').split(',')[1]?.trim();
+  if (cc && COUNTRY_COORDS[cc]) return COUNTRY_COORDS[cc];
+  return null;
+}
+
+/**
+ * Reusable inline map panel (no page chrome). Opens at world zoom, drops a
+ * marker per located record, and offers a "Mi ubicación" control that uses the
+ * browser geolocation to mark and centre on the operator.
+ */
+function ContactsMapPanel({ points, emptyText, height = 'h-[calc(100vh-320px)] min-h-[440px]' }: {
+  points: ContactMapPoint[];
+  emptyText: string;
+  height?: string;
+}) {
   const mapDivRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<any>(null);
+  const mapRef = useRef<any>(null);
+  const meLayerRef = useRef<any>(null);
+  const [locating, setLocating] = useState(false);
 
-  // Compute per-city customer counts
-  const customerDots = useMemo(() => {
-    const cityCount: Record<string, number> = {};
-    for (const c of customers) {
-      const city = parseLocationCity(c.location || c.city || '');
-      if (city && CITY_COORDS[city]) cityCount[city] = (cityCount[city] || 0) + 1;
-    }
-    return Object.entries(cityCount).map(([city, count]) => ({ city, count, coords: CITY_COORDS[city] }));
-  }, [customers]);
-
-  // Compute per-company locations (group customers by company, pick most frequent city)
-  const companyDots = useMemo(() => {
-    const compCity: Record<string, Record<string, number>> = {};
-    for (const c of customers) {
-      const co = c.company || c.canonical_name;
-      if (!co) continue;
-      const city = parseLocationCity(c.location || c.city || '');
-      if (!city || !CITY_COORDS[city]) continue;
-      if (!compCity[co]) compCity[co] = {};
-      compCity[co][city] = (compCity[co][city] || 0) + 1;
-    }
-    return Object.entries(compCity).map(([company, cities]) => {
-      const city = Object.entries(cities).sort((a, b) => b[1] - a[1])[0][0];
-      return { company, city, coords: CITY_COORDS[city] };
-    });
-  }, [customers]);
-
-  const hasData = customerDots.length > 0 || companyDots.length > 0;
-
-  // Build / rebuild Leaflet map whenever data changes
   useEffect(() => {
     if (!mapDivRef.current) return;
-
-    // Destroy existing map instance before creating a new one
-    if (leafletMapRef.current) {
-      leafletMapRef.current.remove();
-      leafletMapRef.current = null;
-    }
-
+    if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+    let cancelled = false;
     import('leaflet').then(({ default: L }) => {
-      if (!mapDivRef.current) return; // Guard: component may have unmounted
-
+      if (cancelled || !mapDivRef.current) return;
       const map = L.map(mapDivRef.current, {
-        center: [30, 5],
-        zoom: 2,
-        minZoom: 1,
-        maxZoom: 16,
-        zoomControl: true,
-        attributionControl: true,
+        center: [30, 0], zoom: 1.6, minZoom: 1, maxZoom: 16,
+        zoomControl: true, worldCopyJump: true, scrollWheelZoom: true,
       });
-      leafletMapRef.current = map;
-
+      mapRef.current = map;
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 18,
       }).addTo(map);
-
-      // ── Blue circles: individual customers ────────────────────────────────
-      customerDots.forEach(({ city, count, coords }) => {
-        const [lat, lng] = coords;
-        const radius = Math.min(7 + count * 3, 22);
-        L.circleMarker([lat, lng] as [number, number], {
-          radius,
-          fillColor: '#3b59f6',
-          color: '#ffffff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.78,
+      points.forEach(p => {
+        L.circleMarker([p.lat, p.lng] as [number, number], {
+          radius: 8, fillColor: p.color, color: '#ffffff', weight: 2, opacity: 1, fillOpacity: 0.85,
         })
           .addTo(map)
           .bindTooltip(
-            `<strong style="font-size:12px">${city}</strong><br/><span style="color:#646462">${count} cliente${count === 1 ? '' : 's'}</span>`,
-            { direction: 'top', className: 'leaflet-crm-tooltip' }
-          );
-      });
-
-      // ── Red circles: companies ─────────────────────────────────────────────
-      companyDots.forEach(({ company, city, coords }) => {
-        const [lat, lng] = coords;
-        // Offset slightly so they don't perfectly overlap customer dots
-        L.circleMarker([lat + 0.15, lng + 0.15] as [number, number], {
-          radius: 9,
-          fillColor: '#ef4444',
-          color: '#ffffff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.82,
-        })
-          .addTo(map)
-          .bindTooltip(
-            `<strong style="font-size:12px">${company}</strong><br/><span style="color:#646462">${city}</span>`,
-            { direction: 'top', className: 'leaflet-crm-tooltip' }
+            `<strong style="font-size:12px">${p.label}</strong><br/><span style="color:#646462">${p.sublabel}</span>`,
+            { direction: 'top', className: 'leaflet-crm-tooltip' },
           );
       });
     });
+    return () => { cancelled = true; if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
+  }, [points]);
 
-    return () => {
-      if (leafletMapRef.current) {
-        leafletMapRef.current.remove();
-        leafletMapRef.current = null;
-      }
-    };
-  }, [customerDots, companyDots]);
+  function locateMe() {
+    if (!navigator.geolocation || !mapRef.current) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setLocating(false);
+        const { latitude, longitude } = pos.coords;
+        import('leaflet').then(({ default: L }) => {
+          const map = mapRef.current;
+          if (!map) return;
+          if (meLayerRef.current) map.removeLayer(meLayerRef.current);
+          meLayerRef.current = L.circleMarker([latitude, longitude], {
+            radius: 9, fillColor: '#0ea5e9', color: '#ffffff', weight: 3, opacity: 1, fillOpacity: 0.95,
+          }).addTo(map).bindTooltip('Tu ubicación', { direction: 'top', className: 'leaflet-crm-tooltip' });
+          map.setView([latitude, longitude], 6);
+        });
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: false, timeout: 8000 },
+    );
+  }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-white">
-      {/* Header bar */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0 bg-white">
-        <span className="text-[13px] font-semibold text-[#1a1a1a]">Mapa de clientes</span>
-        <div className="w-px h-4 bg-[#e9eae6]"/>
-        {/* Legend */}
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-[#3b59f6] border-2 border-white shadow-sm ring-1 ring-[#3b59f6]/30"/>
-          <span className="text-[12px] text-[#646462]">Clientes</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-[#ef4444] border-2 border-white shadow-sm ring-1 ring-[#ef4444]/30"/>
-          <span className="text-[12px] text-[#646462]">Empresas</span>
-        </div>
-        <div className="ml-auto flex items-center gap-2 text-[12px] text-[#646462]">
-          <span className="font-medium text-[#1a1a1a]">{customerDots.length}</span> ciudades ·
-          <span className="font-medium text-[#1a1a1a]">{companyDots.length}</span> empresas
-        </div>
+    <div className={`relative w-full ${height} rounded-[10px] overflow-hidden border border-[#e9eae6]`} style={{ background: '#e8f4f8' }}>
+      <div ref={mapDivRef} className="absolute inset-0 z-0" />
+      {/* Legend overlay */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] bg-white/95 border border-[#e9eae6] rounded-full px-3 h-8 flex items-center gap-3 shadow-sm">
+        <span className="inline-flex items-center gap-1.5 text-[12px] text-[#646462]"><span className="w-2.5 h-2.5 rounded-full" style={{ background: points[0]?.color || '#3b59f6' }} />{points.length} ubicad{points.length === 1 ? 'o' : 'os'}</span>
       </div>
-
-      {/* Leaflet map fills remaining space */}
-      <div ref={mapDivRef} className="flex-1 z-0 min-h-0" style={{ background: '#e8f4f8' }}>
-        {!hasData && (
-          <div className="flex items-center justify-center h-full">
-            <div className="bg-white border border-[#e9eae6] rounded-[10px] px-6 py-4 shadow-sm text-center">
-              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-none stroke-[#d4d4d2] mx-auto mb-2" strokeWidth="1.3">
-                <circle cx="12" cy="10" r="5"/><path d="M12 3C8.1 3 5 6.1 5 10c0 5.2 7 11 7 11s7-5.8 7-11c0-3.9-3.1-7-7-7z"/>
-              </svg>
-              <p className="text-[13px] text-[#646462] font-medium">Sin datos de ubicación</p>
-              <p className="text-[12px] text-[#a4a4a2] mt-1">Añade el campo "location" a tus clientes</p>
-            </div>
+      {/* Geolocation control */}
+      <button
+        onClick={locateMe}
+        disabled={locating}
+        className="absolute top-3 right-3 z-[500] h-8 px-3 rounded-full bg-white border border-[#e9eae6] shadow-sm text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7] inline-flex items-center gap-1.5 disabled:opacity-60"
+      >
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" strokeLinecap="round"/></svg>
+        {locating ? 'Localizando…' : 'Mi ubicación'}
+      </button>
+      {points.length === 0 && (
+        <div className="absolute inset-0 z-[400] flex items-center justify-center pointer-events-none">
+          <div className="bg-white border border-[#e9eae6] rounded-[10px] px-6 py-4 shadow-sm text-center pointer-events-auto">
+            <svg viewBox="0 0 24 24" className="w-8 h-8 fill-none stroke-[#d4d4d2] mx-auto mb-2" strokeWidth="1.3"><circle cx="12" cy="10" r="5"/><path d="M12 3C8.1 3 5 6.1 5 10c0 5.2 7 11 7 11s7-5.8 7-11c0-3.9-3.1-7-7-7z"/></svg>
+            <p className="text-[13px] text-[#646462] font-medium">{emptyText}</p>
+            <p className="text-[12px] text-[#a4a4a2] mt-1">Añade una ubicación (ciudad o país) a tus registros</p>
           </div>
-        )}
-      </div>
-
-      {/* Leaflet tooltip styling injected once */}
+        </div>
+      )}
       <style>{`
-        .leaflet-crm-tooltip {
-          background: white;
-          border: 1px solid #e9eae6;
-          border-radius: 8px;
-          padding: 6px 10px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-          font-family: inherit;
-          font-size: 12px;
-          line-height: 1.4;
-          white-space: nowrap;
-        }
+        .leaflet-crm-tooltip { background: white; border: 1px solid #e9eae6; border-radius: 8px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); font-family: inherit; font-size: 12px; line-height: 1.4; white-space: nowrap; }
         .leaflet-crm-tooltip::before { border-top-color: #e9eae6 !important; }
       `}</style>
     </div>
   );
 }
+
+/** Full-screen customers map (kept for the sidebar "mapa" route). */
+function ContactsMapView({ customers }: { customers: any[] }) {
+  const points = useMemo<ContactMapPoint[]>(() => {
+    const out: ContactMapPoint[] = [];
+    for (const c of customers) {
+      const g = geoForRecord(c);
+      if (!g) continue;
+      out.push({ id: String(c.id ?? out.length), label: c.name || c.email || 'Contacto', sublabel: parseLocationCity(c.location || c.city || '') || String(c.country || ''), lat: g[0] + (Math.sin(out.length) * 0.05), lng: g[1] + (Math.cos(out.length) * 0.05), color: '#3b59f6' });
+    }
+    return out;
+  }, [customers]);
+  return (
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-white">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0 bg-white">
+        <span className="text-[13px] font-semibold text-[#1a1a1a]">Mapa de clientes</span>
+        <div className="ml-auto text-[12px] text-[#646462]"><span className="font-medium text-[#1a1a1a]">{points.length}</span> clientes ubicados</div>
+      </div>
+      <div className="flex-1 min-h-0 p-4">
+        <ContactsMapPanel points={points} emptyText="Sin datos de ubicación" height="h-full" />
+      </div>
+    </div>
+  );
+}
+
 
 function ContactsSidebar({
   view, onNavigate, counts, onNewMessage, onEmpresasView,
@@ -1676,7 +1685,7 @@ function UsersTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [showVerifyBanner, setShowVerifyBanner] = useState(true);
-  const [view, setView] = useState<'grid' | 'list'>('list');
+  const [view, setView] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<ActiveFilter[]>([]);
   const [visibleCols, setVisibleCols] = useState<Set<string>>(
     () => new Set(['type', 'lastSeen', 'firstSeen', 'signedUp', 'openCases', 'city']),
@@ -1728,10 +1737,23 @@ function UsersTable({
   // Optional columns to render (name is the fixed first column, always shown).
   const shownCols = PEOPLE_COLUMNS.filter(c => c.key !== 'name' && visibleCols.has(c.key));
 
+  // Map points from located rows (city/country → coords), for the map view.
+  const mapPoints = useMemo<ContactMapPoint[]>(() => {
+    const out: ContactMapPoint[] = [];
+    for (const r of filtered) {
+      const g = geoForRecord(r);
+      if (!g) continue;
+      out.push({ id: r.id, label: r.name, sublabel: r.city || r.email || '', lat: g[0] + Math.sin(out.length) * 0.05, lng: g[1] + Math.cos(out.length) * 0.05, color: '#3b59f6' });
+    }
+    return out;
+  }, [filtered]);
+
   const selectionCount = selected.size;
   const headerLabel = selectionCount > 0
     ? `${selectionCount} seleccionado${selectionCount === 1 ? '' : 's'}`
-    : totalLabel;
+    : view === 'map'
+      ? (mapPoints.length > 0 ? `${mapPoints.length} usuario${mapPoints.length === 1 ? '' : 's'} en el mapa` : 'No hay usuarios con datos de ubicación')
+      : totalLabel;
   return (
     <div className="mx-4 flex flex-col gap-3">
       {/* Filter bar — identical format to the audience filter used elsewhere */}
@@ -1791,19 +1813,16 @@ function UsersTable({
           </div>
           <ContactsColumnChooser entity="usuario" columns={PEOPLE_COLUMNS} visible={visibleCols} onToggle={toggleCol} lockedKey="name" />
           <div className="flex items-center border border-[#e9eae6] rounded-[8px] overflow-hidden">
-            <button onClick={() => setView('grid')} className={`px-2 py-1.5 ${view === 'grid' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'} border-r border-[#e9eae6]`} title="Vista de cuadrícula">
+            <button onClick={() => setView('list')} className={`px-2 py-1.5 ${view === 'list' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'} border-r border-[#e9eae6]`} title="Vista de lista">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity={view === 'grid' ? '0.9' : '0.4'}/>
-                <rect x="9" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity={view === 'grid' ? '0.9' : '0.4'}/>
-                <rect x="1" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity={view === 'grid' ? '0.9' : '0.4'}/>
-                <rect x="9" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity={view === 'grid' ? '0.9' : '0.4'}/>
+                <rect x="1" y="3" width="14" height="1.5" rx="0.75" fill="#1a1a1a" opacity={view === 'list' ? '0.9' : '0.5'}/>
+                <rect x="1" y="7.25" width="14" height="1.5" rx="0.75" fill="#1a1a1a" opacity={view === 'list' ? '0.9' : '0.5'}/>
+                <rect x="1" y="11.5" width="14" height="1.5" rx="0.75" fill="#1a1a1a" opacity={view === 'list' ? '0.9' : '0.5'}/>
               </svg>
             </button>
-            <button onClick={() => setView('list')} className={`px-2 py-1.5 ${view === 'list' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'}`} title="Vista de lista">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="3" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
-                <rect x="1" y="7.25" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
-                <rect x="1" y="11.5" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
+            <button onClick={() => setView('map')} className={`px-2 py-1.5 ${view === 'map' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'}`} title="Vista de mapa">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="stroke-[#1a1a1a]" strokeWidth="1.3" opacity={view === 'map' ? '0.9' : '0.5'}>
+                <circle cx="8" cy="8" r="6.5"/><ellipse cx="8" cy="8" rx="2.6" ry="6.5"/><path d="M1.6 8h12.8"/>
               </svg>
             </button>
           </div>
@@ -1820,6 +1839,9 @@ function UsersTable({
         </div>
       )}
 
+      {view === 'map' ? (
+        <ContactsMapPanel points={mapPoints} emptyText="No hay usuarios con datos de ubicación" />
+      ) : (
       <div className="w-full overflow-x-auto">
         <div className="min-w-max">
           <div className="flex items-center border-b border-[#e9eae6] pb-2 text-[12px] font-medium text-[#646462]">
@@ -1879,6 +1901,7 @@ function UsersTable({
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -1938,7 +1961,7 @@ function CompaniesTable({
 }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -2023,10 +2046,22 @@ function CompaniesTable({
     });
   };
 
+  const mapPoints = useMemo<ContactMapPoint[]>(() => {
+    const out: ContactMapPoint[] = [];
+    for (const r of filtered) {
+      const g = geoForRecord(r);
+      if (!g) continue;
+      out.push({ id: r.id, label: r.name, sublabel: r.country && r.country !== '—' ? r.country : (r.domain || ''), lat: g[0] + Math.sin(out.length) * 0.05, lng: g[1] + Math.cos(out.length) * 0.05, color: '#ef4444' });
+    }
+    return out;
+  }, [filtered]);
+
   const selCount = selected.size;
   const headerLabel = selCount > 0
     ? `${selCount} seleccionada${selCount === 1 ? '' : 's'}`
-    : `${rows.length} empresa${rows.length === 1 ? '' : 's'}`;
+    : viewMode === 'map'
+      ? (mapPoints.length > 0 ? `${mapPoints.length} empresa${mapPoints.length === 1 ? '' : 's'} en el mapa` : 'No hay empresas con datos de ubicación')
+      : `${rows.length} empresa${rows.length === 1 ? '' : 's'}`;
 
   return (
     <div className="mx-4 flex flex-col gap-3 relative">
@@ -2073,19 +2108,16 @@ function CompaniesTable({
           </div>
           <ContactsColumnChooser entity="empresa" columns={COMPANY_COLUMNS} visible={visibleCols} onToggle={toggleCol} lockedKey="name" />
           <div className="flex items-center border border-[#e9eae6] rounded-[8px] overflow-hidden">
-            <button onClick={() => setViewMode('grid')} className={`px-2 py-1.5 ${viewMode === 'grid' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'} border-r border-[#e9eae6]`} title="Cuadrícula">
+            <button onClick={() => setViewMode('list')} className={`px-2 py-1.5 ${viewMode === 'list' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'} border-r border-[#e9eae6]`} title="Vista de lista">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity={viewMode === 'grid' ? '0.9' : '0.4'}/>
-                <rect x="9" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity={viewMode === 'grid' ? '0.9' : '0.4'}/>
-                <rect x="1" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity={viewMode === 'grid' ? '0.9' : '0.4'}/>
-                <rect x="9" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity={viewMode === 'grid' ? '0.9' : '0.4'}/>
+                <rect x="1" y="3" width="14" height="1.5" rx="0.75" fill="#1a1a1a" opacity={viewMode === 'list' ? '0.9' : '0.5'}/>
+                <rect x="1" y="7.25" width="14" height="1.5" rx="0.75" fill="#1a1a1a" opacity={viewMode === 'list' ? '0.9' : '0.5'}/>
+                <rect x="1" y="11.5" width="14" height="1.5" rx="0.75" fill="#1a1a1a" opacity={viewMode === 'list' ? '0.9' : '0.5'}/>
               </svg>
             </button>
-            <button onClick={() => setViewMode('list')} className={`px-2 py-1.5 ${viewMode === 'list' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'}`} title="Lista">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="3" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
-                <rect x="1" y="7.25" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
-                <rect x="1" y="11.5" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
+            <button onClick={() => setViewMode('map')} className={`px-2 py-1.5 ${viewMode === 'map' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'}`} title="Vista de mapa">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="stroke-[#1a1a1a]" strokeWidth="1.3" opacity={viewMode === 'map' ? '0.9' : '0.5'}>
+                <circle cx="8" cy="8" r="6.5"/><ellipse cx="8" cy="8" rx="2.6" ry="6.5"/><path d="M1.6 8h12.8"/>
               </svg>
             </button>
           </div>
@@ -2100,39 +2132,9 @@ function CompaniesTable({
         <div className="py-12 text-center text-[13px] text-[#b91c1c]">No se pudo cargar la lista.</div>
       )}
 
-      {/* Grid view */}
-      {viewMode === 'grid' && !loading && !error && (
-        <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-          {filtered.length === 0 ? (
-            <div className="col-span-3 py-12 text-center text-[13px] text-[#646462]">
-              {search ? 'Ninguna empresa coincide.' : 'No hay empresas en este segmento.'}
-            </div>
-          ) : filtered.map(row => (
-            <div key={row.id} className="bg-white border border-[#e9eae6] rounded-[12px] p-4 hover:shadow-md hover:border-[#d4d4d2] transition-all cursor-pointer">
-              <div className="flex items-start gap-3 mb-3">
-                <div className="w-10 h-10 rounded-[10px] flex items-center justify-center text-[16px] font-bold text-white flex-shrink-0" style={{ backgroundColor: row.color }}>
-                  {row.initial}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[14px] font-semibold text-[#1a1a1a] truncate leading-tight">{row.name}</p>
-                  <p className="text-[12px] text-[#646462] mt-0.5 truncate">{row.domain || row.country}</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-[12px]">
-                <span className="text-[#646462]">{row.employees != null ? `${row.employees} empleados` : row.country}</span>
-                <span className="px-2 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full text-[#1a1a1a]">{row.industry}</span>
-              </div>
-              <div className="mt-2 pt-2 border-t border-[#f5f5f4] flex items-center justify-end">
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDeleteRow(row.id); }}
-                  disabled={deletingId === row.id}
-                  className="text-[11px] font-medium text-[#dc2626] hover:underline disabled:opacity-40">
-                  {deletingId === row.id ? 'Eliminando…' : 'Eliminar'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Map view */}
+      {viewMode === 'map' && !loading && !error && (
+        <ContactsMapPanel points={mapPoints} emptyText="No hay empresas con datos de ubicación" />
       )}
 
       {/* List view */}
