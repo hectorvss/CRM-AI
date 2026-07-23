@@ -1090,7 +1090,7 @@ function ConvMiniCalendar() {
         {cells.map((c, i) => (
           <span
             key={i}
-            className={`w-7 h-7 flex items-center justify-center text-[12.5px] rounded-full ${c === 23 ? 'bg-[#fa7938] text-white font-medium' : c && c > 23 ? 'text-[#1a1a1a] hover:bg-[#f1f1ee] cursor-pointer' : 'text-[#c8c9c4]'}`}
+            className={`w-7 h-7 flex items-center justify-center text-[12.5px] rounded-[7px] ${c === 23 ? 'border border-[#fa7938] text-[#fa7938] font-medium' : c && c > 23 ? 'text-[#1a1a1a] hover:bg-[#f1f1ee] cursor-pointer' : 'text-[#c8c9c4]'}`}
           >{c ?? ''}</span>
         ))}
       </div>
