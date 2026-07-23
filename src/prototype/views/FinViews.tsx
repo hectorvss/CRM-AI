@@ -450,21 +450,6 @@ const FIN_NAV_ITEMS: { key: FinSubView; label: string; icon: 'book' | 'play' | '
       { key: 'anaMonitor',         label: 'Monitores' },
     ],
   },
-  // Studio — merges all functional AIStudio surface (agents, policy bundles,
-  // permissions, knowledge, reasoning, safety) into the Fin shell.
-  {
-    key: 'studio', label: 'Studio', icon: 'studio',
-    children: [
-      { key: 'studioOverview',    label: 'Resumen' },
-      { key: 'studioAgents',      label: 'Agentes' },
-      { key: 'studioConnections', label: 'Conexiones' },
-      { key: 'studioPermissions', label: 'Permisos' },
-      { key: 'studioKnowledge',   label: 'Conocimiento' },
-      { key: 'studioReasoning',   label: 'Razonamiento' },
-      { key: 'studioSafety',      label: 'Seguridad' },
-      { key: 'studioSuperAgent',  label: 'Super Agent' },
-    ],
-  },
 ];
 
 // Bold/filled icons (Inbox-style) for FinSidebar — fill #1a1a1a, no stroke.
