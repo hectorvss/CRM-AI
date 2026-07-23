@@ -3692,6 +3692,127 @@ function AttrPicker({ onClose, onSelect, placeholder = 'Filtros de búsqueda...'
   );
 }
 
+// ── Selector de rango de fechas (presets + calendario personalizado) ──────────
+const RANGE_MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const RANGE_WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+// Ancla "hoy" del prototipo (2026-07-23) para que el calendario coincida con el diseño.
+const RANGE_TODAY = new Date(2026, 6, 23);
+const rgAddDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const rgAddMonths = (d: Date, n: number) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; };
+const rgStartOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
+const rgSameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const rgFmt = (d: Date) => `${RANGE_MONTHS_EN[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+type DateRange = { presetId: string; from: Date; to: Date };
+const DATE_PRESETS: { id: string; label: string; range: () => [Date, Date] }[] = [
+  { id: 'hoy', label: 'Hoy', range: () => [RANGE_TODAY, RANGE_TODAY] },
+  { id: 'ayer', label: 'Ayer', range: () => [rgAddDays(RANGE_TODAY, -1), rgAddDays(RANGE_TODAY, -1)] },
+  { id: 'semana', label: 'Última semana', range: () => [rgAddDays(RANGE_TODAY, -6), RANGE_TODAY] },
+  { id: 'mesfecha', label: 'Este mes a la fecha', range: () => [rgStartOfMonth(RANGE_TODAY), RANGE_TODAY] },
+  { id: '4sem', label: 'Últimas 4 semanas', range: () => [rgAddDays(RANGE_TODAY, -27), RANGE_TODAY] },
+  { id: '12sem', label: 'Últimas 12 semanas', range: () => [rgAddDays(RANGE_TODAY, -83), RANGE_TODAY] },
+  { id: 'ano', label: 'En lo que va de año', range: () => [new Date(RANGE_TODAY.getFullYear(), 0, 1), RANGE_TODAY] },
+  { id: '6mes', label: 'Últimos 6 meses', range: () => [rgAddMonths(RANGE_TODAY, -6), RANGE_TODAY] },
+  { id: '12mes', label: 'Últimos 12 meses', range: () => [rgAddMonths(RANGE_TODAY, -12), RANGE_TODAY] },
+];
+
+// Una cuadrícula de mes para el calendario personalizado.
+function CalMonth({ month, from, to, onPick }: { month: Date; from: Date; to: Date; onPick: (d: Date) => void }) {
+  const y = month.getFullYear(), m = month.getMonth();
+  const firstDow = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const cells: (Date | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: days }, (_, i) => new Date(y, m, i + 1))];
+  while (cells.length % 7 !== 0) cells.push(null);
+  return (
+    <div className="w-[224px]">
+      <p className="text-center text-[13px] font-semibold text-[#1a1a1a] mb-2">{month.toLocaleString('en-US', { month: 'long' })} {y}</p>
+      <div className="grid grid-cols-7 gap-y-1">
+        {RANGE_WEEKDAYS.map(w => <span key={w} className="text-center text-[11px] text-[#9a9a97]">{w}</span>)}
+        {cells.map((d, i) => {
+          if (!d) return <span key={i} />;
+          const inRange = d >= from && d <= to;
+          const isEnd = rgSameDay(d, from) || rgSameDay(d, to);
+          const future = d > RANGE_TODAY;
+          return (
+            <button key={i} disabled={future} onClick={() => onPick(d)}
+              className={`h-7 text-[12.5px] flex items-center justify-center ${isEnd ? 'bg-[#1a1a1a] text-white rounded-md font-semibold' : inRange ? 'bg-[#fff1ea] text-[#ff7849]' : future ? 'text-[#d4d4d2] cursor-default' : 'text-[#1a1a1a] hover:bg-[#f3f3f1] rounded-md'}`}>
+              {d.getDate()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DateRangePicker({ value, onChange }: { value: DateRange; onChange: (v: DateRange) => void }) {
+  const [open, setOpen] = useState(false);
+  const [custom, setCustom] = useState(false);
+  const [draft, setDraft] = useState<{ from: Date; to: Date; picking: 'from' | 'to' }>({ from: value.from, to: value.to, picking: 'from' });
+  const [calLeft, setCalLeft] = useState(rgStartOfMonth(value.from));
+  const openCustom = () => { setDraft({ from: value.from, to: value.to, picking: 'from' }); setCalLeft(rgStartOfMonth(value.from)); setCustom(true); };
+  const pickDay = (d: Date) => {
+    if (draft.picking === 'from' || d < draft.from) setDraft({ from: d, to: d, picking: 'to' });
+    else setDraft({ from: draft.from, to: d, picking: 'from' });
+  };
+  return (
+    <div className="relative">
+      <button onClick={() => { setOpen(o => !o); setCustom(false); }} className="w-full flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] hover:border-[#1a1a1a]">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+        {rgFmt(value.from)} - {rgFmt(value.to)}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => { setOpen(false); setCustom(false); }} />
+          {!custom ? (
+            <div className="absolute left-0 top-full mt-1 z-40 w-[240px] bg-white border border-[#e9eae6] rounded-xl shadow-xl py-1.5">
+              {DATE_PRESETS.map(p => {
+                const active = value.presetId === p.id;
+                return (
+                  <button key={p.id} onClick={() => { const [f, t] = p.range(); onChange({ presetId: p.id, from: f, to: t }); setOpen(false); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] hover:bg-[#f8f8f7] text-left">
+                    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-none ${active ? 'stroke-[#ff7849]' : 'stroke-[#646462]'}`} strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+                    <span className={active ? 'text-[#ff7849] font-medium' : 'text-[#1a1a1a]'}>{p.label}</span>
+                    {active && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 ml-auto fill-none stroke-[#ff7849]" strokeWidth="1.6"><path d="M3 8l3.5 3.5L13 4"/></svg>}
+                  </button>
+                );
+              })}
+              <div className="border-t border-[#f1f1ee] mt-1 pt-1">
+                <button onClick={openCustom} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] hover:bg-[#f8f8f7] text-left">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M11 2l3 3-8 8H3v-3z"/></svg>
+                  <span className="text-[#1a1a1a]">Personalizado</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="absolute left-0 top-full mt-1 z-40 w-[520px] bg-white border border-[#e9eae6] rounded-xl shadow-xl p-4">
+              <div className="flex items-start gap-8 mb-3">
+                <button onClick={() => setDraft(d => ({ ...d, picking: 'from' }))} className="text-left">
+                  <p className="text-[12px] text-[#646462] mb-0.5">From</p>
+                  <p className={`text-[14px] ${draft.picking === 'from' ? 'text-[#ff7849] font-semibold border-b-2 border-[#ff7849] pb-0.5' : 'text-[#1a1a1a]'}`}>{rgFmt(draft.from)}</p>
+                </button>
+                <button onClick={() => setDraft(d => ({ ...d, picking: 'to' }))} className="text-left">
+                  <p className="text-[12px] text-[#646462] mb-0.5">To</p>
+                  <p className={`text-[14px] ${draft.picking === 'to' ? 'text-[#ff7849] font-semibold border-b-2 border-[#ff7849] pb-0.5' : 'text-[#1a1a1a]'}`}>{rgFmt(draft.to)}</p>
+                </button>
+              </div>
+              <div className="relative flex gap-6">
+                <button onClick={() => setCalLeft(m => rgAddMonths(m, -1))} className="absolute left-0 top-0 text-[#646462] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M10 3L5 8l5 5"/></svg></button>
+                <button onClick={() => setCalLeft(m => rgAddMonths(m, 1))} className="absolute right-0 top-0 text-[#646462] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M6 3l5 5-5 5"/></svg></button>
+                <CalMonth month={calLeft} from={draft.from} to={draft.to} onPick={pickDay} />
+                <CalMonth month={rgAddMonths(calLeft, 1)} from={draft.from} to={draft.to} onPick={pickDay} />
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setCustom(false)} className="text-[13px] font-medium text-[#1a1a1a] rounded-full px-4 py-[7px] hover:bg-[#f3f3f1]">Cancel</button>
+                <button onClick={() => { onChange({ presetId: 'custom', from: draft.from, to: draft.to }); setOpen(false); setCustom(false); }} className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-5 py-[7px] hover:bg-black">Apply</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // Editor de gráfico a pantalla completa — cambia tipo, título, métricas y ejes.
 function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLabel = 'Actualizar gráfico', onCancel, onUpdate }: {
   item: CatalogItem; initialKind: BuilderKind; initialTitle: string; initialVariant?: string; submitLabel?: string;
@@ -3716,6 +3837,8 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
   const [verPorPickerOpen, setVerPorPickerOpen] = useState(false);
   // Filtros aplicados por tarjeta de métrica (índice → lista de atributos).
   const [metricFilters, setMetricFilters] = useState<Record<number, FilterAttr[]>>({});
+  // Rango de fechas del gráfico (por defecto "Últimas 4 semanas": Jun 26 – Jul 23).
+  const [dateRange, setDateRange] = useState<DateRange>({ presetId: '4sem', from: rgAddDays(RANGE_TODAY, -27), to: RANGE_TODAY });
 
   const type = EDITOR_TYPES.find(t => t.id === typeId) ?? EDITOR_TYPES[4];
   const kind = type.kind;
@@ -3802,10 +3925,7 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
         <div className="flex-1 overflow-y-auto min-h-0 p-4 flex flex-col gap-4">
           {tab === 'grafico' ? (
             <>
-              <div className="flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a]">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-                Jul 17, 2026 - Jul 23, 2026
-              </div>
+              <DateRangePicker value={dateRange} onChange={setDateRange} />
               <div className="bg-[#fef9e7] border border-[#f5e6a8] rounded-lg p-3 text-[12px] text-[#7a6a2a] flex gap-2">
                 <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#a8862a] flex-shrink-0 mt-0.5" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
                 El rango de fechas del informe anula el rango de fechas de este gráfico. Usa los filtros informe para cambiar el intervalo de fechas de este gráfico.
