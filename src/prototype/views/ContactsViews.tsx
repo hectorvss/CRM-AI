@@ -2403,7 +2403,7 @@ function ContactsCommon({
             onBack={onBack}
             title={title}
             onCreate={() => setCreateOpen(true)}
-            onNewMessage={() => setShowNewMsgModal(true)}
+            onNewMessage={() => onNavigate('outbound')}
           />
           <div className="flex-1 overflow-y-auto min-h-0">
             {!loading && all.length === 0 && <ImportHero />}
