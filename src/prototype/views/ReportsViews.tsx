@@ -3240,8 +3240,8 @@ const GRAN_EN: Record<string, string> = { hora: 'hour', dia: 'day', semana: 'wee
 
 // ── Catálogo de métricas seleccionables (selector "Buscar métricas") ──────────
 // Solo UI por ahora; la infraestructura de cálculo se hará más adelante.
-type MetricKind = 'count' | 'rate' | 'score' | 'money' | 'dataset';
-type MetricDef = { group: string; title: string; desc: string; kind: MetricKind };
+type MetricKind = 'count' | 'rate' | 'score' | 'money' | 'dataset' | 'ai';
+type MetricDef = { group: string; title: string; desc: string; kind: MetricKind; tag?: string };
 const METRIC_CATALOG: MetricDef[] = [
   // Evaluación de tarjeta de puntuación
   { group: 'Evaluación de tarjeta de puntuación', title: 'Aprobaciones de la tarjeta de puntuación', desc: 'Número de evaluaciones de tarjeta de puntuación que pasaron.', kind: 'count' },
@@ -3260,6 +3260,24 @@ const METRIC_CATALOG: MetricDef[] = [
   // Conjunto de datos de conversación
   { group: 'Conjunto de datos de conversación', title: 'Carrusel de Fin for Ecommerce sirvió conversaciones', desc: 'Número de conversaciones de Fin for Ecommerce en las que se mostró un carrusel de productos', kind: 'dataset' },
   { group: 'Conjunto de datos de conversación', title: 'Conversaciones activas de Fin AI Agent', desc: 'Número de conversaciones que se pasaron a Fin AI Agent.', kind: 'count' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones activas de Fin for Ecommerce', desc: 'Número de conversaciones en las que participó Fin for Ecommerce', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones activas de Fin for Service', desc: 'Número de conversaciones en las que participó Fin for Service (excluye las conversaciones de Fin for Ecommerce)', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones capturadas por correo electrónico de Fin Sales', desc: 'Número de conversaciones con Fin Sales en las que se capturó un correo electrónico', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones cerradas en el primer contacto', desc: 'El número de conversaciones que se cerraron en el primer contacto.', kind: 'count' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones cerradas por primera vez', desc: 'Número de conversaciones únicas cerradas por primera vez. (Anteriormente "Conversaciones cerradas")', kind: 'count' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones con cualquier puntuación de experiencia del cliente (CX)', tag: 'Cerrada por última vez a las', desc: 'El número total de conversaciones que tienen una calificación de experiencia del cliente (CX) generada por IA.', kind: 'ai' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones con cualquier puntuación de experiencia del cliente (CX)', tag: 'Las conversaciones comenzaron el', desc: 'El número total de conversaciones que tienen una calificación de experiencia del cliente (CX) generada por IA.', kind: 'ai' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones con datos de contacto', desc: 'Número de conversaciones en las que se capturaron datos de contacto.', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones con datos de contacto capturados de Fin Sales', desc: 'Número de conversaciones de Fin Sales en las que se obtuvo una dirección de correo electrónico o un número de teléfono', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones con número de teléfono capturado por Fin Sales', desc: 'Número de conversaciones de Fin Sales en las que se capturó un número de teléfono', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones con una calificación positiva de experiencia del cliente (CX)', tag: 'Cerrada por última vez a las', desc: 'El número de conversaciones que tienen una calificación de experiencia del cliente (CX) generada por IA de 4 o 5.', kind: 'ai' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones con una calificación positiva de experiencia del cliente (CX)', tag: 'Las conversaciones comenzaron el', desc: 'El número de conversaciones que tienen una calificación de experiencia del cliente (CX) generada por IA de 4 o 5.', kind: 'ai' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones de clics de Fin for Ecommerce al finalizar la compra', desc: 'Número de conversaciones de Fin for Ecommerce en las que se hizo clic en un enlace de pago', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones de escalación basadas en la configuración del Fin AI Agent', desc: 'Número de conversaciones en las que el Fin AI Agent realizó una cesión según los ajustes de configuración (orientación, reglas de escalamiento, finalización de respuesta personalizada o modo de una sola vez).', kind: 'count' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones de transferencia de procedimientos de Fin AI Agent', desc: 'Número de conversaciones en las que Fin AI Agent se transfirió deliberadamente a otro equipo o flujo de trabajo mediante la lógica configurada en las instrucciones del procedimiento.', kind: 'count' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones de ventas finalizadas', desc: 'Número de conversaciones de Fin Sales que han alcanzado un resultado de enrutamiento', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones descalificadas por Fin for Sales', desc: 'Número de conversaciones de Fin Sales que fueron descalificadas', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones en las que Fin AI Agent participó', desc: 'Número de conversaciones en las que Fin AI Agent intentó dar una respuesta. Datos disponibles a partir de octubre de 2025.', kind: 'count' },
   { group: 'Conjunto de datos de conversación', title: 'Ingresos atribuidos a Fin for Ecommerce', desc: 'Valor total de los pedidos en los que Fin influyó (valor total de cada pedido con al menos un producto recomendado o mencionado por Fin que se compró en un plazo de 14 días)', kind: 'money' },
 ];
 function MetricIcon({ kind }: { kind: MetricKind }) {
@@ -3267,6 +3285,7 @@ function MetricIcon({ kind }: { kind: MetricKind }) {
   return (
     <div className="w-7 h-7 rounded-md bg-[#1a1a1a] text-white flex items-center justify-center flex-shrink-0 text-[11px] font-bold">
       {kind === 'count' ? '#'
+        : kind === 'ai' ? <span className="text-[9px] font-extrabold tracking-tight">AI</span>
         : kind === 'dataset' ? <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><rect x="6" y="6" width="4" height="4" rx="1"/></svg>
         : glyph}
     </div>
@@ -3293,10 +3312,11 @@ function MetricPicker({ selected, onSelect, onClose }: { selected: string; onSel
               <div key={g}>
                 <p className="text-[11px] text-[#646462] px-2 pt-2.5 pb-1">{g}</p>
                 {items.map(m => (
-                  <button key={m.title} onClick={() => onSelect(m)} className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-[#f8f8f7] text-left">
+                  <button key={m.title + (m.tag ?? '')} onClick={() => onSelect(m)} className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-[#f8f8f7] text-left">
                     <MetricIcon kind={m.kind} />
                     <div className="min-w-0 flex-1">
                       <p className="text-[12.5px] font-semibold text-[#1a1a1a] leading-snug">{m.title}</p>
+                      {m.tag && <span className="inline-block text-[10.5px] text-[#646462] bg-[#f1f1ee] rounded px-1.5 py-0.5 mt-1">{m.tag}</span>}
                       <p className="text-[11.5px] text-[#646462] leading-snug mt-0.5">{m.desc}</p>
                       <span className="text-[11px] text-[#3b59f6] hover:underline">Más información</span>
                     </div>
