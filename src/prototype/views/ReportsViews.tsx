@@ -18,7 +18,7 @@ import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDi
 
 type ReportsSubView =
   | 'overview' | 'aiResumen' | 'areasNegocio' | 'agentesPerf' | 'aprobacionesRisk' | 'costesRoi'
-  | 'todos' | 'misInformes' | 'favoritos'
+  | 'todos' | 'misInformes' | 'favoritos' | 'cxScore'
   | 'temas' | 'sugerencias' | 'export' | 'horarios'
   | 'finAgent' | 'copilot'
   | 'calls' | 'conversations' | 'csat' | 'effectiveness'
@@ -77,7 +77,7 @@ const ALL_REPORTS: AllReportRow[] = [
   { t: 'Conversation tags', sub: 'temas', d: 'Explore the reasons your customers get in touch, and monitor trends in the topics that come up.' },
   { t: 'Conversations', sub: 'conversations', d: 'Track your new inbound conversations, busiest periods and biggest customer issues, and optimize your support.' },
   { t: 'Copilot', sub: 'copilot', d: 'Analyze and report on how Copilot is used by teammates in your workspace.' },
-  { t: 'CX Score', sub: 'csat', d: 'Analyze your customer experience across teammates and AI Agents using a breakthrough AI-generated metric.' },
+  { t: 'CX Score', sub: 'cxScore', d: 'Analyze your customer experience across teammates and AI Agents using a breakthrough AI-generated metric.' },
   { t: 'Descripción general de los informes de Intercom', sub: 'overview' },
   { t: 'Effectiveness', sub: 'effectiveness', d: 'Measure how effectively your teams handle conversations with the Effectiveness report.' },
   { t: 'Fin AI Agent', sub: 'finAgent', d: 'Find out how Fin AI Agent is performing in conversations and impacting your resolution rates.' },
@@ -1640,42 +1640,70 @@ function ReportsCsatContent({ period, channel }: { period: string; channel: stri
 }
 
 function ReportsEffectivenessContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.effectiveness(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const effTs: { day: number; fcr_rate: number }[] = data?.timeSeries ?? [];
-  const maxFcr = Math.max(...effTs.map(t => t.fcr_rate ?? 0), 1);
+  useApi(() => reportsApi.effectiveness(period, channel), [period, channel], null);
   return (
     <>
       <ReportShellHeader title="Effectiveness" description="Measure how effectively your teams handle conversations with the Effectiveness report." />
       <ReportShellFilters />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.conversations_replied_to ?? '—')} />
-        <ReportsKpiCard label="Closed conversations on first contact rate" value={loading ? '…' : kpis.first_contact_resolution ?? '0%'} sub={kpis.first_contact_total != null ? `${kpis.first_contact_resolved ?? 0} de ${kpis.first_contact_total}` : undefined} />
-        <ReportsKpiCard label="Median replies to close a conversation" value={loading ? '…' : (kpis.median_replies_to_close != null ? String(kpis.median_replies_to_close) : '—')} />
-        <ReportsKpiCard label="Conversations reassigned" value={loading ? '…' : String(kpis.conversations_reassigned ?? 0)} />
-        <ReportsKpiCard label="Median time to first assignment" value={loading ? '…' : kpis.median_time_to_first_assignment ?? '—'} />
-        <ReportsKpiCard label="Median time from first assignment to close" value={loading ? '…' : kpis.median_time_from_assign_to_close ?? '—'} />
-        {/* FCR time series chart */}
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">First contact resolution rate – by day</span>
-          </div>
-          {effTs.length === 0 ? (
-            <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos en el período</div>
-          ) : (
-            <>
-              <div className="h-[120px] flex items-end gap-0.5 px-2">
-                {effTs.map((t, i) => (
-                  <div key={i} style={{ height: t.fcr_rate ? `${(t.fcr_rate / maxFcr) * 100}%` : '4px' }} className={`flex-1 ${t.fcr_rate ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-                ))}
-              </div>
-              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
-                <span>Día 1</span><span>Día {Math.floor(effTs.length / 3)}</span><span>Día {Math.floor(2 * effTs.length / 3)}</span><span>Día {effTs.length}</span>
-              </div>
-            </>
-          )}
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
+        <div className="grid grid-cols-3 gap-3">
+          <KpiCard label="Conversations replied to" value="0" />
+          <KpiCard label="Closed conversations on first contact rate" value="0%" sub="0 de 4" />
+          <KpiCard label="Median replies to close a conversation" value="—" />
+          <KpiCard label="Conversations reassigned" value="0" />
+          <KpiCard label="Median time to first assignment" value="—" />
+          <KpiCard label="Median time from first assignment to close" value="—" />
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <KpiChartCard title="Median replies to close a conversation - by time"><KpiEmpty /></KpiChartCard>
+          <KpiChartCard title="Median time to first assignment"><KpiEmpty /></KpiChartCard>
+        </div>
+        <KpiChartCard title="Closed conversations on first contact rate - by time">
+          <KpiTimeSeries labels={['Jun 22', 'Jun 29', 'Jul 6', 'Jul 13', 'Jul 20']} series={[{ label: 'Tasa', data: [0, 0, 0, 0, 0], fill: true }]} type="line" showLegend={false} />
+        </KpiChartCard>
+        <div className="grid grid-cols-2 gap-4">
+          <KpiChartCard title="Conversations reassigned - by time"><KpiEmpty /></KpiChartCard>
+          <KpiChartCard title="Median time from first assignment to close - by time"><KpiEmpty /></KpiChartCard>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ReportsCxScoreContent({ period, channel }: { period: string; channel: string }) {
+  useApi(() => reportsApi.csat(period, channel), [period, channel], null);
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
+  return (
+    <>
+      <ReportShellHeader title="CX Score" description="Analyze your customer experience across teammates and AI Agents using a breakthrough AI-generated metric." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <Section title="Customer Experience score overview">
+          <div className="grid grid-cols-4 gap-3">
+            {['Overall CX Score', 'Fin AI Agent CX Score', 'Teammate CX Score', 'Fin AI Agent & Teammate CX Score'].map(l => (
+              <KpiCard key={l} label={l} value="—" sub="0 de 0" />
+            ))}
+          </div>
+          <KpiChartCard title="CX Score over time"><KpiEmpty /></KpiChartCard>
+        </Section>
+        <Section title="CX Score reasons">
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="Negative CX score reasons 😖"><KpiEmpty /></KpiChartCard>
+            <KpiChartCard title="Positive CX score reasons 😀"><KpiEmpty /></KpiChartCard>
+          </div>
+          <KpiChartCard title="Conversation topics with negative CX score"><KpiEmpty /></KpiChartCard>
+        </Section>
+        <Section title="Customer Experience ratings & explanations">
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="CX Score ratings - by CX Score rating"><KpiEmpty /></KpiChartCard>
+            <KpiChartCard title="CX Score ratings - by CX Score rating"><KpiEmpty /></KpiChartCard>
+          </div>
+          <KpiChartCard title="CX Score ratings"><KpiTable columns={['Conversación', 'CX Score', 'Motivo', 'Fecha']} rows={[]} /></KpiChartCard>
+        </Section>
       </div>
     </>
   );
@@ -2819,7 +2847,7 @@ function readInitialReportsSubFromUrl(): ReportsSubView {
   const s = new URLSearchParams(window.location.search).get('sub');
   const known: ReportsSubView[] = [
     'overview','aiResumen','areasNegocio','agentesPerf','aprobacionesRisk','costesRoi',
-    'todos','misInformes','favoritos',
+    'todos','misInformes','favoritos','cxScore',
     'temas','sugerencias','export','horarios',
     'finAgent','copilot',
     'calls','conversations','csat','effectiveness',
@@ -2843,6 +2871,7 @@ export function ReportsView() {
       case 'todos':            return <ReportsAllReportsContent onOpen={setSub} />;
       case 'misInformes':      return <KnowledgePlaceholder title="Tus informes" subtitle="Aún no has creado informes propios. Duplica un informe o crea uno desde cero para verlo aquí." />;
       case 'favoritos':        return <KnowledgePlaceholder title="Tus favoritos" subtitle="Marca informes como favoritos para acceder a ellos rápidamente desde aquí." />;
+      case 'cxScore':          return <ReportsCxScoreContent period={period} channel={channel} />;
       case 'aiResumen':        return <ReportsAiResumenContent period={period} channel={channel} />;
       case 'areasNegocio':     return <ReportsAreasNegocioContent period={period} channel={channel} />;
       case 'agentesPerf':      return <ReportsAgentesContent period={period} channel={channel} />;
