@@ -3586,6 +3586,73 @@ function MetricPicker({ selected, onSelect, onClose }: { selected: string; onSel
   );
 }
 
+// ── Catálogo de atributos (desplegables "Añadir filtro" y "Ver por") ──────────
+type FilterIconKind = 'dataset' | 'list' | 'heart' | 'channel' | 'team' | 'user';
+type FilterAttr = { group: string; title: string; icon: FilterIconKind };
+const FILTER_CATALOG: FilterAttr[] = [
+  { group: 'Atributos sugeridos', title: 'Equipo asignado actualmente', icon: 'team' },
+  { group: 'Atributos sugeridos', title: 'Compañero de equipo asignado actualmente', icon: 'user' },
+  { group: 'Atributos de Fin for Sales', title: 'Canal de reuniones de Fin Sales', icon: 'dataset' },
+  { group: 'Atributos de Fin for Sales', title: 'Contacto capturado de Fin Sales', icon: 'dataset' },
+  { group: 'Atributos de Fin for Sales', title: 'Correo electrónico capturado por Fin Sales', icon: 'dataset' },
+  { group: 'Atributos de Fin for Sales', title: 'Correo electrónico de recuperación de Fin Sales enviado', icon: 'dataset' },
+  { group: 'Atributos de Fin for Sales', title: 'Fin Sales participó', icon: 'dataset' },
+  { group: 'Atributos de Fin for Sales', title: 'Fin Sales tuvo contacto previo', icon: 'list' },
+  { group: 'Atributos de Fin for Sales', title: 'Proveedor de reuniones de Fin Sales', icon: 'dataset' },
+  { group: 'Atributos de Fin for Sales', title: 'Resultado de enrutamiento de Fin Sales', icon: 'dataset' },
+  { group: 'Atributos de Fin for Sales', title: 'Reunión de Fin Sales reservada', icon: 'dataset' },
+  { group: 'Atributos de Fin for Sales', title: 'Reunión de Fin Sales reservada mediante el botón de Messenger', icon: 'dataset' },
+  { group: 'Atributos de Fin for Sales', title: 'Teléfono capturado de Fin Sales', icon: 'dataset' },
+  { group: 'Atributos de Fin for Ecommerce', title: 'Fin for Ecommerce participó', icon: 'dataset' },
+  { group: 'Atributos de Fin for Service', title: 'Fin for Service activo', icon: 'dataset' },
+  { group: 'Atributos estándar de la conversación', title: 'Calificación del último compañero de equipo', icon: 'heart' },
+  { group: 'Atributos estándar de la conversación', title: 'Canal', icon: 'channel' },
+];
+function FilterIcon({ icon }: { icon: FilterIconKind }) {
+  const cls = 'w-4 h-4 flex-shrink-0 text-[#646462]';
+  if (icon === 'list') return <svg viewBox="0 0 16 16" className={`${cls} fill-none stroke-current`} strokeWidth="1.4"><path d="M2 4h12M2 8h12M2 12h8"/></svg>;
+  if (icon === 'heart') return <svg viewBox="0 0 16 16" className={`${cls} fill-current`}><path d="M8 14S2 10 2 5.5A3 3 0 018 4a3 3 0 016 1.5C14 10 8 14 8 14z"/></svg>;
+  if (icon === 'channel') return <svg viewBox="0 0 16 16" className={`${cls} fill-current`}><path d="M11 3L4 6H2v4h2l7 3V3z"/><path d="M13 6a3 3 0 010 4" className="fill-none stroke-current" strokeWidth="1.2"/></svg>;
+  if (icon === 'team') return <svg viewBox="0 0 16 16" className={`${cls} fill-none stroke-current`} strokeWidth="1.3"><circle cx="6" cy="6" r="2"/><circle cx="11.5" cy="6.5" r="1.6"/><path d="M2 13c0-2 2-3 4-3s4 1 4 3M9.5 13c0-1.5 1.3-2.4 3-2.4s3 .9 3 2.4"/></svg>;
+  if (icon === 'user') return <svg viewBox="0 0 16 16" className={`${cls} fill-none stroke-current`} strokeWidth="1.3"><circle cx="8" cy="5.5" r="2.6"/><path d="M3 13c0-2.2 2.5-3.4 5-3.4s5 1.2 5 3.4"/></svg>;
+  return <svg viewBox="0 0 16 16" className={`${cls} fill-current`}><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><rect x="6" y="6" width="4" height="4" rx="1"/></svg>;
+}
+// Desplegable de atributos — buscable y agrupado. Reutilizado por "Añadir filtro"
+// (placeholder "Filtros de búsqueda...") y "Ver por" ("Buscar propiedades...").
+function AttrPicker({ onClose, onSelect, placeholder = 'Filtros de búsqueda...' }: { onClose: () => void; onSelect: (f: FilterAttr) => void; placeholder?: string }) {
+  const [q, setQ] = useState('');
+  const query = q.trim().toLowerCase();
+  const groups = [...new Set(FILTER_CATALOG.map(f => f.group))];
+  return (
+    <>
+      <div className="fixed inset-0 z-30" onClick={onClose} />
+      <div className="absolute left-0 top-full mt-1 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-xl overflow-hidden flex flex-col w-[320px] max-w-[calc(100vw-2rem)]" style={{ maxHeight: 360 }}>
+        <div className="p-2 border-b border-[#f1f1ee] flex items-center gap-2 flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] ml-1" strokeWidth="1.5"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L14 14" strokeLinecap="round"/></svg>
+          <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder} className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]" />
+        </div>
+        <div className="overflow-y-auto min-h-0 py-1">
+          {groups.map(g => {
+            const items = FILTER_CATALOG.filter(f => f.group === g && (!query || f.title.toLowerCase().includes(query)));
+            if (!items.length) return null;
+            return (
+              <div key={g}>
+                <p className="text-[11px] text-[#646462] px-3 pt-2.5 pb-1">{g}</p>
+                {items.map(f => (
+                  <button key={f.title} onClick={() => onSelect(f)} className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#f8f8f7] text-left">
+                    <FilterIcon icon={f.icon} />
+                    <span className="text-[12.5px] text-[#1a1a1a] truncate">{f.title}</span>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // Editor de gráfico a pantalla completa — cambia tipo, título, métricas y ejes.
 function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLabel = 'Actualizar gráfico', onCancel, onUpdate }: {
   item: CatalogItem; initialKind: BuilderKind; initialTitle: string; initialVariant?: string; submitLabel?: string;
@@ -3604,25 +3671,33 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
   const [metricsOpen, setMetricsOpen] = useState(true);
   const [metrics, setMetrics] = useState<{ title: string; desc: string }[]>([{ title: item.label, desc: '' }]);
   const [pickerFor, setPickerFor] = useState<number | null>(null);
+  const [filterFor, setFilterFor] = useState<number | null>(null);
   const [accionesOpen, setAccionesOpen] = useState(false);
+  const [verPorAttr, setVerPorAttr] = useState<FilterAttr | null>(null);
+  const [verPorPickerOpen, setVerPorPickerOpen] = useState(false);
+  // Filtros aplicados por tarjeta de métrica (índice → lista de atributos).
+  const [metricFilters, setMetricFilters] = useState<Record<number, FilterAttr[]>>({});
 
   const type = EDITOR_TYPES.find(t => t.id === typeId) ?? EDITOR_TYPES[4];
   const kind = type.kind;
   const isNumber = typeId === 'number';
   const isMatrix = typeId === 'matrix';
   const isTable = typeId === 'table';
-  const grouping = isTable ? 'Rango' : 'Promedio';
+
+  // Número, circular y mapa de calor solo admiten UNA variable; el resto hasta dos.
+  const maxMetrics = (isNumber || typeId === 'pie' || isMatrix) ? 1 : 2;
+  const shownMetrics = metrics.slice(0, maxMetrics);
 
   // Sufijo de dimensión del título del preview, según el tipo.
-  const dimSuffix = isNumber ? '' : isMatrix ? 'por día de la semana y hora del día' : isTable ? 'by Intervalos de tiempo' : `by ${GRAN_EN[gran]}`;
-  const baseTitle = title || metrics[0]?.title || item.label;
-  const previewTitle = `${baseTitle}${metrics.length > 1 ? ` + ${metrics.length - 1} métrica` : ''}${dimSuffix ? ` ${dimSuffix}` : ''}`;
+  const dimSuffix = isNumber ? '' : isMatrix ? 'por día de la semana y hora del día' : isTable ? 'by Intervalos de tiempo' : verPorAttr ? `by ${verPorAttr.title}` : `by ${GRAN_EN[gran]}`;
+  const baseTitle = title || shownMetrics[0]?.title || item.label;
+  const previewTitle = `${baseTitle}${shownMetrics.length > 1 ? ` + ${shownMetrics.length - 1} métrica` : ''}${dimSuffix ? ` ${dimSuffix}` : ''}`;
   // Variante de render: barra horizontal, combo barra+línea (≥2 métricas),
   // matriz 7×24 o área. El número/circular/tabla usan su kind base.
   const editorVariant =
     typeId === 'hbar' ? 'hbar'
     : typeId === 'matrix' ? 'matrix'
-    : typeId === 'area' || (metrics.length >= 2 && (typeId === 'bar' || typeId === 'column' || typeId === 'line')) ? 'combo'
+    : typeId === 'area' || (shownMetrics.length >= 2 && (typeId === 'bar' || typeId === 'column' || typeId === 'line')) ? 'combo'
     : typeId === 'line' ? 'line'
     : undefined;
 
@@ -3637,7 +3712,7 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
             <p className="text-[12.5px] text-[#646462]">Ingresa una descripción</p>
           </div>
           <button onClick={onCancel} className="text-[13px] font-medium text-[#1a1a1a] rounded-full px-3 py-[6px] hover:bg-[#f3f3f1]">Cancelar</button>
-          <button onClick={() => onUpdate(kind, title, editorVariant, metrics[0]?.title)} className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-4 py-[6px] hover:bg-black">{submitLabel}</button>
+          <button onClick={() => onUpdate(kind, title, editorVariant, shownMetrics[0]?.title)} className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-4 py-[6px] hover:bg-black">{submitLabel}</button>
         </div>
         {/* Barra de tipos */}
         <div className="flex-shrink-0 px-6 py-2 border-b border-[#e9eae6]">
@@ -3709,36 +3784,51 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
               </div>
               <div>
                 <button onClick={() => setMetricsOpen(o => !o)} className="w-full flex items-center justify-between mb-2">
-                  <span className="text-[13px] font-semibold text-[#1a1a1a]">Métricas <span className="text-[#646462] font-normal ml-1 bg-[#f3f3f1] rounded px-1.5">{metrics.length}</span></span>
+                  <span className="text-[13px] font-semibold text-[#1a1a1a]">Métricas <span className="text-[#646462] font-normal ml-1 bg-[#f3f3f1] rounded px-1.5">{shownMetrics.length}</span></span>
                   <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${metricsOpen ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
                 </button>
                 {metricsOpen && (
                   <div className="flex flex-col gap-2">
-                    {metrics.map((m, i) => (
+                    {shownMetrics.map((m, i) => (
                       <div key={i} className="border border-[#e9eae6] rounded-lg p-3 flex flex-col gap-2.5">
-                        <p className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5">{metrics.length > 1 && <span className="text-[#9a9a97] font-normal">{i + 1}</span>}{m.title}</p>
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5">{shownMetrics.length > 1 && <span className="text-[#9a9a97] font-normal">{i + 1}</span>}{m.title}</p>
                         <div className="relative">
                           <button onClick={() => setPickerFor(pickerFor === i ? null : i)} className="w-full border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#646462] flex items-center justify-between text-left hover:border-[#1a1a1a]">
                             <span className="truncate">{m.title}</span><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
                           </button>
                           {pickerFor === i && <MetricPicker selected={m.title} onClose={() => setPickerFor(null)} onSelect={met => { setMetrics(prev => prev.map((x, j) => j === i ? { title: met.title, desc: met.desc } : x)); setPickerFor(null); }} />}
                         </div>
-                        <label className="flex items-center gap-2 text-[12.5px] text-[#1a1a1a]"><input type="checkbox" defaultChecked className="accent-[#3b59f6]" />Dentro del horario de atención<svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a97]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M6.5 6.5a1.5 1.5 0 113 .5c0 1-1.5 1-1.5 2M8 12h.01"/></svg></label>
-                        <div>
-                          <p className="text-[12px] font-medium text-[#1a1a1a] mb-1 flex items-center gap-1">Agrupación<svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a97]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M6.5 6.5a1.5 1.5 0 113 .5c0 1-1.5 1-1.5 2M8 12h.01"/></svg></p>
-                          <div className={`border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] flex items-center justify-between ${isTable ? 'text-[#a4a4a2] bg-[#f8f8f7]' : 'text-[#646462]'}`}>{grouping}<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg></div>
+                        {(metricFilters[i] ?? []).length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {(metricFilters[i] ?? []).map((f, fi) => (
+                              <span key={fi} className="inline-flex items-center gap-1.5 bg-[#f3f3f1] rounded-full pl-2 pr-1 py-0.5 text-[12px] text-[#1a1a1a] max-w-full">
+                                <FilterIcon icon={f.icon} /><span className="truncate">{f.title}</span>
+                                <button onClick={() => setMetricFilters(prev => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== fi) }))} className="text-[#9a9a97] hover:text-[#1a1a1a] flex-shrink-0"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="relative self-start">
+                          <button onClick={() => setFilterFor(filterFor === i ? null : i)} className="text-[12.5px] text-[#646462] flex items-center gap-1"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir filtro</button>
+                          {filterFor === i && <AttrPicker onClose={() => setFilterFor(null)} onSelect={f => { setMetricFilters(prev => ({ ...prev, [i]: [...(prev[i] ?? []), f] })); setFilterFor(null); }} />}
                         </div>
-                        <button className="text-[12.5px] text-[#646462] flex items-center gap-1 self-start"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir filtro</button>
                       </div>
                     ))}
                   </div>
                 )}
-                <button onClick={() => setMetrics(m => [...m, { title: 'Promedio Tiempo para cerrar', desc: '' }])} className="text-[12.5px] text-[#646462] flex items-center gap-1 mt-2"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir métrica</button>
+                {metrics.length < maxMetrics && (
+                  <button onClick={() => setMetrics(m => [...m, { title: 'Promedio Tiempo para cerrar', desc: '' }])} className="text-[12.5px] text-[#646462] flex items-center gap-1 mt-2"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir métrica</button>
+                )}
               </div>
               {/* Ver por — varía según el tipo */}
               {!isNumber && (
                 <div className="border-t border-[#f1f1ee] pt-3">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1.5 flex items-center gap-1">Ver por<svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a97]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M6.5 6.5a1.5 1.5 0 113 .5c0 1-1.5 1-1.5 2M8 12h.01"/></svg></p>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1">Ver por<svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a97]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M6.5 6.5a1.5 1.5 0 113 .5c0 1-1.5 1-1.5 2M8 12h.01"/></svg></p>
+                    {verPorAttr && !isMatrix && !isTable && (
+                      <div className="flex items-center gap-1.5"><span className="text-[12px] text-[#646462]">Mostrar arriba</span><div className="border border-[#e9eae6] rounded-md px-2 py-0.5 text-[12px] text-[#1a1a1a] flex items-center gap-1">10<svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg></div></div>
+                    )}
+                  </div>
                   {isMatrix ? (
                     <div className="border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#1a1a1a] flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M6 2.5v11M2.5 6h11"/></svg>Día de la semana y hora del día</div>
                   ) : isTable ? (
@@ -3749,9 +3839,23 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
                         <button className="text-[12px] font-medium text-[#1a1a1a] flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M11 2l3 3-8 8H3v-3z"/></svg>Editar intervalos de tiempo</button>
                       </div>
                     </>
+                  ) : verPorAttr ? (
+                    <div className="relative">
+                      <button onClick={() => setVerPorPickerOpen(o => !o)} className="w-full border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#1a1a1a] flex items-center justify-between text-left hover:border-[#1a1a1a]">
+                        <span className="flex items-center gap-2 truncate"><FilterIcon icon={verPorAttr.icon} /><span className="truncate">{verPorAttr.title}</span></span>
+                        <span className="flex items-center gap-1.5 flex-shrink-0"><button onClick={e => { e.stopPropagation(); setVerPorAttr(null); }} className="text-[#9a9a97] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg></button><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg></span>
+                      </button>
+                      {verPorPickerOpen && <AttrPicker placeholder="Buscar propiedades..." onClose={() => setVerPorPickerOpen(false)} onSelect={f => { setVerPorAttr(f); setVerPorPickerOpen(false); }} />}
+                    </div>
                   ) : (
                     <>
-                      <div className="border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#1a1a1a] flex items-center gap-2 mb-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>Tiempo</div>
+                      <div className="relative mb-2">
+                        <button onClick={() => setVerPorPickerOpen(o => !o)} className="w-full border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#1a1a1a] flex items-center justify-between text-left hover:border-[#1a1a1a]">
+                          <span className="flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>Tiempo</span>
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                        </button>
+                        {verPorPickerOpen && <AttrPicker placeholder="Buscar propiedades..." onClose={() => setVerPorPickerOpen(false)} onSelect={f => { setVerPorAttr(f); setVerPorPickerOpen(false); }} />}
+                      </div>
                       <div className="flex gap-1">
                         {(['hora', 'dia', 'semana', 'mes'] as const).map(g => (
                           <button key={g} onClick={() => setGran(g)} className={`px-2.5 py-1 rounded-full text-[12px] capitalize ${gran === g ? 'bg-[#f3f3f1] font-semibold text-[#1a1a1a]' : 'text-[#646462] hover:bg-[#f8f8f7]'}`}>{g === 'dia' ? 'día' : g}</button>
