@@ -2799,23 +2799,47 @@ function BuilderBanner({ text, color, onText, onColor, onDelete }: {
   text: string; color: string; onText: (t: string) => void; onColor: (c: string) => void; onDelete: () => void;
 }) {
   const bg = (BANNER_COLORS.find(c => c.id === color) ?? BANNER_COLORS[3]).bg;
+  const ref = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState(false);
+  const [below, setBelow] = useState(false);
+  // Al entrar, decide si la barra cabe encima. Mide el espacio disponible contra
+  // el contenedor con scroll (no el viewport): si el banner está pegado al borde
+  // superior del lienzo, la barra se muestra debajo para no recortarse.
+  const onEnter = () => {
+    const el = ref.current;
+    const r = el?.getBoundingClientRect();
+    if (r) {
+      let scrollTop = 0;
+      for (let n: HTMLElement | null = el!.parentElement; n; n = n.parentElement) {
+        const oy = getComputedStyle(n).overflowY;
+        if (oy === 'auto' || oy === 'scroll') { scrollTop = n.getBoundingClientRect().top; break; }
+      }
+      setBelow(r.top - scrollTop < 44);
+    }
+    setHover(true);
+  };
   return (
-    <div className="relative h-full">
-      {/* Barra flotante (aparece al pasar el ratón) */}
-      <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-20 hidden group-hover:flex items-center gap-1.5 bg-white border border-[#e9eae6] rounded-full shadow-md px-2 py-1">
-        {BANNER_COLORS.map(c => (
-          <button key={c.id} onClick={() => onColor(c.id)} title={c.id}
-            className={`w-5 h-5 rounded-full flex items-center justify-center border ${color === c.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}
-            style={{ background: c.id === 'none' ? '#fff' : c.swatch }}>
-            {c.id === 'none' && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#c4c4c1]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M4 12L12 4"/></svg>}
-            {color === c.id && c.id !== 'none' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#1a1a1a]" strokeWidth="2"><path d="M3 8l3 3 6-7"/></svg>}
-          </button>
-        ))}
-        <span className="w-px h-4 bg-[#e9eae6] mx-0.5" />
-        <button onClick={onDelete} title="Eliminar" className="w-5 h-5 flex items-center justify-center text-[#646462] hover:text-[#dc2626]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"/></svg>
-        </button>
-      </div>
+    <div ref={ref} className="relative h-full" onMouseEnter={onEnter} onMouseLeave={() => setHover(false)}>
+      {/* Barra flotante (aparece al pasar el ratón). El contenedor toca el banner
+          (bottom-full / top-full) y el padding hace de puente para no perder el hover. */}
+      {hover && (
+        <div className={`absolute left-1/2 -translate-x-1/2 z-30 flex ${below ? 'top-full pt-2' : 'bottom-full pb-2'}`}>
+          <div className="flex items-center gap-1.5 bg-white border border-[#e9eae6] rounded-full shadow-md px-2 py-1">
+            {BANNER_COLORS.map(c => (
+              <button key={c.id} onClick={() => onColor(c.id)} title={c.id}
+                className={`w-5 h-5 rounded-full flex items-center justify-center border ${color === c.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}
+                style={{ background: c.id === 'none' ? '#fff' : c.swatch }}>
+                {c.id === 'none' && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#c4c4c1]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M4 12L12 4"/></svg>}
+                {color === c.id && c.id !== 'none' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#1a1a1a]" strokeWidth="2"><path d="M3 8l3 3 6-7"/></svg>}
+              </button>
+            ))}
+            <span className="w-px h-4 bg-[#e9eae6] mx-0.5" />
+            <button onClick={onDelete} title="Eliminar" className="w-5 h-5 flex items-center justify-center text-[#646462] hover:text-[#dc2626]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
       {/* Bloque del banner con título editable */}
       <div className="h-full min-h-[56px] rounded-[10px] px-4 py-3 flex items-center" style={{ background: bg }}>
         <input value={text} onChange={e => onText(e.target.value)} placeholder="Ingresa un título"
@@ -3749,14 +3773,21 @@ function DateRangePicker({ value, onChange }: { value: DateRange; onChange: (v: 
   const [custom, setCustom] = useState(false);
   const [draft, setDraft] = useState<{ from: Date; to: Date; picking: 'from' | 'to' }>({ from: value.from, to: value.to, picking: 'from' });
   const [calLeft, setCalLeft] = useState(rgStartOfMonth(value.from));
-  const openCustom = () => { setDraft({ from: value.from, to: value.to, picking: 'from' }); setCalLeft(rgStartOfMonth(value.from)); setCustom(true); };
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [anchor, setAnchor] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const CAL_W = 520;
+  const openCustom = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setAnchor({ top: Math.max(8, Math.min(r.top, window.innerHeight - 420)), left: Math.max(8, r.left - CAL_W - 8) });
+    setDraft({ from: value.from, to: value.to, picking: 'from' }); setCalLeft(rgStartOfMonth(value.from)); setCustom(true);
+  };
   const pickDay = (d: Date) => {
     if (draft.picking === 'from' || d < draft.from) setDraft({ from: d, to: d, picking: 'to' });
     else setDraft({ from: draft.from, to: d, picking: 'from' });
   };
   return (
     <div className="relative">
-      <button onClick={() => { setOpen(o => !o); setCustom(false); }} className="w-full flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] hover:border-[#1a1a1a]">
+      <button ref={btnRef} onClick={() => { setOpen(o => !o); setCustom(false); }} className="w-full flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] hover:border-[#1a1a1a]">
         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
         {rgFmt(value.from)} - {rgFmt(value.to)}
       </button>
@@ -3784,7 +3815,7 @@ function DateRangePicker({ value, onChange }: { value: DateRange; onChange: (v: 
               </div>
             </div>
           ) : (
-            <div className="absolute left-0 top-full mt-1 z-40 w-[520px] bg-white border border-[#e9eae6] rounded-xl shadow-xl p-4">
+            <div style={{ position: 'fixed', top: anchor.top, left: anchor.left, width: CAL_W }} className="z-40 bg-white border border-[#e9eae6] rounded-xl shadow-xl p-4">
               <div className="flex items-start gap-8 mb-3">
                 <button onClick={() => setDraft(d => ({ ...d, picking: 'from' }))} className="text-left">
                   <p className="text-[12px] text-[#646462] mb-0.5">From</p>
