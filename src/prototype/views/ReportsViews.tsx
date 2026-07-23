@@ -18,7 +18,7 @@ import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDi
 
 type ReportsSubView =
   | 'overview' | 'aiResumen' | 'areasNegocio' | 'agentesPerf' | 'aprobacionesRisk' | 'costesRoi'
-  | 'todos' | 'misInformes' | 'favoritos' | 'cxScore'
+  | 'todos' | 'misInformes' | 'favoritos' | 'cxScore' | 'emailDeliv'
   | 'temas' | 'sugerencias' | 'export' | 'horarios'
   | 'finAgent' | 'copilot'
   | 'calls' | 'conversations' | 'csat' | 'effectiveness'
@@ -73,7 +73,7 @@ type AllReportRow = { t: string; d?: string; sub?: ReportsSubView; legacy?: bool
 const ALL_REPORTS: AllReportRow[] = [
   { t: 'Artículos', sub: 'articles', legacy: true },
   { t: 'Calls', sub: 'calls', d: 'Use the Calls report to visualize and explore your team’s calling activity.' },
-  { t: 'Capacidad de entrega de correo electrónico', legacy: true },
+  { t: 'Capacidad de entrega de correo electrónico', sub: 'emailDeliv', legacy: true },
   { t: 'Conversation tags', sub: 'temas', d: 'Explore the reasons your customers get in touch, and monitor trends in the topics that come up.' },
   { t: 'Conversations', sub: 'conversations', d: 'Track your new inbound conversations, busiest periods and biggest customer issues, and optimize your support.' },
   { t: 'Copilot', sub: 'copilot', d: 'Analyze and report on how Copilot is used by teammates in your workspace.' },
@@ -241,9 +241,10 @@ const DEMO_OVERVIEW = buildDemoOverview();
 // Shared deterministic mock generators so every report can render populated
 // while the backend has no data. Seeded → stable across renders.
 const MOCK_WEEKS = ['Jun 22', 'Jun 29', 'Jul 6', 'Jul 13', 'Jul 20', 'Jul 27', 'Ago 3', 'Ago 10', 'Ago 17'];
-function mockSeries(base: number, amp: number, slope = 0, seed = 3): number[] {
+function mockSeries(base: number, amp: number, slope = 0, seed = 3, decimals = 0): number[] {
   const r = mulberry32(seed);
-  return MOCK_WEEKS.map((_, i) => Math.max(0, Math.round((base + slope * i + Math.sin(i / 2.1) * amp + (r() - 0.5) * amp) * 10) / 10));
+  const f = Math.pow(10, decimals);
+  return MOCK_WEEKS.map((_, i) => Math.max(0, Math.round((base + slope * i + Math.sin(i / 2.1) * amp + (r() - 0.5) * amp) * f) / f));
 }
 
 // ── 1. Resumen — dashboard de KPIs (Chart.js vía KpiChart) ────────────────────
@@ -1008,37 +1009,20 @@ function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: 
 function ReportsTopicsContent() {
   return (
     <>
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M3 9c0-2.5 2-4.5 4.5-4.5S12 6.5 12 9c0 1.5-.7 2.7-1.7 3.5l.4 2L9 13.4 5.5 14l-.5-2C3.7 11.2 3 10 3 8.5z"/></svg>
-          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Temas</h1>
+      <ReportShellHeader title="Conversation tags" description="Explore the reasons your customers get in touch, and monitor trends in the topics that come up." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard label="New conversations" value="124" change="18" trend="up" />
+          <KpiCard label="Tagged conversations" value="96" change="12" trend="up" />
         </div>
-        <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13.5l-5-4.5C1 7 1 4.5 3 3s4.5-.5 5 1.5C8.5 2.5 11 2 12.5 3.5S15 7 13 9z"/></svg>
-        </button>
-      </div>
-      <div className="flex-1 flex items-center justify-center min-h-0 p-6">
-        <div className="flex flex-col items-center max-w-[460px] text-center">
-          <div className="flex items-center justify-center gap-4 mb-6">
-            <div className="w-20 h-20 rounded-full bg-[#cdf3eb] flex items-center justify-center relative">
-              <svg viewBox="0 0 32 32" className="w-10 h-10 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="11" cy="14" r="6"/><circle cx="22" cy="11" r="3"/><path d="M16 18l5-3"/></svg>
-            </div>
-            <div className="w-20 h-20 rounded-full bg-[#cdf3eb] flex items-center justify-center">
-              <svg viewBox="0 0 32 32" className="w-10 h-10 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="16" cy="16" r="2"/><circle cx="9" cy="10" r="2"/><circle cx="23" cy="10" r="2"/><circle cx="9" cy="22" r="2"/><circle cx="23" cy="22" r="2"/><path d="M11 11l4 4M21 11l-4 4M11 21l4-4M21 21l-4-4"/></svg>
-            </div>
-            <div className="w-20 h-20 rounded-full bg-[#cdf3eb] flex items-center justify-center">
-              <svg viewBox="0 0 32 32" className="w-10 h-10 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M16 4c-3 0-5.5 2.5-5.5 5.5 0 2 .8 3.7 2 4.5l-.5 4 4-1 4 1-.5-4c1.2-.8 2-2.5 2-4.5C21.5 6.5 19 4 16 4z"/><path d="M14 24v3M18 24v3M13 28h6"/></svg>
-            </div>
-          </div>
-          <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Comprende y rastrea de forma automática los temas de conversación</h2>
-          <p className="text-[13.5px] text-[#646462] leading-[20px] mb-5">
-            Accede a la información de los datos de tus conversaciones al descubrir o definir los temas que te interesan y rastréalos de forma automática.
-          </p>
-          <div className="flex items-center gap-3">
-            <button className="bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-full px-4 py-[7px] hover:bg-black">Crear tema</button>
-            <button className="bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] rounded-full px-4 py-[7px] hover:bg-[#f5f5f4]">Más información</button>
-          </div>
-        </div>
+        <KpiChartCard title="Tagged conversations - by time">
+          <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Etiquetadas', data: mockSeries(11, 4, 0.4, 51), fill: true }]} type="line" showLegend={false} />
+        </KpiChartCard>
+        <KpiChartCard title="Most used conversation tags" height={240}>
+          <KpiTable columns={['Etiqueta de la conversación', 'Nuevas conversaciones']} rows={[['Reembolsos', '32'], ['Envíos', '24'], ['Facturación', '18'], ['Cuenta', '12'], ['Producto', '9'], ['Not tagged', '29']]} />
+        </KpiChartCard>
       </div>
     </>
   );
@@ -1369,87 +1353,32 @@ function ReportsCustomReport({ title, description }: { title: string; descriptio
 //    3:26772, 4:16934, 4:19011, 4:22197, 4:24401) ─────────────────────────────
 
 function ReportsCallsContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.calls(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 30 }, (_, i) => ({ day: i, count: 0 }));
-  const byDirection: { direction: string; count: number }[] = data?.byDirection ?? [];
-  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
-  const isEmpty = data?.isEmpty !== false;
-  const days = timeSeries.length;
-
+  useApi(() => reportsApi.calls(period, channel), [period, channel], null);
   return (
     <>
       <ReportShellHeader title="Calls" description="Use the Calls report to visualize and explore your team's calling activity." />
       <ReportShellFilters />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Inbound calls" value={loading ? '…' : String(kpis.inbound_calls ?? 0)} />
-        <ReportsKpiCard label="Outbound calls" value={loading ? '…' : String(kpis.outbound_calls ?? 0)} />
-        <ReportsKpiCard label="Messenger calls" value={loading ? '…' : String(kpis.messenger_calls ?? 0)} />
-        <ReportsKpiCard label="Median call duration" value={kpis.median_call_duration ?? '—'} />
-        <ReportsKpiCard label="Median call in queue time" value={kpis.median_queue_time ?? '—'} />
-        <ReportsKpiCard label="Median call talk time" value={kpis.median_talk_time ?? '—'} />
-        {/* Call volume time series */}
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Calls - by time</span>
-          </div>
-          {isEmpty ? (
-            <div className="h-[160px] flex flex-col items-center justify-center text-center">
-              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M11 2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1l1-1h2l1 1z"/><path d="M8 7v4M8 6h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a] font-medium">Sin actividad de llamadas</span>
-              <span className="text-[11.5px] text-[#646462] mt-0.5">Conecta un canal de voz para ver métricas de llamadas.</span>
-            </div>
-          ) : (
-            <>
-              <div className="h-[140px] flex items-end gap-0.5 px-2">
-                {timeSeries.map((t, i) => (
-                  <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-                ))}
-              </div>
-              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
-                <span>Día 1</span><span>Día {Math.floor(days / 3)}</span><span>Día {Math.floor(2 * days / 3)}</span><span>Día {days}</span>
-              </div>
-            </>
-          )}
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <div className="grid grid-cols-3 gap-3">
+          <KpiCard label="Inbound calls" value="24" change="6" trend="up" />
+          <KpiCard label="Outbound calls" value="12" change="3" trend="up" />
+          <KpiCard label="Messenger calls" value="8" change="1" trend="down" />
+          <KpiCard label="Median call duration" value="4m 32s" change="12s" trend="up" />
+          <KpiCard label="Median call in queue time" value="28s" change="4s" trend="up" />
+          <KpiCard label="Median call talk time" value="3m 51s" change="8s" trend="down" />
         </div>
-        {/* By direction donut */}
-        <div className="col-span-3 grid grid-cols-2 gap-4">
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Calls - by direction</span>
-            </div>
-            {isEmpty || byDirection.length === 0 ? (
-              <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos de dirección</div>
-            ) : (
-              <div className="space-y-2 pt-2">
-                {byDirection.map(d => {
-                  const maxD = Math.max(...byDirection.map(x => x.count), 1);
-                  const COLORS: Record<string, string> = { inbound: '#3b59f6', outbound: '#fc8a37', messenger: '#7c3aed' };
-                  return (
-                    <div key={d.direction} className="flex items-center gap-2">
-                      <span className="text-[11px] text-[#646462] w-[70px] capitalize">{d.direction}</span>
-                      <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
-                        <div className="h-2 rounded-full" style={{ width: `${(d.count / maxD) * 100}%`, background: COLORS[d.direction] ?? '#3b59f6' }} />
-                      </div>
-                      <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{d.count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Inbound calls – by time and call state</span>
-            </div>
-            <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">
-              Requiere datos de estado de llamada en tiempo real
-            </div>
-          </div>
+        <div className="grid grid-cols-2 gap-4">
+          <KpiChartCard title="Calls - by direction"><KpiDoughnut labels={['Inbound', 'Outbound', 'Messenger']} values={[24, 12, 8]} /></KpiChartCard>
+          <KpiChartCard title="Inbound calls - by time and call state"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Atendidas', data: mockSeries(4, 2, 0.3, 31) }, { label: 'Perdidas', data: mockSeries(1, 1, 0, 32) }]} type="bar" /></KpiChartCard>
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <KpiChartCard title="Median call talk time (min)"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Minutos', data: mockSeries(3.8, 0.8, 0, 33), fill: true }]} type="line" showLegend={false} /></KpiChartCard>
+          <KpiChartCard title="Median call in queue time (s)"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Segundos', data: mockSeries(28, 8, -0.5, 34), fill: true }]} type="line" showLegend={false} /></KpiChartCard>
+        </div>
+        <KpiChartCard title="Call performance" height={220}>
+          <KpiTable columns={['Compañero', 'Llamadas', 'Duración media', 'En cola']} rows={[['Ana Torres', '18', '4m 10s', '22s'], ['Luis Vega', '14', '5m 02s', '31s'], ['María Ruiz', '12', '3m 44s', '19s']]} />
+        </KpiChartCard>
       </div>
     </>
   );
@@ -2678,80 +2607,62 @@ function ReportsOutboundEngagementContent({ period, channel }: { period: string;
 }
 
 function ReportsCopilotContent({ period, channel }: { period: string; channel: string }) {
-  // Copilot usage is derived from AI agent runs — we reuse the agents endpoint
-  const { data, loading } = useApi(() => reportsApi.agents(period, channel), [period, channel], null);
-  const agents: any[] = data?.agents ?? [];
-  const agentTimeSeries: { day: number; runs: number }[] = data?.timeSeries ?? [];
-  const maxAgentRuns = Math.max(...agentTimeSeries.map(t => t.runs), 1);
-  const totalRuns = agents.reduce((s, a) => s + (a.totalRuns ?? 0), 0);
-  const totalTokens = agents.reduce((s, a) => s + (a.tokensUsed ?? 0), 0);
-  const avgSuccessRate = agents.length > 0
-    ? Math.round(agents.reduce((s, a) => s + Number.parseFloat(String(a.successRate ?? '0')), 0) / agents.length)
-    : 0;
-  const copilotAgents = agents.filter(a => (a.name ?? '').toLowerCase().includes('copilot') || (a.slug ?? '').toLowerCase().includes('copilot'));
-  const displayAgents = copilotAgents.length > 0 ? copilotAgents : agents;
-  const isEmpty = agents.length === 0;
-
+  useApi(() => reportsApi.agents(period, channel), [period, channel], null);
   return (
     <>
-      <ReportShellHeader title="Copilot" description="Analyze how Copilot is used by teammates in your workspace to assist conversations." />
-      <ReportShellFilters />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="AI agent runs" value={loading ? '…' : String(totalRuns)} sub={`${agents.length} agentes activos`} />
-        <ReportsKpiCard label="Tokens consumidos" value={loading ? '…' : Number(totalTokens).toLocaleString()} />
-        <ReportsKpiCard label="Tasa de éxito media" value={loading ? '…' : `${avgSuccessRate}%`} />
-        {/* Agent table */}
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-          <div className="px-5 py-3 flex items-center gap-1">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Actividad de agentes de IA / Copilot</span>
-          </div>
-          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-            <div>Agente</div>
-            <div>Ejecuciones</div>
-            <div>Éxito</div>
-            <div>Fallos</div>
-            <div>Tokens</div>
-          </div>
-          {loading ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
-          ) : isEmpty ? (
-            <div className="h-[140px] flex flex-col items-center justify-center text-center">
-              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M4 4h8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H8L5 14v-2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a] font-medium">Sin actividad de Copilot</span>
-              <span className="text-[11.5px] text-[#646462] mt-0.5">Las métricas aparecen cuando los agentes procesan conversaciones.</span>
-            </div>
-          ) : displayAgents.map((a: any, i: number) => (
-            <div key={i} className="grid grid-cols-5 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-              <div className="font-medium truncate">{a.name ?? a.slug ?? 'Agente'}</div>
-              <div>{a.totalRuns ?? 0}</div>
-              <div className={Number.parseFloat(String(a.successRate ?? '0').replace('%','')) >= 80 ? 'text-[#16a34a]' : 'text-[#dc2626]'}>
-                {a.successRate ?? '—'}
-              </div>
-              <div className="text-[#646462]">{a.failedRuns ?? 0}</div>
-              <div className="text-[#646462]">{Number(a.tokensUsed ?? 0).toLocaleString()}</div>
-            </div>
-          ))}
+      <ReportShellHeader title="Copilot" description="Analyze and report on how Copilot is used by teammates in your workspace." />
+      <ReportShellFilters extraFilter={{ icon: 'user', label: 'Compañero de equipo es Cualquiera' }} />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard label="Percentage of conversations using Copilot" value="34%" sub="42 de 124" change="6 pts" trend="up" />
+          <KpiCard label="Copilot questions" value="287" change="15%" trend="up" />
         </div>
-        {/* Agent runs over time */}
-        {agentTimeSeries.some(t => t.runs > 0) ? (
-          <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Uso de Copilot por tiempo</span>
-            </div>
-            <div className="h-[140px] flex items-end gap-0.5 px-2">
-              {agentTimeSeries.map((t, i) => (
-                <div key={i} style={{ height: t.runs ? `${(t.runs / maxAgentRuns) * 100}%` : '4px' }} className={`flex-1 ${t.runs ? 'bg-[#8b5cf6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-              ))}
-            </div>
-            <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-2">
-              <span>Día 1</span><span>Día {Math.round(agentTimeSeries.length / 2)}</span><span>Día {agentTimeSeries.length}</span>
-            </div>
+        <div className="grid grid-cols-3 gap-3">
+          <KpiCard label="Conversations using Copilot" value="42" change="9" trend="up" />
+          <KpiCard label="Percentage of conversations with a copied Copilot answer" value="18%" sub="22 de 124" change="3 pts" trend="up" />
+          <KpiCard label="Teammates using Copilot" value="7" change="1" trend="up" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <KpiChartCard title="Percentage of conversations using Copilot"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: '% conversaciones', data: mockSeries(30, 8, 0.6, 41), fill: true }]} type="line" showLegend={false} /></KpiChartCard>
+          <KpiChartCard title="Teammates using Copilot"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Compañeros', data: mockSeries(5, 2, 0.2, 42) }]} type="bar" showLegend={false} /></KpiChartCard>
+        </div>
+        <KpiChartCard title="Teammate overview" height={220}>
+          <KpiTable columns={['Compañero', 'Preguntas', 'Respuestas copiadas', 'Conversaciones']} rows={[['Ana Torres', '92', '18', '15'], ['Luis Vega', '74', '12', '11'], ['María Ruiz', '63', '9', '9'], ['Jon Aixa', '58', '7', '7']]} />
+        </KpiChartCard>
+        <KpiChartCard title="Copilot content performance" height={220}>
+          <KpiTable columns={['Fuente', 'Usos', 'Respuestas copiadas', '% copiado']} rows={[['Reembolsos', '84', '31', '37%'], ['Envíos', '61', '19', '31%'], ['Facturación', '42', '11', '26%']]} />
+        </KpiChartCard>
+      </div>
+    </>
+  );
+}
+
+function ReportsEmailDeliverabilityContent() {
+  const seg: [string, string][] = [['Abierto', '42%'], ['Se canceló la suscripción', '1.2%'], ['Sin entregar', '0.8%'], ['Marcado como spam', '0.3%']];
+  return (
+    <>
+      <ReportShellHeader title="Capacidad de entrega de correo electrónico" description="Mide la entregabilidad de tus correos: aperturas, cancelaciones, no entregados y spam." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+          <KpiSectionHeader title="Capacidad general de entrega de correo electrónico" />
+          <div className="grid grid-cols-4 gap-3">
+            {seg.map(([l, v]) => <KpiCard key={l} label={l} value={v} />)}
           </div>
-        ) : (
-          <ReportEmptyChart label="Uso de Copilot por tiempo" span={3} />
-        )}
+          <p className="text-[12.5px] text-[#646462] px-1">Recomendamos que la tasa de apertura se mantenga <b className="text-[#1a1a1a]">por encima del 25 %</b>.</p>
+          <KpiChartCard title="Tasa de apertura por tiempo (%)">
+            <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Tasa de apertura', data: mockSeries(40, 6, 0.3, 61), fill: true }]} type="line" showLegend={false} />
+          </KpiChartCard>
+        </div>
+        <KpiChartCard title="Tasa de entrega de tus correos electrónicos" height={240}>
+          <KpiTable columns={['Título', 'Enviado', 'Abierto', 'Clics', 'Respuestas', 'Cancelado', 'Sin entregar', 'Spam']} rows={[
+            ['Newsletter Julio', '1.240', '43%', '9%', '2%', '0.9%', '0.6%', '0.2%'],
+            ['Onboarding día 1', '820', '58%', '14%', '5%', '0.4%', '0.5%', '0.1%'],
+            ['Recuperación carrito', '640', '31%', '7%', '1%', '1.8%', '1.1%', '0.4%'],
+          ]} />
+        </KpiChartCard>
       </div>
     </>
   );
@@ -2861,7 +2772,7 @@ function readInitialReportsSubFromUrl(): ReportsSubView {
   const s = new URLSearchParams(window.location.search).get('sub');
   const known: ReportsSubView[] = [
     'overview','aiResumen','areasNegocio','agentesPerf','aprobacionesRisk','costesRoi',
-    'todos','misInformes','favoritos','cxScore',
+    'todos','misInformes','favoritos','cxScore','emailDeliv',
     'temas','sugerencias','export','horarios',
     'finAgent','copilot',
     'calls','conversations','csat','effectiveness',
@@ -2886,6 +2797,7 @@ export function ReportsView() {
       case 'misInformes':      return <KnowledgePlaceholder title="Tus informes" subtitle="Aún no has creado informes propios. Duplica un informe o crea uno desde cero para verlo aquí." />;
       case 'favoritos':        return <KnowledgePlaceholder title="Tus favoritos" subtitle="Marca informes como favoritos para acceder a ellos rápidamente desde aquí." />;
       case 'cxScore':          return <ReportsCxScoreContent period={period} channel={channel} />;
+      case 'emailDeliv':       return <ReportsEmailDeliverabilityContent />;
       case 'aiResumen':        return <ReportsAiResumenContent period={period} channel={channel} />;
       case 'areasNegocio':     return <ReportsAreasNegocioContent period={period} channel={channel} />;
       case 'agentesPerf':      return <ReportsAgentesContent period={period} channel={channel} />;
