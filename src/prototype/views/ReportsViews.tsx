@@ -2364,137 +2364,43 @@ function ReportsHorariosContent() {
 }
 
 function ReportsArticlesContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.articles(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const topArticles: { title: string; views: number; helpful: number; unhelpful: number; deflected: number }[] = data?.topArticles ?? [];
+  useApi(() => reportsApi.articles(period, channel), [period, channel], null);
   return (
     <>
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 8h6M5 10h4"/></svg>
-          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Artículo</h1>
-          <span className="text-[12px] text-[#646462]">Anterior</span>
+      <ReportShellHeader title="Artículos" description="Analiza cómo se leen y buscan tus artículos del centro de ayuda." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard label="Personas que vieron un artículo" value="486" change="12%" trend="up" />
+          <KpiCard label="Total de visualizaciones del artículo" value="1.204" change="9%" trend="up" />
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <a className="text-[12.5px] font-medium text-[#3b59f6] flex items-center gap-1">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
-            ¿Cómo se elabora este informe?
-          </a>
-          <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg></button>
-        </div>
-      </div>
-      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-wrap flex-shrink-0">
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-          Período: {period}
-        </button>
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c0-2 2.5-3 5-3s5 1 5 3"/></svg>
-          visitantes, Leads y Usuarios
-        </button>
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">Centro de ayuda y Messenger</button>
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">Todos los centros de ayuda</button>
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
-        <div className="grid grid-cols-3 gap-4">
-          <ReportsKpiCard label="Total artículos" value={loading ? '…' : String(kpis.total_articles ?? 0)} />
-          <ReportsKpiCard label="Artículos publicados" value={loading ? '…' : String(kpis.published_articles ?? 0)} />
-          <ReportsKpiCard label="Borradores" value={loading ? '…' : String(kpis.draft_articles ?? 0)} />
-          <ReportsKpiCard label="Visualizaciones" value={loading ? '…' : String(kpis.view_count_total ?? 0)} />
-          <ReportsKpiCard label="Búsquedas totales" value={loading ? '…' : String(kpis.search_hits_total ?? 0)} />
-          <ReportsKpiCard label="Tasa de utilidad" value={loading ? '…' : (kpis.helpfulness_rate ?? '0%')} sub={kpis.helpful_total != null ? `${kpis.helpful_total} útil / ${kpis.unhelpful_total ?? 0} no útil` : undefined} />
-          <ReportsKpiCard label="Conversaciones desviadas" value={loading ? '…' : String(kpis.deflected_total ?? 0)} />
-        </div>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Personas vs visualizaciones de tiempo</span>
-            </div>
-            <button className="w-6 h-6 rounded-full hover:bg-[#ededea] flex items-center justify-center text-[#646462]">⋯</button>
-          </div>
-          <div className="h-[200px] flex flex-col items-center justify-center text-center">
-            <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-            <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
-            <span className="text-[12px] text-[#646462] mt-1">Intenta cambiar los filtros en la parte superior de la página</span>
-          </div>
-        </div>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3">
-            <div className="flex items-center gap-1">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Interacción con el artículo</span>
-            </div>
-            <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[5px] text-[11.5px] font-medium text-[#1a1a1a]">
-              Números totales
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
-            </button>
-          </div>
-          <div className="px-5 pb-3 flex items-center gap-2">
-            <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] text-[#1a1a1a]">
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><circle cx="6" cy="6" r="3"/><path d="M14 14l-4-4"/></svg>
-              Visitantes greater than 1C
-            </button>
-            <button className="flex items-center gap-1 border border-dashed border-[#d4d4d2] rounded-full px-3 py-[5px] text-[12px] text-[#646462]">
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-              Añadir filtro
-            </button>
-          </div>
-          <div className="border-t border-[#e9eae6]">
-            <div className="grid grid-cols-7 px-5 py-2 bg-[#fafaf9] border-b border-[#e9eae6] text-[12px] font-medium text-[#646462]">
-              <div>artículo</div>
-              <div>Visitantes</div>
-              <div>
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#16a34a]" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M5.5 10c.7.8 1.5 1.2 2.5 1.2s1.8-.4 2.5-1.2M6 6.5v.01M10 6.5v.01" strokeLinecap="round"/></svg>
-              </div>
-              <div>
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#a16207]" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M5.5 10.5h5M6 6.5v.01M10 6.5v.01" strokeLinecap="round"/></svg>
-              </div>
-              <div>
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#dc2626]" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M5.5 11c.7-.8 1.5-1.2 2.5-1.2s1.8.4 2.5 1.2M6 6.5v.01M10 6.5v.01" strokeLinecap="round"/></svg>
-              </div>
-              <div>Conversaciones</div>
-              <div>última actualización</div>
-            </div>
-            {topArticles.length > 0 ? topArticles.map((art, i) => (
-              <div key={i} className="grid grid-cols-7 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a] hover:bg-[#fafaf9]">
-                <div className="truncate pr-2" title={art.title}>{art.title}</div>
-                <div>{art.views}</div>
-                <div className="text-[#16a34a]">{art.helpful}</div>
-                <div className="text-[#a16207]">0</div>
-                <div className="text-[#dc2626]">{art.unhelpful}</div>
-                <div>{art.deflected}</div>
-                <div className="text-[#646462]">—</div>
-              </div>
-            )) : (
-              <div className="h-[160px] flex flex-col items-center justify-center text-center">
-                <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-                <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-          <div className="px-5 py-3"><span className="text-[12.5px] text-[#1a1a1a]">Busca resultados</span></div>
-          <div className="border-t border-b border-[#e9eae6] grid grid-cols-4 px-5 py-2 bg-[#fafaf9] text-[12px] font-medium text-[#646462]">
-            <div>Palabra clave</div><div>Búsquedas</div><div>Índices de clics</div><div>acción</div>
-          </div>
-          <div className="h-[140px] flex flex-col items-center justify-center text-center">
-            <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-            <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
-          </div>
-        </div>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-          <div className="px-5 py-3"><span className="text-[12.5px] text-[#1a1a1a]">Búsquedas sin resultados</span></div>
-          <div className="border-t border-b border-[#e9eae6] grid grid-cols-3 px-5 py-2 bg-[#fafaf9] text-[12px] font-medium text-[#646462]">
-            <div>Palabra clave</div><div>Búsquedas</div><div>acción</div>
-          </div>
-          <div className="h-[140px] flex flex-col items-center justify-center text-center">
-            <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-            <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
-          </div>
-        </div>
-        <p className="text-[11.5px] text-[#646462] text-center pt-2">Los informes están en Madrid time (GMT+2)</p>
+        <KpiChartCard title="Personas vs visualizaciones en el tiempo">
+          <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Personas', data: mockSeries(58, 18, 2, 71) }, { label: 'Visualizaciones', data: mockSeries(140, 40, 4, 72) }]} type="line" />
+        </KpiChartCard>
+        <KpiChartCard title="Interacción con el artículo" height={240}>
+          <KpiTable columns={['Artículo', 'Visitantes', '😖', '😐', '😀', 'Conversaciones']} rows={[
+            ['Cómo pedir un reembolso', '182', '4', '11', '96', '8'],
+            ['Estado de mi envío', '146', '6', '9', '74', '12'],
+            ['Cambiar método de pago', '98', '2', '7', '51', '5'],
+            ['Cancelar suscripción', '60', '9', '8', '22', '14'],
+          ]} />
+        </KpiChartCard>
+        <KpiChartCard title="Resultados de búsqueda" height={220}>
+          <KpiTable columns={['Palabra clave', 'Búsquedas', 'Índice de clics']} rows={[
+            ['reembolso', '128', '62%'],
+            ['envío', '96', '54%'],
+            ['factura', '71', '48%'],
+            ['cancelar', '52', '39%'],
+          ]} />
+        </KpiChartCard>
+        <KpiChartCard title="Búsquedas sin resultados" height={200}>
+          <KpiTable columns={['Palabra clave', 'Búsquedas']} rows={[
+            ['garantía extendida', '18'],
+            ['cambio de talla', '12'],
+            ['punto físico', '7'],
+          ]} />
+        </KpiChartCard>
       </div>
     </>
   );
