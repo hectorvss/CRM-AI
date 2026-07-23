@@ -1949,7 +1949,7 @@ function companyCellValue(row: any, key: string): string {
 }
 
 function CompaniesTable({
-  companies, segment, loading, error, onRefresh, onCreate, onDelete,
+  companies, segment, loading, error, onRefresh, onCreate, onDelete, creating, setCreating, onAction,
 }: {
   companies: any[];
   segment: 'all' | 'active' | 'new';
@@ -1958,18 +1958,19 @@ function CompaniesTable({
   onRefresh: () => void;
   onCreate: (name: string) => Promise<boolean>;
   onDelete: (id: string) => Promise<void>;
+  creating: boolean;
+  setCreating: (b: boolean) => void;
+  onAction: (msg: string) => void;
 }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
-  const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<ActiveFilter[]>([]);
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => new Set(['lastSeen', 'userCount', 'country', 'industry']));
-  const [moreToast, setMoreToast] = useState<string | null>(null);
-  useEffect(() => { if (!moreToast) return; const t = setTimeout(() => setMoreToast(null), 3000); return () => clearTimeout(t); }, [moreToast]);
+  const [showVerifyBanner, setShowVerifyBanner] = useState(true);
   function toggleCol(key: string) {
     setVisibleCols(prev => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   }
@@ -2065,10 +2066,7 @@ function CompaniesTable({
 
   return (
     <div className="mx-4 flex flex-col gap-3 relative">
-      {moreToast && (
-        <div className="absolute top-0 right-0 z-50 px-4 py-2.5 rounded-[8px] text-[13px] font-medium shadow-lg bg-[#1a1a1a] text-white">{moreToast}</div>
-      )}
-      {/* Filter bar — same format as Personas */}
+      {/* Filter bar — identical format to the audience filter used elsewhere */}
       <div className="pt-1">
         <ContactsFilterBar
           fields={COMPANY_FILTER_FIELDS}
@@ -2077,24 +2075,35 @@ function CompaniesTable({
           setFilters={setFilters}
         />
       </div>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      {/* Toolbar — identical to Personas */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[18px] font-semibold text-[#1a1a1a]">{headerLabel}</span>
-          <ContactsMoreMenu entity="empresas" onAction={label => { const n = selCount || filtered.length; setMoreToast(`${label} · ${n} empresa${n === 1 ? '' : 's'}`); }} />
-          <button
-            onClick={onRefresh}
-            className="flex items-center gap-1 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]"
-          >
-            <span>Actualizar</span>
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3V1L4 5l4 4V7a4 4 0 11-4 4H2.5A5.5 5.5 0 108 3z"/></svg>
-          </button>
-          <button
-            onClick={() => { setCreating(true); setNewName(''); }}
-            className="flex items-center gap-1 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-[#444]"
-          >
-            + Nueva empresa
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              disabled={selCount === 0}
+              onClick={() => onAction(`Nuevo mensaje · ${selCount} empresa${selCount === 1 ? '' : 's'}`)}
+              className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <img src={ICON_MSG} alt="" className="w-3.5 h-3.5" /><span>Nuevo mensaje</span>
+            </button>
+            <button
+              disabled={selCount === 0}
+              onClick={() => onAction(`Etiqueta añadida · ${selCount} empresa${selCount === 1 ? '' : 's'}`)}
+              className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <img src={ICON_TAG} alt="" className="w-3.5 h-3.5" /><span>Añadir etiqueta</span>
+            </button>
+            <ContactsMoreMenu entity="empresas" onAction={label => { const n = selCount || filtered.length; onAction(`${label} · ${n} empresa${n === 1 ? '' : 's'}`); }} />
+            <button
+              onClick={onRefresh}
+              className="flex items-center gap-1 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]"
+              title="Recargar"
+            >
+              <span>Actualizar</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3V1L4 5l4 4V7a4 4 0 11-4 4H2.5A5.5 5.5 0 108 3z"/></svg>
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -2123,6 +2132,16 @@ function CompaniesTable({
           </div>
         </div>
       </div>
+
+      {showVerifyBanner && (
+        <div className="flex items-center justify-between bg-[#f8f8f7] rounded-[6px] px-[15px] py-[10px] border border-[#e9eae6]">
+          <span className="text-[13px] text-[#1a1a1a]">
+            Exige la verificación de identidad para proteger los datos de tus empresas.{" "}
+            <span className="underline cursor-pointer">Configurar verificación de identidad.</span>
+          </span>
+          <button onClick={() => setShowVerifyBanner(false)} className="text-[13px] text-[#646462] ml-4 hover:text-[#1a1a1a] flex-shrink-0">✕</button>
+        </div>
+      )}
 
       {/* States */}
       {loading && rows.length === 0 && (
@@ -2253,6 +2272,7 @@ function ContactsCommon({
   // ── Companies mode state ──────────────────────────────────────────────────
   const [contactMode, setContactMode] = useState<'personas' | 'empresas'>('personas');
   const [empresaSegment, setEmpresaSegment] = useState<'all' | 'active' | 'new'>('all');
+  const [empresaCreating, setEmpresaCreating] = useState(false);
   // Real companies from the companies table (companiesApi CRUD) — replaces the
   // previous "derive companies from the customers list" behaviour.
   const { data: companies, loading: companiesLoading, error: companiesError, refetch: refetchCompanies } =
@@ -2317,6 +2337,16 @@ function ContactsCommon({
         <ContactsMapView customers={all} />
       ) : contactMode === 'empresas' ? (
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {!trialDismissed && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-[#e7e2fd] border border-[#b09efa] rounded-[10px] mx-4 mt-3 flex-shrink-0">
+              <span className="text-[13px] text-[#1a1a1a] flex-shrink-0">
+                Quedan <strong>8 días</strong> en tu <span className="underline cursor-pointer font-medium">prueba de Advanced</span>. Incluye uso ilimitado de Fin.
+              </span>
+              <button className="text-[12.5px] font-semibold text-[#1a1a1a] underline hover:no-underline whitespace-nowrap ml-auto">Obtenga un 93% de descuento con Early Stage</button>
+              <button className="px-3 py-1 bg-[#1a1a1a] text-white text-[12.5px] font-semibold rounded-full hover:bg-black whitespace-nowrap">Comprar Intercom</button>
+              <button onClick={() => setTrialDismissed(true)} className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex-shrink-0">✕</button>
+            </div>
+          )}
           {/* Empresas header */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#e9eae6] flex-shrink-0 bg-white">
             <div className="flex items-center gap-2">
@@ -2333,6 +2363,13 @@ function ContactsCommon({
                   {seg === 'all' ? 'Todas' : seg === 'active' ? 'Activas' : 'Nuevas'}
                 </button>
               ))}
+              <div className="w-px h-5 bg-[#e9eae6] mx-1" />
+              <button
+                onClick={() => setEmpresaCreating(true)}
+                className="flex items-center gap-1 bg-[#1a1a1a] text-white rounded-full px-3.5 py-[6px] text-[13px] font-semibold hover:bg-[#444]"
+              >
+                + Nueva empresa
+              </button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 pt-4">
@@ -2344,6 +2381,9 @@ function ContactsCommon({
               onRefresh={() => { refetchCompanies(); setToast({ msg: 'Lista actualizada', type: 'success' }); }}
               onCreate={createCompany}
               onDelete={deleteCompany}
+              creating={empresaCreating}
+              setCreating={setEmpresaCreating}
+              onAction={(msg) => setToast({ msg, type: 'success' })}
             />
           </div>
         </div>
