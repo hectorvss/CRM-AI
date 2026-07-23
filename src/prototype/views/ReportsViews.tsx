@@ -2932,7 +2932,9 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
     return arr;
   });
   const commitEdit = (uid: number, kind: BuilderKind, title: string, variant?: string) => {
-    setPlaced(prev => prev.map(p => p.uid === uid ? { ...p, kind, title, variant } : p));
+    // El heatmap (24 columnas) necesita el ancho completo para leerse bien.
+    const fullWidth = variant === 'matrix' || kind === 'heatmap';
+    setPlaced(prev => prev.map(p => p.uid === uid ? { ...p, kind, title, variant, span: fullWidth ? 12 : p.span } : p));
     setEditing(null);
   };
 
