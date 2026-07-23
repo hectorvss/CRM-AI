@@ -182,6 +182,125 @@ const OUTBOUND_TEMPLATE_CAT_GROUPS: { label: string; items: { key: OutboundTempl
   { label: 'TIPOS', items: [{ key: 'automatizado', label: 'Automatizados' }, { key: 'manual', label: 'Manuales' }] },
 ];
 
+// ── Full quick-start catalogue (Intercom "Elegir una plantilla") ──────────────
+type QsType = 'chat' | 'banner' | 'tooltip' | 'post' | 'email' | 'push' | 'tour' | 'checklist' | 'sms' | 'survey' | 'carousel' | 'workflow' | 'news' | 'whatsapp' | 'broadcast' | 'discord' | 'telegram';
+
+// The 17 content types offered in "Comenzar desde cero" (in display order).
+const OUTBOUND_QS_TYPES: { key: QsType; label: string; core: OutboundContentType; grad: string }[] = [
+  { key: 'chat',      label: 'Chat',                            core: 'chat',     grad: 'from-[#dbeafe] to-[#bfdbfe]' },
+  { key: 'banner',    label: 'Banner',                          core: 'banner',   grad: 'from-[#fff7ed] to-[#fed7aa]' },
+  { key: 'tooltip',   label: 'Información de herramientas',      core: 'post',     grad: 'from-[#ccfbf1] to-[#99f6e4]' },
+  { key: 'post',      label: 'Publicación',                     core: 'post',     grad: 'from-[#ede9fe] to-[#ddd6fe]' },
+  { key: 'email',     label: 'Correo electrónico',              core: 'email',    grad: 'from-[#fce7f3] to-[#fbcfe8]' },
+  { key: 'push',      label: 'Notificación instantánea móvil',  core: 'push',     grad: 'from-[#f3e8ff] to-[#e9d5ff]' },
+  { key: 'tour',      label: 'Recorrido de producto',           core: 'post',     grad: 'from-[#e0f2fe] to-[#bae6fd]' },
+  { key: 'checklist', label: 'Lista de verificación',           core: 'chat',     grad: 'from-[#d1fae5] to-[#a7f3d0]' },
+  { key: 'sms',       label: 'SMS',                             core: 'sms',      grad: 'from-[#fef9c3] to-[#fde68a]' },
+  { key: 'survey',    label: 'Encuesta',                        core: 'post',     grad: 'from-[#e0e7ff] to-[#c7d2fe]' },
+  { key: 'carousel',  label: 'Carrusel móvil',                  core: 'post',     grad: 'from-[#ffe4e6] to-[#fecdd3]' },
+  { key: 'workflow',  label: 'Flujo de trabajo',                core: 'post',     grad: 'from-[#f1f5f9] to-[#e2e8f0]' },
+  { key: 'news',      label: 'Noticias',                        core: 'post',     grad: 'from-[#fef3c7] to-[#fde68a]' },
+  { key: 'whatsapp',  label: 'WhatsApp',                        core: 'whatsapp', grad: 'from-[#dcfce7] to-[#bbf7d0]' },
+  { key: 'broadcast', label: 'Difusión',                        core: 'post',     grad: 'from-[#e0e7ff] to-[#c7d2fe]' },
+  { key: 'discord',   label: 'Difusión en Discord',             core: 'post',     grad: 'from-[#e0e7ff] to-[#c7d2fe]' },
+  { key: 'telegram',  label: 'Difusión en Telegram',            core: 'post',     grad: 'from-[#e0f2fe] to-[#bae6fd]' },
+];
+function qsTypeMeta(type: QsType) {
+  return OUTBOUND_QS_TYPES.find(t => t.key === type) ?? OUTBOUND_QS_TYPES[3];
+}
+
+interface OutboundQuickStart { id: string; type: QsType; title: string; popular?: boolean }
+const OUTBOUND_QUICKSTARTS: OutboundQuickStart[] = [
+  { id: 'qs1',  type: 'post', title: 'Announce a new feature to drive adoption', popular: true },
+  { id: 'qs2',  type: 'post', title: 'Offer a discount to boost sales', popular: true },
+  { id: 'qs3',  type: 'post', title: 'Promote webinars to drive engagement' },
+  { id: 'qs4',  type: 'post', title: 'Follow up after orders to ensure satisfaction' },
+  { id: 'qs5',  type: 'chat', title: 'Say hi to welcome new visitors', popular: true },
+  { id: 'qs6',  type: 'chat', title: 'Ask new users if they need any help' },
+  { id: 'qs7',  type: 'chat', title: 'Help visitors on your pricing page' },
+  { id: 'qs8',  type: 'chat', title: 'Encourage more newsletter sign-ups' },
+  { id: 'qs9',  type: 'chat', title: 'Ask Spanish speakers if they need any help' },
+  { id: 'qs10', type: 'email', title: 'Nurture leads to build relationships', popular: true },
+  { id: 'qs11', type: 'email', title: 'Reconnect to keep users close' },
+  { id: 'qs12', type: 'email', title: 'Remind users to complete their purchase' },
+  { id: 'qs13', type: 'email', title: 'Confirm an order has been placed' },
+  { id: 'qs14', type: 'email', title: 'Remind users their subscription will renew' },
+  { id: 'qs15', type: 'email', title: 'Treat customers on their birthday' },
+  { id: 'qs16', type: 'email', title: "Verify a new user's email address" },
+  { id: 'qs17', type: 'banner', title: 'Promote an upcoming event' },
+  { id: 'qs18', type: 'banner', title: 'Offer a discount or promotion' },
+  { id: 'qs19', type: 'banner', title: 'Announce downtimes or maintenance' },
+  { id: 'qs20', type: 'banner', title: 'Share helpful tips and tricks' },
+  { id: 'qs21', type: 'banner', title: 'Remind users their trial is ending' },
+  { id: 'qs22', type: 'banner', title: 'Promote a feature to drive action' },
+  { id: 'qs23', type: 'banner', title: 'Ask for visitor details to generate leads' },
+  { id: 'qs24', type: 'banner', title: 'Alert users to an expired credit card' },
+  { id: 'qs25', type: 'carousel', title: 'Onboard new users to drive adoption' },
+  { id: 'qs26', type: 'carousel', title: 'Welcome new users so they feel at home' },
+  { id: 'qs27', type: 'carousel', title: 'Offer support before users ask' },
+  { id: 'qs28', type: 'carousel', title: 'Announce a feature to boost engagement' },
+  { id: 'qs29', type: 'carousel', title: 'Offer promotions to convert customers' },
+  { id: 'qs30', type: 'carousel', title: 'Share activity summaries to engage users' },
+  { id: 'qs31', type: 'push', title: 'Remind users their subscription will renew' },
+  { id: 'qs32', type: 'push', title: 'Promote new offers to re-engage users' },
+  { id: 'qs33', type: 'push', title: 'Send promotions to drive new purchases' },
+  { id: 'qs34', type: 'workflow', title: 'Convert trial users into paying customers' },
+  { id: 'qs35', type: 'tour', title: 'Show customers how to adopt new features' },
+  { id: 'qs36', type: 'tour', title: 'Take new users on a tour to get onboarded' },
+  { id: 'qs37', type: 'survey', title: 'Measure NPS® to understand user loyalty', popular: true },
+  { id: 'qs38', type: 'sms', title: 'Welcome new customers to drive activation' },
+  { id: 'qs39', type: 'sms', title: 'Notify users about an order or update' },
+  { id: 'qs40', type: 'sms', title: 'Remind customers about appointments' },
+  { id: 'qs41', type: 'sms', title: 'Send account updates to keep customers aware' },
+  { id: 'qs42', type: 'sms', title: 'Reconnect with inactive customers' },
+  { id: 'qs43', type: 'sms', title: 'Offer discounts to drive more purchases' },
+  { id: 'qs44', type: 'tooltip', title: 'Add links to deepen engagement' },
+  { id: 'qs45', type: 'tooltip', title: 'Get attention with an animated beacon' },
+  { id: 'qs46', type: 'tooltip', title: 'Add labels to boost visibility' },
+  { id: 'qs47', type: 'tooltip', title: 'Add a tooltip to give extra details' },
+  { id: 'qs48', type: 'survey', title: 'Learn about users to personalize experiences' },
+  { id: 'qs49', type: 'survey', title: 'Capture feature requests to help you grow' },
+  { id: 'qs50', type: 'survey', title: 'Measure satisfaction to improve features' },
+  { id: 'qs51', type: 'survey', title: 'Capture visitor intent to generate leads' },
+  { id: 'qs52', type: 'survey', title: 'Learn why users leave, to boost retention' },
+  { id: 'qs53', type: 'survey', title: 'Measure product/market fit to meet user needs' },
+  { id: 'qs54', type: 'news', title: 'Announce a new product to raise awareness' },
+  { id: 'qs55', type: 'news', title: 'Share a feature update to boost adoption' },
+  { id: 'qs56', type: 'news', title: 'Promote events to increase sign-ups' },
+  { id: 'qs57', type: 'news', title: 'Share company news to keep customers informed' },
+  { id: 'qs58', type: 'checklist', title: 'Onboard new users with key steps' },
+  { id: 'qs59', type: 'checklist', title: 'Guide users through a new feature' },
+  { id: 'qs60', type: 'workflow', title: 'Use Fin to proactively offer help to prospects' },
+  { id: 'qs61', type: 'workflow', title: 'Use Fin to proactively offer help to customers' },
+];
+
+// Sidebar: use-case + type filters over the quick-start catalogue.
+const OUTBOUND_QS_SIDEBAR: { label: string; items: { key: string; label: string }[] }[] = [
+  { label: '', items: [{ key: 'todo', label: 'Todo' }, { key: 'popular', label: 'Popular' }] },
+  { label: 'CASOS DE USO', items: [
+    { key: 'uc:proactiva', label: 'Asistencia proactiva' },
+    { key: 'uc:onboarding', label: 'Incorporación' },
+    { key: 'uc:transaccional', label: 'Transaccional' },
+    { key: 'uc:captacion', label: 'Captación' },
+  ] },
+  { label: 'TIPOS', items: OUTBOUND_QS_TYPES.map(t => ({ key: `type:${t.key}`, label: t.label })) },
+];
+function qsMatchesUseCase(qs: OutboundQuickStart, uc: string): boolean {
+  const t = qs.title.toLowerCase();
+  if (uc === 'onboarding') return /onboard|welcome|new (user|customer|visitor)|activation|get onboarded|first/.test(t);
+  if (uc === 'proactiva') return /help|support|pricing|question|tips|assist|proactively/.test(t);
+  if (uc === 'transaccional') return /order|renew|subscription|appointment|confirm|account update|verify|birthday|expired|maintenance|downtime|receipt/.test(t);
+  if (uc === 'captacion') return /lead|sign-up|newsletter|discount|promotion|convert|purchase|sale|event|webinar|re-engage|reconnect|trial|generate|offer/.test(t);
+  return true;
+}
+function qsMatchesCategory(qs: OutboundQuickStart, cat: string): boolean {
+  if (cat === 'todo') return true;
+  if (cat === 'popular') return !!qs.popular;
+  if (cat.startsWith('type:')) return qs.type === cat.slice(5);
+  if (cat.startsWith('uc:')) return qsMatchesUseCase(qs, cat.slice(3));
+  return true;
+}
+
 function OutboundTemplatePreview({ color, type }: { color: string; type: OutboundContentType }) {
   return (
     <div className={`w-full h-full bg-gradient-to-br ${color} flex items-center justify-center p-3`}>
@@ -237,36 +356,44 @@ function OutboundTemplatePreview({ color, type }: { color: string; type: Outboun
 }
 
 function OutboundTemplatePicker({ onSelect, onClose }: { onSelect: (t: OutboundTemplate | null) => void; onClose: () => void }) {
-  const [activeCategory, setActiveCategory] = useState<OutboundTemplateCategory>('todo');
+  const [activeCategory, setActiveCategory] = useState<string>('todo');
   const [search, setSearch] = useState('');
 
-  const filtered = OUTBOUND_TEMPLATES.filter(t => {
-    const matchesCat = activeCategory === 'todo' || t.categories.includes(activeCategory);
-    const matchesSearch = !search || t.title.toLowerCase().includes(search.toLowerCase()) || t.description.toLowerCase().includes(search.toLowerCase());
-    return matchesCat && matchesSearch;
+  const toTpl = (title: string, meta: { core: OutboundContentType; grad: string }): OutboundTemplate => ({
+    id: `qs_${Date.now()}_${Math.floor(Math.random() * 1e4)}`,
+    title, description: '', categories: [], contentType: meta.core, triggerType: 'manual', previewColor: meta.grad,
   });
+
+  const s = search.trim().toLowerCase();
+  const filteredQs = OUTBOUND_QUICKSTARTS.filter(q => {
+    if (!qsMatchesCategory(q, activeCategory)) return false;
+    if (s) return q.title.toLowerCase().includes(s) || qsTypeMeta(q.type).label.toLowerCase().includes(s);
+    return true;
+  });
+  const showScratch = activeCategory === 'todo' && !s;
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white rounded-[16px] shadow-2xl w-[900px] max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-[16px] shadow-2xl w-[940px] max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-          <div>
-            <h2 className="text-[17px] font-bold text-[#1a1a1a]">Elegir una plantilla</h2>
-            <p className="text-[12.5px] text-[#646462] mt-0.5">Selecciona una plantilla o empieza en blanco</p>
+          <h2 className="text-[17px] font-bold text-[#1a1a1a]">Elegir una plantilla</h2>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Probar una demostración</button>
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f1f1ee] text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.8"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>
+            </button>
           </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f1f1ee] text-[#646462]">
-            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.8"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>
-          </button>
         </div>
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          <div className="w-[196px] flex-shrink-0 border-r border-[#e9eae6] bg-[#fafaf9] py-3 overflow-y-auto">
+          {/* Sidebar */}
+          <div className="w-[210px] flex-shrink-0 border-r border-[#e9eae6] bg-[#fafaf9] py-3 overflow-y-auto">
             <div className="px-3 mb-3">
               <div className="flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-3 py-1.5 bg-white">
                 <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar…" className="flex-1 outline-none text-[12px] placeholder:text-[#9ca3af] bg-transparent"/>
               </div>
             </div>
-            {OUTBOUND_TEMPLATE_CAT_GROUPS.map((group, gi) => (
+            {OUTBOUND_QS_SIDEBAR.map((group, gi) => (
               <div key={gi} className="mb-3">
                 {group.label && <p className="px-4 py-1 text-[10.5px] font-semibold text-[#9ca3af] tracking-[0.08em] uppercase">{group.label}</p>}
                 {group.items.map(item => (
@@ -277,41 +404,60 @@ function OutboundTemplatePicker({ onSelect, onClose }: { onSelect: (t: OutboundT
               </div>
             ))}
           </div>
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div onClick={() => onSelect(null)} className="border-2 border-dashed border-[#d4d4d2] rounded-[10px] overflow-hidden hover:border-[#3b59f6] hover:shadow-md cursor-pointer group transition-all">
-                <div className="h-[130px] bg-[#fafaf9] flex flex-col items-center justify-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-[#e9eae6] group-hover:bg-[#dbeafe] flex items-center justify-center transition-colors">
-                    <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#646462] group-hover:fill-[#3b59f6] transition-colors"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-                  </div>
-                  <span className="text-[12px] font-medium text-[#646462] group-hover:text-[#3b59f6] transition-colors">En blanco</span>
-                </div>
-                <div className="p-3 border-t border-[#e9eae6]">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">Empezar desde cero</p>
-                  <p className="text-[11.5px] text-[#646462] mt-0.5">Crea tu mensaje personalizado</p>
+          {/* Main */}
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            {/* Comenzar desde cero — 17 content types */}
+            {showScratch && (
+              <div className="mb-7">
+                <h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-3">Comenzar desde cero</h3>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {OUTBOUND_QS_TYPES.map(t => (
+                    <button key={t.key} onClick={() => onSelect(toTpl('', t))} className="border border-[#e9eae6] rounded-[9px] px-3 py-2.5 flex items-center gap-2 hover:border-[#3b59f6] hover:shadow-sm text-left transition-all bg-white">
+                      <span className="w-7 h-7 rounded-[7px] bg-[#f1f1ee] flex items-center justify-center text-[#646462] flex-shrink-0"><OutboundContentIcon type={t.core}/></span>
+                      <span className="text-[13px] font-medium text-[#1a1a1a] leading-tight">{t.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
-              {filtered.map(t => (
-                <div key={t.id} onClick={() => onSelect(t)} className="border border-[#e9eae6] rounded-[10px] overflow-hidden hover:border-[#3b59f6] hover:shadow-md cursor-pointer group transition-all">
-                  <div className="h-[130px] overflow-hidden relative">
-                    <OutboundTemplatePreview color={t.previewColor} type={t.contentType} />
-                    {t.popular && <span className="absolute top-2 right-2 bg-[#fbbf24] text-[#7c2d12] text-[10px] font-semibold px-2 py-0.5 rounded-full">Popular</span>}
-                  </div>
-                  <div className="p-3 border-t border-[#e9eae6]">
-                    <div className="flex items-center gap-1 mb-1">
-                      <span className="text-[#646462]"><OutboundContentIcon type={t.contentType}/></span>
-                      <span className="text-[11px] text-[#646462]">{OUTBOUND_CONTENT_TYPE_LABELS[t.contentType]}</span>
-                    </div>
-                    <p className="text-[13px] font-semibold text-[#1a1a1a] leading-tight">{t.title}</p>
-                    <p className="text-[11.5px] text-[#646462] mt-0.5 leading-snug line-clamp-2">{t.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {filtered.length === 0 && (
+            )}
+
+            {/* O elige un inicio rápido — quick-start templates grouped by type */}
+            <h3 className="text-[15px] font-semibold text-[#1a1a1a] mb-3">{showScratch ? 'O elige un inicio rápido' : 'Inicio rápido'}</h3>
+            {filteredQs.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-[14px] text-[#646462]">No se encontraron plantillas para esta categoría.</p>
+                <p className="text-[14px] text-[#646462]">No se encontraron plantillas para este filtro.</p>
               </div>
+            ) : (
+              OUTBOUND_QS_TYPES.map(t => {
+                const items = filteredQs.filter(q => q.type === t.key);
+                if (!items.length) return null;
+                return (
+                  <div key={t.key} className="mb-6">
+                    <div className="flex items-center gap-1.5 mb-2 text-[#646462]">
+                      <OutboundContentIcon type={t.core}/>
+                      <span className="text-[11.5px] font-semibold uppercase tracking-[0.06em]">{t.label}</span>
+                      <span className="text-[11px] text-[#a4a4a2]">· {items.length}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {items.map(q => (
+                        <div key={q.id} onClick={() => onSelect(toTpl(q.title, t))} className="border border-[#e9eae6] rounded-[10px] overflow-hidden hover:border-[#3b59f6] hover:shadow-md cursor-pointer transition-all bg-white">
+                          <div className="h-[92px] overflow-hidden relative">
+                            <OutboundTemplatePreview color={t.grad} type={t.core} />
+                            {q.popular && <span className="absolute top-2 right-2 bg-[#fbbf24] text-[#7c2d12] text-[10px] font-semibold px-2 py-0.5 rounded-full">Popular</span>}
+                          </div>
+                          <div className="p-3 border-t border-[#e9eae6]">
+                            <div className="flex items-center gap-1 mb-0.5 text-[#646462]">
+                              <OutboundContentIcon type={t.core}/>
+                              <span className="text-[11px]">{t.label}</span>
+                            </div>
+                            <p className="text-[13px] font-semibold text-[#1a1a1a] leading-snug">{q.title}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
