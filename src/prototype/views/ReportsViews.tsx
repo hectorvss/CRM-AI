@@ -2881,13 +2881,14 @@ function CatalogThumb({ item }: { item: CatalogItem }) {
 function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; onClose: () => void }) {
   const [title, setTitle] = useState(initialTitle);
   const [desc, setDesc] = useState('');
-  const [placed, setPlaced] = useState<{ uid: number; itemId: string; span: number; height?: number; text?: string; color?: string; kind?: BuilderKind; title?: string; variant?: string }[]>([]);
+  const [placed, setPlaced] = useState<{ uid: number; itemId: string; span: number; height?: number; text?: string; color?: string; kind?: BuilderKind; title?: string; variant?: string; custom?: CatalogItem }[]>([]);
   const [panelOpen, setPanelOpen] = useState(true);
   const [q, setQ] = useState('');
   const [dragOver, setDragOver] = useState<number | string | null>(null);
   const [resizing, setResizing] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
   const uidRef = useRef(1);
   const dragUid = useRef<number | null>(null);
@@ -2936,6 +2937,15 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
     const fullWidth = variant === 'matrix' || kind === 'heatmap';
     setPlaced(prev => prev.map(p => p.uid === uid ? { ...p, kind, title, variant, span: fullWidth ? 12 : p.span } : p));
     setEditing(null);
+  };
+  // "Crea el tuyo": añade un KPI/gráfico personalizado con la métrica elegida.
+  const addCustomChart = (kind: BuilderKind, title: string, variant: string | undefined, metricTitle?: string) => {
+    const label = (title && title.trim()) || metricTitle || 'Métrica personalizada';
+    const uid = uidRef.current++;
+    const custom: CatalogItem = { id: 'custom-' + uid, group: 'Personalizado', label, kind, span: kind === 'kpi' ? 1 : kind === 'heatmap' || kind === 'table' ? 4 : 2, value: '128', seed: 300 + uid };
+    const span = kind === 'kpi' ? 3 : (variant === 'matrix' || kind === 'heatmap' || kind === 'table') ? 12 : 6;
+    setPlaced(prev => [...prev, { uid, itemId: custom.id, span, variant, custom, title: label, kind }]);
+    setCreating(false);
   };
 
   // Ajustador libre: arrastra la esquina inferior-derecha para cambiar ancho
@@ -3018,10 +3028,15 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
     if (col > 0 && 12 - col >= 2) layout.push({ type: 'gap', span: 12 - col, insertIndex: placed.length, key: 'gap-end' });
   }
 
+  // "Crea el tuyo": editor en modo creación con un KPI en blanco.
+  if (creating) {
+    const blank: CatalogItem = { id: 'new', group: 'Personalizado', label: 'Métrica personalizada', kind: 'kpi', span: 1, value: '128' };
+    return <ChartEditor item={blank} initialKind="kpi" initialTitle="" submitLabel="Agregar gráfico" onCancel={() => setCreating(false)} onUpdate={(k, t, v, mt) => addCustomChart(k, t, v, mt)} />;
+  }
   // Editor de gráfico a pantalla completa (al pulsar "Editar" en un bloque).
   if (editing != null) {
     const p = placed.find(x => x.uid === editing);
-    const item = p ? CATALOG_BY_ID[p.itemId] : null;
+    const item = p ? (p.custom ?? CATALOG_BY_ID[p.itemId]) : null;
     if (p && item) {
       return <ChartEditor item={item} initialKind={p.kind ?? item.kind} initialTitle={p.title ?? item.label} initialVariant={p.variant} onCancel={() => setEditing(null)} onUpdate={(k, t, v) => commitEdit(p.uid, k, t, v)} />;
     }
@@ -3090,7 +3105,7 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
                   );
                 }
                 const p = node.p;
-                const baseItem = CATALOG_BY_ID[p.itemId];
+                const baseItem = p.custom ?? CATALOG_BY_ID[p.itemId];
                 if (!baseItem) return null;
                 // Item efectivo: aplica el tipo/título editado por-instancia; por
                 // defecto se muestra el diseño original del KPI.
@@ -3172,10 +3187,10 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
             </button>
           </div>
           <div className="flex-shrink-0 px-4 py-3 border-b border-[#f1f1ee] flex flex-col gap-2">
-            <div className="flex items-center gap-3 rounded-lg border border-[#e9eae6] p-3 hover:bg-[#f8f8f7] cursor-pointer">
+            <button onClick={() => setCreating(true)} className="w-full text-left flex items-center gap-3 rounded-lg border border-[#e9eae6] p-3 hover:border-[#3b59f6] hover:bg-[#f8f8f7]">
               <div className="w-9 h-9 rounded-md bg-[#f3f3f1] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg></div>
               <div><p className="text-[13px] font-semibold text-[#1a1a1a]">Crea el tuyo</p><p className="text-[11.5px] text-[#646462]">Ve al creador de gráficos y crea un nuevo gráfico.</p></div>
-            </div>
+            </button>
             <div className="flex items-center gap-2 h-9 rounded-lg border border-[#e9eae6] px-3 bg-white focus-within:border-[#1a1a1a]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L14 14" strokeLinecap="round"/></svg>
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Plantillas de gráficos de búsqueda" className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]" />
@@ -3572,9 +3587,9 @@ function MetricPicker({ selected, onSelect, onClose }: { selected: string; onSel
 }
 
 // Editor de gráfico a pantalla completa — cambia tipo, título, métricas y ejes.
-function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel, onUpdate }: {
-  item: CatalogItem; initialKind: BuilderKind; initialTitle: string; initialVariant?: string;
-  onCancel: () => void; onUpdate: (kind: BuilderKind, title: string, variant?: string) => void;
+function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLabel = 'Actualizar gráfico', onCancel, onUpdate }: {
+  item: CatalogItem; initialKind: BuilderKind; initialTitle: string; initialVariant?: string; submitLabel?: string;
+  onCancel: () => void; onUpdate: (kind: BuilderKind, title: string, variant?: string, metricTitle?: string) => void;
 }) {
   const [typeId, setTypeId] = useState<string>(() => {
     if (initialVariant === 'hbar') return 'hbar';
@@ -3589,6 +3604,7 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel
   const [metricsOpen, setMetricsOpen] = useState(true);
   const [metrics, setMetrics] = useState<{ title: string; desc: string }[]>([{ title: item.label, desc: '' }]);
   const [pickerFor, setPickerFor] = useState<number | null>(null);
+  const [accionesOpen, setAccionesOpen] = useState(false);
 
   const type = EDITOR_TYPES.find(t => t.id === typeId) ?? EDITOR_TYPES[4];
   const kind = type.kind;
@@ -3599,7 +3615,8 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel
 
   // Sufijo de dimensión del título del preview, según el tipo.
   const dimSuffix = isNumber ? '' : isMatrix ? 'por día de la semana y hora del día' : isTable ? 'by Intervalos de tiempo' : `by ${GRAN_EN[gran]}`;
-  const previewTitle = `${title || item.label}${metrics.length > 1 ? ` + ${metrics.length - 1} métrica` : ''}${dimSuffix ? ` ${dimSuffix}` : ''}`;
+  const baseTitle = title || metrics[0]?.title || item.label;
+  const previewTitle = `${baseTitle}${metrics.length > 1 ? ` + ${metrics.length - 1} métrica` : ''}${dimSuffix ? ` ${dimSuffix}` : ''}`;
   // Variante de render: barra horizontal, combo barra+línea (≥2 métricas),
   // matriz 7×24 o área. El número/circular/tabla usan su kind base.
   const editorVariant =
@@ -3620,7 +3637,7 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel
             <p className="text-[12.5px] text-[#646462]">Ingresa una descripción</p>
           </div>
           <button onClick={onCancel} className="text-[13px] font-medium text-[#1a1a1a] rounded-full px-3 py-[6px] hover:bg-[#f3f3f1]">Cancelar</button>
-          <button onClick={() => onUpdate(kind, title, editorVariant)} className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-4 py-[6px] hover:bg-black">Actualizar gráfico</button>
+          <button onClick={() => onUpdate(kind, title, editorVariant, metrics[0]?.title)} className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-4 py-[6px] hover:bg-black">{submitLabel}</button>
         </div>
         {/* Barra de tipos */}
         <div className="flex-shrink-0 px-6 py-2 border-b border-[#e9eae6]">
@@ -3636,9 +3653,29 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel
         {/* Preview */}
         <div className="flex-1 overflow-y-auto min-h-0 p-6">
           <div className="relative border border-[#e9eae6] rounded-[12px] p-4 bg-white">
-            <button className="absolute top-3 right-3 z-10 flex items-center gap-1 text-[12.5px] font-medium text-[#1a1a1a] border border-[#e9eae6] rounded-lg px-2.5 py-1 hover:bg-[#f5f5f4]">
-              Acciones <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-            </button>
+            <div className="absolute top-3 right-3 z-20">
+              <button onClick={() => setAccionesOpen(o => !o)} className="flex items-center gap-1 text-[12.5px] font-medium text-[#1a1a1a] border border-[#e9eae6] rounded-lg px-2.5 py-1 hover:bg-[#f5f5f4]">
+                Acciones <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+              </button>
+              {accionesOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setAccionesOpen(false)} />
+                  <div className="absolute right-0 top-9 z-20 w-64 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1.5">
+                    <p className="text-[11px] text-[#646462] px-3 pt-1 pb-1.5">Exploración de datos</p>
+                    <button onClick={() => setAccionesOpen(false)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M5 4L2 8l3 4M11 4l3 4-3 4"/></svg>Exploración de gráficos
+                    </button>
+                    <button onClick={() => setAccionesOpen(false)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 3h10v8H6l-3 2V3z"/></svg>Exportar datos del gráfico
+                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-[#fef3c7] text-[#92400e] font-medium">Anterior</span>
+                    </button>
+                    <button onClick={() => setAccionesOpen(false)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 2v8M5 7l3 3 3-3M2 13h12"/></svg>Exportar datos agregados
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             <BuilderCardBody item={{ ...item, kind, label: previewTitle }} height={340} variant={editorVariant} />
           </div>
         </div>
