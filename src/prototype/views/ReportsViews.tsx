@@ -2952,7 +2952,7 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
               </button>
             </div>
           ) : (
-            <div ref={gridRef} className="grid grid-cols-12 grid-flow-row-dense gap-3 auto-rows-min pb-40">
+            <div ref={gridRef} className="grid grid-cols-12 gap-3 auto-rows-min pb-40">
               {placed.map(p => {
                 const item = CATALOG_BY_ID[p.itemId];
                 if (!item) return null;
