@@ -1776,27 +1776,39 @@ function ReportsTeammateContent({ period, channel }: { period: string; channel: 
       <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
         <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
         <Section title="Rendimiento del compañero">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <KpiCard label="Median teammate handling time" value="11m 08s" change="40s" trend="up" />
-            <KpiCard label="Median teammate assignment to close" value="1h 46m" change="9m" trend="up" />
+            <KpiCard label="Median adjusted teammate handling time" value="9m 32s" change="28s" trend="up" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
             <KpiCard label="Median teammate assignment to first response" value="2m 54s" change="11s" trend="up" />
             <KpiCard label="Median teammate assignment to subsequent response" value="4m 37s" change="18s" trend="down" />
-            <KpiCard label="Conversations closed per active hour" value="4.2" change="0.3" trend="up" />
+            <KpiCard label="Median teammate assignment to close" value="1h 46m" change="9m" trend="up" />
             <KpiCard label="Conversations assigned per active hour" value="5.1" change="0.4" trend="up" />
             <KpiCard label="Conversations replied to per active hour" value="6.8" change="0.5" trend="up" />
-            <KpiCard label="Teammate CSAT score" value="92%" sub="164 encuestas" change="2 pts" trend="up" />
+            <KpiCard label="Conversations closed per active hour" value="4.2" change="0.3" trend="up" />
           </div>
-          <KpiChartCard title="Teammate productivity – cases closed per day">
+          <KpiChartCard title="Teammate Productivity – casos cerrados por día">
             <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Casos cerrados', data: mockDaily(36, 12, 1, 141), fill: true }]} type="bar" showLegend={false} />
           </KpiChartCard>
         </Section>
+        <Section title="Satisfacción del compañero">
+          <div className="grid grid-cols-3 gap-4">
+            <KpiCard label="Teammate CSAT score" value="92%" sub="164 de 176" change="2 pts" trend="up" />
+            <div className="col-span-2">
+              <KpiChartCard title="Teammate conversation ratings - by conversation rating">
+                <KpiTimeSeries labels={['😡 1', '🙁 2', '😐 3', '🙂 4', '🤩 5']} series={[{ label: 'Valoraciones', data: [3, 3, 12, 52, 106] }]} type="bar" showLegend={false} />
+              </KpiChartCard>
+            </div>
+          </div>
+        </Section>
         <Section title="Comparativa de compañeros">
-          <KpiChartCard title="Comparison of Teammate performance" height={240}>
-            <KpiTable columns={['Compañero', 'Rol', 'Asignados', 'Respondidos', 'Cerrados', 'T. gestión', 'CSAT']} rows={[
-              ['Ana Torres', 'Agente', '92', '90', '84', '9m 42s', '95%'],
-              ['Luis Vega', 'Agente', '78', '75', '69', '11m 18s', '90%'],
-              ['María Ruiz', 'Agente', '67', '65', '61', '10m 06s', '93%'],
-              ['Jon Aixa', 'Lead', '47', '45', '41', '12m 30s', '87%'],
+          <KpiChartCard title="Comparison of Teammate performance" height={260}>
+            <KpiTable columns={['Compañero de equipo', 'Asignadas', 'Respondidas', 'Respuestas enviadas', 'Cerradas', 'T. gestión', 'CSAT']} rows={[
+              ['Ana Torres', '92', '90', '318', '84', '9m 42s', '95%'],
+              ['Luis Vega', '78', '75', '264', '69', '11m 18s', '90%'],
+              ['María Ruiz', '67', '65', '231', '61', '10m 06s', '93%'],
+              ['Jon Aixa', '47', '45', '158', '41', '12m 30s', '87%'],
             ]} />
           </KpiChartCard>
         </Section>
@@ -1824,19 +1836,35 @@ function ReportsTicketsContent({ period, channel }: { period: string; channel: s
             <KpiCard label="Median ticket time in submitted" value="42m" change="4m" trend="up" />
             <KpiCard label="Median ticket time in progress" value="3h 18m" change="12m" trend="down" />
             <KpiCard label="Median ticket time in waiting on customer" value="2h 06m" change="8m" trend="up" />
-            <div className="col-span-2"><KpiCard label="New tickets" value="142" change="14%" trend="up" /></div>
-            <div className="col-span-2"><KpiCard label="Resolved tickets" value="128" change="9%" trend="up" /></div>
           </div>
-          <KpiChartCard title="Nuevos tickets por día">
-            <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Nuevos tickets', data: mockDaily(20, 8, 0.6, 151), fill: true }]} type="bar" showLegend={false} />
+          <KpiChartCard title="Median ticket time to resolve - by time (h)">
+            <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Mediana (h)', data: mockSeries(6.4, 1.2, -0.05, 151, 1), fill: true }]} type="line" showLegend={false} />
           </KpiChartCard>
-        </Section>
-        <Section title="Desglose de tickets">
           <div className="grid grid-cols-2 gap-4">
-            <KpiChartCard title="Tickets por tipo">
-              <KpiTimeSeries labels={['Reembolso', 'Envío', 'Facturación', 'Cuenta', 'Bug']} series={[{ label: 'Tickets', data: [38, 31, 27, 24, 22] }]} type="bar" showLegend={false} />
+            <KpiChartCard title="Median ticket time to resolve - by team assigned">
+              <KpiTimeSeries labels={['Soporte', 'Facturación', 'Técnico', 'Ventas']} series={[{ label: 'Horas', data: [5.8, 7.2, 8.4, 4.6] }]} type="bar" showLegend={false} />
             </KpiChartCard>
-            <KpiChartCard title="Tickets por compañero asignado">
+            <KpiChartCard title="Median ticket time to resolve - by teammate assigned">
+              <KpiTimeSeries labels={['Ana', 'Luis', 'María', 'Jon']} series={[{ label: 'Horas', data: [5.2, 6.8, 6.1, 7.4] }]} type="bar" showLegend={false} />
+            </KpiChartCard>
+          </div>
+        </Section>
+        <Section title="Volumen de tickets">
+          <div className="grid grid-cols-2 gap-3">
+            <KpiCard label="New tickets" value="142" change="14%" trend="up" />
+            <KpiCard label="Resolved tickets" value="128" change="9%" trend="up" />
+          </div>
+          <KpiChartCard title="Comparison of New and Resolved Tickets">
+            <KpiTimeSeries labels={MOCK_DAYS} series={[
+              { label: 'Nuevos', data: mockDaily(20, 8, 0.6, 152), fill: true },
+              { label: 'Resueltos', data: mockDaily(18, 7, 0.5, 153) },
+            ]} type="line" />
+          </KpiChartCard>
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="Ticket volume - by team assigned">
+              <KpiTimeSeries labels={['Soporte', 'Facturación', 'Técnico', 'Ventas']} series={[{ label: 'Tickets', data: [58, 41, 27, 16] }]} type="bar" showLegend={false} />
+            </KpiChartCard>
+            <KpiChartCard title="Ticket volume - by teammate assigned">
               <KpiTable columns={['Compañero', 'Tickets']} rows={[
                 ['Ana Torres', '41'], ['Luis Vega', '36'], ['María Ruiz', '29'], ['Jon Aixa', '22'],
               ]} />
