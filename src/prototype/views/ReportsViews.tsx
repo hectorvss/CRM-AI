@@ -5,7 +5,7 @@
 
 import { useApi } from '../../api/hooks';
 import { casesApi, reportsApi } from '../../api/client';
-import { useRef, useState, type ReactNode, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useRef, useState, memo, type ReactNode, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { Dropdown, KnowledgePlaceholder, TrialBanner } from '../sharedUi';
 import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDistributionBar, KpiDoughnut, KpiHeatmap, KpiTable } from '../charts/KpiChart';
 
@@ -2749,6 +2749,9 @@ function BuilderCardBody({ item, height }: { item: CatalogItem; height?: number 
       return <KpiChartCard title={item.label} height={h}><KpiTable columns={['Nombre', 'Valor']} rows={[['Ana Torres', '42'], ['Luis Vega', '31'], ['María Ruiz', '27']]} /></KpiChartCard>;
   }
 }
+// Memoizada: durante el resize solo se re-renderiza la tarjeta que cambia, no
+// todos los gráficos del lienzo → redimensionado fluido.
+const BuilderCardBodyMemo = memo(BuilderCardBody);
 
 // Miniatura del componente en el panel lateral "Agregar un gráfico" — dibujo
 // representativo del tipo de gráfico, al estilo Intercom.
@@ -2859,16 +2862,33 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
     const spanMax = isKpi ? 6 : 12;
     const startH = p.height ?? builderDefaultHeight(kind);
     setResizing(p.uid);
-    const move = (ev: MouseEvent) => {
-      const dCols = Math.round((ev.clientX - startX) / colStep);
+    let raf = 0;
+    let pending: { x: number; y: number } | null = null;
+    const apply = () => {
+      raf = 0;
+      if (!pending) return;
+      const dCols = Math.round((pending.x - startX) / colStep);
       const span = Math.min(spanMax, Math.max(2, startSpan + dCols));
       // Alto libre y continuo (sin escalones) para gráficos; los KPIs numéricos
       // y los títulos conservan su alto natural.
-      const patch: { span: number; height?: number } = { span };
-      if (!isKpi && !isTitle) patch.height = Math.max(140, startH + (ev.clientY - startY));
-      setPlaced(prev => prev.map(q => q.uid === p.uid ? { ...q, ...patch } : q));
+      const height = (!isKpi && !isTitle) ? Math.max(140, startH + (pending.y - startY)) : undefined;
+      // Solo re-renderiza esta tarjeta (BuilderCardBodyMemo evita redibujar el
+      // resto de gráficos). Si nada cambia, se descarta la actualización.
+      setPlaced(prev => prev.map(q => {
+        if (q.uid !== p.uid) return q;
+        if (q.span === span && q.height === height) return q;
+        return { ...q, span, height };
+      }));
     };
-    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); setResizing(null); };
+    const move = (ev: MouseEvent) => {
+      pending = { x: ev.clientX, y: ev.clientY };
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    const up = () => {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      apply(); // fija la posición/tamaño final aunque el último frame no llegara
+      window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); setResizing(null);
+    };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
   };
@@ -2932,7 +2952,7 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
               </button>
             </div>
           ) : (
-            <div ref={gridRef} className="grid grid-cols-12 gap-3 auto-rows-min pb-40">
+            <div ref={gridRef} className="grid grid-cols-12 grid-flow-row-dense gap-3 auto-rows-min pb-40">
               {placed.map(p => {
                 const item = CATALOG_BY_ID[p.itemId];
                 if (!item) return null;
@@ -2959,7 +2979,7 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
                     <div className="absolute top-1.5 left-1.5 z-10 hidden group-hover:flex cursor-grab active:cursor-grabbing w-5 h-5 rounded bg-white/80 border border-[#e9eae6] items-center justify-center text-[#9a9a97]">
                       <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><circle cx="5" cy="4" r="1"/><circle cx="11" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="11" cy="8" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="11" cy="12" r="1"/></svg>
                     </div>
-                    <BuilderCardBody item={item} height={p.height} />
+                    <BuilderCardBodyMemo item={item} height={p.height} />
                     {/* Ajustador de tamaño (esquina inferior derecha) */}
                     <div
                       onMouseDown={e => startResize(e, p)}
