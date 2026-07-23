@@ -68,6 +68,59 @@ function ReportsAnalysisKpiCard({ label, value, change, trend, sub }: { label: s
   );
 }
 
+// ── Demo data — deterministic simulated overview so the Resumen shows real
+// Chart.js charts until reportsApi.overview returns time-series. Seeded RNG →
+// stable across renders. Used only as a fallback when the backend has no series.
+function mulberry32(a: number) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function demoLabels(n: number): string[] {
+  const out: string[] = []; const now = new Date();
+  for (let i = n - 1; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate() - i * 7); out.push(d.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })); }
+  return out;
+}
+function buildDemoOverview() {
+  const n = 13; const labels = demoLabels(n); const r = mulberry32(7);
+  const mk = (base: number, amp: number, slope = 0) => Array.from({ length: n }, (_, i) => Math.max(0, Math.round(base + slope * i + Math.sin(i / 2.2) * amp + (r() - 0.5) * amp)));
+  const all = mk(90, 22, 4);
+  const fin = all.map(v => Math.round(v * 0.55));
+  const chatbot = all.map(v => Math.round(v * 0.12));
+  const teammate = all.map(v => Math.round(v * 0.22));
+  const noreply = all.map(v => Math.max(0, Math.round(v * 0.06)));
+  const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+  return {
+    kpis: [],
+    metrics: {
+      fin_deflect: { value: '46%', change: '+3 pts', trend: 'up' }, fin_resolution: { value: '87%', change: '+5 pts', trend: 'up' }, fin_cx: { value: '82', change: '+1', trend: 'up' },
+      tm_first: { value: '2m 14s', change: '-11s', trend: 'up' }, tm_reply: { value: '5m 03s', change: '+22s', trend: 'down' }, tm_close: { value: '3h 42m', change: '-18m', trend: 'up' }, tm_handle: { value: '11m 08s', change: '-40s', trend: 'up' },
+      cx_overall: { value: '82', change: '+2', trend: 'up' }, cx_fin: { value: '84', change: '+1', trend: 'up' }, cx_chatbot: { value: '71', change: '-3', trend: 'down' }, cx_teammate: { value: '88', change: '+4', trend: 'up' },
+      csat_overall: { value: '91%', change: '+1 pt', trend: 'up' }, csat_fin: { value: '89%', change: '+2 pts', trend: 'up' }, csat_teammate: { value: '93%', change: '0', trend: 'flat' },
+    } as Record<string, { value: any; change?: string; trend?: string }>,
+    handling: [
+      { label: 'Fin', value: sum(fin) }, { label: 'Chatbot', value: sum(chatbot) },
+      { label: 'Compañero de equipo', value: sum(teammate) }, { label: 'Sin respuesta', value: sum(noreply) },
+    ],
+    series: {
+      volume: { labels, series: [{ label: 'Todas las conversaciones', data: all, fill: true }, { label: 'Fin', data: fin }, { label: 'Chatbot', data: chatbot }, { label: 'Compañero de equipo', data: teammate }, { label: 'Sin respuesta', data: noreply }] },
+      newByChannel: { labels, series: [{ label: 'Chat', data: mk(38, 12, 1) }, { label: 'Email', data: mk(22, 8, 0.5) }, { label: 'Unknown', data: mk(9, 5) }] },
+      closeByChannel: { labels, series: [{ label: 'Chat (h)', data: mk(6, 2) }, { label: 'Email (h)', data: mk(11, 3) }] },
+      finImpact: { labels, series: [{ label: 'Resueltas por Fin', data: fin, fill: true }] },
+      teammateOverTime: { labels, series: [{ label: 'Mediana 1ª respuesta (min)', data: mk(4, 1.5) }, { label: 'Mediana cierre (h)', data: mk(4, 1) }] },
+      cxOverTime: { labels, series: [{ label: 'CX', data: mk(80, 6), fill: true }] },
+      csatOverTime: { labels, series: [{ label: 'CSAT', data: mk(90, 4), fill: true }] },
+      cxNegReasons: { labels: ['Tiempo de espera', 'Resolución incompleta', 'Tono', 'No resuelto', 'Otros'], values: [38, 24, 16, 14, 8] },
+      cxPosReasons: { labels: ['Rapidez', 'Resolución', 'Amabilidad', 'Proactividad'], values: [42, 31, 18, 9] },
+      cxNegTopics: { labels, series: [{ label: 'Reembolsos', data: mk(6, 2) }, { label: 'Envíos', data: mk(5, 2) }, { label: 'Facturación', data: mk(4, 1.5) }] },
+    } as Record<string, any>,
+  };
+}
+const DEMO_OVERVIEW = buildDemoOverview();
+
 // ── 1. Resumen — dashboard de KPIs (Chart.js vía KpiChart) ────────────────────
 // Data-driven: pulls what reportsApi.overview provides, and renders Intercom-
 // style empty states everywhere there is no series yet. Every KPI/chart goes
@@ -75,44 +128,35 @@ function ReportsAnalysisKpiCard({ label, value, change, trend, sub }: { label: s
 function ReportsOverviewContent({ period, channel }: { period: string; channel: string }) {
   const { data: ov } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
   const { data: sla } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
-  const kpis: any[] = ov?.kpis ?? [];
-  // Best-effort lookup of a backend KPI by fuzzy label; defaults to "—".
-  const kpiVal = (needle: string): { value: any; change?: string; trend?: string } => {
-    const m = kpis.find((k: any) => String(k.label || '').toLowerCase().includes(needle.toLowerCase()));
-    return m ? { value: m.value, change: m.change, trend: m.trend } : { value: '—' };
-  };
-  const num = (needle: string): number => {
-    const v = kpiVal(needle).value;
-    const n = parseFloat(String(v).replace(/[^0-9.]/g, ''));
-    return Number.isFinite(n) ? n : 0;
-  };
+  // Use real series when the backend provides them; otherwise fall back to the
+  // deterministic demo so the charts are populated ("simula datos").
+  const hasRealSeries = !!(ov?.series && Object.keys(ov.series).length);
+  const data: any = hasRealSeries ? ov : DEMO_OVERVIEW;
+  const isDemo = !hasRealSeries;
 
-  // A generic series accessor: reportsApi may expose `ov.series[key]` as
-  // { labels, series:[{label,data}] }. Absent → render an empty state.
+  const kpiVal = (key: string): { value: any; change?: string; trend?: string } =>
+    (data.metrics?.[key]) ?? { value: '—' };
   const seriesBlock = (key: string) => {
-    const s = ov?.series?.[key];
+    const s = data.series?.[key];
     if (s && Array.isArray(s.series) && s.series.some((x: any) => (x.data ?? []).some((v: number) => v))) return s;
     return null;
   };
-
-  // "Cómo manejas las conversaciones" — split of total conversations.
-  const total = num('conversacion') || num('total') || 0;
-  const handling = ov?.handling ?? (total ? [{ label: 'Conversaciones', value: total }] : []);
+  const handling = data.handling ?? [];
   const dist: any[] = sla?.distribution ?? [];
 
   const finGroup: [string, string][] = [
-    ['Tasa de desviación', 'desviaci'], ['Tasa de resolución', 'resoluci'], ['Puntuación de la experiencia del cliente (CX)', 'cx'],
+    ['Tasa de desviación', 'fin_deflect'], ['Tasa de resolución', 'fin_resolution'], ['Puntuación de la experiencia del cliente (CX)', 'fin_cx'],
   ];
   const teammateGroup: [string, string][] = [
-    ['Mediana de tiempo de primera respuesta', 'primera respuesta'], ['Mediana de tiempo de respuesta', 'tiempo de respuesta'],
-    ['Mediana de tiempo para cerrar', 'para cerrar'], ['Mediana de tiempo de gestión', 'gestión'],
+    ['Mediana de tiempo de primera respuesta', 'tm_first'], ['Mediana de tiempo de respuesta', 'tm_reply'],
+    ['Mediana de tiempo para cerrar', 'tm_close'], ['Mediana de tiempo de gestión', 'tm_handle'],
   ];
   const cxGroup: [string, string][] = [
-    ['Puntuación general de la experiencia del cliente', 'cx general'], ['Puntuación CX · Fin', 'cx fin'],
-    ['Puntuación CX · Chatbot', 'cx chatbot'], ['Puntuación CX · Compañero', 'cx compañero'],
+    ['Puntuación general de la experiencia del cliente', 'cx_overall'], ['Puntuación CX · Fin', 'cx_fin'],
+    ['Puntuación CX · Chatbot', 'cx_chatbot'], ['Puntuación CX · Compañero', 'cx_teammate'],
   ];
   const csatGroup: [string, string][] = [
-    ['Puntuación general de CSAT', 'csat general'], ['Puntuación CSAT de Fin AI Agent', 'csat fin'], ['Puntuación CSAT del compañero de equipo', 'csat compañero'],
+    ['Puntuación general de CSAT', 'csat_overall'], ['Puntuación CSAT de Fin AI Agent', 'csat_fin'], ['Puntuación CSAT del compañero de equipo', 'csat_teammate'],
   ];
 
   const Section = ({ title, children }: { title: string; children: ReactNode }) => (
@@ -136,6 +180,7 @@ function ReportsOverviewContent({ period, channel }: { period: string; channel: 
         <div className="flex items-center gap-2">
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><rect x="1.5" y="1.5" width="5.6" height="5.6" rx="1.4"/><rect x="8.9" y="1.5" width="5.6" height="5.6" rx="1.4"/><rect x="1.5" y="8.9" width="5.6" height="5.6" rx="1.4"/><rect x="8.9" y="8.9" width="5.6" height="5.6" rx="1.4"/></svg>
           <h1 className="text-[18px] font-bold text-[#1a1a1a]">Resumen</h1>
+          {isDemo && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span>}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
@@ -177,8 +222,8 @@ function ReportsOverviewContent({ period, channel }: { period: string; channel: 
           </div>
           <TimeCard title="Puntuación de la experiencia del cliente (CX) a lo largo del tiempo" seriesKey="cxOverTime" />
           <div className="grid grid-cols-2 gap-4">
-            <KpiChartCard title="Razones de puntuación CX negativa 😖">{seriesBlock('cxNegReasons') ? <KpiDoughnut labels={ov.series.cxNegReasons.labels} values={ov.series.cxNegReasons.values} /> : <KpiEmpty />}</KpiChartCard>
-            <KpiChartCard title="Razones de puntuación CX positiva 😀">{seriesBlock('cxPosReasons') ? <KpiDoughnut labels={ov.series.cxPosReasons.labels} values={ov.series.cxPosReasons.values} /> : <KpiEmpty />}</KpiChartCard>
+            <KpiChartCard title="Razones de puntuación CX negativa 😖">{data.series?.cxNegReasons ? <KpiDoughnut labels={data.series.cxNegReasons.labels} values={data.series.cxNegReasons.values} /> : <KpiEmpty />}</KpiChartCard>
+            <KpiChartCard title="Razones de puntuación CX positiva 😀">{data.series?.cxPosReasons ? <KpiDoughnut labels={data.series.cxPosReasons.labels} values={data.series.cxPosReasons.values} /> : <KpiEmpty />}</KpiChartCard>
           </div>
           <TimeCard title="Temas de conversación con puntuación CX negativa" seriesKey="cxNegTopics" />
         </Section>
