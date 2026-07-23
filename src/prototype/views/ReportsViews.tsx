@@ -5,7 +5,7 @@
 
 import { useApi } from '../../api/hooks';
 import { casesApi, reportsApi } from '../../api/client';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode, type DragEvent } from 'react';
 import { Dropdown, KnowledgePlaceholder, TrialBanner } from '../sharedUi';
 import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDistributionBar, KpiDoughnut, KpiHeatmap, KpiTable } from '../charts/KpiChart';
 
@@ -18,7 +18,7 @@ import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDi
 
 type ReportsSubView =
   | 'overview' | 'aiResumen' | 'areasNegocio' | 'agentesPerf' | 'aprobacionesRisk' | 'costesRoi'
-  | 'todos' | 'misInformes' | 'favoritos' | 'cxScore' | 'emailDeliv'
+  | 'todos' | 'misInformes' | 'compartidos' | 'favoritos' | 'cxScore' | 'emailDeliv'
   | 'temas' | 'sugerencias' | 'export' | 'horarios'
   | 'finAgent' | 'copilot'
   | 'calls' | 'conversations' | 'csat' | 'effectiveness'
@@ -99,15 +99,21 @@ const ALL_REPORTS: AllReportRow[] = [
   { t: 'Ventas', legacy: true },
 ];
 
-function ReportsAllReportsContent({ onOpen }: { onOpen: (s: ReportsSubView) => void }) {
-  const [tab, setTab] = useState<'shared' | 'mine' | 'intercom'>('intercom');
+function ReportsAllReportsContent({ tab, onTab, onOpen, onCreate }: { tab: 'shared' | 'mine' | 'intercom'; onTab: (t: 'shared' | 'mine' | 'intercom') => void; onOpen: (s: ReportsSubView) => void; onCreate: (title: string) => void }) {
+  const setTab = onTab;
   const [q, setQ] = useState('');
+  const [showTemplates, setShowTemplates] = useState(false);
   const query = q.trim().toLowerCase();
   const rows = tab === 'intercom' ? ALL_REPORTS.filter(r => !query || r.t.toLowerCase().includes(query)) : [];
   const IntercomTag = () => (
     <span className="inline-flex items-center gap-1.5 text-[13px] text-[#646462]">
-      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M3 2a1 1 0 011-1h8a1 1 0 011 1v12l-5-2.5L3 14V2z"/></svg>
-      Intercom
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]" aria-label="Clain">
+        <rect x="2" y="2.5" width="1.7" height="11" rx="0.5" />
+        <rect x="5.2" y="4" width="1.7" height="9.5" rx="0.5" />
+        <rect x="8.4" y="2.5" width="1.7" height="11" rx="0.5" />
+        <rect x="11.6" y="4" width="1.7" height="9.5" rx="0.5" />
+      </svg>
+      Clain
     </span>
   );
   const tabs = [
@@ -122,11 +128,12 @@ function ReportsAllReportsContent({ onOpen }: { onOpen: (s: ReportsSubView) => v
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M2 13V9h2.5v4H2zm3.5 0V6.5H8V13H5.5zm3.5 0V4h2.5v9H9zm3.5 0V7.5H15V13h-2.5z"/></svg>
           <h1 className="text-[18px] font-bold text-[#1a1a1a]">Todos los informes</h1>
         </div>
-        <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+        <button onClick={() => setShowTemplates(true)} className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
           Nuevo informe
         </button>
       </div>
+      {showTemplates && <ReportTemplatesModal onClose={() => setShowTemplates(false)} onCreate={(t) => { setShowTemplates(false); onCreate(t); }} />}
       <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -145,9 +152,16 @@ function ReportsAllReportsContent({ onOpen }: { onOpen: (s: ReportsSubView) => v
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         {tab !== 'intercom' ? (
-          <div className="px-6 py-16 text-center">
-            <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">{tab === 'mine' ? 'Aún no has creado informes' : 'No hay informes compartidos contigo'}</p>
-            <p className="text-[13px] text-[#646462]">{tab === 'mine' ? 'Crea uno nuevo o duplica un informe de Intercom para empezar.' : 'Cuando alguien comparta un informe contigo, aparecerá aquí.'}</p>
+          <div className="px-6 py-16 flex flex-col items-center text-center">
+            <svg viewBox="0 0 16 16" className="w-8 h-8 fill-[#c9c9c6] mb-3"><path d="M2 13V9h2.5v4H2zm3.5 0V6.5H8V13H5.5zm3.5 0V4h2.5v9H9zm3.5 0V7.5H15V13h-2.5z"/></svg>
+            <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">{tab === 'mine' ? 'Aún no has creado ningún informe' : 'No hay informes compartidos contigo'}</p>
+            <p className="text-[13px] text-[#646462] mb-4">{tab === 'mine' ? 'Una vez que hayas creado los informes, los encontrarás aquí' : 'Cuando alguien comparta un informe contigo, aparecerá aquí.'}</p>
+            {tab === 'mine' && (
+              <button onClick={() => setShowTemplates(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] rounded-full px-3 py-[6px]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+                Nuevo informe
+              </button>
+            )}
           </div>
         ) : (
           <table className="w-full">
@@ -1073,7 +1087,12 @@ function ReportShellHeader({ title, description }: { title: string; description:
         <p className="text-[12.5px] text-[#646462] mt-0.5 truncate">{description}</p>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className="text-[12px] text-[#646462]">Propietario: <span className="text-[#1a1a1a]">Intercom</span></span>
+        <span className="inline-flex items-center gap-1 text-[12px] text-[#646462]">Propietario:
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]" aria-label="Clain">
+            <rect x="2" y="2.5" width="1.7" height="11" rx="0.5" /><rect x="5.2" y="4" width="1.7" height="9.5" rx="0.5" />
+            <rect x="8.4" y="2.5" width="1.7" height="11" rx="0.5" /><rect x="11.6" y="4" width="1.7" height="9.5" rx="0.5" />
+          </svg>
+          <span className="text-[#1a1a1a]">Clain</span></span>
         <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><span className="text-[#646462]">⋯</span></button>
         <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]">
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg>
@@ -1235,7 +1254,12 @@ function ReportsCustomReport({ title, description }: { title: string; descriptio
           <p className="text-[12.5px] text-[#646462] mt-0.5 truncate">{description}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-[12px] text-[#646462]">Propietario: <span className="text-[#1a1a1a]">Intercom</span></span>
+          <span className="inline-flex items-center gap-1 text-[12px] text-[#646462]">Propietario:
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]" aria-label="Clain">
+            <rect x="2" y="2.5" width="1.7" height="11" rx="0.5" /><rect x="5.2" y="4" width="1.7" height="9.5" rx="0.5" />
+            <rect x="8.4" y="2.5" width="1.7" height="11" rx="0.5" /><rect x="11.6" y="4" width="1.7" height="9.5" rx="0.5" />
+          </svg>
+          <span className="text-[#1a1a1a]">Clain</span></span>
           <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><span className="text-[#646462]">⋯</span></button>
           <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
@@ -2464,12 +2488,332 @@ function ReportsExportContent({ period, channel }: { period: string; channel: st
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REPORT BUILDER — canvas editor con drag & drop (estilo Intercom)
+// El usuario crea sus propios monitores arrastrando KPIs/gráficos al lienzo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type BuilderKind = 'kpi' | 'line' | 'bar' | 'doughnut' | 'table' | 'heatmap' | 'title';
+type CatalogItem = {
+  id: string; group: string; label: string; kind: BuilderKind; span: 1 | 2 | 3 | 4;
+  value?: string; sub?: string; change?: string; trend?: 'up' | 'down'; seed?: number;
+};
+
+// Catálogo completo de componentes que se pueden añadir a cualquier monitor.
+const BUILDER_CATALOG: CatalogItem[] = [
+  // Componentes
+  { id: 'cmp-title', group: 'Componentes', label: 'Title / banner', kind: 'title', span: 4, value: 'Nueva sección' },
+  // Fin AI Agent
+  { id: 'fin-defl', group: 'Fin AI Agent', label: 'Fin AI agent deflection rate', kind: 'kpi', span: 1, value: '46%', sub: '57 de 124', change: '4 pts', trend: 'up' },
+  { id: 'fin-auto', group: 'Fin AI Agent', label: 'Fin AI agent automation rate', kind: 'kpi', span: 1, value: '63%', sub: '78 de 124', change: '6 pts', trend: 'up' },
+  { id: 'fin-reso', group: 'Fin AI Agent', label: 'Fin AI agent resolution rate', kind: 'kpi', span: 1, value: '87%', sub: '68 de 78', change: '2 pts', trend: 'up' },
+  { id: 'fin-cx', group: 'Fin AI Agent', label: 'Fin AI agent CX Score', kind: 'kpi', span: 1, value: '84', sub: 'de 100', change: '1', trend: 'up' },
+  { id: 'fin-impact', group: 'Fin AI Agent', label: "Fin AI agent's impact over time", kind: 'line', span: 4, seed: 81 },
+  { id: 'fin-invol', group: 'Fin AI Agent', label: 'Fin AI agent involved conversations', kind: 'bar', span: 2, seed: 83 },
+  // Copilot
+  { id: 'cop-pct', group: 'Copilot', label: 'Percentage of conversations using Copilot', kind: 'kpi', span: 1, value: '34%', sub: '42 de 124', change: '6 pts', trend: 'up' },
+  { id: 'cop-q', group: 'Copilot', label: 'Copilot questions', kind: 'kpi', span: 1, value: '287', change: '15%', trend: 'up' },
+  { id: 'cop-tm', group: 'Copilot', label: 'Teammates using Copilot', kind: 'bar', span: 2, seed: 42 },
+  // Conversations
+  { id: 'cv-new', group: 'Conversations', label: 'New conversations', kind: 'kpi', span: 1, value: '124', change: '9%', trend: 'up' },
+  { id: 'cv-chan', group: 'Conversations', label: 'New conversations by channel', kind: 'bar', span: 2, seed: 31 },
+  { id: 'cv-busy', group: 'Conversations', label: 'Busiest periods', kind: 'heatmap', span: 4, seed: 44 },
+  // Effectiveness
+  { id: 'ef-repl', group: 'Effectiveness', label: 'Conversations replied to', kind: 'kpi', span: 1, value: '128', change: '12%', trend: 'up' },
+  { id: 'ef-first', group: 'Effectiveness', label: 'Closed on first contact rate', kind: 'kpi', span: 1, value: '62%', sub: '79 de 128', change: '4 pts', trend: 'up' },
+  { id: 'ef-time', group: 'Effectiveness', label: 'First contact rate - by time', kind: 'line', span: 2, seed: 13 },
+  // CX Score
+  { id: 'cx-overall', group: 'CX Score', label: 'Overall CX Score', kind: 'kpi', span: 1, value: '82', sub: 'de 100', change: '2', trend: 'up' },
+  { id: 'cx-time', group: 'CX Score', label: 'CX Score over time', kind: 'line', span: 2, seed: 21 },
+  { id: 'cx-neg', group: 'CX Score', label: 'Negative CX score reasons', kind: 'doughnut', span: 2 },
+  // Calls
+  { id: 'ca-total', group: 'Calls', label: 'Total calls', kind: 'kpi', span: 1, value: '312', change: '8%', trend: 'up' },
+  { id: 'ca-state', group: 'Calls', label: 'Inbound calls - by call state', kind: 'bar', span: 2, seed: 71 },
+  // Surveyed CSAT
+  { id: 'cs-overall', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'Puntuación general de CSAT', kind: 'kpi', span: 1, value: '91%', sub: '248 de 273', change: '1 pt', trend: 'up' },
+  { id: 'cs-tm', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'Puntuación CSAT del compañero de equipo', kind: 'kpi', span: 1, value: '93%', sub: '164 de 176', change: '2 pts', trend: 'up' },
+  { id: 'cs-fin', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'Puntuación CSAT de Fin AI Agent', kind: 'kpi', span: 1, value: '89%', sub: '97 de 109', change: '3 pts', trend: 'up' },
+  { id: 'cs-time', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'CSAT score over time', kind: 'line', span: 2, seed: 111 },
+  { id: 'cs-rating', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'Conversation ratings - by rating', kind: 'bar', span: 2, seed: 114 },
+  // Responsiveness
+  { id: 'rs-resp', group: 'Capacidad de respuesta', label: 'Median response time', kind: 'kpi', span: 1, value: '3m 42s', change: '14s', trend: 'up' },
+  { id: 'rs-first', group: 'Capacidad de respuesta', label: 'Median first response time', kind: 'kpi', span: 1, value: '1m 58s', change: '9s', trend: 'up' },
+  { id: 'rs-close', group: 'Capacidad de respuesta', label: 'Median time to close', kind: 'kpi', span: 1, value: '2h 24m', change: '11m', trend: 'up' },
+  { id: 'rs-time', group: 'Capacidad de respuesta', label: 'Response time - by time', kind: 'line', span: 2, seed: 61 },
+  // SLAs
+  { id: 'sla-miss', group: 'SLA', label: 'SLA miss rate', kind: 'kpi', span: 1, value: '8%', sub: '14 de 176', change: '2 pts', trend: 'up' },
+  { id: 'sla-with', group: 'SLA', label: 'Conversations with SLA', kind: 'kpi', span: 1, value: '176', change: '11%', trend: 'up' },
+  { id: 'sla-time', group: 'SLA', label: 'Targets hit over time', kind: 'bar', span: 2, seed: 121 },
+  // Team inbox
+  { id: 'ti-assign', group: 'Desempeño de los compañeros de equipo de Inbox', label: 'Conversations assigned', kind: 'kpi', span: 1, value: '284', change: '9%', trend: 'up' },
+  { id: 'ti-replied', group: 'Desempeño de los compañeros de equipo de Inbox', label: 'Conversations replied to', kind: 'kpi', span: 1, value: '271', change: '7%', trend: 'up' },
+  { id: 'ti-closed', group: 'Desempeño de los compañeros de equipo de Inbox', label: 'Closed conversations', kind: 'kpi', span: 1, value: '248', change: '11%', trend: 'up' },
+  // Teammate
+  { id: 'tm-handle', group: 'Desempeño de los compañeros de equipo', label: 'Median teammate handling time', kind: 'kpi', span: 1, value: '11m 08s', change: '40s', trend: 'up' },
+  { id: 'tm-prod', group: 'Desempeño de los compañeros de equipo', label: 'Teammate productivity', kind: 'bar', span: 2, seed: 141 },
+  { id: 'tm-csat', group: 'Desempeño de los compañeros de equipo', label: 'Teammate CSAT score', kind: 'kpi', span: 1, value: '92%', sub: '164 de 176', change: '2 pts', trend: 'up' },
+  // Tickets
+  { id: 'tk-new', group: 'Folios de atención', label: 'New tickets', kind: 'kpi', span: 1, value: '142', change: '14%', trend: 'up' },
+  { id: 'tk-res', group: 'Folios de atención', label: 'Resolved tickets', kind: 'kpi', span: 1, value: '128', change: '9%', trend: 'up' },
+  { id: 'tk-time', group: 'Folios de atención', label: 'Time to resolve - by time', kind: 'line', span: 2, seed: 151 },
+  // Monitors
+  { id: 'mo-eval', group: 'Monitores', label: 'Evaluated conversations', kind: 'bar', span: 2, seed: 101 },
+  { id: 'mo-score', group: 'Monitores', label: 'Average review score', kind: 'kpi', span: 1, value: '4.3', sub: 'de 5', change: '0.2', trend: 'up' },
+  { id: 'mo-pass', group: 'Monitores', label: 'Reviews passed', kind: 'kpi', span: 1, value: '87%', sub: '612 de 703', change: '3 pts', trend: 'up' },
+  { id: 'mo-num', group: 'Monitores', label: 'Number of reviews', kind: 'kpi', span: 1, value: '703', change: '11%', trend: 'up' },
+  { id: 'mo-fail', group: 'Monitores', label: 'Failed reviews', kind: 'kpi', span: 1, value: '91', change: '8', trend: 'down' },
+];
+const CATALOG_BY_ID: Record<string, CatalogItem> = Object.fromEntries(BUILDER_CATALOG.map(i => [i.id, i]));
+
+// Renderiza el cuerpo real de un componente colocado en el lienzo.
+function BuilderCardBody({ item }: { item: CatalogItem }) {
+  switch (item.kind) {
+    case 'kpi':
+      return <KpiCard label={item.label} value={item.value ?? '0'} sub={item.sub} change={item.change} trend={item.trend} />;
+    case 'title':
+      return <div className="py-2 px-1"><h3 className="text-[16px] font-bold text-[#1a1a1a]">{item.value ?? item.label}</h3></div>;
+    case 'line':
+      return <KpiChartCard title={item.label}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(60, 12, 1, item.seed ?? 3), fill: true }]} type="line" showLegend={false} /></KpiChartCard>;
+    case 'bar':
+      return <KpiChartCard title={item.label}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(40, 14, 1, item.seed ?? 3) }]} type="bar" showLegend={false} /></KpiChartCard>;
+    case 'doughnut':
+      return <KpiChartCard title={item.label}><KpiDoughnut labels={['Tiempo de espera', 'Resolución', 'Tono', 'Otros']} values={[38, 24, 16, 22]} /></KpiChartCard>;
+    case 'heatmap':
+      return <KpiChartCard title={item.label} height={300}><KpiHeatmap rows={['12 a.m.', '3 a.m.', '6 a.m.', '9 a.m.', '12 p.m.', '3 p.m.', '6 p.m.', '9 p.m.']} cols={['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do']} matrix={mockHeatmap(item.seed ?? 44)} /></KpiChartCard>;
+    case 'table':
+      return <KpiChartCard title={item.label} height={220}><KpiTable columns={['Nombre', 'Valor']} rows={[['Ana Torres', '42'], ['Luis Vega', '31'], ['María Ruiz', '27']]} /></KpiChartCard>;
+  }
+}
+
+// Miniatura del componente en el panel lateral "Agregar un gráfico".
+function CatalogThumb({ item }: { item: CatalogItem }) {
+  return (
+    <div className="w-[52px] h-[40px] flex-shrink-0 rounded-md bg-[#f3f3f1] flex items-center justify-center text-[#646462]">
+      {item.kind === 'kpi' ? <span className="text-[13px] font-bold text-[#1a1a1a]">{item.value ?? '—'}</span>
+        : item.kind === 'title' ? <span className="text-[10px] font-semibold">Title</span>
+        : item.kind === 'line' ? <svg viewBox="0 0 24 16" className="w-6 h-4 fill-none stroke-[#646462]" strokeWidth="1.6"><path d="M1 13l5-5 4 3 8-8" /></svg>
+        : item.kind === 'doughnut' ? <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="2.4"><circle cx="8" cy="8" r="5" /></svg>
+        : item.kind === 'heatmap' ? <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><rect x="2" y="2" width="4" height="4"/><rect x="8" y="2" width="4" height="4" opacity=".5"/><rect x="2" y="8" width="4" height="4" opacity=".5"/><rect x="8" y="8" width="4" height="4"/></svg>
+        : <svg viewBox="0 0 16 16" className="w-4 h-5 fill-[#646462]"><rect x="2" y="8" width="3" height="6"/><rect x="6.5" y="4" width="3" height="10"/><rect x="11" y="6" width="3" height="8"/></svg>}
+    </div>
+  );
+}
+
+function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; onClose: () => void }) {
+  const [title, setTitle] = useState(initialTitle);
+  const [desc, setDesc] = useState('');
+  const [placed, setPlaced] = useState<{ uid: number; itemId: string; span: number }[]>([]);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [q, setQ] = useState('');
+  const [dragOver, setDragOver] = useState<number | 'end' | null>(null);
+  const uidRef = useRef(1);
+  const dragUid = useRef<number | null>(null);
+
+  const addItem = (itemId: string, beforeUid?: number | null) => {
+    const cat = CATALOG_BY_ID[itemId];
+    if (!cat) return;
+    setPlaced(prev => {
+      const arr = [...prev];
+      const entry = { uid: uidRef.current++, itemId, span: cat.span };
+      let to = beforeUid == null ? arr.length : arr.findIndex(p => p.uid === beforeUid);
+      if (to < 0) to = arr.length;
+      arr.splice(to, 0, entry);
+      return arr;
+    });
+  };
+  const moveItem = (uid: number, beforeUid: number | null) => {
+    setPlaced(prev => {
+      const arr = [...prev];
+      const from = arr.findIndex(p => p.uid === uid);
+      if (from < 0) return prev;
+      const [it] = arr.splice(from, 1);
+      let to = beforeUid == null ? arr.length : arr.findIndex(p => p.uid === beforeUid);
+      if (to < 0) to = arr.length;
+      arr.splice(to, 0, it);
+      return arr;
+    });
+  };
+  const cycleSpan = (uid: number) => setPlaced(prev => prev.map(p => p.uid === uid ? { ...p, span: p.span >= 4 ? 1 : p.span === 1 ? 2 : 4 } : p));
+  const removeItem = (uid: number) => setPlaced(prev => prev.filter(p => p.uid !== uid));
+
+  const onDropAt = (e: DragEvent, beforeUid: number | null) => {
+    e.preventDefault(); e.stopPropagation(); setDragOver(null);
+    let data: any = null;
+    try { data = JSON.parse(e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain') || '{}'); } catch { data = null; }
+    if (!data) return;
+    if (data.t === 'new' && data.itemId) addItem(data.itemId, beforeUid);
+    else if (data.t === 'move' && data.uid != null) moveItem(data.uid, beforeUid);
+    dragUid.current = null;
+  };
+
+  const groups = [...new Set(BUILDER_CATALOG.map(i => i.group))];
+  const query = q.trim().toLowerCase();
+  const spanCls = (s: number) => s >= 4 ? 'col-span-4' : s === 3 ? 'col-span-3' : s === 2 ? 'col-span-2' : 'col-span-1';
+
+  return (
+    <div className="flex flex-1 min-h-0 gap-2">
+      <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+        {/* Header editor */}
+        <div className="flex-shrink-0 px-6 py-3 border-b border-[#e9eae6] flex items-center gap-3">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 8h6M5 10h4"/></svg>
+          <div className="min-w-0 flex-1">
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título del informe" className="w-full text-[18px] font-bold text-[#1a1a1a] outline-none placeholder:text-[#c9c9c6]" />
+            <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ingresa una descripción" className="w-full text-[12.5px] text-[#646462] outline-none placeholder:text-[#a4a4a2]" />
+          </div>
+          <button onClick={onClose} className="text-[13px] font-medium text-[#1a1a1a] rounded-full px-3 py-[6px] hover:bg-[#f3f3f1]">Cancelar</button>
+          <button onClick={() => setPanelOpen(p => !p)} className="flex items-center gap-1.5 text-[13px] font-medium text-[#1a1a1a] border border-[#e9eae6] rounded-full px-3 py-[6px] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Agregar un gráfico
+          </button>
+          <button onClick={onClose} className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-4 py-[6px] hover:bg-black">Guardar</button>
+        </div>
+        {/* Filtros guardados (static) */}
+        <div className="flex-shrink-0 px-6 py-2.5 border-b border-[#e9eae6] flex items-center gap-2 text-[12.5px]">
+          <span className="text-[#646462] flex items-center gap-1"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2 4h12M4 8h8M6 12h4"/></svg>Filtros guardados:</span>
+          <span className="border border-[#e9eae6] rounded-full px-2.5 py-1 text-[#1a1a1a]">Jun 26, 2026 - Jul 23, 2026</span>
+          <span className="border border-dashed border-[#d4d4d2] rounded-full px-2.5 py-1 text-[#646462]">+ Añadir filtro</span>
+        </div>
+        {/* Lienzo drop zone */}
+        <div
+          className="flex-1 overflow-y-auto min-h-0 p-6"
+          onDragOver={e => { e.preventDefault(); setDragOver('end'); }}
+          onDragLeave={() => setDragOver(null)}
+          onDrop={e => onDropAt(e, null)}
+        >
+          {placed.length === 0 ? (
+            <div className={`h-full min-h-[320px] rounded-[12px] border-2 border-dashed flex flex-col items-center justify-center text-center transition-colors ${dragOver ? 'border-[#3b59f6] bg-[#f5f7ff]' : 'border-[#e0e0dd]'}`}>
+              <svg viewBox="0 0 16 16" className="w-8 h-8 fill-[#c9c9c6] mb-3"><path d="M2 13V9h2.5v4H2zm3.5 0V6.5H8V13H5.5zm3.5 0V4h2.5v9H9zm3.5 0V7.5H15V13h-2.5z"/></svg>
+              <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Arrastra gráficos aquí</p>
+              <p className="text-[12.5px] text-[#646462] mb-4 max-w-[320px]">Arrastra un KPI o gráfico desde el panel de la derecha, o pulsa "Agregar un gráfico" para empezar tu monitor.</p>
+              <button onClick={() => setPanelOpen(true)} className="flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] border border-[#e9eae6] rounded-full px-3 py-[6px] hover:bg-[#f5f5f4]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Agregar un gráfico
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-3 auto-rows-min">
+              {placed.map(p => {
+                const item = CATALOG_BY_ID[p.itemId];
+                if (!item) return null;
+                return (
+                  <div
+                    key={p.uid}
+                    className={`group relative ${spanCls(p.span)} ${dragOver === p.uid ? 'ring-2 ring-[#3b59f6] rounded-[12px]' : ''}`}
+                    draggable
+                    onDragStart={e => { dragUid.current = p.uid; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/json', JSON.stringify({ t: 'move', uid: p.uid })); }}
+                    onDragOver={e => { e.preventDefault(); setDragOver(p.uid); }}
+                    onDrop={e => onDropAt(e, p.uid)}
+                  >
+                    {/* Controles al hover */}
+                    <div className="absolute -top-2 right-1 z-10 hidden group-hover:flex items-center gap-1">
+                      <button onClick={() => cycleSpan(p.uid)} title="Cambiar ancho" className="w-6 h-6 rounded-md bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center text-[#646462] hover:bg-[#f5f5f4]">
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M2 8h12M5 5L2 8l3 3M11 5l3 3-3 3"/></svg>
+                      </button>
+                      <button onClick={() => removeItem(p.uid)} title="Quitar" className="w-6 h-6 rounded-md bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center text-[#dc2626] hover:bg-[#fef2f2]">
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+                      </button>
+                    </div>
+                    <div className="absolute top-1.5 left-1.5 z-10 hidden group-hover:flex cursor-grab active:cursor-grabbing w-5 h-5 rounded bg-white/80 border border-[#e9eae6] items-center justify-center text-[#9a9a97]">
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><circle cx="5" cy="4" r="1"/><circle cx="11" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="11" cy="8" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="11" cy="12" r="1"/></svg>
+                    </div>
+                    <BuilderCardBody item={item} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+      {/* Panel lateral: Agregar un gráfico */}
+      {panelOpen && (
+        <div className="w-[340px] flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-shrink-0 px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+            <h2 className="text-[15px] font-bold text-[#1a1a1a]">Agregar un gráfico</h2>
+            <button onClick={() => setPanelOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1] text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+          <div className="flex-shrink-0 px-4 py-3 border-b border-[#f1f1ee] flex flex-col gap-2">
+            <div className="flex items-center gap-3 rounded-lg border border-[#e9eae6] p-3 hover:bg-[#f8f8f7] cursor-pointer">
+              <div className="w-9 h-9 rounded-md bg-[#f3f3f1] flex items-center justify-center text-[#646462]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg></div>
+              <div><p className="text-[13px] font-semibold text-[#1a1a1a]">Crea el tuyo</p><p className="text-[11.5px] text-[#646462]">Ve al creador de gráficos y crea un nuevo gráfico.</p></div>
+            </div>
+            <div className="flex items-center gap-2 h-9 rounded-lg border border-[#e9eae6] px-3 bg-white focus-within:border-[#1a1a1a]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L14 14" strokeLinecap="round"/></svg>
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Plantillas de gráficos de búsqueda" className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]" />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 px-4 py-3">
+            {groups.map(group => {
+              const items = BUILDER_CATALOG.filter(i => i.group === group && (!query || i.label.toLowerCase().includes(query)));
+              if (items.length === 0) return null;
+              return (
+                <div key={group} className="mb-4">
+                  <p className="text-[12px] font-semibold text-[#1a1a1a] mb-2">{group}</p>
+                  <div className="flex flex-col gap-2">
+                    {items.map(item => (
+                      <div
+                        key={item.id}
+                        draggable
+                        onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('application/json', JSON.stringify({ t: 'new', itemId: item.id })); }}
+                        onClick={() => addItem(item.id)}
+                        title="Arrástralo al lienzo o pulsa para añadir"
+                        className="flex items-center gap-3 rounded-lg border border-[#e9eae6] p-2.5 hover:border-[#3b59f6] hover:bg-[#f8f8f7] cursor-grab active:cursor-grabbing"
+                      >
+                        <CatalogThumb item={item} />
+                        <div className="min-w-0">
+                          <p className="text-[11px] text-[#646462] truncate">{group}</p>
+                          <p className="text-[12.5px] font-semibold text-[#1a1a1a] leading-tight">{item.label}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Modal "Crear un nuevo informe" — elige una plantilla (o crea el tuyo) y abre el editor.
+function ReportTemplatesModal({ onClose, onCreate }: { onClose: () => void; onCreate: (title: string) => void }) {
+  const templates = ALL_REPORTS.filter(r => !r.legacy || r.sub);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-6 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-[14px] w-full max-w-[980px] my-6 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+          <h2 className="text-[18px] font-bold text-[#1a1a1a]">Crear un nuevo informe</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f3f3f1] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+          </button>
+        </div>
+        <div className="p-6 grid grid-cols-3 gap-4 max-h-[70vh] overflow-y-auto">
+          <button onClick={() => onCreate('Informe sin título')} className="text-left border border-[#e9eae6] rounded-[12px] p-4 hover:border-[#3b59f6] hover:bg-[#f8f8f7]">
+            <div className="w-9 h-9 rounded-md bg-[#f3f3f1] flex items-center justify-center text-[#646462] mb-3"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg></div>
+            <p className="text-[14px] font-bold text-[#1a1a1a] mb-1">Crea el tuyo</p>
+            <p className="text-[12.5px] text-[#646462]">Crea tu propio informe, en lugar de empezar con una plantilla.</p>
+          </button>
+          {templates.map(t => (
+            <button key={t.t} onClick={() => onCreate(t.t)} className="text-left border border-[#e9eae6] rounded-[12px] p-4 hover:border-[#3b59f6] hover:bg-[#f8f8f7]">
+              <div className="w-9 h-9 rounded-md bg-[#1a1a1a] flex items-center justify-center text-white mb-3"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M2 13V9h2.5v4H2zm3.5 0V6.5H8V13H5.5zm3.5 0V4h2.5v9H9zm3.5 0V7.5H15V13h-2.5z"/></svg></div>
+              <p className="text-[14px] font-bold text-[#1a1a1a] mb-1">{t.t}</p>
+              {t.d && <p className="text-[12.5px] text-[#646462] line-clamp-3">{t.d}</p>}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function readInitialReportsSubFromUrl(): ReportsSubView {
   if (typeof window === 'undefined') return 'overview';
   const s = new URLSearchParams(window.location.search).get('sub');
   const known: ReportsSubView[] = [
     'overview','aiResumen','areasNegocio','agentesPerf','aprobacionesRisk','costesRoi',
-    'todos','misInformes','favoritos','cxScore','emailDeliv',
+    'todos','misInformes','compartidos','favoritos','cxScore','emailDeliv',
     'temas','sugerencias','export','horarios',
     'finAgent','copilot',
     'calls','conversations','csat','effectiveness',
@@ -2487,12 +2831,21 @@ export function ReportsView() {
   const [sub, setSub] = useState<ReportsSubView>(() => readInitialReportsSubFromUrl());
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
   const [channel, setChannel] = useState('all');
+  const [builder, setBuilder] = useState<{ title: string } | null>(null);
+  // The "Todos los informes" / "Tus informes" / "Compartido contigo" tabs and the
+  // sidebar entries are the same category: keep them in sync via the sub route.
+  const allReportsTab: 'shared' | 'mine' | 'intercom' =
+    sub === 'misInformes' ? 'mine' : sub === 'compartidos' ? 'shared' : 'intercom';
+  const setAllReportsTab = (t: 'shared' | 'mine' | 'intercom') =>
+    setSub(t === 'mine' ? 'misInformes' : t === 'shared' ? 'compartidos' : 'todos');
+  const AllReports = () => <ReportsAllReportsContent tab={allReportsTab} onTab={setAllReportsTab} onOpen={setSub} onCreate={(title) => setBuilder({ title })} />;
   function renderSub() {
     switch (sub) {
       // ── Análisis (from original Reports.tsx) ────────────────────────────
       case 'overview':         return <ReportsOverviewContent period={period} channel={channel} />;
-      case 'todos':            return <ReportsAllReportsContent onOpen={setSub} />;
-      case 'misInformes':      return <KnowledgePlaceholder title="Tus informes" subtitle="Aún no has creado informes propios. Duplica un informe o crea uno desde cero para verlo aquí." />;
+      case 'todos':            return <AllReports />;
+      case 'misInformes':      return <AllReports />;
+      case 'compartidos':      return <AllReports />;
       case 'favoritos':        return <KnowledgePlaceholder title="Tus favoritos" subtitle="Marca informes como favoritos para acceder a ellos rápidamente desde aquí." />;
       case 'cxScore':          return <ReportsCxScoreContent period={period} channel={channel} />;
       case 'emailDeliv':       return <ReportsEmailDeliverabilityContent />;
@@ -2538,6 +2891,15 @@ export function ReportsView() {
     : channel === 'whatsapp' ? 'WhatsApp'
     : channel === 'sms' ? 'SMS'
     : 'Social';
+  // The report builder takes over the whole content area (Intercom-style editor).
+  if (builder) {
+    return (
+      <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+        <TrialBanner />
+        <ReportBuilderCanvas initialTitle={builder.title} onClose={() => setBuilder(null)} />
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
