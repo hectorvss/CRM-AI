@@ -2963,7 +2963,7 @@ function ReportTemplatesModal({ onClose, onCreate }: { onClose: () => void; onCr
           </button>
           {templates.map(t => (
             <button key={t.t} onClick={() => onCreate(t.t)} className="text-left border border-[#e9eae6] rounded-[12px] p-4 hover:border-[#3b59f6] hover:bg-[#f8f8f7]">
-              <div className="w-9 h-9 rounded-md bg-[#1a1a1a] flex items-center justify-center text-white mb-3"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M2 13V9h2.5v4H2zm3.5 0V6.5H8V13H5.5zm3.5 0V4h2.5v9H9zm3.5 0V7.5H15V13h-2.5z"/></svg></div>
+              <div className="w-9 h-9 rounded-md bg-[#1a1a1a] flex items-center justify-center mb-3"><img src="/logos/clain-favicon.png" alt="Clain" className="w-5 h-5 object-contain" style={{ filter: 'brightness(0) invert(1)' }} draggable={false} /></div>
               <p className="text-[14px] font-bold text-[#1a1a1a] mb-1">{t.t}</p>
               {t.d && <p className="text-[12.5px] text-[#646462] line-clamp-3">{t.d}</p>}
             </button>
