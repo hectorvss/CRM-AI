@@ -9212,13 +9212,30 @@ function changelogActor(e: any): string {
 function FinChangelogContent() {
   const { data: auditData, loading } = useApi<any[]>(() => auditApi.workspaceAll(), [], []);
   const [search, setSearch] = useState('');
-  // Group the meaningful changes by month (most recent first), like Intercom's changelog.
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterSearch, setFilterSearch] = useState('');
+
+  // Meaningful (noise-filtered) changes, and the distinct change types present
+  // in them — the options offered by the "Cualquier cambio" filter.
+  const meaningful = useMemo(
+    () => (Array.isArray(auditData) ? auditData : []).filter(e => !isChangelogNoise(e)),
+    [auditData],
+  );
+  const availableTypes = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of meaningful) set.add(humanizeChangelogAction(e.action));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [meaningful]);
+
+  // Group the changes by month (most recent first), filtered by search + type.
   const groups = useMemo(() => {
-    const list = (Array.isArray(auditData) ? auditData : []).filter(e => !isChangelogNoise(e));
     const q = search.trim().toLowerCase();
-    const filtered = q
-      ? list.filter((e: any) => `${humanizeChangelogAction(e.action)} ${changelogElement(e)} ${changelogActor(e)}`.toLowerCase().includes(q))
-      : list;
+    const filtered = meaningful.filter((e: any) => {
+      if (selectedTypes.size > 0 && !selectedTypes.has(humanizeChangelogAction(e.action))) return false;
+      if (q && !`${humanizeChangelogAction(e.action)} ${changelogElement(e)} ${changelogActor(e)}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
     const sorted = [...filtered].sort((a, b) =>
       new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime());
     const byMonth = new Map<string, any[]>();
@@ -9229,8 +9246,10 @@ function FinChangelogContent() {
       byMonth.get(key)!.push(e);
     }
     return Array.from(byMonth.entries());
-  }, [auditData, search]);
+  }, [meaningful, search, selectedTypes]);
   const total = groups.reduce((n, [, rows]) => n + rows.length, 0);
+  const toggleType = (t: string) => setSelectedTypes(prev => { const n = new Set(prev); if (n.has(t)) n.delete(t); else n.add(t); return n; });
+  const visibleTypes = availableTypes.filter(t => t.toLowerCase().includes(filterSearch.trim().toLowerCase()));
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* H1 header — Figma 1:19015 */}
@@ -9253,10 +9272,51 @@ function FinChangelogContent() {
             className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
           />
         </div>
-        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
-          <span>Cualquier cambio</span>
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setFilterOpen(o => !o)}
+            className={`h-8 px-3 rounded-[8px] border text-[13px] inline-flex items-center gap-1.5 hover:bg-[#f8f8f7] ${selectedTypes.size > 0 ? 'border-[#1a1a1a] bg-[#f8f8f7] text-[#1a1a1a]' : 'border-[#e9eae6] bg-white text-[#1a1a1a]'}`}
+          >
+            <span>{selectedTypes.size === 0 ? 'Cualquier cambio' : `${selectedTypes.size} tipo${selectedTypes.size === 1 ? '' : 's'}`}</span>
+            <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${filterOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          {filterOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-20 w-[300px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_28px_rgba(20,20,20,0.14)] overflow-hidden">
+                <div className="p-2 border-b border-[#f1f1ee]">
+                  <div className="relative">
+                    <svg viewBox="0 0 16 16" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
+                    <input
+                      autoFocus
+                      value={filterSearch}
+                      onChange={e => setFilterSearch(e.target.value)}
+                      placeholder="Buscar"
+                      className="w-full h-8 pl-8 pr-2 rounded-[6px] border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                    />
+                  </div>
+                </div>
+                <div className="max-h-[280px] overflow-y-auto py-1">
+                  {visibleTypes.length === 0 ? (
+                    <div className="px-3 py-4 text-[12.5px] text-[#a4a4a2] text-center">Sin tipos de cambio</div>
+                  ) : visibleTypes.map(t => (
+                    <button key={t} onClick={() => toggleType(t)} className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#f8f8f7] text-left">
+                      <span className={`w-4 h-4 rounded-[4px] border flex items-center justify-center flex-shrink-0 ${selectedTypes.has(t) ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#c4c4c2] bg-white'}`}>
+                        {selectedTypes.has(t) && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-white" strokeWidth="2"><path d="M3.5 8.5l3 3 6-6.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </span>
+                      <span className="text-[13px] text-[#1a1a1a] truncate">{t}</span>
+                    </button>
+                  ))}
+                </div>
+                {selectedTypes.size > 0 && (
+                  <div className="p-2 border-t border-[#f1f1ee]">
+                    <button onClick={() => setSelectedTypes(new Set())} className="w-full h-7 rounded-[6px] text-[12.5px] text-[#646462] hover:bg-[#f8f8f7]">Limpiar filtros</button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         {loading ? (
