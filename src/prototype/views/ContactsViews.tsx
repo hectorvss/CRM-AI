@@ -1096,7 +1096,7 @@ function ConvMiniCalendar() {
 }
 
 function ContactsConversationsView() {
-  const [expanded, setExpanded] = useState<string | null>('messenger');
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [statusOpen, setStatusOpen] = useState(false);
   return (
     <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
