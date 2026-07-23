@@ -2740,15 +2740,15 @@ const CATALOG_BY_ID: Record<string, CatalogItem> = Object.fromEntries(BUILDER_CA
 function builderDefaultHeight(kind: BuilderKind): number {
   return kind === 'heatmap' ? 300 : kind === 'table' ? 220 : 260;
 }
-function BuilderCardBody({ item, height, variant }: { item: CatalogItem; height?: number; variant?: string }) {
+function BuilderCardBody({ item, height, variant, headerRight }: { item: CatalogItem; height?: number; variant?: string; headerRight?: ReactNode }) {
   const h = height ?? builderDefaultHeight(item.kind);
   const seed = item.seed ?? 3;
   // Variantes del editor (barra horizontal, combo barra+línea, matriz 7×24).
   if (variant === 'hbar') {
-    return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(40, 14, 1, seed) }]} type="bar" horizontal showLegend={false} /></KpiChartCard>;
+    return <KpiChartCard title={item.label} height={h} titleRight={headerRight}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(40, 14, 1, seed) }]} type="bar" horizontal showLegend={false} /></KpiChartCard>;
   }
   if (variant === 'combo') {
-    return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[
+    return <KpiChartCard title={item.label} height={h} titleRight={headerRight}><KpiTimeSeries labels={MOCK_WEEKS} series={[
       { label: item.label, data: mockSeries(40, 14, 1, seed), chartType: 'bar' },
       { label: item.label, data: mockSeries(46, 10, 0.6, seed + 1), chartType: 'line' },
     ]} /></KpiChartCard>;
@@ -2757,7 +2757,7 @@ function BuilderCardBody({ item, height, variant }: { item: CatalogItem; height?
     const H = Math.max(h, 300);
     const rowH = Math.max(24, Math.floor((H - 74) / HEATMAP_DAYS.length)); // llena el alto de la tarjeta
     return (
-      <KpiChartCard title={item.label} height={H}>
+      <KpiChartCard title={item.label} height={H} titleRight={headerRight}>
         <KpiHeatmap rows={HEATMAP_DAYS} cols={HEATMAP_HOURS} matrix={mock24Heatmap(seed + 44)} legend showValues={false}
           rowHeight={rowH} fmtTitle={(v, r, c) => `${v} (${r} a las ${c}:00)`} />
       </KpiChartCard>
@@ -2765,19 +2765,19 @@ function BuilderCardBody({ item, height, variant }: { item: CatalogItem; height?
   }
   switch (item.kind) {
     case 'kpi':
-      return <div className="h-full"><KpiCard label={item.label} value={item.value ?? '0'} sub={item.sub} change={item.change} trend={item.trend} /></div>;
+      return <div className="relative h-full">{headerRight && <div className="absolute top-0 right-0 z-10">{headerRight}</div>}<KpiCard label={item.label} value={item.value ?? '0'} sub={item.sub} change={item.change} trend={item.trend} /></div>;
     case 'title':
       return <div className="py-2 px-1 h-full flex items-center"><h3 className="text-[16px] font-bold text-[#1a1a1a]">{item.value ?? item.label}</h3></div>;
     case 'line':
-      return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(60, 12, 1, seed), fill: variant !== 'line' }]} type="line" showLegend={false} /></KpiChartCard>;
+      return <KpiChartCard title={item.label} height={h} titleRight={headerRight}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(60, 12, 1, seed), fill: variant !== 'line' }]} type="line" showLegend={false} /></KpiChartCard>;
     case 'bar':
-      return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(40, 14, 1, seed) }]} type="bar" showLegend={false} /></KpiChartCard>;
+      return <KpiChartCard title={item.label} height={h} titleRight={headerRight}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(40, 14, 1, seed) }]} type="bar" showLegend={false} /></KpiChartCard>;
     case 'doughnut':
-      return <KpiChartCard title={item.label} height={h}><KpiDoughnut labels={['Tiempo de espera', 'Resolución', 'Tono', 'Otros']} values={[38, 24, 16, 22]} /></KpiChartCard>;
+      return <KpiChartCard title={item.label} height={h} titleRight={headerRight}><KpiDoughnut labels={['Tiempo de espera', 'Resolución', 'Tono', 'Otros']} values={[38, 24, 16, 22]} /></KpiChartCard>;
     case 'heatmap':
-      return <KpiChartCard title={item.label} height={Math.max(h, 300)}><KpiHeatmap rows={HEATMAP_DAYS} cols={HEATMAP_HOURS} matrix={mock24Heatmap(seed + 44)} legend showValues={false} fmtTitle={(v, r, c) => `${v} (${r} a las ${c}:00)`} /></KpiChartCard>;
+      return <KpiChartCard title={item.label} height={Math.max(h, 300)} titleRight={headerRight}><KpiHeatmap rows={HEATMAP_DAYS} cols={HEATMAP_HOURS} matrix={mock24Heatmap(seed + 44)} legend showValues={false} fmtTitle={(v, r, c) => `${v} (${r} a las ${c}:00)`} /></KpiChartCard>;
     case 'table':
-      return <KpiChartCard title={item.label} height={h}><KpiTable columns={['Nombre', 'Valor']} rows={[['Ana Torres', '42'], ['Luis Vega', '31'], ['María Ruiz', '27']]} /></KpiChartCard>;
+      return <KpiChartCard title={item.label} height={h} titleRight={headerRight}><KpiTable columns={['Nombre', 'Valor']} rows={[['Ana Torres', '42'], ['Luis Vega', '31'], ['María Ruiz', '27']]} /></KpiChartCard>;
   }
 }
 // Memoizada: durante el resize solo se re-renderiza la tarjeta que cambia, no
@@ -3592,6 +3592,26 @@ type FilterAttr = { group: string; title: string; icon: FilterIconKind };
 const FILTER_CATALOG: FilterAttr[] = [
   { group: 'Atributos sugeridos', title: 'Equipo asignado actualmente', icon: 'team' },
   { group: 'Atributos sugeridos', title: 'Compañero de equipo asignado actualmente', icon: 'user' },
+  { group: 'Atributos estándar de la conversación', title: 'Estado', icon: 'list' },
+  { group: 'Atributos estándar de la conversación', title: 'Prioridad', icon: 'list' },
+  { group: 'Atributos estándar de la conversación', title: 'Canal', icon: 'channel' },
+  { group: 'Atributos estándar de la conversación', title: 'Primer canal de respuesta', icon: 'channel' },
+  { group: 'Atributos estándar de la conversación', title: 'Etiqueta de la conversación', icon: 'list' },
+  { group: 'Atributos estándar de la conversación', title: 'Tema de IA', icon: 'list' },
+  { group: 'Atributos estándar de la conversación', title: 'Idioma', icon: 'list' },
+  { group: 'Atributos estándar de la conversación', title: 'Marca', icon: 'list' },
+  { group: 'Atributos estándar de la conversación', title: 'Tipo de conversación', icon: 'list' },
+  { group: 'Atributos estándar de la conversación', title: 'Valoración de la conversación', icon: 'heart' },
+  { group: 'Atributos estándar de la conversación', title: 'Calificación del último compañero de equipo', icon: 'heart' },
+  { group: 'Atributos estándar de la conversación', title: 'Motivo del cierre', icon: 'list' },
+  { group: 'Atributos estándar de la conversación', title: 'Conversación evaluada', icon: 'dataset' },
+  { group: 'Atributos estándar de la conversación', title: 'Creado por', icon: 'user' },
+  { group: 'Atributos estándar de la conversación', title: 'Origen', icon: 'list' },
+  { group: 'Atributos de Fin AI Agent', title: 'Fin AI Agent participó', icon: 'dataset' },
+  { group: 'Atributos de Fin AI Agent', title: 'Estado de resolución de Fin AI Agent', icon: 'dataset' },
+  { group: 'Atributos de Fin AI Agent', title: 'Fin AI Agent activo', icon: 'dataset' },
+  { group: 'Atributos de Fin AI Agent', title: 'Fin AI Agent resolvió la conversación', icon: 'dataset' },
+  { group: 'Atributos de Fin AI Agent', title: 'Contenido de Fin referenciado', icon: 'list' },
   { group: 'Atributos de Fin for Sales', title: 'Canal de reuniones de Fin Sales', icon: 'dataset' },
   { group: 'Atributos de Fin for Sales', title: 'Contacto capturado de Fin Sales', icon: 'dataset' },
   { group: 'Atributos de Fin for Sales', title: 'Correo electrónico capturado por Fin Sales', icon: 'dataset' },
@@ -3604,9 +3624,14 @@ const FILTER_CATALOG: FilterAttr[] = [
   { group: 'Atributos de Fin for Sales', title: 'Reunión de Fin Sales reservada mediante el botón de Messenger', icon: 'dataset' },
   { group: 'Atributos de Fin for Sales', title: 'Teléfono capturado de Fin Sales', icon: 'dataset' },
   { group: 'Atributos de Fin for Ecommerce', title: 'Fin for Ecommerce participó', icon: 'dataset' },
+  { group: 'Atributos de Fin for Ecommerce', title: 'Producto recomendado por Fin for Ecommerce', icon: 'dataset' },
+  { group: 'Atributos de Fin for Ecommerce', title: 'Enlace de pago de Fin for Ecommerce clicado', icon: 'dataset' },
   { group: 'Atributos de Fin for Service', title: 'Fin for Service activo', icon: 'dataset' },
-  { group: 'Atributos estándar de la conversación', title: 'Calificación del último compañero de equipo', icon: 'heart' },
-  { group: 'Atributos estándar de la conversación', title: 'Canal', icon: 'channel' },
+  { group: 'Atributos de SLA', title: 'Tipo de métrica de SLA', icon: 'list' },
+  { group: 'Atributos de SLA', title: 'SLA incumplido', icon: 'dataset' },
+  { group: 'Atributos de SLA', title: 'SLA activo', icon: 'dataset' },
+  { group: 'Atributos de Copilot', title: 'Contenido de Copilot referenciado', icon: 'list' },
+  { group: 'Atributos de Copilot', title: 'Copilot utilizado', icon: 'dataset' },
 ];
 function FilterIcon({ icon }: { icon: FilterIconKind }) {
   const cls = 'w-4 h-4 flex-shrink-0 text-[#646462]';
@@ -3619,35 +3644,49 @@ function FilterIcon({ icon }: { icon: FilterIconKind }) {
 }
 // Desplegable de atributos — buscable y agrupado. Reutilizado por "Añadir filtro"
 // (placeholder "Filtros de búsqueda...") y "Ver por" ("Buscar propiedades...").
-function AttrPicker({ onClose, onSelect, placeholder = 'Filtros de búsqueda...' }: { onClose: () => void; onSelect: (f: FilterAttr) => void; placeholder?: string }) {
+function AttrPicker({ onClose, onSelect, placeholder = 'Filtros de búsqueda...', inline = false }: { onClose: () => void; onSelect: (f: FilterAttr) => void; placeholder?: string; inline?: boolean }) {
   const [q, setQ] = useState('');
   const query = q.trim().toLowerCase();
   const groups = [...new Set(FILTER_CATALOG.map(f => f.group))];
+  const inner = (
+    <>
+      <div className="p-2 border-b border-[#f1f1ee] flex items-center gap-2 flex-shrink-0">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] ml-1" strokeWidth="1.5"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L14 14" strokeLinecap="round"/></svg>
+        <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder} className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]" />
+        {inline && <button onClick={onClose} className="text-[#9a9a97] hover:text-[#1a1a1a] flex-shrink-0 mr-1"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>}
+      </div>
+      <div className="overflow-y-auto min-h-0 py-1">
+        {groups.map(g => {
+          const items = FILTER_CATALOG.filter(f => f.group === g && (!query || f.title.toLowerCase().includes(query)));
+          if (!items.length) return null;
+          return (
+            <div key={g}>
+              <p className="text-[11px] text-[#646462] px-3 pt-2.5 pb-1">{g}</p>
+              {items.map(f => (
+                <button key={f.title} onClick={() => onSelect(f)} className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#f8f8f7] text-left">
+                  <FilterIcon icon={f.icon} />
+                  <span className="text-[12.5px] text-[#1a1a1a] truncate">{f.title}</span>
+                </button>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+  // Inline: en el propio panel, empuja el contenido inferior (no lo tapa).
+  if (inline) {
+    return (
+      <div className="mt-1.5 bg-white border border-[#e9eae6] rounded-xl overflow-hidden flex flex-col" style={{ maxHeight: 280 }}>
+        {inner}
+      </div>
+    );
+  }
   return (
     <>
       <div className="fixed inset-0 z-30" onClick={onClose} />
       <div className="absolute left-0 top-full mt-1 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-xl overflow-hidden flex flex-col w-[320px] max-w-[calc(100vw-2rem)]" style={{ maxHeight: 360 }}>
-        <div className="p-2 border-b border-[#f1f1ee] flex items-center gap-2 flex-shrink-0">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] ml-1" strokeWidth="1.5"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L14 14" strokeLinecap="round"/></svg>
-          <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder} className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]" />
-        </div>
-        <div className="overflow-y-auto min-h-0 py-1">
-          {groups.map(g => {
-            const items = FILTER_CATALOG.filter(f => f.group === g && (!query || f.title.toLowerCase().includes(query)));
-            if (!items.length) return null;
-            return (
-              <div key={g}>
-                <p className="text-[11px] text-[#646462] px-3 pt-2.5 pb-1">{g}</p>
-                {items.map(f => (
-                  <button key={f.title} onClick={() => onSelect(f)} className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#f8f8f7] text-left">
-                    <FilterIcon icon={f.icon} />
-                    <span className="text-[12.5px] text-[#1a1a1a] truncate">{f.title}</span>
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-        </div>
+        {inner}
       </div>
     </>
   );
@@ -3727,15 +3766,15 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
         </div>
         {/* Preview */}
         <div className="flex-1 overflow-y-auto min-h-0 p-6">
-          <div className="relative border border-[#e9eae6] rounded-[12px] p-4 bg-white">
-            <div className="absolute top-3 right-3 z-20">
+          <BuilderCardBody item={{ ...item, kind, label: previewTitle }} height={340} variant={editorVariant} headerRight={
+            <div className="relative">
               <button onClick={() => setAccionesOpen(o => !o)} className="flex items-center gap-1 text-[12.5px] font-medium text-[#1a1a1a] border border-[#e9eae6] rounded-lg px-2.5 py-1 hover:bg-[#f5f5f4]">
                 Acciones <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
               </button>
               {accionesOpen && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setAccionesOpen(false)} />
-                  <div className="absolute right-0 top-9 z-20 w-64 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1.5">
+                  <div className="fixed inset-0 z-30" onClick={() => setAccionesOpen(false)} />
+                  <div className="absolute right-0 top-9 z-40 w-64 bg-white border border-[#e9eae6] rounded-xl shadow-lg py-1.5">
                     <p className="text-[11px] text-[#646462] px-3 pt-1 pb-1.5">Exploración de datos</p>
                     <button onClick={() => setAccionesOpen(false)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
                       <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M5 4L2 8l3 4M11 4l3 4-3 4"/></svg>Exploración de gráficos
@@ -3751,8 +3790,7 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
                 </>
               )}
             </div>
-            <BuilderCardBody item={{ ...item, kind, label: previewTitle }} height={340} variant={editorVariant} />
-          </div>
+          } />
         </div>
       </div>
       {/* Panel de configuración */}
@@ -3808,9 +3846,9 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
                             ))}
                           </div>
                         )}
-                        <div className="relative self-start">
-                          <button onClick={() => setFilterFor(filterFor === i ? null : i)} className="text-[12.5px] text-[#646462] flex items-center gap-1"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir filtro</button>
-                          {filterFor === i && <AttrPicker onClose={() => setFilterFor(null)} onSelect={f => { setMetricFilters(prev => ({ ...prev, [i]: [...(prev[i] ?? []), f] })); setFilterFor(null); }} />}
+                        <div className="relative">
+                          <button onClick={() => setFilterFor(filterFor === i ? null : i)} className="text-[12.5px] text-[#646462] flex items-center gap-1 self-start"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir filtro</button>
+                          {filterFor === i && <AttrPicker inline onClose={() => setFilterFor(null)} onSelect={f => { setMetricFilters(prev => ({ ...prev, [i]: [...(prev[i] ?? []), f] })); setFilterFor(null); }} />}
                         </div>
                       </div>
                     ))}
@@ -3841,11 +3879,11 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
                     </>
                   ) : verPorAttr ? (
                     <div className="relative">
-                      <button onClick={() => setVerPorPickerOpen(o => !o)} className="w-full border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#1a1a1a] flex items-center justify-between text-left hover:border-[#1a1a1a]">
+                      <div role="button" tabIndex={0} onClick={() => setVerPorPickerOpen(o => !o)} className="w-full border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#1a1a1a] flex items-center justify-between text-left hover:border-[#1a1a1a] cursor-pointer">
                         <span className="flex items-center gap-2 truncate"><FilterIcon icon={verPorAttr.icon} /><span className="truncate">{verPorAttr.title}</span></span>
                         <span className="flex items-center gap-1.5 flex-shrink-0"><button onClick={e => { e.stopPropagation(); setVerPorAttr(null); }} className="text-[#9a9a97] hover:text-[#1a1a1a]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg></button><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg></span>
-                      </button>
-                      {verPorPickerOpen && <AttrPicker placeholder="Buscar propiedades..." onClose={() => setVerPorPickerOpen(false)} onSelect={f => { setVerPorAttr(f); setVerPorPickerOpen(false); }} />}
+                      </div>
+                      {verPorPickerOpen && <AttrPicker inline placeholder="Buscar propiedades..." onClose={() => setVerPorPickerOpen(false)} onSelect={f => { setVerPorAttr(f); setVerPorPickerOpen(false); }} />}
                     </div>
                   ) : (
                     <>
@@ -3854,7 +3892,7 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLa
                           <span className="flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>Tiempo</span>
                           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
                         </button>
-                        {verPorPickerOpen && <AttrPicker placeholder="Buscar propiedades..." onClose={() => setVerPorPickerOpen(false)} onSelect={f => { setVerPorAttr(f); setVerPorPickerOpen(false); }} />}
+                        {verPorPickerOpen && <AttrPicker inline placeholder="Buscar propiedades..." onClose={() => setVerPorPickerOpen(false)} onSelect={f => { setVerPorAttr(f); setVerPorPickerOpen(false); }} />}
                       </div>
                       <div className="flex gap-1">
                         {(['hora', 'dia', 'semana', 'mes'] as const).map(g => (

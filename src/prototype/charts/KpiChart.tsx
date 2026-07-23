@@ -87,14 +87,15 @@ export function KpiEmpty({ text = 'Este gráfico no tiene datos', hint = 'Para v
 }
 
 // ── Card shell — a titled chart/KPI container with an info dot ────────────────
-export function KpiChartCard({ title, info = true, className = '', height = 260, children }: {
-  title: string; info?: boolean; className?: string; height?: number; children: ReactNode;
+export function KpiChartCard({ title, info = true, className = '', height = 260, titleRight, children }: {
+  title: string; info?: boolean; className?: string; height?: number; titleRight?: ReactNode; children: ReactNode;
 }) {
   return (
     <div className={`bg-white border border-[#e9eae6] rounded-[12px] p-4 flex flex-col ${className}`}>
       <div className="flex items-center gap-1.5 mb-2">
         {info && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a] flex-shrink-0"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM7.25 6.75h1.5V11h-1.5V6.75zM8 4a.9.9 0 110 1.8A.9.9 0 018 4z"/></svg>}
-        <h3 className="text-[13.5px] font-semibold text-[#1a1a1a]">{title}</h3>
+        <h3 className="text-[13.5px] font-semibold text-[#1a1a1a] min-w-0 truncate">{title}</h3>
+        {titleRight && <div className="ml-auto pl-2 flex-shrink-0">{titleRight}</div>}
       </div>
       <div className="flex-1 min-h-0" style={{ minHeight: height }}>{children}</div>
     </div>
