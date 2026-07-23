@@ -123,9 +123,76 @@ async function getOverviewSupabase(scope: ReportScope, period: string, channel?:
   const nAutoResolved = autoResolved || 0;
   const nPriorAutoResolved = priorAutoResolved || 0;
 
+  // ── Time-series: bucket the period's cases (weekly, or daily for 7d) so the
+  // Resumen renders real charts. Absent metrics (CX/CSAT) are simply omitted
+  // and the UI shows an empty state for them.
+  const bucketDays = period === '7d' ? 1 : 7;
+  const nBuckets = Math.max(1, Math.ceil(days / bucketDays));
+  const startMs = new Date(since).getTime();
+  const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const labels: string[] = [];
+  for (let i = 0; i < nBuckets; i++) { const d = new Date(startMs + i * bucketDays * 86_400_000); labels.push(`${MONTHS_ES[d.getUTCMonth()]} ${d.getUTCDate()}`); }
+  const bucketIndex = (iso: string) => Math.min(nBuckets - 1, Math.max(0, Math.floor((new Date(iso).getTime() - startMs) / (bucketDays * 86_400_000))));
+  const channelLabel = (c: any) => {
+    const s = String(c || 'unknown').toLowerCase();
+    return s === 'chat' || s === 'messenger' ? 'Chat' : s === 'email' ? 'Email' : s === 'whatsapp' ? 'WhatsApp'
+      : s === 'phone' || s === 'call' ? 'Teléfono' : s === 'unknown' || !c ? 'Desconocido' : s.charAt(0).toUpperCase() + s.slice(1);
+  };
+
+  let rowsQuery = supabase
+    .from('cases')
+    .select('created_at, source_channel, status, resolution_state, execution_state')
+    .eq('tenant_id', scope.tenantId)
+    .gte('created_at', since)
+    .limit(5000);
+  if (normalizedChannel) rowsQuery = rowsQuery.eq('source_channel', normalizedChannel);
+  const { data: rows } = await rowsQuery;
+
+  const zeros = () => new Array(nBuckets).fill(0);
+  const totalSeries = zeros(); const resolvedSeries = zeros(); const autoSeries = zeros();
+  const byChannel: Record<string, number[]> = {};
+  for (const r of rows ?? []) {
+    const bi = bucketIndex((r as any).created_at);
+    totalSeries[bi]++;
+    const isResolved = ['resolved', 'closed'].includes((r as any).status) || (r as any).resolution_state === 'resolved';
+    if (isResolved) resolvedSeries[bi]++;
+    if ((r as any).resolution_state === 'resolved' && (r as any).execution_state === 'completed') autoSeries[bi]++;
+    const ch = channelLabel((r as any).source_channel);
+    (byChannel[ch] ??= zeros())[bi]++;
+  }
+  const sumArr = (a: number[]) => a.reduce((x, y) => x + y, 0);
+  const totalAll = sumArr(totalSeries); const resolvedAll = sumArr(resolvedSeries); const autoAll = sumArr(autoSeries);
+
+  const series: Record<string, any> = {
+    volume: {
+      labels,
+      series: [
+        { label: 'Todas las conversaciones', data: totalSeries, fill: true },
+        { label: 'Resueltas', data: resolvedSeries },
+        { label: 'Auto-resueltas (IA)', data: autoSeries },
+      ],
+    },
+    newByChannel: {
+      labels,
+      series: Object.entries(byChannel).map(([label, data]) => ({ label, data })),
+    },
+  };
+  const handling = totalAll > 0 ? [
+    { label: 'Auto-resueltas (IA)', value: autoAll },
+    { label: 'Resueltas por el equipo', value: Math.max(0, resolvedAll - autoAll) },
+    { label: 'Sin resolver', value: Math.max(0, totalAll - resolvedAll) },
+  ] : [];
+  const metrics: Record<string, any> = {
+    fin_resolution: { value: pct(resolvedAll, totalAll || 1), trend: 'neutral' },
+    fin_deflect: { value: pct(autoAll, totalAll || 1), trend: 'neutral' },
+  };
+
   return {
     period,
     generatedAt: new Date().toISOString(),
+    series,
+    handling,
+    metrics,
     kpis: [
       {
         key: 'total_cases',

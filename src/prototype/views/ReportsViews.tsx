@@ -128,9 +128,10 @@ const DEMO_OVERVIEW = buildDemoOverview();
 function ReportsOverviewContent({ period, channel }: { period: string; channel: string }) {
   const { data: ov } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
   const { data: sla } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
-  // Use real series when the backend provides them; otherwise fall back to the
-  // deterministic demo so the charts are populated ("simula datos").
-  const hasRealSeries = !!(ov?.series && Object.keys(ov.series).length);
+  // Use real series when the backend returns non-zero data; otherwise fall back
+  // to the deterministic demo so an empty tenant still previews the layout.
+  const hasRealSeries = !!(ov?.series && Object.values(ov.series).some((s: any) =>
+    Array.isArray(s?.series) && s.series.some((x: any) => (x.data ?? []).some((v: number) => v > 0))));
   const data: any = hasRealSeries ? ov : DEMO_OVERVIEW;
   const isDemo = !hasRealSeries;
 
