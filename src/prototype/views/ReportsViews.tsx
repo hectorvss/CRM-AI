@@ -2753,6 +2753,47 @@ function BuilderCardBody({ item, height }: { item: CatalogItem; height?: number 
 // todos los gráficos del lienzo → redimensionado fluido.
 const BuilderCardBodyMemo = memo(BuilderCardBody);
 
+// Colores de fondo para el componente banner/título.
+const BANNER_COLORS: { id: string; bg: string; swatch: string }[] = [
+  { id: 'none', bg: 'transparent', swatch: '#ffffff' },
+  { id: 'blue', bg: '#dbeafe', swatch: '#bfdbfe' },
+  { id: 'green', bg: '#dcfce7', swatch: '#bbf7d0' },
+  { id: 'gray', bg: '#f1f1ee', swatch: '#e5e5e2' },
+  { id: 'pink', bg: '#fce7f3', swatch: '#fbcfe8' },
+  { id: 'yellow', bg: '#fef9c3', swatch: '#fef08a' },
+];
+
+// Banner / título editable con barra flotante de colores + papelera.
+function BuilderBanner({ text, color, onText, onColor, onDelete }: {
+  text: string; color: string; onText: (t: string) => void; onColor: (c: string) => void; onDelete: () => void;
+}) {
+  const bg = (BANNER_COLORS.find(c => c.id === color) ?? BANNER_COLORS[3]).bg;
+  return (
+    <div className="relative h-full">
+      {/* Barra flotante (aparece al pasar el ratón) */}
+      <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-20 hidden group-hover:flex items-center gap-1.5 bg-white border border-[#e9eae6] rounded-full shadow-md px-2 py-1">
+        {BANNER_COLORS.map(c => (
+          <button key={c.id} onClick={() => onColor(c.id)} title={c.id}
+            className={`w-5 h-5 rounded-full flex items-center justify-center border ${color === c.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}
+            style={{ background: c.id === 'none' ? '#fff' : c.swatch }}>
+            {c.id === 'none' && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#c4c4c1]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M4 12L12 4"/></svg>}
+            {color === c.id && c.id !== 'none' && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#1a1a1a]" strokeWidth="2"><path d="M3 8l3 3 6-7"/></svg>}
+          </button>
+        ))}
+        <span className="w-px h-4 bg-[#e9eae6] mx-0.5" />
+        <button onClick={onDelete} title="Eliminar" className="w-5 h-5 flex items-center justify-center text-[#646462] hover:text-[#dc2626]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"/></svg>
+        </button>
+      </div>
+      {/* Bloque del banner con título editable */}
+      <div className="h-full min-h-[56px] rounded-[10px] px-4 py-3 flex items-center" style={{ background: bg }}>
+        <input value={text} onChange={e => onText(e.target.value)} placeholder="Ingresa un título"
+          className="w-full bg-transparent outline-none text-[16px] font-bold text-[#1a1a1a] placeholder:text-[#9a9a97] placeholder:font-normal" />
+      </div>
+    </div>
+  );
+}
+
 // Miniatura del componente en el panel lateral "Agregar un gráfico" — dibujo
 // representativo del tipo de gráfico, al estilo Intercom.
 function CatalogThumb({ item }: { item: CatalogItem }) {
@@ -2809,11 +2850,12 @@ function CatalogThumb({ item }: { item: CatalogItem }) {
 function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; onClose: () => void }) {
   const [title, setTitle] = useState(initialTitle);
   const [desc, setDesc] = useState('');
-  const [placed, setPlaced] = useState<{ uid: number; itemId: string; span: number; height?: number }[]>([]);
+  const [placed, setPlaced] = useState<{ uid: number; itemId: string; span: number; height?: number; text?: string; color?: string }[]>([]);
   const [panelOpen, setPanelOpen] = useState(true);
   const [q, setQ] = useState('');
-  const [dragOver, setDragOver] = useState<number | 'end' | null>(null);
+  const [dragOver, setDragOver] = useState<number | string | null>(null);
   const [resizing, setResizing] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
   const uidRef = useRef(1);
   const dragUid = useRef<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -2893,18 +2935,41 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
     window.addEventListener('mouseup', up);
   };
 
+  const updatePlaced = (uid: number, patch: Partial<{ text: string; color: string }>) =>
+    setPlaced(prev => prev.map(p => p.uid === uid ? { ...p, ...patch } : p));
+
   const onDropAt = (e: DragEvent, beforeUid: number | null) => {
-    e.preventDefault(); e.stopPropagation(); setDragOver(null);
+    e.preventDefault(); e.stopPropagation(); setDragOver(null); setDragging(false);
     let data: any = null;
-    try { data = JSON.parse(e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain') || '{}'); } catch { data = null; }
-    if (!data) return;
-    if (data.t === 'new' && data.itemId) addItem(data.itemId, beforeUid);
-    else if (data.t === 'move' && data.uid != null) moveItem(data.uid, beforeUid);
+    try { data = JSON.parse(e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain') || 'null'); } catch { data = null; }
+    if (data && data.t === 'new' && data.itemId) addItem(data.itemId, beforeUid);
+    else if (data && data.t === 'move' && data.uid != null) moveItem(data.uid, beforeUid);
+    else if (dragUid.current != null) moveItem(dragUid.current, beforeUid); // respaldo si dataTransfer no está disponible
     dragUid.current = null;
   };
 
   const groups = [...new Set(BUILDER_CATALOG.map(i => i.group))];
   const query = q.trim().toLowerCase();
+
+  // Layout de flujo por filas de 12 columnas: intercala huecos vacíos que se
+  // vuelven zonas de soltado (solo visibles al arrastrar), para poder colocar
+  // una tarjeta en cualquier hueco libre (p.ej. la esquina superior derecha).
+  type LayoutNode = { type: 'card'; p: typeof placed[number] } | { type: 'gap'; span: number; insertIndex: number; key: string };
+  const layout: LayoutNode[] = [];
+  {
+    let col = 0;
+    for (let i = 0; i < placed.length; i++) {
+      const span = placed[i].span;
+      if (col > 0 && col + span > 12) {
+        if (12 - col >= 2) layout.push({ type: 'gap', span: 12 - col, insertIndex: i, key: `gap-${placed[i].uid}` });
+        col = 0;
+      }
+      layout.push({ type: 'card', p: placed[i] });
+      col += span;
+      if (col >= 12) col = 0;
+    }
+    if (col > 0 && 12 - col >= 2) layout.push({ type: 'gap', span: 12 - col, insertIndex: placed.length, key: 'gap-end' });
+  }
 
   return (
     <div className="flex flex-1 min-h-0 gap-2">
@@ -2953,9 +3018,25 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
             </div>
           ) : (
             <div ref={gridRef} className="grid grid-cols-12 gap-3 auto-rows-min pb-40">
-              {placed.map(p => {
+              {layout.map(node => {
+                if (node.type === 'gap') {
+                  // Zona de soltado en un hueco libre — solo activa mientras se arrastra.
+                  if (!dragging) return null;
+                  const beforeUid = placed[node.insertIndex]?.uid ?? null;
+                  const active = dragOver === node.key;
+                  return (
+                    <div key={node.key} style={{ gridColumn: `span ${node.span} / span ${node.span}` }}
+                      onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOver(node.key); }}
+                      onDrop={e => onDropAt(e, beforeUid)}
+                      className={`rounded-[10px] border-2 border-dashed min-h-[90px] flex items-center justify-center text-[11px] font-medium transition-colors ${active ? 'border-[#3b59f6] bg-[#eef2ff] text-[#3b59f6]' : 'border-[#cfd0cd] bg-[#fafafa] text-[#a4a4a2]'}`}>
+                      Soltar aquí
+                    </div>
+                  );
+                }
+                const p = node.p;
                 const item = CATALOG_BY_ID[p.itemId];
                 if (!item) return null;
+                const isBanner = item.kind === 'title';
                 const showDrop = dragOver === p.uid && dragUid.current !== p.uid;
                 return (
                   <div
@@ -2963,23 +3044,27 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
                     style={{ gridColumn: `span ${p.span} / span ${p.span}` }}
                     className={`group relative ${resizing === p.uid ? 'ring-2 ring-[#3b59f6] rounded-[12px]' : ''}`}
                     draggable={resizing == null}
-                    onDragStart={e => { dragUid.current = p.uid; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/json', JSON.stringify({ t: 'move', uid: p.uid })); }}
+                    onDragStart={e => { dragUid.current = p.uid; setDragging(true); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/json', JSON.stringify({ t: 'move', uid: p.uid })); }}
                     onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOver(p.uid); }}
                     onDrop={e => onDropAt(e, p.uid)}
-                    onDragEnd={() => { dragUid.current = null; setDragOver(null); }}
+                    onDragEnd={() => { dragUid.current = null; setDragOver(null); setDragging(false); }}
                   >
                     {/* Indicador de destino: aquí caerá el gráfico al soltar */}
                     {showDrop && <div className="absolute -left-[7px] top-0 bottom-0 w-[3px] bg-[#3b59f6] rounded-full z-20" />}
-                    {/* Controles al hover */}
-                    <div className="absolute -top-2 right-1 z-10 hidden group-hover:flex items-center gap-1">
-                      <button onClick={() => removeItem(p.uid)} title="Quitar" className="w-6 h-6 rounded-md bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center text-[#dc2626] hover:bg-[#fef2f2]">
-                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-                      </button>
-                    </div>
+                    {/* Controles al hover (los banners tienen su propia barra) */}
+                    {!isBanner && (
+                      <div className="absolute -top-2 right-1 z-10 hidden group-hover:flex items-center gap-1">
+                        <button onClick={() => removeItem(p.uid)} title="Quitar" className="w-6 h-6 rounded-md bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center text-[#dc2626] hover:bg-[#fef2f2]">
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+                        </button>
+                      </div>
+                    )}
                     <div className="absolute top-1.5 left-1.5 z-10 hidden group-hover:flex cursor-grab active:cursor-grabbing w-5 h-5 rounded bg-white/80 border border-[#e9eae6] items-center justify-center text-[#9a9a97]">
                       <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><circle cx="5" cy="4" r="1"/><circle cx="11" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="11" cy="8" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="11" cy="12" r="1"/></svg>
                     </div>
-                    <BuilderCardBodyMemo item={item} height={p.height} />
+                    {isBanner
+                      ? <BuilderBanner text={p.text ?? ''} color={p.color ?? 'gray'} onText={t => updatePlaced(p.uid, { text: t })} onColor={c => updatePlaced(p.uid, { color: c })} onDelete={() => removeItem(p.uid)} />
+                      : <BuilderCardBodyMemo item={item} height={p.height} />}
                     {/* Ajustador de tamaño (esquina inferior derecha) */}
                     <div
                       onMouseDown={e => startResize(e, p)}
@@ -3030,7 +3115,8 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
                       <div
                         key={item.id}
                         draggable
-                        onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('application/json', JSON.stringify({ t: 'new', itemId: item.id })); }}
+                        onDragStart={e => { setDragging(true); e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('application/json', JSON.stringify({ t: 'new', itemId: item.id })); }}
+                        onDragEnd={() => setDragging(false)}
                         onClick={() => addItem(item.id)}
                         title="Arrástralo al lienzo o pulsa para añadir"
                         className="flex items-stretch gap-3 rounded-[10px] border border-[#e9eae6] p-3 hover:border-[#3b59f6] hover:bg-[#f8f8f7] cursor-grab active:cursor-grabbing"
