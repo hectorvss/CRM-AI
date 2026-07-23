@@ -3042,15 +3042,15 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
 function ReportTemplatesModal({ onClose, onCreate }: { onClose: () => void; onCreate: (title: string) => void }) {
   const templates = ALL_REPORTS.filter(r => !r.legacy || r.sub);
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-6 overflow-y-auto" onClick={onClose}>
-      <div className="bg-white rounded-[14px] w-full max-w-[980px] my-6 shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6" onClick={onClose}>
+      <div className="bg-white rounded-[14px] w-full max-w-[980px] h-[88vh] max-h-[900px] shadow-xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
           <h2 className="text-[18px] font-bold text-[#1a1a1a]">Crear un nuevo informe</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f3f3f1] text-[#646462]">
             <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>
           </button>
         </div>
-        <div className="p-6 grid grid-cols-3 gap-4 max-h-[70vh] overflow-y-auto">
+        <div className="p-6 grid grid-cols-3 gap-4 overflow-y-auto flex-1 rounded-b-[14px]">
           <button onClick={() => onCreate('Informe sin título')} className="text-left border border-[#e9eae6] rounded-[12px] p-4 hover:border-[#3b59f6] hover:bg-[#f8f8f7]">
             <div className="w-9 h-9 rounded-md bg-[#f3f3f1] flex items-center justify-center text-[#646462] mb-3"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg></div>
             <p className="text-[14px] font-bold text-[#1a1a1a] mb-1">Crea el tuyo</p>
