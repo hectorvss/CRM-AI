@@ -2814,13 +2814,18 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
   const uidRef = useRef(1);
   const dragUid = useRef<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // El lienzo usa una rejilla de 12 columnas para dar mucha más libertad de
+  // tamaño. Se convierte el span del catálogo (1/2/4) a la escala de 12.
+  const to12 = (s: number) => s >= 4 ? 12 : s === 2 ? 6 : s === 1 ? 3 : 6;
 
   const addItem = (itemId: string, beforeUid?: number | null) => {
     const cat = CATALOG_BY_ID[itemId];
     if (!cat) return;
     setPlaced(prev => {
       const arr = [...prev];
-      const entry = { uid: uidRef.current++, itemId, span: cat.span };
+      const entry = { uid: uidRef.current++, itemId, span: to12(cat.span) };
       let to = beforeUid == null ? arr.length : arr.findIndex(p => p.uid === beforeUid);
       if (to < 0) to = arr.length;
       arr.splice(to, 0, entry);
@@ -2845,17 +2850,23 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
   // (columnas, 1..4) y alto (px) de cada gráfico.
   const startResize = (e: ReactMouseEvent, p: { uid: number; itemId: string; span: number; height?: number }) => {
     e.preventDefault(); e.stopPropagation();
-    const gw = gridRef.current ? gridRef.current.clientWidth : 800;
-    const colStep = (gw - 3 * 12) / 4 + 12; // ancho de una columna incl. gap
+    const gw = gridRef.current ? gridRef.current.clientWidth : 1000;
+    const colStep = (gw - 11 * 12) / 12 + 12; // ancho de una columna (de 12) incl. gap
     const startX = e.clientX, startY = e.clientY, startSpan = p.span;
     const kind = CATALOG_BY_ID[p.itemId]?.kind ?? 'line';
+    const isKpi = kind === 'kpi';
+    const isTitle = kind === 'title';
+    const spanMax = isKpi ? 6 : 12;
     const startH = p.height ?? builderDefaultHeight(kind);
     setResizing(p.uid);
     const move = (ev: MouseEvent) => {
       const dCols = Math.round((ev.clientX - startX) / colStep);
-      const span = Math.min(4, Math.max(1, startSpan + dCols));
-      const height = Math.max(120, Math.round((startH + (ev.clientY - startY)) / 20) * 20);
-      setPlaced(prev => prev.map(q => q.uid === p.uid ? { ...q, span, height } : q));
+      const span = Math.min(spanMax, Math.max(2, startSpan + dCols));
+      // Alto libre y continuo (sin escalones) para gráficos; los KPIs numéricos
+      // y los títulos conservan su alto natural.
+      const patch: { span: number; height?: number } = { span };
+      if (!isKpi && !isTitle) patch.height = Math.max(140, startH + (ev.clientY - startY));
+      setPlaced(prev => prev.map(q => q.uid === p.uid ? { ...q, ...patch } : q));
     };
     const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); setResizing(null); };
     window.addEventListener('mousemove', move);
@@ -2874,7 +2885,6 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
 
   const groups = [...new Set(BUILDER_CATALOG.map(i => i.group))];
   const query = q.trim().toLowerCase();
-  const spanCls = (s: number) => s >= 4 ? 'col-span-4' : s === 3 ? 'col-span-3' : s === 2 ? 'col-span-2' : 'col-span-1';
 
   return (
     <div className="flex flex-1 min-h-0 gap-2">
@@ -2899,10 +2909,16 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
           <span className="border border-[#e9eae6] rounded-full px-2.5 py-1 text-[#1a1a1a]">Jun 26, 2026 - Jul 23, 2026</span>
           <span className="border border-dashed border-[#d4d4d2] rounded-full px-2.5 py-1 text-[#646462]">+ Añadir filtro</span>
         </div>
-        {/* Lienzo drop zone */}
+        {/* Lienzo drop zone — crece indefinidamente y hace scroll */}
         <div
+          ref={scrollRef}
           className="flex-1 overflow-y-auto min-h-0 p-6"
-          onDragOver={e => { e.preventDefault(); setDragOver('end'); }}
+          onDragOver={e => {
+            e.preventDefault(); setDragOver('end');
+            // auto-scroll cerca de los bordes para poder seguir construyendo
+            const el = scrollRef.current;
+            if (el) { const r = el.getBoundingClientRect(); if (e.clientY < r.top + 64) el.scrollTop -= 20; else if (e.clientY > r.bottom - 64) el.scrollTop += 20; }
+          }}
           onDragLeave={() => setDragOver(null)}
           onDrop={e => onDropAt(e, null)}
         >
@@ -2916,19 +2932,24 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
               </button>
             </div>
           ) : (
-            <div ref={gridRef} className="grid grid-cols-4 gap-3 auto-rows-min">
+            <div ref={gridRef} className="grid grid-cols-12 gap-3 auto-rows-min pb-40">
               {placed.map(p => {
                 const item = CATALOG_BY_ID[p.itemId];
                 if (!item) return null;
+                const showDrop = dragOver === p.uid && dragUid.current !== p.uid;
                 return (
                   <div
                     key={p.uid}
-                    className={`group relative ${spanCls(p.span)} ${dragOver === p.uid ? 'ring-2 ring-[#3b59f6] rounded-[12px]' : ''} ${resizing === p.uid ? 'ring-2 ring-[#3b59f6] rounded-[12px]' : ''}`}
+                    style={{ gridColumn: `span ${p.span} / span ${p.span}` }}
+                    className={`group relative ${resizing === p.uid ? 'ring-2 ring-[#3b59f6] rounded-[12px]' : ''}`}
                     draggable={resizing == null}
                     onDragStart={e => { dragUid.current = p.uid; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('application/json', JSON.stringify({ t: 'move', uid: p.uid })); }}
-                    onDragOver={e => { e.preventDefault(); setDragOver(p.uid); }}
+                    onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOver(p.uid); }}
                     onDrop={e => onDropAt(e, p.uid)}
+                    onDragEnd={() => { dragUid.current = null; setDragOver(null); }}
                   >
+                    {/* Indicador de destino: aquí caerá el gráfico al soltar */}
+                    {showDrop && <div className="absolute -left-[7px] top-0 bottom-0 w-[3px] bg-[#3b59f6] rounded-full z-20" />}
                     {/* Controles al hover */}
                     <div className="absolute -top-2 right-1 z-10 hidden group-hover:flex items-center gap-1">
                       <button onClick={() => removeItem(p.uid)} title="Quitar" className="w-6 h-6 rounded-md bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center text-[#dc2626] hover:bg-[#fef2f2]">
@@ -2950,6 +2971,10 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
                   </div>
                 );
               })}
+              {/* Indicador de destino al final */}
+              {dragOver === 'end' && (
+                <div style={{ gridColumn: 'span 12 / span 12' }}><div className="h-[3px] bg-[#3b59f6] rounded-full my-1" /></div>
+              )}
             </div>
           )}
         </div>
