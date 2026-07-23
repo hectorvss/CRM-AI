@@ -5,7 +5,7 @@
 
 import { useApi } from '../../api/hooks';
 import { casesApi, reportsApi } from '../../api/client';
-import { useRef, useState, memo, type ReactNode, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useRef, useState, memo, createContext, useContext, type ReactNode, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { Dropdown, KnowledgePlaceholder, TrialBanner } from '../sharedUi';
 import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDistributionBar, KpiDoughnut, KpiHeatmap, KpiTable, ReportEditProvider } from '../charts/KpiChart';
 
@@ -874,11 +874,12 @@ function ReportsCostesRoiContent({ period, channel }: { period: string; channel:
   );
 }
 
-function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: ReportsSubView) => void }) {
+function ReportsSidebar({ sub, onSelect, favorites = [] }: { sub: ReportsSubView; onSelect: (s: ReportsSubView) => void; favorites?: ReportsSubView[] }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'AI & Automation': false,
     'Human support': false,
     'Proactive': false,
+    'favoritos': true,
   });
   const toggleGroup = (label: string) => setOpenGroups(s => ({ ...s, [label]: !s[label] }));
   // Flat top section (matches the Informes screenshot): direct items with an
@@ -973,6 +974,34 @@ function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: 
         {/* Top flat section */}
         {topItems.map(it => {
           const active = sub === it.key;
+          // "Tus favoritos": grupo desplegable que lista los informes marcados.
+          if (it.key === 'favoritos') {
+            const favMeta = favorites.map(k => familyGroups.flatMap(g => g.items).find(i => i.key === k)).filter(Boolean) as { key: ReportsSubView; label: string; icon?: ReportsItemIcon }[];
+            const expanded = openGroups['favoritos'] === true;
+            return (
+              <div key={it.key}>
+                <button onClick={() => toggleGroup('favoritos')} className="w-full min-h-8 flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors hover:bg-[#e9eae6]/40 text-[#1a1a1a]">
+                  <GroupIcon kind={it.icon} />
+                  <span className="flex-1 text-left leading-[15px]">{it.label}</span>
+                  {favorites.length > 0 && <span className="text-[12px] text-[#646462] flex-shrink-0">{favorites.length}</span>}
+                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                </button>
+                {expanded && (
+                  favMeta.length === 0
+                    ? <p className="pl-9 pr-3 py-1 text-[12px] text-[#9a9a97]">Marca informes con el corazón para verlos aquí.</p>
+                    : <div className="flex flex-col pl-7 mt-0.5 mb-1 gap-0.5">
+                        {favMeta.map(f => (
+                          <button key={f.key} onClick={() => onSelect(f.key)}
+                            className={`h-8 flex items-center gap-2 pl-2 pr-3 rounded-lg text-left text-[13px] transition-colors ${sub === f.key ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#e9eae6]/40'}`}>
+                            {f.icon && <GroupIcon kind={f.icon} />}
+                            <span className="flex-1">{f.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                )}
+              </div>
+            );
+          }
           return (
             <button
               key={it.key}
@@ -1081,7 +1110,15 @@ function ReportsKpiCard({ label, value, delta, sub }: { label: string; value: st
 
 // Shared chrome (header + filter row) used by every custom-report screen.
 // Lets each specialized report (Calls, Conversations, etc.) focus on its body.
+// Contexto de "chrome" del informe: permite al encabezado marcar/desmarcar el
+// informe actual como favorito (el estado vive en ReportsView y lo pinta la barra
+// lateral en "Tus favoritos").
+type ReportChrome = { favorite: boolean; toggleFavorite: () => void };
+const ReportChromeContext = createContext<ReportChrome | null>(null);
+
 function ReportShellHeader({ title, description }: { title: string; description: string }) {
+  const chrome = useContext(ReportChromeContext);
+  const fav = chrome?.favorite ?? false;
   return (
     <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
       <div className="min-w-0 flex-1">
@@ -1096,8 +1133,8 @@ function ReportShellHeader({ title, description }: { title: string; description:
           <img src="/logos/clain-favicon.png" alt="Clain" className="w-3.5 h-3.5 object-contain" draggable={false} />
           <span className="text-[#1a1a1a]">Clain</span></span>
         <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><span className="text-[#646462]">⋯</span></button>
-        <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg>
+        <button onClick={() => chrome?.toggleFavorite()} title={fav ? 'Quitar de favoritos' : 'Añadir a favoritos'} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+          <svg viewBox="0 0 16 16" className={`w-4 h-4 ${fav ? 'fill-[#e8572a] stroke-[#e8572a]' : 'fill-none stroke-[#646462]'}`} strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg>
         </button>
         <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
@@ -1113,6 +1150,7 @@ function ReportShellHeader({ title, description }: { title: string; description:
 }
 
 function ReportShellFilters({ extraFilter }: { extraFilter?: { icon?: 'user' | 'team' | 'sla' | 'ticket'; label: string } }) {
+  const [range, setRange] = useState<DateRange>({ presetId: '4sem', from: rgAddDays(RANGE_TODAY, -27), to: RANGE_TODAY });
   function FilterIcon({ kind }: { kind: NonNullable<NonNullable<Parameters<typeof ReportShellFilters>[0]['extraFilter']>['icon']> }) {
     const cls = "w-3.5 h-3.5 fill-none stroke-[#646462]";
     if (kind === 'user')   return <svg viewBox="0 0 16 16" className={cls} strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c0-2 2.5-3 5-3s5 1 5 3"/></svg>;
@@ -1122,11 +1160,8 @@ function ReportShellFilters({ extraFilter }: { extraFilter?: { icon?: 'user' | '
   }
   return (
     <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0 flex-wrap">
-      <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-        Apr 8, 2026 - May 5, 2026
-        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-      </button>
+      <DateRangePicker value={range} onChange={setRange}
+        triggerClassName="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]" />
       {extraFilter && (
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
           {extraFilter.icon && <FilterIcon kind={extraFilter.icon} />}
@@ -3770,7 +3805,7 @@ function CalMonth({ month, from, to, onPick }: { month: Date; from: Date; to: Da
   );
 }
 
-function DateRangePicker({ value, onChange }: { value: DateRange; onChange: (v: DateRange) => void }) {
+function DateRangePicker({ value, onChange, triggerClassName = 'w-full flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] hover:border-[#1a1a1a]' }: { value: DateRange; onChange: (v: DateRange) => void; triggerClassName?: string }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState(false);
   const [draft, setDraft] = useState<{ from: Date; to: Date; picking: 'from' | 'to' }>({ from: value.from, to: value.to, picking: 'from' });
@@ -3780,7 +3815,14 @@ function DateRangePicker({ value, onChange }: { value: DateRange; onChange: (v: 
   const CAL_W = 520;
   const openCustom = () => {
     const r = btnRef.current?.getBoundingClientRect();
-    if (r) setAnchor({ top: Math.max(8, Math.min(r.top, window.innerHeight - 420)), left: Math.max(8, r.left - CAL_W - 8) });
+    if (r) {
+      // Si cabe a la derecha (p.ej. encabezado, botón arriba-izquierda) abre debajo;
+      // si no cabe (panel del editor, botón a la derecha) abre a la izquierda.
+      const fitsRight = r.left + CAL_W + 8 <= window.innerWidth;
+      const left = fitsRight ? r.left : Math.max(8, r.left - CAL_W - 8);
+      const top = fitsRight ? r.bottom + 6 : r.top;
+      setAnchor({ top: Math.max(8, Math.min(top, window.innerHeight - 420)), left });
+    }
     setDraft({ from: value.from, to: value.to, picking: 'from' }); setCalLeft(rgStartOfMonth(value.from)); setCustom(true);
   };
   const pickDay = (d: Date) => {
@@ -3789,9 +3831,10 @@ function DateRangePicker({ value, onChange }: { value: DateRange; onChange: (v: 
   };
   return (
     <div className="relative">
-      <button ref={btnRef} onClick={() => { setOpen(o => !o); setCustom(false); }} className="w-full flex items-center gap-2 border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] text-[#1a1a1a] hover:border-[#1a1a1a]">
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-        {rgFmt(value.from)} - {rgFmt(value.to)}
+      <button ref={btnRef} onClick={() => { setOpen(o => !o); setCustom(false); }} className={triggerClassName}>
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+        <span className="truncate">{rgFmt(value.from)} - {rgFmt(value.to)}</span>
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
       </button>
       {open && (
         <>
@@ -4153,6 +4196,10 @@ export function ReportsView() {
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
   const [channel, setChannel] = useState('all');
   const [builder, setBuilder] = useState<{ title: string } | null>(null);
+  // Informes marcados como favoritos (con el corazón del encabezado) → salen en
+  // la barra lateral bajo "Tus favoritos".
+  const [favorites, setFavorites] = useState<ReportsSubView[]>([]);
+  const toggleFavorite = (key: ReportsSubView) => setFavorites(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   // The "Todos los informes" / "Tus informes" / "Compartido contigo" tabs and the
   // sidebar entries are the same category: keep them in sync via the sub route.
   const allReportsTab: 'shared' | 'mine' | 'intercom' =
@@ -4225,7 +4272,7 @@ export function ReportsView() {
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
-        <ReportsSidebar sub={sub} onSelect={setSub} />
+        <ReportsSidebar sub={sub} onSelect={setSub} favorites={favorites} />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           {/* Global period + channel selector — every Reports*Content
               receives these as props and reruns its API call when they
@@ -4278,7 +4325,11 @@ export function ReportsView() {
               className="h-8 px-3 rounded-[8px] text-[12.5px] text-[#646462] hover:bg-[#f8f8f7] disabled:opacity-50"
             >Restablecer</button>
           </div>
-          <ReportEditHost>{renderSub()}</ReportEditHost>
+          <ReportEditHost>
+            <ReportChromeContext.Provider value={{ favorite: favorites.includes(sub), toggleFavorite: () => toggleFavorite(sub) }}>
+              {renderSub()}
+            </ReportChromeContext.Provider>
+          </ReportEditHost>
         </div>
       </div>
     </div>
