@@ -5,11 +5,411 @@
 
 import { useApi } from '../../api/hooks';
 import { casesApi, companiesApi, customersApi } from '../../api/client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { IMG_QUALIFICATION, IMG_USERDATA_BANNER } from '../assets';
 import { ICON_BULLET_1, ICON_BULLET_2, ICON_BULLET_3, ICON_BULLET_4 } from '../icons';
 import { ICON_ADD_FILTER, ICON_BACK, ICON_CHEVRON, ICON_CLOSE, ICON_EMPTY_STATE, ICON_INFO, ICON_LEADS_CHIP, ICON_LEARN, ICON_MSG, ICON_MSG_LEADS, ICON_NEW_USER, ICON_PERSONAS, ICON_SEARCH, ICON_TAG, ICON_VIEW_COLS, ICON_VIEW_GRID, ICON_VIEW_LIST, IMG_ILLUSTRATION, SettingsSidebar, TrialBanner, formatContactWhen } from '../sharedUi';
 import type { View } from '../types';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contacts filter bar — the Intercom-style "+ Añadir filtro" system, shared by
+// Personas (UsersTable) and Empresas (CompaniesTable). A field catalog drives
+// both the add-filter dropdown and the column chooser; each field type picks
+// its own operator popover (date → relative/absolute, number, text, select,
+// boolean). Identical format for people and companies.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type CFType = 'date' | 'number' | 'text' | 'select' | 'boolean';
+type CFIcon = 'person' | 'people' | 'calendar' | 'bars' | 'briefcase' | 'owner' | 'swap' | 'smiley'
+  | 'mail' | 'globe' | 'phone' | 'id' | 'clock' | 'monitor' | 'pie' | 'tag' | 'block' | 'warn' | 'code' | 'building';
+type ContactField = { key: string; label: string; icon: CFIcon; type: CFType; options?: string[]; group?: string };
+
+function CFieldIcon({ kind, className = 'w-3.5 h-3.5' }: { kind: CFIcon; className?: string }) {
+  const c = `${className} fill-none stroke-[#646462]`;
+  switch (kind) {
+    case 'person':    return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><circle cx="8" cy="5.5" r="2.5"/><path d="M3.5 13c.6-2.2 2.3-3.5 4.5-3.5s3.9 1.3 4.5 3.5"/></svg>;
+    case 'people':    return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><circle cx="6" cy="6" r="2"/><path d="M2.5 12.5c.4-1.9 1.8-3 3.5-3s3.1 1.1 3.5 3"/><path d="M10.5 5a2 2 0 0 1 0 3.9M11 12.5c-.2-1.3-.8-2.3-1.7-3"/></svg>;
+    case 'calendar':  return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></svg>;
+    case 'bars':      return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3" strokeLinecap="round"><path d="M3 13V7M8 13V3M13 13V9"/></svg>;
+    case 'briefcase': return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><rect x="2.5" y="5" width="11" height="8" rx="1.2"/><path d="M6 5V4a2 2 0 0 1 4 0v1"/></svg>;
+    case 'owner':     return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="6.5" r="1.8"/><path d="M4.8 12.5c.4-1.5 1.6-2.5 3.2-2.5s2.8 1 3.2 2.5"/></svg>;
+    case 'swap':      return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5h8l-2-2M13 11H5l2 2"/></svg>;
+    case 'smiley':    return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.8 9.5c.5.7 1.3 1.1 2.2 1.1s1.7-.4 2.2-1.1" strokeLinecap="round"/><path d="M6 6.5v.1M10 6.5v.1" strokeLinecap="round"/></svg>;
+    case 'mail':      return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>;
+    case 'globe':     return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 1.6 2.8 3.8 2.8 6S9.8 12.4 8 14C6.2 12.4 5.2 10.2 5.2 8S6.2 3.6 8 2z"/></svg>;
+    case 'phone':     return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3" strokeLinejoin="round"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z"/></svg>;
+    case 'id':        return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><rect x="2" y="4" width="12" height="8" rx="1.2"/><circle cx="6" cy="8" r="1.5"/><path d="M9.5 7h3M9.5 9.5h2"/></svg>;
+    case 'clock':     return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 4.8V8l2.2 1.3" strokeLinecap="round"/></svg>;
+    case 'monitor':   return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><rect x="2" y="3" width="12" height="8" rx="1.2"/><path d="M6 13.5h4M8 11v2.5"/></svg>;
+    case 'pie':       return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><path d="M8 2.5A5.5 5.5 0 1 0 13.5 8H8z"/><path d="M8 2.5V8h5.5"/></svg>;
+    case 'tag':       return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3" strokeLinejoin="round"><path d="M2.5 2.5h4.6L14 9.4 9.4 14 2.5 7.1V2.5z"/><circle cx="5" cy="5" r=".8" fill="currentColor" stroke="none"/></svg>;
+    case 'block':     return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M3.8 3.8l8.4 8.4" strokeLinecap="round"/></svg>;
+    case 'warn':      return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2l6 11H2z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>;
+    case 'code':      return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M5.5 5L2.5 8l3 3M10.5 5l3 3-3 3"/></svg>;
+    case 'building':  return <svg viewBox="0 0 16 16" className={c} strokeWidth="1.3"><rect x="3" y="2.5" width="10" height="11" rx="1"/><path d="M5.5 5h1.5M9 5h1.5M5.5 7.5h1.5M9 7.5h1.5M5.5 10h1.5M9 10h1.5"/></svg>;
+  }
+}
+
+const PEOPLE_FILTER_FIELDS: ContactField[] = [
+  { key: 'name', label: 'Name', icon: 'person', type: 'text' },
+  { key: 'firstSeen', label: 'First Seen', icon: 'calendar', type: 'date' },
+  { key: 'signedUp', label: 'Signed up', icon: 'calendar', type: 'date' },
+  { key: 'lastSeen', label: 'Last seen', icon: 'calendar', type: 'date' },
+  { key: 'webSessions', label: 'Web sessions', icon: 'bars', type: 'number' },
+  { key: 'city', label: 'City', icon: 'bars', type: 'text' },
+  { key: 'account', label: 'Account', icon: 'briefcase', type: 'text' },
+  { key: 'owner', label: 'Owner', icon: 'owner', type: 'text' },
+  { key: 'leadCategory', label: 'Lead category', icon: 'swap', type: 'select', options: ['Good fit', 'Bad fit', 'Sin calificar'] },
+  { key: 'qualificationStatus', label: 'Qualification status', icon: 'swap', type: 'select', options: ['Automatically qualified', 'Manually qualified', 'Unqualified'] },
+  { key: 'conversationRating', label: 'Conversation Rating', icon: 'smiley', type: 'select', options: ['1', '2', '3', '4', '5'] },
+  { key: 'email', label: 'Email', icon: 'mail', type: 'text' },
+  { key: 'emailDomain', label: 'Email domain', icon: 'globe', type: 'text' },
+  { key: 'phone', label: 'Phone', icon: 'phone', type: 'text' },
+  { key: 'userId', label: 'User ID', icon: 'id', type: 'text' },
+  { key: 'type', label: 'Type', icon: 'person', type: 'select', options: ['Usuario', 'Lead', 'Visitante'] },
+  { key: 'country', label: 'Country', icon: 'globe', type: 'text' },
+  { key: 'region', label: 'Region', icon: 'globe', type: 'text' },
+  { key: 'timezone', label: 'Timezone', icon: 'clock', type: 'text' },
+  { key: 'continentCode', label: 'Continent code', icon: 'globe', type: 'text' },
+  { key: 'browserLanguage', label: 'Browser Language', icon: 'globe', type: 'text' },
+  { key: 'languageOverride', label: 'Language Override', icon: 'globe', type: 'text' },
+  { key: 'browser', label: 'Browser', icon: 'monitor', type: 'text' },
+  { key: 'browserVersion', label: 'Browser Version', icon: 'monitor', type: 'text' },
+  { key: 'os', label: 'OS', icon: 'monitor', type: 'text' },
+  { key: 'segment', label: 'Segment', icon: 'pie', type: 'select', options: ['Activos', 'Nuevos', 'En riesgo'] },
+  { key: 'personTag', label: 'Person tag', icon: 'tag', type: 'text' },
+  { key: 'unsubscribed', label: 'Unsubscribed from Emails', icon: 'block', type: 'boolean' },
+  { key: 'markedSpam', label: 'Marked email as spam', icon: 'warn', type: 'boolean' },
+  { key: 'hardBounced', label: 'Has hard bounced', icon: 'warn', type: 'boolean' },
+  { key: 'utmCampaign', label: 'UTM Campaign', icon: 'code', type: 'text' },
+  { key: 'utmContent', label: 'UTM Content', icon: 'code', type: 'text' },
+  { key: 'utmMedium', label: 'UTM Medium', icon: 'code', type: 'text' },
+];
+
+const COMPANY_FILTER_FIELDS: ContactField[] = [
+  { key: 'name', label: 'Company name', icon: 'building', type: 'text' },
+  { key: 'companyId', label: 'Company ID', icon: 'id', type: 'text' },
+  { key: 'createdAt', label: 'Created at', icon: 'calendar', type: 'date' },
+  { key: 'lastSeen', label: 'Last seen', icon: 'calendar', type: 'date' },
+  { key: 'userCount', label: 'People', icon: 'people', type: 'number' },
+  { key: 'monthlySpend', label: 'Monthly spend', icon: 'bars', type: 'number' },
+  { key: 'plan', label: 'Plan', icon: 'swap', type: 'select', options: ['Free', 'Premium', 'Enterprise'] },
+  { key: 'size', label: 'Company size', icon: 'people', type: 'number' },
+  { key: 'industry', label: 'Industry', icon: 'briefcase', type: 'text' },
+  { key: 'website', label: 'Website', icon: 'globe', type: 'text' },
+  { key: 'owner', label: 'Owner', icon: 'owner', type: 'text' },
+  { key: 'city', label: 'City', icon: 'globe', type: 'text' },
+  { key: 'country', label: 'Country', icon: 'globe', type: 'text' },
+  { key: 'companyTag', label: 'Company tag', icon: 'tag', type: 'text' },
+];
+
+type ActiveFilter = { id: string; fieldKey: string; operator: string; value: string };
+
+function newFilterFor(f: ContactField): ActiveFilter {
+  const op = f.type === 'date' ? 'exactly' : f.type === 'number' ? 'is' : f.type === 'select' ? 'is' : f.type === 'boolean' ? 'is true' : 'is';
+  const val = f.type === 'select' ? (f.options?.[0] ?? '') : '';
+  return { id: `flt_${f.key}_${Math.random().toString(36).slice(2, 7)}`, fieldKey: f.key, operator: op, value: val };
+}
+
+function filterChipLabel(f: ContactField, a: ActiveFilter): string {
+  if (f.type === 'boolean') return `${f.label} ${a.operator}`;
+  if (f.type === 'date') {
+    if (a.operator === 'is unknown' || a.operator === 'has any value') return `${f.label} ${a.operator}`;
+    if (['more than', 'exactly', 'less than'].includes(a.operator)) return `${f.label} ${a.operator} ${a.value || '…'} days ago`;
+    return `${f.label} ${a.operator} ${a.value || '…'}`;
+  }
+  if (a.operator === 'is unknown' || a.operator === 'has any value') return `${f.label} ${a.operator}`;
+  return `${f.label} ${a.operator} ${a.value || '…'}`;
+}
+
+/** Operator popover, shaped by the field type (mirrors the reference exactly). */
+function ContactFilterPopover({ field, filter, onChange, onClose }: {
+  field: ContactField;
+  filter: ActiveFilter;
+  onChange: (patch: Partial<ActiveFilter>) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('mousedown', onDoc); window.removeEventListener('keydown', onKey); };
+  }, [onClose]);
+
+  const Radio = ({ on, label, children }: { on: boolean; label: string; children?: ReactNode }) => (
+    <button onClick={() => onChange({ operator: label })} className="w-full flex items-center gap-2.5 text-left py-1.5">
+      <span className={`w-[15px] h-[15px] rounded-full border flex items-center justify-center flex-shrink-0 ${on ? 'border-[#3b59f6]' : 'border-[#c8c9c4]'}`}>
+        {on && <span className="w-[7px] h-[7px] rounded-full bg-[#3b59f6]" />}
+      </span>
+      <span className="text-[13px] text-[#1a1a1a]">{label}</span>
+      {on && children}
+    </button>
+  );
+
+  return (
+    <div ref={ref} className="absolute left-0 top-[calc(100%+8px)] z-40 w-[300px] bg-white rounded-[10px] border border-[#e9eae6] shadow-[0_10px_36px_rgba(20,20,20,0.18)] overflow-hidden">
+      <div className="px-4 py-3 max-h-[320px] overflow-y-auto">
+        {field.type === 'date' && (
+          <>
+            <p className="text-[12px] font-semibold text-[#646462] mb-1">Relative</p>
+            {['more than', 'exactly', 'less than'].map(op => (
+              <Fragment key={op}><Radio on={filter.operator === op} label={op}>
+                <span className="ml-2 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                  <input type="number" min={0} value={filter.value} onChange={e => onChange({ value: e.target.value })} className="w-[70px] h-7 px-2 rounded-[6px] border border-[#e9eae6] text-[12.5px] focus:outline-none focus:border-[#1a1a1a]" />
+                  <span className="text-[12.5px] text-[#646462]">days ago</span>
+                </span>
+              </Radio></Fragment>
+            ))}
+            <p className="text-[12px] font-semibold text-[#646462] mt-2 mb-1">Absolute</p>
+            {['after', 'on', 'before', 'is unknown', 'has any value'].map(op => (
+              <Fragment key={op}><Radio on={filter.operator === op} label={op}>
+                {['after', 'on', 'before'].includes(op) && (
+                  <input type="date" value={filter.value} onClick={e => e.stopPropagation()} onChange={e => onChange({ value: e.target.value })} className="ml-2 h-7 px-2 rounded-[6px] border border-[#e9eae6] text-[12.5px] focus:outline-none focus:border-[#1a1a1a]" />
+                )}
+              </Radio></Fragment>
+            ))}
+          </>
+        )}
+        {field.type === 'number' && (
+          <>
+            {['is less than', 'is', 'is greater than', 'is unknown', 'has any value'].map(op => (
+              <Fragment key={op}><Radio on={filter.operator === op} label={op}>
+                {['is less than', 'is', 'is greater than'].includes(op) && (
+                  <input type="number" value={filter.value} onClick={e => e.stopPropagation()} onChange={e => onChange({ value: e.target.value })} className="ml-2 w-[80px] h-7 px-2 rounded-[6px] border border-[#e9eae6] text-[12.5px] focus:outline-none focus:border-[#1a1a1a]" />
+                )}
+              </Radio></Fragment>
+            ))}
+          </>
+        )}
+        {field.type === 'text' && (
+          <>
+            {['is', 'is not', 'contains', 'does not contain', 'starts with', 'is unknown', 'has any value'].map(op => (
+              <Fragment key={op}><Radio on={filter.operator === op} label={op}>
+                {!['is unknown', 'has any value'].includes(op) && (
+                  <input value={filter.value} onClick={e => e.stopPropagation()} onChange={e => onChange({ value: e.target.value })} placeholder="valor" className="ml-2 flex-1 min-w-0 h-7 px-2 rounded-[6px] border border-[#e9eae6] text-[12.5px] focus:outline-none focus:border-[#1a1a1a]" />
+                )}
+              </Radio></Fragment>
+            ))}
+          </>
+        )}
+        {field.type === 'select' && (
+          <>
+            <p className="text-[12px] font-semibold text-[#646462] mb-1">is</p>
+            {(field.options ?? []).map(o => (
+              <button key={o} onClick={() => onChange({ operator: 'is', value: o })} className="w-full flex items-center gap-2.5 text-left py-1.5">
+                <span className={`w-[15px] h-[15px] rounded-full border flex items-center justify-center flex-shrink-0 ${filter.value === o ? 'border-[#3b59f6]' : 'border-[#c8c9c4]'}`}>
+                  {filter.value === o && <span className="w-[7px] h-[7px] rounded-full bg-[#3b59f6]" />}
+                </span>
+                <span className="text-[13px] text-[#1a1a1a]">{o}</span>
+              </button>
+            ))}
+            <div className="mt-1 pt-1 border-t border-[#f1f1ee]">
+              <Radio on={filter.operator === 'is unknown'} label="is unknown" />
+              <Radio on={filter.operator === 'has any value'} label="has any value" />
+            </div>
+          </>
+        )}
+        {field.type === 'boolean' && (
+          <>
+            {['is true', 'is false', 'has any value'].map(op => (
+              <Fragment key={op}><Radio on={filter.operator === op} label={op} /></Fragment>
+            ))}
+          </>
+        )}
+      </div>
+      <button onClick={onClose} className="w-full h-10 border-t border-[#e9eae6] text-[13.5px] font-medium text-[#f4643f] hover:bg-[#fdf6f3]">Done</button>
+    </div>
+  );
+}
+
+/** The "+ Añadir filtro" dropdown: searchable field list + Nuevo atributo + CSV. */
+function AddFilterDropdown({ fields, onPick, onClose }: { fields: ContactField[]; onPick: (f: ContactField) => void; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('mousedown', onDoc); window.removeEventListener('keydown', onKey); };
+  }, [onClose]);
+  const matches = fields.filter(f => f.label.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div ref={ref} className="absolute left-0 top-[calc(100%+6px)] z-40 w-[300px] bg-white rounded-[12px] border border-[#e9eae6] shadow-[0_10px_36px_rgba(20,20,20,0.18)] overflow-hidden">
+      <div className="p-2 border-b border-[#f1f1ee]">
+        <div className="flex items-center gap-2 h-9 px-2.5 rounded-[8px] border border-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14" strokeLinecap="round"/></svg>
+          <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar personas y datos de la empresa" className="flex-1 min-w-0 text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none" />
+        </div>
+      </div>
+      <div className="max-h-[300px] overflow-y-auto py-1">
+        {q === '' && <div className="px-3 pt-1.5 pb-1 text-[12.5px] font-semibold text-[#646462]">Datos de personas</div>}
+        {matches.map(f => (
+          <button key={f.key} onClick={() => onPick(f)} className="w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            <span className="w-4 h-4 flex items-center justify-center flex-shrink-0"><CFieldIcon kind={f.icon} /></span>
+            <span className="flex-1 truncate">{f.label}</span>
+          </button>
+        ))}
+        {matches.length === 0 && <p className="px-3 py-3 text-[13px] text-[#a4a4a2]">Sin resultados.</p>}
+      </div>
+      <div className="border-t border-[#f1f1ee]">
+        <button className="w-full h-10 px-3 flex items-center gap-2.5 text-left text-[13.5px] text-[#f4643f] font-medium hover:bg-[#fdf6f3]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+          Nuevo atributo
+        </button>
+        <button className="w-full h-10 px-3 flex items-center gap-2.5 text-left text-[13px] text-[#646462] hover:bg-[#f8f8f7] border-t border-[#f1f1ee]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><path d="M4.5 12a3 3 0 0 1 .5-5.96 4 4 0 0 1 7.6-.9A2.75 2.75 0 0 1 12 12z" strokeLinejoin="round"/><path d="M8 7v4M6.3 8.7L8 7l1.7 1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span className="flex-1">Filter audience from CSV</span>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.2"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.1" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The full filter bar: a base segment chip, active-filter chips (each with its
+ *  operator popover) and the "+ Añadir filtro" trigger. Reports active filters. */
+function ContactsFilterBar({ fields, baseChip, filters, setFilters }: {
+  fields: ContactField[];
+  baseChip: { icon: CFIcon; label: string };
+  filters: ActiveFilter[];
+  setFilters: (updater: (prev: ActiveFilter[]) => ActiveFilter[]) => void;
+}) {
+  const [addOpen, setAddOpen] = useState(false);
+  const [openChip, setOpenChip] = useState<string | null>(null);
+  const byKey = (k: string) => fields.find(f => f.key === k)!;
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="inline-flex items-center gap-2 h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a]">
+        <CFieldIcon kind={baseChip.icon} /> {baseChip.label}
+      </span>
+      {filters.map(a => {
+        const field = byKey(a.fieldKey);
+        if (!field) return null;
+        return (
+          <div key={a.id} className="relative">
+            <span className={`inline-flex items-center gap-2 h-8 pl-3 pr-1.5 rounded-full border bg-white text-[13px] text-[#1a1a1a] ${openChip === a.id ? 'border-[#1a1a1a]' : 'border-[#e9eae6]'}`}>
+              <CFieldIcon kind={field.icon} />
+              <button onClick={() => setOpenChip(o => o === a.id ? null : a.id)} className="max-w-[220px] truncate">{filterChipLabel(field, a)}</button>
+              <button
+                onClick={() => { setOpenChip(null); setFilters(prev => prev.filter(x => x.id !== a.id)); }}
+                title="Quitar filtro"
+                className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${openChip === a.id ? 'bg-[#1a1a1a] text-white' : 'text-[#646462] hover:bg-[#f1f1ee]'}`}
+              >
+                <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-none stroke-current" strokeWidth="2"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </span>
+            {openChip === a.id && (
+              <ContactFilterPopover
+                field={field}
+                filter={a}
+                onChange={patch => setFilters(prev => prev.map(x => x.id === a.id ? { ...x, ...patch } : x))}
+                onClose={() => setOpenChip(null)}
+              />
+            )}
+          </div>
+        );
+      })}
+      <div className="relative">
+        <button onClick={() => setAddOpen(o => !o)} className="inline-flex items-center gap-1.5 h-8 px-2 text-[13px] text-[#f4643f] font-medium hover:underline">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+          Añadir filtro
+        </button>
+        {addOpen && (
+          <AddFilterDropdown
+            fields={fields}
+            onPick={f => { setFilters(prev => [...prev, newFilterFor(f)]); setAddOpen(false); setOpenChip(null); }}
+            onClose={() => setAddOpen(false)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** "Más" dropdown — Exportar / Archivar / Anular suscripción / Suscribir. */
+function ContactsMoreMenu({ entity, onAction }: { entity: 'usuarios' | 'empresas'; onAction: (label: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    window.addEventListener('mousedown', onDoc);
+    return () => window.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  const items = [
+    { key: 'export', label: `Exportar ${entity}`, danger: false, icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><path d="M4.5 12a3 3 0 0 1 .5-5.96 4 4 0 0 1 7.6-.9A2.75 2.75 0 0 1 12 12z" strokeLinejoin="round"/><path d="M8 11V7M6.3 8.7L8 7l1.7 1.7" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+    { key: 'archive', label: `${entity === 'usuarios' ? 'Usuarios' : 'Empresas'} del archivo`, danger: true, icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M3.8 3.8l8.4 8.4" strokeLinecap="round"/></svg> },
+    { key: 'unsub', label: `Anular suscripción de ${entity}`, danger: false, icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.5 8h5" strokeLinecap="round"/></svg> },
+    { key: 'sub', label: `Suscribir ${entity}`, danger: false, icon: <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+  ];
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]">
+        <span>Más</span>
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-[calc(100%+4px)] z-40 w-[260px] bg-white rounded-[10px] border border-[#e9eae6] shadow-[0_10px_36px_rgba(20,20,20,0.18)] py-1.5">
+          {items.map(it => (
+            <button key={it.key} onClick={() => { setOpen(false); onAction(it.label); }} className={`w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] hover:bg-[#f8f8f7] ${it.danger ? 'text-[#e5484d]' : 'text-[#1a1a1a]'}`}>
+              <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">{it.icon}</span>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Column chooser ("|||" button) — the "Atributos … mostrados" checklist. */
+function ContactsColumnChooser({ entity, columns, visible, onToggle, lockedKey }: {
+  entity: 'usuario' | 'empresa';
+  columns: ContactField[];
+  visible: Set<string>;
+  onToggle: (key: string) => void;
+  lockedKey: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    window.addEventListener('mousedown', onDoc);
+    return () => window.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-1.5 border border-[#e9eae6] rounded-[8px] px-2.5 h-8 bg-white hover:bg-[#f8f8f7]" title="Columnas">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3"><path d="M4 3v10M8 3v10M12 3v10"/></svg>
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+4px)] z-40 w-[280px] bg-white rounded-[10px] border border-[#e9eae6] shadow-[0_10px_36px_rgba(20,20,20,0.18)] py-1.5 max-h-[360px] overflow-y-auto">
+          <div className="px-3 pt-1 pb-1.5 text-[12.5px] font-semibold text-[#a4a4a2]">Atributos de {entity} mostrados</div>
+          {columns.map(c => {
+            const locked = c.key === lockedKey;
+            const on = visible.has(c.key) || locked;
+            return (
+              <button key={c.key} disabled={locked} onClick={() => onToggle(c.key)} className={`w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] ${locked ? 'cursor-default' : 'hover:bg-[#f8f8f7]'}`}>
+                <span className={`w-[15px] h-[15px] rounded-[3px] border flex items-center justify-center flex-shrink-0 ${on ? (locked ? 'bg-[#c8c9c4] border-[#c8c9c4]' : 'bg-[#3b59f6] border-[#3b59f6]') : 'bg-white border-[#c8c9c4]'}`}>
+                  {on && <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="2.4"><path d="M3 8.5l3.3 3.3L13 4.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </span>
+                <span className="w-4 h-4 flex items-center justify-center flex-shrink-0"><CFieldIcon kind={c.icon} /></span>
+                <span className="flex-1 truncate text-[#1a1a1a]">{c.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1188,6 +1588,78 @@ function ImportHero() {
   );
 }
 
+// Column catalog for the Personas table (drives the "|||" column chooser).
+const PEOPLE_COLUMNS: ContactField[] = [
+  { key: 'type', label: 'Type', icon: 'person', type: 'select' },
+  { key: 'name', label: 'Name', icon: 'person', type: 'text' },
+  { key: 'account', label: 'Account', icon: 'briefcase', type: 'text' },
+  { key: 'owner', label: 'Owner', icon: 'owner', type: 'text' },
+  { key: 'leadCategory', label: 'Lead category', icon: 'swap', type: 'select' },
+  { key: 'qualificationStatus', label: 'Qualification status', icon: 'swap', type: 'select' },
+  { key: 'conversationRating', label: 'Conversation rating', icon: 'smiley', type: 'select' },
+  { key: 'email', label: 'Email', icon: 'mail', type: 'text' },
+  { key: 'emailDomain', label: 'Email domain', icon: 'globe', type: 'text' },
+  { key: 'phone', label: 'Phone', icon: 'phone', type: 'text' },
+  { key: 'lastSeen', label: 'Last seen', icon: 'calendar', type: 'date' },
+  { key: 'firstSeen', label: 'First seen', icon: 'calendar', type: 'date' },
+  { key: 'signedUp', label: 'Signed up', icon: 'calendar', type: 'date' },
+  { key: 'webSessions', label: 'Web sessions', icon: 'bars', type: 'number' },
+  { key: 'openCases', label: 'Open cases', icon: 'bars', type: 'number' },
+  { key: 'country', label: 'Country', icon: 'globe', type: 'text' },
+  { key: 'region', label: 'Region', icon: 'globe', type: 'text' },
+  { key: 'city', label: 'City', icon: 'globe', type: 'text' },
+  { key: 'personTag', label: 'Person tag', icon: 'tag', type: 'text' },
+  { key: 'unsubscribed', label: 'Unsubscribed from emails', icon: 'block', type: 'boolean' },
+  { key: 'markedSpam', label: 'Marked email as spam', icon: 'warn', type: 'boolean' },
+  { key: 'hardBounced', label: 'Has hard bounced', icon: 'warn', type: 'boolean' },
+];
+
+/** Cell value for a Personas column, given the live row. */
+function peopleCellValue(row: ContactRow, key: string): string {
+  switch (key) {
+    case 'type': return row.type;
+    case 'lastSeen': return formatContactWhen(row.lastSeenAt);
+    case 'firstSeen':
+    case 'signedUp': return formatContactWhen(row.createdAt);
+    case 'webSessions': return String(row.webSessions ?? 0);
+    case 'openCases': return String(row.openCases ?? 0);
+    case 'city': return row.city || 'Desconocido';
+    case 'email': return row.email || '—';
+    case 'emailDomain': return row.email?.split('@')[1] || 'Desconocido';
+    default: return 'Desconocido';
+  }
+}
+
+/** Apply one active filter to a row where the field maps to real data. */
+function rowMatchesFilter(getVal: (key: string) => string | number | null, f: ContactField, a: ActiveFilter): boolean {
+  const raw = getVal(a.fieldKey);
+  if (raw == null && a.operator !== 'is unknown') {
+    // Unmapped/unknown fields: only exclude on strict equality-style operators.
+    return !['is', 'contains', 'starts with', 'is true'].includes(a.operator);
+  }
+  if (f.type === 'number') {
+    const n = Number(raw ?? 0), v = Number(a.value);
+    if (Number.isNaN(v)) return true;
+    if (a.operator === 'is') return n === v;
+    if (a.operator === 'is less than') return n < v;
+    if (a.operator === 'is greater than') return n > v;
+    return true;
+  }
+  if (f.type === 'select' || f.type === 'text') {
+    const s = String(raw ?? '').toLowerCase(), v = a.value.toLowerCase();
+    if (a.operator === 'is unknown') return !raw;
+    if (a.operator === 'has any value') return !!raw;
+    if (!v) return true;
+    if (a.operator === 'is') return s === v;
+    if (a.operator === 'is not') return s !== v;
+    if (a.operator === 'contains') return s.includes(v);
+    if (a.operator === 'does not contain') return !s.includes(v);
+    if (a.operator === 'starts with') return s.startsWith(v);
+    return true;
+  }
+  return true; // date / boolean: chip shown, no client-side filtering
+}
+
 function UsersTable({
   rows, loading, error, totalLabel, onRowClick, onAction, onRefresh, onBulkTag, onBulkMessage,
 }: {
@@ -1205,14 +1677,33 @@ function UsersTable({
   const [search, setSearch] = useState('');
   const [showVerifyBanner, setShowVerifyBanner] = useState(true);
   const [view, setView] = useState<'grid' | 'list'>('list');
+  const [filters, setFilters] = useState<ActiveFilter[]>([]);
+  const [visibleCols, setVisibleCols] = useState<Set<string>>(
+    () => new Set(['type', 'lastSeen', 'firstSeen', 'signedUp', 'openCases', 'city']),
+  );
 
   useEffect(() => { setSelected(new Set()); }, [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(r => `${r.name} ${r.email} ${r.channel} ${r.city}`.toLowerCase().includes(q));
-  }, [rows, search]);
+    let out = rows;
+    if (q) out = out.filter(r => `${r.name} ${r.email} ${r.channel} ${r.city}`.toLowerCase().includes(q));
+    if (filters.length > 0) {
+      out = out.filter(r => filters.every(a => {
+        const field = PEOPLE_FILTER_FIELDS.find(f => f.key === a.fieldKey);
+        if (!field) return true;
+        return rowMatchesFilter(k => {
+          if (k === 'name') return r.name;
+          if (k === 'email') return r.email;
+          if (k === 'city') return r.city;
+          if (k === 'type') return r.type;
+          if (k === 'webSessions') return r.webSessions;
+          return null;
+        }, field, a);
+      }));
+    }
+    return out;
+  }, [rows, search, filters]);
 
   const allSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
   function toggleAll() {
@@ -1226,6 +1717,16 @@ function UsersTable({
       return next;
     });
   }
+  function toggleCol(key: string) {
+    setVisibleCols(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  // Optional columns to render (name is the fixed first column, always shown).
+  const shownCols = PEOPLE_COLUMNS.filter(c => c.key !== 'name' && visibleCols.has(c.key));
 
   const selectionCount = selected.size;
   const headerLabel = selectionCount > 0
@@ -1233,6 +1734,16 @@ function UsersTable({
     : totalLabel;
   return (
     <div className="mx-4 flex flex-col gap-3">
+      {/* Filter bar — identical format to the audience filter used elsewhere */}
+      <div className="pt-1">
+        <ContactsFilterBar
+          fields={PEOPLE_FILTER_FIELDS}
+          baseChip={{ icon: 'people', label: 'Usuarios' }}
+          filters={filters}
+          setFilters={setFilters}
+        />
+      </div>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[18px] font-semibold text-[#1a1a1a]">{headerLabel}</span>
@@ -1251,6 +1762,13 @@ function UsersTable({
             >
               <img src={ICON_TAG} alt="" className="w-3.5 h-3.5" /><span>Añadir etiqueta</span>
             </button>
+            <ContactsMoreMenu
+              entity="usuarios"
+              onAction={label => {
+                const n = selectionCount || filtered.length;
+                onAction(`${label} · ${n} usuario${n === 1 ? '' : 's'}`);
+              }}
+            />
             <button
               onClick={onRefresh}
               className="flex items-center gap-1 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]"
@@ -1271,6 +1789,7 @@ function UsersTable({
               className="h-8 w-[220px] pl-8 pr-3 border border-[#e9eae6] rounded-[8px] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
             />
           </div>
+          <ContactsColumnChooser entity="usuario" columns={PEOPLE_COLUMNS} visible={visibleCols} onToggle={toggleCol} lockedKey="name" />
           <div className="flex items-center border border-[#e9eae6] rounded-[8px] overflow-hidden">
             <button onClick={() => setView('grid')} className={`px-2 py-1.5 ${view === 'grid' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'} border-r border-[#e9eae6]`} title="Vista de cuadrícula">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -1301,71 +1820,69 @@ function UsersTable({
         </div>
       )}
 
-      <div className="w-full">
-        <div className="flex items-center border-b border-[#e9eae6] pb-2 text-[12px] font-medium text-[#646462]">
-          <div className="w-7 flex-shrink-0">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 rounded border-[#e9eae6]" />
+      <div className="w-full overflow-x-auto">
+        <div className="min-w-max">
+          <div className="flex items-center border-b border-[#e9eae6] pb-2 text-[12px] font-medium text-[#646462]">
+            <div className="w-7 flex-shrink-0">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 rounded border-[#e9eae6]" />
+            </div>
+            <div className="w-[240px] flex-shrink-0">Nombre</div>
+            {shownCols.map(c => (
+              <div key={c.key} className="w-[130px] flex-shrink-0 flex items-center gap-1">
+                <span className={c.key === 'lastSeen' ? 'text-[#e35712]' : ''}>{c.label}</span>
+                {c.key === 'lastSeen' && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-60"><path d="M5 2L7 5H3L5 2Z" fill="#e35712"/><path d="M5 8L3 5H7L5 8Z" fill="#e35712" opacity="0.4"/></svg>
+                )}
+              </div>
+            ))}
           </div>
-          <div className="flex-1 min-w-[180px]">Nombre</div>
-          <div className="w-[130px] flex-shrink-0 flex items-center gap-1">
-            <span className="text-[#e35712]">Last seen</span>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-60">
-              <path d="M5 2L7 5H3L5 2Z" fill="#e35712"/>
-              <path d="M5 8L3 5H7L5 8Z" fill="#e35712" opacity="0.4"/>
-            </svg>
-          </div>
-          <div className="w-[90px] flex-shrink-0">Type</div>
-          <div className="w-[110px] flex-shrink-0">First seen</div>
-          <div className="w-[100px] flex-shrink-0">Signed up</div>
-          <div className="w-[100px] flex-shrink-0">Open cases</div>
-          <div className="w-[100px] flex-shrink-0">City</div>
+          {loading && rows.length === 0 && (
+            <div className="py-12 text-center text-[13px] text-[#646462]">Cargando contactos…</div>
+          )}
+          {error && (
+            <div className="py-12 text-center text-[13px] text-[#b91c1c]">No se pudo cargar la lista de contactos.</div>
+          )}
+          {!loading && !error && filtered.length === 0 && (
+            <div className="py-12 text-center text-[13px] text-[#646462]">
+              {search || filters.length ? 'Ningún usuario coincide con los filtros' : 'No hay contactos en este filtro.'}
+            </div>
+          )}
+          {filtered.map(row => (
+            <div
+              key={row.id}
+              onClick={() => onRowClick(row.id)}
+              className="flex items-center border-b border-[#e9eae6] py-[10px] hover:bg-[#f8f8f7] cursor-pointer"
+            >
+              <div className="w-7 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(row.id)}
+                  onChange={() => toggleOne(row.id)}
+                  className="w-3.5 h-3.5 rounded border-[#e9eae6]"
+                />
+              </div>
+              <div className="w-[240px] flex-shrink-0 flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold text-white flex-shrink-0" style={{ backgroundColor: row.color }}>
+                  {row.initial}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[13px] font-medium text-[#1a1a1a] truncate" title={row.name}>{row.name}</span>
+                  <span className="text-[12px] text-[#646462] truncate" title={row.email || row.channel}>{row.email || row.channel}</span>
+                </div>
+              </div>
+              {shownCols.map(c => (
+                <div key={c.key} className={`w-[130px] flex-shrink-0 text-[13px] truncate ${peopleCellValue(row, c.key) === 'Desconocido' ? 'text-[#a4a4a2]' : 'text-[#1a1a1a]'}`}>
+                  {peopleCellValue(row, c.key)}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
-        {loading && rows.length === 0 && (
-          <div className="py-12 text-center text-[13px] text-[#646462]">Cargando contactos…</div>
-        )}
-        {error && (
-          <div className="py-12 text-center text-[13px] text-[#b91c1c]">No se pudo cargar la lista de contactos.</div>
-        )}
-        {!loading && !error && filtered.length === 0 && (
-          <div className="py-12 text-center text-[13px] text-[#646462]">
-            {search ? 'Ningún contacto coincide con la búsqueda.' : 'No hay contactos en este filtro.'}
-          </div>
-        )}
-        {filtered.map(row => (
-          <div
-            key={row.id}
-            onClick={() => onRowClick(row.id)}
-            className="flex items-center border-b border-[#e9eae6] py-[10px] hover:bg-[#f8f8f7] cursor-pointer"
-          >
-            <div className="w-7 flex-shrink-0" onClick={e => e.stopPropagation()}>
-              <input
-                type="checkbox"
-                checked={selected.has(row.id)}
-                onChange={() => toggleOne(row.id)}
-                className="w-3.5 h-3.5 rounded border-[#e9eae6]"
-              />
-            </div>
-            <div className="flex-1 min-w-[180px] flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold text-white flex-shrink-0" style={{ backgroundColor: row.color }}>
-                {row.initial}
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-[13px] font-medium text-[#1a1a1a] truncate" title={row.name}>{row.name}</span>
-                <span className="text-[12px] text-[#646462] truncate" title={row.email || row.channel}>{row.email || row.channel}</span>
-              </div>
-            </div>
-            <div className="w-[130px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{formatContactWhen(row.lastSeenAt)}</div>
-            <div className="w-[90px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{row.type}</div>
-            <div className="w-[110px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{formatContactWhen(row.createdAt)}</div>
-            <div className="w-[100px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{formatContactWhen(row.createdAt)}</div>
-            <div className="w-[100px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{row.openCases}</div>
-            <div className="w-[100px] flex-shrink-0 text-[13px] text-[#646462] truncate" title={row.city}>{row.city}</div>
-          </div>
-        ))}
       </div>
     </div>
   );
 }
+
 
 // ── Companies Table ───────────────────────────────────────────────────────────
 // Derives company records from the customers list (grouped by customer.company)
@@ -1382,6 +1899,31 @@ interface CompanyRow {
   openCases: number;
 }
 
+
+// Column catalog for the Empresas table.
+const COMPANY_COLUMNS: ContactField[] = [
+  { key: 'name', label: 'Company name', icon: 'building', type: 'text' },
+  { key: 'lastSeen', label: 'Last seen', icon: 'calendar', type: 'date' },
+  { key: 'userCount', label: 'People', icon: 'people', type: 'number' },
+  { key: 'monthlySpend', label: 'Monthly spend', icon: 'bars', type: 'number' },
+  { key: 'plan', label: 'Plan', icon: 'swap', type: 'select' },
+  { key: 'industry', label: 'Industry', icon: 'briefcase', type: 'text' },
+  { key: 'website', label: 'Website', icon: 'globe', type: 'text' },
+  { key: 'owner', label: 'Owner', icon: 'owner', type: 'text' },
+  { key: 'country', label: 'Country', icon: 'globe', type: 'text' },
+  { key: 'city', label: 'City', icon: 'globe', type: 'text' },
+  { key: 'companyTag', label: 'Company tag', icon: 'tag', type: 'text' },
+];
+function companyCellValue(row: any, key: string): string {
+  switch (key) {
+    case 'lastSeen': return formatContactWhen(row.lastActivity);
+    case 'userCount': return row.employees != null ? String(row.employees) : 'Desconocido';
+    case 'industry': return row.industry && row.industry !== '—' ? row.industry : 'Desconocido';
+    case 'country': return row.country && row.country !== '—' ? row.country : 'Desconocido';
+    case 'website': return row.domain || 'Desconocido';
+    default: return 'Desconocido';
+  }
+}
 
 function CompaniesTable({
   companies, segment, loading, error, onRefresh, onCreate, onDelete,
@@ -1401,6 +1943,14 @@ function CompaniesTable({
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<ActiveFilter[]>([]);
+  const [visibleCols, setVisibleCols] = useState<Set<string>>(() => new Set(['lastSeen', 'userCount', 'country', 'industry']));
+  const [moreToast, setMoreToast] = useState<string | null>(null);
+  useEffect(() => { if (!moreToast) return; const t = setTimeout(() => setMoreToast(null), 3000); return () => clearTimeout(t); }, [moreToast]);
+  function toggleCol(key: string) {
+    setVisibleCols(prev => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  }
+  const shownCols = COMPANY_COLUMNS.filter(c => c.key !== 'name' && visibleCols.has(c.key));
 
   // Map real company records onto the display-row shape the table renders.
   const rows = useMemo(() => {
@@ -1441,9 +1991,24 @@ function CompaniesTable({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(r => `${r.name} ${r.country} ${r.industry} ${r.domain}`.toLowerCase().includes(q));
-  }, [rows, search]);
+    let out = rows;
+    if (q) out = out.filter(r => `${r.name} ${r.country} ${r.industry} ${r.domain}`.toLowerCase().includes(q));
+    if (filters.length > 0) {
+      out = out.filter(r => filters.every(a => {
+        const field = COMPANY_FILTER_FIELDS.find(f => f.key === a.fieldKey);
+        if (!field) return true;
+        return rowMatchesFilter(k => {
+          if (k === 'name') return r.name;
+          if (k === 'country') return r.country;
+          if (k === 'industry') return r.industry;
+          if (k === 'website') return r.domain;
+          if (k === 'userCount' || k === 'size') return r.employees;
+          return null;
+        }, field, a);
+      }));
+    }
+    return out;
+  }, [rows, search, filters]);
 
   const allSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
   const toggleAll = () => {
@@ -1464,11 +2029,24 @@ function CompaniesTable({
     : `${rows.length} empresa${rows.length === 1 ? '' : 's'}`;
 
   return (
-    <div className="mx-4 flex flex-col gap-3">
+    <div className="mx-4 flex flex-col gap-3 relative">
+      {moreToast && (
+        <div className="absolute top-0 right-0 z-50 px-4 py-2.5 rounded-[8px] text-[13px] font-medium shadow-lg bg-[#1a1a1a] text-white">{moreToast}</div>
+      )}
+      {/* Filter bar — same format as Personas */}
+      <div className="pt-1">
+        <ContactsFilterBar
+          fields={COMPANY_FILTER_FIELDS}
+          baseChip={{ icon: 'building', label: 'Empresas' }}
+          filters={filters}
+          setFilters={setFilters}
+        />
+      </div>
       {/* Toolbar */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[18px] font-semibold text-[#1a1a1a]">{headerLabel}</span>
+          <ContactsMoreMenu entity="empresas" onAction={label => { const n = selCount || filtered.length; setMoreToast(`${label} · ${n} empresa${n === 1 ? '' : 's'}`); }} />
           <button
             onClick={onRefresh}
             className="flex items-center gap-1 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]"
@@ -1493,6 +2071,7 @@ function CompaniesTable({
               className="h-8 w-[220px] pl-8 pr-3 border border-[#e9eae6] rounded-[8px] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
             />
           </div>
+          <ContactsColumnChooser entity="empresa" columns={COMPANY_COLUMNS} visible={visibleCols} onToggle={toggleCol} lockedKey="name" />
           <div className="flex items-center border border-[#e9eae6] rounded-[8px] overflow-hidden">
             <button onClick={() => setViewMode('grid')} className={`px-2 py-1.5 ${viewMode === 'grid' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'} border-r border-[#e9eae6]`} title="Cuadrícula">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -1558,22 +2137,21 @@ function CompaniesTable({
 
       {/* List view */}
       {viewMode === 'list' && !loading && !error && (
-        <div className="w-full">
+        <div className="w-full overflow-x-auto">
+         <div className="min-w-max">
           <div className="flex items-center border-b border-[#e9eae6] pb-2 text-[12px] font-medium text-[#646462]">
             <div className="w-7 flex-shrink-0">
               <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 rounded border-[#e9eae6]"/>
             </div>
-            <div className="flex-1 min-w-[180px]">Empresa</div>
-            <div className="w-[110px] flex-shrink-0 flex items-center gap-1">
-              <span className="text-[#e35712]">Última actividad</span>
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-60">
-                <path d="M5 2L7 5H3L5 2Z" fill="#e35712"/>
-                <path d="M5 8L3 5H7L5 8Z" fill="#e35712" opacity="0.4"/>
-              </svg>
-            </div>
-            <div className="w-[90px] flex-shrink-0">Empleados</div>
-            <div className="w-[110px] flex-shrink-0">País</div>
-            <div className="w-[110px] flex-shrink-0">Sector</div>
+            <div className="w-[240px] flex-shrink-0">Empresa</div>
+            {shownCols.map(c => (
+              <div key={c.key} className="w-[130px] flex-shrink-0 flex items-center gap-1">
+                <span className={c.key === 'lastSeen' ? 'text-[#e35712]' : ''}>{c.label}</span>
+                {c.key === 'lastSeen' && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-60"><path d="M5 2L7 5H3L5 2Z" fill="#e35712"/><path d="M5 8L3 5H7L5 8Z" fill="#e35712" opacity="0.4"/></svg>
+                )}
+              </div>
+            ))}
             <div className="w-[90px] flex-shrink-0"></div>
           </div>
           {creating && (
@@ -1606,7 +2184,7 @@ function CompaniesTable({
               <div className="w-7 flex-shrink-0" onClick={e => e.stopPropagation()}>
                 <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleOne(row.id)} className="w-3.5 h-3.5 rounded border-[#e9eae6]"/>
               </div>
-              <div className="flex-1 min-w-[180px] flex items-center gap-2 min-w-0">
+              <div className="w-[240px] flex-shrink-0 flex items-center gap-2 min-w-0">
                 <div className="w-7 h-7 rounded-[6px] flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0" style={{ backgroundColor: row.color }}>
                   {row.initial}
                 </div>
@@ -1615,10 +2193,11 @@ function CompaniesTable({
                   <span className="text-[12px] text-[#646462] truncate">{row.domain}</span>
                 </div>
               </div>
-              <div className="w-[110px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{formatContactWhen(row.lastActivity)}</div>
-              <div className="w-[90px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{row.employees != null ? row.employees : '—'}</div>
-              <div className="w-[110px] flex-shrink-0 text-[13px] text-[#646462] truncate">{row.country}</div>
-              <div className="w-[110px] flex-shrink-0 text-[13px] text-[#1a1a1a] truncate">{row.industry}</div>
+              {shownCols.map(c => (
+                <div key={c.key} className={`w-[130px] flex-shrink-0 text-[13px] truncate ${companyCellValue(row, c.key) === 'Desconocido' ? 'text-[#a4a4a2]' : 'text-[#1a1a1a]'}`}>
+                  {companyCellValue(row, c.key)}
+                </div>
+              ))}
               <div className="w-[90px] flex-shrink-0 text-[13px]" onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => handleDeleteRow(row.id)}
@@ -1629,6 +2208,7 @@ function CompaniesTable({
               </div>
             </div>
           ))}
+         </div>
         </div>
       )}
     </div>
