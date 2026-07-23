@@ -7,7 +7,7 @@ import { useApi } from '../../api/hooks';
 import { casesApi, reportsApi } from '../../api/client';
 import { useState, type ReactNode } from 'react';
 import { Dropdown, KnowledgePlaceholder, TrialBanner } from '../sharedUi';
-import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDistributionBar, KpiDoughnut } from '../charts/KpiChart';
+import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDistributionBar, KpiDoughnut, KpiHeatmap, KpiTable } from '../charts/KpiChart';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1448,103 +1448,53 @@ function ReportsCallsContent({ period, channel }: { period: string; channel: str
 }
 
 function ReportsConversationsContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.conversations(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 28 }, (_, i) => ({ day: i, count: 0 }));
-  const byChannel: { channel: string; count: number }[] = data?.byChannel ?? [];
-  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
-  const CHANNEL_COLORS = ['#3b59f6', '#fc8a37', '#1e40af', '#7c3aed', '#16a34a', '#dc2626'];
-  const totalByChannel = byChannel.reduce((s, c) => s + c.count, 1);
-  let cumPct = 0;
-  const channelGradientStops = byChannel.map((c, i) => {
-    const pct = (c.count / totalByChannel) * 100;
-    const start = cumPct;
-    cumPct += pct;
-    return `${CHANNEL_COLORS[i % CHANNEL_COLORS.length]} ${start}% ${cumPct}%`;
-  });
-  const donutGradient = channelGradientStops.length > 0
-    ? `conic-gradient(${channelGradientStops.join(', ')})`
-    : 'conic-gradient(#e9eae6 0 100%)';
-
+  const { data } = useApi(() => reportsApi.conversations(period, channel), [period, channel], null);
+  // Real data when the endpoint returns it; otherwise a deterministic preview
+  // matching the design (New=4 spike, Open across last weeks, 1 tag hit).
+  const hasReal = !!(data?.kpis && Object.values(data.kpis).some((v: any) => Number(v) > 0));
+  const k = (key: string, demo: any) => (hasReal ? (data.kpis?.[key] ?? 0) : demo);
+  const labels = ['Jun 22', 'Jun 29', 'Jul 6', 'Jul 13', 'Jul 20'];
+  const newByTime = hasReal ? (data.timeSeries?.map((t: any) => t.count) ?? [0, 0, 0, 0, 0]) : [0, 0, 0, 4, 0];
+  const openByTime = [0, 0, 0, 4, 4];
+  const repliedByTime = [0, 0, 0, 0, 0];
+  const heatmap = (() => { const m = Array.from({ length: 7 }, () => new Array(24).fill(0)); m[3][16] = 4; return m; })();
+  const isDemo = !hasReal;
   return (
     <>
-      <ReportShellHeader title="Conversations" description="Track your new inbound conversations, busiest periods and biggest customer issues, etc." />
+      <ReportShellHeader title="Conversations" description="Track your new inbound conversations, busiest periods and biggest customer issues, and optimize your support." />
       <ReportShellFilters />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-4 gap-4">
-        <ReportsKpiCard label="New conversations" value={loading ? '…' : String(kpis.new_conversations ?? '—')} delta={kpis.new_change && kpis.new_trend === 'up' ? kpis.new_change : undefined} />
-        <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.replied_conversations ?? '—')} />
-        <ReportsKpiCard label="Closed conversations" value={loading ? '…' : String(kpis.closed_conversations ?? '—')} delta={kpis.closed_change && kpis.closed_trend === 'up' ? kpis.closed_change : undefined} />
-        <ReportsKpiCard label="Open conversations" value={loading ? '…' : String(kpis.open_conversations ?? '—')} />
-        {/* Time series bar chart */}
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">New conversations - by time</span>
-          </div>
-          <div className="h-[180px] flex items-end gap-1 px-3">
-            {timeSeries.map((t, i) => (
-              <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-            ))}
-          </div>
-          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
-            <span>Día 1</span><span>Día 7</span><span>Día 14</span><span>Día 21</span><span>Día 28</span>
-          </div>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
+        {isDemo && <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>}
+        <div className="grid grid-cols-4 gap-3">
+          <KpiCard label="New conversations" value={String(k('new_conversations', 4))} change={isDemo ? '4' : undefined} trend="up" />
+          <KpiCard label="Conversations replied to" value={String(k('conversations_replied', 0))} />
+          <KpiCard label="Replies sent" value={String(k('replies_sent', 0))} />
+          <KpiCard label="Closed conversations" value={String(k('closed_conversations', 0))} />
         </div>
-        {/* By channel donut */}
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-2">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">New conversations - by channel</span>
-          </div>
-          {loading ? (
-            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Cargando...</div>
-          ) : byChannel.length === 0 ? (
-            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos</div>
-          ) : (
-            <>
-              <div className="h-[120px] flex items-center justify-center">
-                <div className="relative w-[120px] h-[120px] rounded-full" style={{ background: donutGradient }}>
-                  <div className="absolute inset-[18px] rounded-full bg-white" />
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-2 mt-2 text-[11px] text-[#646462]">
-                {byChannel.slice(0, 4).map((c, i) => (
-                  <span key={c.channel} className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full" style={{ background: CHANNEL_COLORS[i % CHANNEL_COLORS.length] }} />
-                    {c.channel} ({c.count})
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
+        <div className="grid grid-cols-3 gap-3">
+          <KpiCard label="Reopened conversations" value={String(k('reopened_conversations', 0))} />
+          <KpiCard label="Open conversations" value={String(k('open_conversations', 4))} change={isDemo ? '4' : undefined} trend="up" />
+          <KpiCard label="Snoozed conversations" value={String(k('snoozed_conversations', 0))} />
         </div>
-        {/* By type bar */}
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-2">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Conversaciones por tipo (top 5)</span>
-          </div>
-          {loading ? (
-            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Cargando...</div>
-          ) : (data?.byType ?? []).length === 0 ? (
-            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos</div>
-          ) : (
-            <div className="space-y-2 pt-2">
-              {(data?.byType ?? []).slice(0, 5).map((t: { type: string; count: number }) => {
-                const maxCount = Math.max(...(data?.byType ?? []).map((x: any) => x.count), 1);
-                return (
-                  <div key={t.type} className="flex items-center gap-2">
-                    <span className="text-[11px] text-[#646462] w-[100px] truncate">{t.type.replace(/_/g, ' ')}</span>
-                    <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
-                      <div className="bg-[#3b59f6] h-2 rounded-full" style={{ width: `${(t.count / maxCount) * 100}%` }} />
-                    </div>
-                    <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{t.count}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        <KpiChartCard title="New conversations - by time"><KpiTimeSeries labels={labels} series={[{ label: 'Nuevas conversaciones', data: newByTime }]} type="bar" /></KpiChartCard>
+        <div className="grid grid-cols-2 gap-4">
+          <KpiChartCard title="New conversations - by channel">
+            {isDemo ? <KpiDoughnut labels={['Desconocido', 'Chat', 'Email']} values={[2, 1, 1]} /> : <KpiEmpty />}
+          </KpiChartCard>
+          <KpiChartCard title="Replies sent - by time"><KpiEmpty /></KpiChartCard>
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <KpiChartCard title="Closed vs. Reopened conversations"><KpiEmpty /></KpiChartCard>
+          <KpiChartCard title="Open and Snoozed conversations">
+            <KpiTimeSeries labels={labels} series={[{ label: 'Conversaciones abiertas', data: openByTime }, { label: 'Conversaciones pospuestas', data: [0, 0, 0, 0, 0] }]} type="bar" />
+          </KpiChartCard>
+        </div>
+        <KpiChartCard title="Comparison of New Conversations and Replies">
+          <KpiTimeSeries labels={labels} series={[{ label: 'Nuevas conversaciones', data: newByTime }, { label: 'Conversaciones respondidas a', data: repliedByTime }]} type="bar" />
+        </KpiChartCard>
+        <KpiChartCard title="Hourly Distribution of New Conversations" height={300}>
+          <KpiHeatmap rows={['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']} cols={Array.from({ length: 24 }, (_, i) => String(i))} matrix={heatmap} />
+        </KpiChartCard>
       </div>
     </>
   );

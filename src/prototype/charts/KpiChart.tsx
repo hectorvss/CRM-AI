@@ -8,7 +8,7 @@
 // thin marks, a legend for ≥2 series, recessive grid/axes, tooltips on by
 // default. Cards degrade to an Intercom-style "sin datos" empty state.
 // ─────────────────────────────────────────────────────────────────────────────
-import { type ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale, TimeScale,
@@ -177,6 +177,58 @@ export function KpiDistributionBar({ segments }: { segments: { label: string; va
         ))}
       </div>
     </div>
+  );
+}
+
+// ── Heatmap — e.g. hourly distribution (día × hora) ──────────────────────────
+export function KpiHeatmap({ rows, cols, matrix, colorHue = '#3b59f6' }: {
+  rows: string[]; cols: string[]; matrix: number[][]; colorHue?: string;
+}) {
+  const max = Math.max(1, ...matrix.flat());
+  return (
+    <div className="overflow-x-auto">
+      <div className="inline-grid gap-0.5" style={{ gridTemplateColumns: `36px repeat(${cols.length}, minmax(20px,1fr))` }}>
+        <div />
+        {cols.map(c => <div key={c} className="text-[9.5px] text-[#9a9a97] text-center pb-1">{c}</div>)}
+        {rows.map((r, ri) => (
+          <Fragment key={`r${ri}`}>
+            <div className="text-[10.5px] text-[#646462] pr-1 flex items-center">{r}</div>
+            {cols.map((_, ci) => {
+              const v = matrix[ri]?.[ci] ?? 0;
+              const a = v / max;
+              return (
+                <div key={`${ri}-${ci}`} title={`${v} · ${r} ${cols[ci]}`}
+                  className="h-6 rounded-[3px] flex items-center justify-center text-[9px] font-medium"
+                  style={{ background: a === 0 ? '#f3f3f1' : `${colorHue}${Math.round(30 + a * 225).toString(16).padStart(2, '0')}`, color: a > 0.55 ? '#fff' : '#646462' }}>
+                  {v > 0 ? v : ''}
+                </div>
+              );
+            })}
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Simple table (report rows) ───────────────────────────────────────────────
+export function KpiTable({ columns, rows }: { columns: string[]; rows: (ReactNode)[][] }) {
+  if (!rows.length) return <KpiEmpty text="Esta tabla no tiene datos" hint="Para ver los datos aquí, cambia los ajustes del gráfico" />;
+  return (
+    <table className="w-full text-[13px]">
+      <thead>
+        <tr className="text-[12px] font-semibold text-[#646462] border-b border-[#f1f1ee]">
+          {columns.map((c, i) => <th key={c} className={`py-2 ${i === 0 ? 'text-left' : 'text-right'} px-2`}>{c}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, ri) => (
+          <tr key={ri} className="border-b border-[#f6f6f4]">
+            {r.map((cell, ci) => <td key={ci} className={`py-2.5 px-2 ${ci === 0 ? 'text-left text-[#1a1a1a] font-medium' : 'text-right text-[#646462]'}`}>{cell}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
