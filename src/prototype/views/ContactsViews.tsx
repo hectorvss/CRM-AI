@@ -903,25 +903,6 @@ function ContactsSidebar({
           </div>
         )}
       </div>
-
-      <div className="h-px bg-[#e9eae6] mx-2 my-1" />
-
-      <button
-        onClick={() => { setActiveItem('conversaciones'); }}
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-[8px] w-full ${activeItem === 'conversaciones' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]' : 'hover:bg-white/60'}`}
-      >
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] opacity-50" strokeWidth="1.3"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/><path d="M5 14l3-2.5h5"/></svg>
-        <span className={`text-[13px] text-[#1a1a1a] ${activeItem === 'conversaciones' ? 'font-semibold' : ''}`}>Conversaciones</span>
-      </button>
-
-      {/* Mapa de clientes */}
-      <button
-        onClick={() => { setActiveItem('mapa'); onNavigate('mapa' as unknown as View); }}
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-[8px] w-full ${activeItem === 'mapa' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]' : 'hover:bg-white/60'}`}
-      >
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] opacity-50" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 2c0 0-3 2.5-3 6s3 6 3 6M8 2c0 0 3 2.5 3 6s-3 6-3 6M2 8h12"/></svg>
-        <span className={`text-[13px] text-[#1a1a1a] ${activeItem === 'mapa' ? 'font-semibold' : ''}`}>Mapa de clientes</span>
-      </button>
     </div>
   );
 }
