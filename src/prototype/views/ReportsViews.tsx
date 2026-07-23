@@ -23,7 +23,8 @@ type ReportsSubView =
   | 'finAgent' | 'copilot'
   | 'calls' | 'conversations' | 'csat' | 'effectiveness'
   | 'responsiveness' | 'slas' | 'teamInbox' | 'teammate' | 'tickets'
-  | 'articles' | 'outboundEng' | 'administrar';
+  | 'articles' | 'outboundEng' | 'administrar'
+  | 'workflows' | 'workflowsLeadGen';
 
 type ReportsItemIcon = 'topic' | 'export' | 'schedule' | 'folder' | 'admin'
   | 'lightbulb' | 'sparkles' | 'fin' | 'copilot' | 'phone' | 'chat' | 'star'
@@ -83,8 +84,8 @@ const ALL_REPORTS: AllReportRow[] = [
   { t: 'Fin AI Agent', sub: 'finAgent', d: 'Find out how Fin AI Agent is performing in conversations and impacting your resolution rates.' },
   { t: 'Fin for Ecommerce', sub: 'finAgent', d: 'Analyze how Fin for Ecommerce is performing, including carousel engagement and checkout activity.' },
   { t: 'Fin for Service', sub: 'finAgent', d: 'Find out how Fin for Service is performing in conversations and impacting your resolution rates.' },
-  { t: 'Flujos de trabajo', legacy: true },
-  { t: 'Flujos de trabajo (generación de prospectos)', legacy: true },
+  { t: 'Flujos de trabajo', sub: 'workflows', legacy: true },
+  { t: 'Flujos de trabajo (generación de prospectos)', sub: 'workflowsLeadGen', legacy: true },
   { t: 'Información general sobre las relaciones con el cliente', sub: 'outboundEng', legacy: true },
   { t: 'Leads', legacy: true },
   { t: 'Monitors', sub: 'finAgent', d: 'Monitor and improve Fin AI Agent quality at scale' },
@@ -245,6 +246,21 @@ function mockSeries(base: number, amp: number, slope = 0, seed = 3, decimals = 0
   const r = mulberry32(seed);
   const f = Math.pow(10, decimals);
   return MOCK_WEEKS.map((_, i) => Math.max(0, Math.round((base + slope * i + Math.sin(i / 2.1) * amp + (r() - 0.5) * amp) * f) / f));
+}
+// Daily labels (one week) for reports that Intercom renders per-day rather than
+// per-week (e.g. the legacy Flujos de trabajo reports).
+const MOCK_DAYS = ['17 jul', '18 jul', '19 jul', '20 jul', '21 jul', '22 jul', '23 jul'];
+function mockDaily(base: number, amp: number, slope = 0, seed = 3): number[] {
+  const r = mulberry32(seed);
+  return MOCK_DAYS.map((_, i) => Math.max(0, Math.round(base + slope * i + Math.sin(i / 1.6) * amp + (r() - 0.5) * amp)));
+}
+// Weekly activity heatmap (hours × weekdays) with a plausible support-load shape:
+// busiest midday on weekdays, quiet nights and weekends.
+function mockHeatmap(seed: number): number[][] {
+  const r = mulberry32(seed);
+  const hourWeight = [0.05, 0.05, 0.15, 0.55, 0.95, 0.8, 0.45, 0.15]; // 12a,3a,6a,9a,12p,3p,6p,9p
+  const dayWeight = [1, 1, 0.95, 1, 0.9, 0.45, 0.35];                  // Lu..Do
+  return hourWeight.map(hw => dayWeight.map(dw => Math.round(hw * dw * 24 * (0.6 + r() * 0.8))));
 }
 
 // ── 1. Resumen — dashboard de KPIs (Chart.js vía KpiChart) ────────────────────
@@ -2224,71 +2240,153 @@ function ReportsTicketsContent({ period, channel }: { period: string; channel: s
 }
 
 function ReportsFinAgentContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.finagent(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const agents: any[] = data?.agentBreakdown ?? [];
+  useApi(() => reportsApi.finagent(period, channel), [period, channel], null);
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
   return (
     <>
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-[18px] font-bold text-[#1a1a1a] truncate">Fin AI Agent</h1>
-          <p className="text-[12.5px] text-[#646462] mt-0.5 truncate">Métricas de resolución, calidad y volumen del agente Fin.</p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-[12px] text-[#646462]">Propietario: <span className="text-[#1a1a1a]">Clain</span></span>
-          <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
-            Compartir
-          </button>
-        </div>
-      </div>
-      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0 flex-wrap">
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-          Período: {period}
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-        </button>
-        <div className="ml-auto flex items-center gap-1 text-[12px] text-[#646462]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
-          Madrid time (GMT+2)
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        {/* KPI Cards */}
-        <ReportsKpiCard label="Tasa de auto-resolución IA" value={loading ? '…' : kpis.auto_resolution_rate ?? '—'} delta={kpis.auto_resolution_change && kpis.auto_resolution_change !== '0%' ? kpis.auto_resolution_change : undefined} />
-        <ReportsKpiCard label="Casos resueltos por IA" value={loading ? '…' : String(kpis.cases_resolved_by_ai ?? 0)} />
-        <ReportsKpiCard label="Total casos IA" value={loading ? '…' : String(kpis.total_ai_cases ?? '—')} />
-        <ReportsKpiCard label="Avg. tasa de éxito agentes" value={loading ? '…' : kpis.avg_agent_success_rate ?? '—'} />
-        <ReportsKpiCard label="Tokens totales usados" value={loading ? '…' : Number(kpis.total_tokens ?? 0).toLocaleString()} />
-        <ReportsKpiCard label="Créditos consumidos" value={loading ? '…' : String(kpis.credits_used ?? 0)} />
-        {/* Agent breakdown table */}
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
-          <div className="px-5 py-3 flex items-center gap-1">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Agentes de IA — rendimiento</span>
+      <ReportShellHeader title="Fin AI Agent" description="Find out how Fin AI Agent is performing in conversations and impacting your resolution rates." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Rendimiento de Fin AI Agent">
+          <div className="grid grid-cols-4 gap-3">
+            <KpiCard label="Fin AI agent deflection rate" value="46%" sub="57 de 124" change="4 pts" trend="up" />
+            <KpiCard label="Fin AI agent automation rate" value="63%" sub="78 de 124" change="6 pts" trend="up" />
+            <KpiCard label="Fin AI agent resolution rate" value="87%" sub="68 de 78" change="2 pts" trend="up" />
+            <KpiCard label="Fin AI agent CX Score" value="84" sub="de 100" change="1" trend="up" />
           </div>
-          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-            <div>Agente</div>
-            <div>Ejecuciones</div>
-            <div>Tasa de éxito</div>
-            <div>Tokens</div>
-            <div>Créditos</div>
+          <KpiChartCard title="Fin AI agent's impact over time (%)">
+            <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Tasa de resolución', data: mockSeries(80, 6, 0.5, 81), fill: true }, { label: 'Tasa de desviación', data: mockSeries(42, 6, 0.4, 82) }]} type="line" />
+          </KpiChartCard>
+        </Section>
+        <Section title="Fin AI agent involvement">
+          <div className="grid grid-cols-3 gap-3">
+            <KpiCard label="Fin AI agent involvement rate" value="71%" sub="88 de 124" change="5 pts" trend="up" />
+            <KpiCard label="Involved conversations" value="88" change="11" trend="up" />
+            <KpiCard label="Handed over to a teammate" value="26" change="3" trend="down" />
           </div>
-          {loading ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
-          ) : agents.length === 0 ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay agentes configurados para este período.</div>
-          ) : agents.map((a, i) => (
-            <div key={i} className="grid grid-cols-5 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-              <div className="font-medium">{a.name ?? a.slug ?? 'Agente'}</div>
-              <div>{a.totalRuns ?? 0}</div>
-              <div className={Number.parseFloat(String(a.successRate).replace('%', '') || '0') >= 80 ? 'text-[#16a34a]' : 'text-[#dc2626]'}>
-                {a.successRate ?? '—'}
-              </div>
-              <div className="text-[#646462]">{Number(a.tokensUsed ?? 0).toLocaleString()}</div>
-              <div className="text-[#646462]">{a.costCredits ?? 0}</div>
+          <KpiChartCard title="Fin AI agent involved conversations over time">
+            <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Conversaciones con Fin', data: mockSeries(11, 4, 0.5, 83), fill: true }]} type="bar" showLegend={false} />
+          </KpiChartCard>
+        </Section>
+      </div>
+    </>
+  );
+}
+
+// ── Resumen de interacción — funnel Enviado → Comprometido → Completado ───────
+function EngagementFunnel({ sent, engaged, completed }: { sent: number; engaged: number; completed: number }) {
+  const stages = [
+    { label: 'Enviado', value: sent, active: true },
+    { label: 'Comprometido', value: engaged, active: false },
+    { label: 'Completado', value: completed, active: false, info: true },
+  ];
+  return (
+    <div className="flex items-stretch gap-6">
+      {stages.map((s, i) => (
+        <div key={s.label} className="flex items-center gap-6">
+          {i > 0 && (
+            <svg viewBox="0 0 24 40" className="w-5 h-9 text-[#e9eae6]" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 4l14 16-14 16" /></svg>
+          )}
+          <div className="min-w-[110px]">
+            <div className="flex items-center gap-1">
+              <span className={`text-[13px] ${s.active ? 'text-[#1a1a1a] font-medium border-b-2 border-[#3b59f6] pb-0.5' : 'text-[#646462]'}`}>{s.label}</span>
+              {s.info && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a97]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>}
             </div>
-          ))}
+            <div className="text-[26px] font-bold text-[#1a1a1a] leading-tight mt-1">{s.value}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Flujos de trabajo (legacy "Anterior") ─────────────────────────────────────
+function ReportsWorkflowsContent() {
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
+  const HOURS = ['12 a.m.', '3 a.m.', '6 a.m.', '9 a.m.', '12 p.m.', '3 p.m.', '6 p.m.', '9 p.m.'];
+  const DAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
+  return (
+    <>
+      <ReportShellHeader title="Flujos de trabajo" description="Analiza el rendimiento de tus flujos de trabajo: interacciones enviadas, comprometidas y completadas." />
+      <ReportShellFilters extraFilter={{ label: 'Todos los flujos de trabajo' }} />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Resumen de interacción">
+          <EngagementFunnel sent={1284} engaged={742} completed={531} />
+          <KpiChartCard title="Interacciones a lo largo del tiempo">
+            <KpiTimeSeries labels={MOCK_DAYS} series={[
+              { label: '7 días anteriores', data: mockDaily(150, 40, 2, 41) },
+              { label: '17 jul - 23 jul', data: mockDaily(184, 46, 4, 42), fill: true },
+            ]} type="line" />
+          </KpiChartCard>
+        </Section>
+        <Section title="Conversaciones asignadas">
+          <KpiChartCard title="Conversaciones asignadas por flujos de trabajo">
+            <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Conversaciones asignadas', data: mockDaily(46, 16, 1, 43), fill: true }]} type="bar" showLegend={false} />
+          </KpiChartCard>
+        </Section>
+        <Section title="Período de mayor actividad para flujos de trabajo">
+          <KpiChartCard title="Actividad por hora y día de la semana" height={320}>
+            <KpiHeatmap rows={HOURS} cols={DAYS} matrix={mockHeatmap(44)} />
+          </KpiChartCard>
+        </Section>
+      </div>
+    </>
+  );
+}
+
+// ── Flujos de trabajo (generación de prospectos) — legacy "Anterior" ──────────
+function ReportsWorkflowsLeadGenContent() {
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
+  return (
+    <>
+      <ReportShellHeader title="Flujos de trabajo (generación de prospectos)" description="Analiza cómo tus flujos de trabajo captan correos, crean leads y reservan reuniones." />
+      <ReportShellFilters extraFilter={{ label: 'Todos los flujos de trabajo' }} />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Resumen de interacción">
+          <EngagementFunnel sent={968} engaged={504} completed={287} />
+          <KpiChartCard title="Interacciones a lo largo del tiempo">
+            <KpiTimeSeries labels={MOCK_DAYS} series={[
+              { label: '7 días anteriores', data: mockDaily(112, 30, 1, 51) },
+              { label: '17 jul - 23 jul', data: mockDaily(138, 34, 3, 52), fill: true },
+            ]} type="line" />
+          </KpiChartCard>
+        </Section>
+        <div className="grid grid-cols-2 gap-5">
+          <Section title="Correos electrónicos recopilados">
+            <KpiChartCard title="Correos electrónicos recopilados">
+              <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Correos recopilados', data: mockDaily(34, 12, 1, 53), fill: true }]} type="bar" showLegend={false} />
+            </KpiChartCard>
+          </Section>
+          <Section title="Leads creados en Salesforce">
+            <KpiChartCard title="Leads creados en Salesforce">
+              <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Leads creados', data: mockDaily(9, 5, 0.4, 54), fill: true }]} type="bar" showLegend={false} />
+            </KpiChartCard>
+          </Section>
+          <Section title="Leads no cualificados">
+            <KpiChartCard title="Leads no cualificados">
+              <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Leads no cualificados', data: mockDaily(6, 4, 0.2, 55), fill: true }]} type="bar" showLegend={false} />
+            </KpiChartCard>
+          </Section>
+          <Section title="Reuniones reservadas">
+            <KpiChartCard title="Reuniones reservadas">
+              <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Reuniones reservadas', data: mockDaily(4, 3, 0.2, 56), fill: true }]} type="bar" showLegend={false} />
+            </KpiChartCard>
+          </Section>
         </div>
       </div>
     </>
@@ -2684,6 +2782,7 @@ function readInitialReportsSubFromUrl(): ReportsSubView {
     'calls','conversations','csat','effectiveness',
     'responsiveness','slas','teamInbox','teammate','tickets',
     'articles','outboundEng','administrar',
+    'workflows','workflowsLeadGen',
   ];
   return s && (known as string[]).includes(s) ? (s as ReportsSubView) : 'overview';
 }
@@ -2730,6 +2829,9 @@ export function ReportsView() {
       // ── Proactivo ───────────────────────────────────────────────────────
       case 'articles':      return <ReportsArticlesContent period={period} channel={channel} />;
       case 'outboundEng':   return <ReportsOutboundEngagementContent period={period} channel={channel} />;
+      // ── Legacy "Anterior" ───────────────────────────────────────────────
+      case 'workflows':        return <ReportsWorkflowsContent />;
+      case 'workflowsLeadGen': return <ReportsWorkflowsLeadGenContent />;
       case 'administrar':   return <KnowledgePlaceholder title="Administrar" subtitle="Configuración avanzada de informes, propietarios y permisos." />;
     }
   }
