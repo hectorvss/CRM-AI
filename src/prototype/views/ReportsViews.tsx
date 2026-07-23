@@ -238,6 +238,14 @@ function buildDemoOverview() {
 }
 const DEMO_OVERVIEW = buildDemoOverview();
 
+// Shared deterministic mock generators so every report can render populated
+// while the backend has no data. Seeded → stable across renders.
+const MOCK_WEEKS = ['Jun 22', 'Jun 29', 'Jul 6', 'Jul 13', 'Jul 20', 'Jul 27', 'Ago 3', 'Ago 10', 'Ago 17'];
+function mockSeries(base: number, amp: number, slope = 0, seed = 3): number[] {
+  const r = mulberry32(seed);
+  return MOCK_WEEKS.map((_, i) => Math.max(0, Math.round((base + slope * i + Math.sin(i / 2.1) * amp + (r() - 0.5) * amp) * 10) / 10));
+}
+
 // ── 1. Resumen — dashboard de KPIs (Chart.js vía KpiChart) ────────────────────
 // Data-driven: pulls what reportsApi.overview provides, and renders Intercom-
 // style empty states everywhere there is no series yet. Every KPI/chart goes
@@ -1481,10 +1489,14 @@ function ReportsConversationsContent({ period, channel }: { period: string; chan
           <KpiChartCard title="New conversations - by channel">
             {isDemo ? <KpiDoughnut labels={['Desconocido', 'Chat', 'Email']} values={[2, 1, 1]} /> : <KpiEmpty />}
           </KpiChartCard>
-          <KpiChartCard title="Replies sent - by time"><KpiEmpty /></KpiChartCard>
+          <KpiChartCard title="Replies sent - by time">
+            {isDemo ? <KpiTimeSeries labels={labels} series={[{ label: 'Respuestas enviadas', data: [0, 1, 0, 3, 1], fill: true }]} type="line" showLegend={false} /> : <KpiEmpty />}
+          </KpiChartCard>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <KpiChartCard title="Closed vs. Reopened conversations"><KpiEmpty /></KpiChartCard>
+          <KpiChartCard title="Closed vs. Reopened conversations">
+            {isDemo ? <KpiTimeSeries labels={labels} series={[{ label: 'Cerradas', data: [0, 0, 1, 2, 1] }, { label: 'Reabiertas', data: [0, 0, 0, 1, 0] }]} type="bar" /> : <KpiEmpty />}
+          </KpiChartCard>
           <KpiChartCard title="Open and Snoozed conversations">
             <KpiTimeSeries labels={labels} series={[{ label: 'Conversaciones abiertas', data: openByTime }, { label: 'Conversaciones pospuestas', data: [0, 0, 0, 0, 0] }]} type="bar" />
           </KpiChartCard>
@@ -1646,24 +1658,25 @@ function ReportsEffectivenessContent({ period, channel }: { period: string; chan
       <ReportShellHeader title="Effectiveness" description="Measure how effectively your teams handle conversations with the Effectiveness report." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-4">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
         <div className="grid grid-cols-3 gap-3">
-          <KpiCard label="Conversations replied to" value="0" />
-          <KpiCard label="Closed conversations on first contact rate" value="0%" sub="0 de 4" />
-          <KpiCard label="Median replies to close a conversation" value="—" />
-          <KpiCard label="Conversations reassigned" value="0" />
-          <KpiCard label="Median time to first assignment" value="—" />
-          <KpiCard label="Median time from first assignment to close" value="—" />
+          <KpiCard label="Conversations replied to" value="128" change="12%" trend="up" />
+          <KpiCard label="Closed conversations on first contact rate" value="62%" sub="79 de 128" change="4 pts" trend="up" />
+          <KpiCard label="Median replies to close a conversation" value="3.4" change="0.3" trend="down" />
+          <KpiCard label="Conversations reassigned" value="14" change="2" trend="down" />
+          <KpiCard label="Median time to first assignment" value="4m 12s" change="18s" trend="up" />
+          <KpiCard label="Median time from first assignment to close" value="2h 18m" change="9m" trend="up" />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <KpiChartCard title="Median replies to close a conversation - by time"><KpiEmpty /></KpiChartCard>
-          <KpiChartCard title="Median time to first assignment"><KpiEmpty /></KpiChartCard>
+          <KpiChartCard title="Median replies to close a conversation - by time"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Réplicas', data: mockSeries(3.4, 0.8, -0.05, 11), fill: true }]} type="line" showLegend={false} /></KpiChartCard>
+          <KpiChartCard title="Median time to first assignment (min)"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Minutos', data: mockSeries(4.2, 1.2, -0.08, 12), fill: true }]} type="line" showLegend={false} /></KpiChartCard>
         </div>
         <KpiChartCard title="Closed conversations on first contact rate - by time">
-          <KpiTimeSeries labels={['Jun 22', 'Jun 29', 'Jul 6', 'Jul 13', 'Jul 20']} series={[{ label: 'Tasa', data: [0, 0, 0, 0, 0], fill: true }]} type="line" showLegend={false} />
+          <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Tasa (%)', data: mockSeries(60, 8, 0.6, 13), fill: true }]} type="line" showLegend={false} />
         </KpiChartCard>
         <div className="grid grid-cols-2 gap-4">
-          <KpiChartCard title="Conversations reassigned - by time"><KpiEmpty /></KpiChartCard>
-          <KpiChartCard title="Median time from first assignment to close - by time"><KpiEmpty /></KpiChartCard>
+          <KpiChartCard title="Conversations reassigned - by time"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Reasignadas', data: mockSeries(2, 1.5, 0, 14) }]} type="bar" showLegend={false} /></KpiChartCard>
+          <KpiChartCard title="Median time from first assignment to close (h)"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Horas', data: mockSeries(2.3, 0.6, -0.03, 15), fill: true }]} type="line" showLegend={false} /></KpiChartCard>
         </div>
       </div>
     </>
@@ -1682,27 +1695,28 @@ function ReportsCxScoreContent({ period, channel }: { period: string; channel: s
       <ReportShellHeader title="CX Score" description="Analyze your customer experience across teammates and AI Agents using a breakthrough AI-generated metric." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
         <Section title="Customer Experience score overview">
           <div className="grid grid-cols-4 gap-3">
-            {['Overall CX Score', 'Fin AI Agent CX Score', 'Teammate CX Score', 'Fin AI Agent & Teammate CX Score'].map(l => (
-              <KpiCard key={l} label={l} value="—" sub="0 de 0" />
+            {([['Overall CX Score', '82'], ['Fin AI Agent CX Score', '84'], ['Teammate CX Score', '88'], ['Fin AI Agent & Teammate CX Score', '85']] as [string, string][]).map(([l, v]) => (
+              <KpiCard key={l} label={l} value={v} sub="de 100" change="2" trend="up" />
             ))}
           </div>
-          <KpiChartCard title="CX Score over time"><KpiEmpty /></KpiChartCard>
+          <KpiChartCard title="CX Score over time"><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'CX Score', data: mockSeries(80, 5, 0.4, 21), fill: true }]} type="line" showLegend={false} /></KpiChartCard>
         </Section>
         <Section title="CX Score reasons">
           <div className="grid grid-cols-2 gap-4">
-            <KpiChartCard title="Negative CX score reasons 😖"><KpiEmpty /></KpiChartCard>
-            <KpiChartCard title="Positive CX score reasons 😀"><KpiEmpty /></KpiChartCard>
+            <KpiChartCard title="Negative CX score reasons 😖"><KpiDoughnut labels={['Tiempo de espera', 'Resolución incompleta', 'Tono', 'No resuelto', 'Otros']} values={[38, 24, 16, 14, 8]} /></KpiChartCard>
+            <KpiChartCard title="Positive CX score reasons 😀"><KpiDoughnut labels={['Rapidez', 'Resolución', 'Amabilidad', 'Proactividad']} values={[42, 31, 18, 9]} /></KpiChartCard>
           </div>
-          <KpiChartCard title="Conversation topics with negative CX score"><KpiEmpty /></KpiChartCard>
+          <KpiChartCard title="Conversation topics with negative CX score"><KpiTimeSeries labels={['Reembolsos', 'Envíos', 'Facturación', 'Cuenta', 'Producto']} series={[{ label: 'Conversaciones', data: [9, 7, 5, 4, 3] }]} type="bar" showLegend={false} /></KpiChartCard>
         </Section>
         <Section title="Customer Experience ratings & explanations">
           <div className="grid grid-cols-2 gap-4">
-            <KpiChartCard title="CX Score ratings - by CX Score rating"><KpiEmpty /></KpiChartCard>
-            <KpiChartCard title="CX Score ratings - by CX Score rating"><KpiEmpty /></KpiChartCard>
+            <KpiChartCard title="CX Score ratings - by CX Score rating"><KpiTimeSeries labels={['1', '2', '3', '4', '5']} series={[{ label: 'Valoraciones', data: [3, 5, 12, 34, 58] }]} type="bar" showLegend={false} /></KpiChartCard>
+            <KpiChartCard title="CX Score ratings - Fin vs equipo"><KpiTimeSeries labels={['1', '2', '3', '4', '5']} series={[{ label: 'Fin', data: [1, 2, 5, 16, 30] }, { label: 'Equipo', data: [2, 3, 7, 18, 28] }]} type="bar" /></KpiChartCard>
           </div>
-          <KpiChartCard title="CX Score ratings"><KpiTable columns={['Conversación', 'CX Score', 'Motivo', 'Fecha']} rows={[]} /></KpiChartCard>
+          <KpiChartCard title="CX Score ratings"><KpiTable columns={['Conversación', 'CX Score', 'Motivo', 'Fecha']} rows={[['#1042', '92', 'Rapidez', 'Jul 18'], ['#1039', '35', 'Tiempo de espera', 'Jul 17'], ['#1036', '88', 'Resolución', 'Jul 16'], ['#1031', '74', 'Tono', 'Jul 15']]} /></KpiChartCard>
         </Section>
       </div>
     </>
