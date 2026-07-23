@@ -24,7 +24,7 @@ type ReportsSubView =
   | 'calls' | 'conversations' | 'csat' | 'effectiveness'
   | 'responsiveness' | 'slas' | 'teamInbox' | 'teammate' | 'tickets'
   | 'articles' | 'outboundEng' | 'administrar'
-  | 'workflows' | 'workflowsLeadGen';
+  | 'workflows' | 'workflowsLeadGen' | 'leads' | 'monitors';
 
 type ReportsItemIcon = 'topic' | 'export' | 'schedule' | 'folder' | 'admin'
   | 'lightbulb' | 'sparkles' | 'fin' | 'copilot' | 'phone' | 'chat' | 'star'
@@ -87,8 +87,8 @@ const ALL_REPORTS: AllReportRow[] = [
   { t: 'Flujos de trabajo', sub: 'workflows', legacy: true },
   { t: 'Flujos de trabajo (generación de prospectos)', sub: 'workflowsLeadGen', legacy: true },
   { t: 'Información general sobre las relaciones con el cliente', sub: 'outboundEng', legacy: true },
-  { t: 'Leads', legacy: true },
-  { t: 'Monitors', sub: 'finAgent', d: 'Monitor and improve Fin AI Agent quality at scale' },
+  { t: 'Leads', sub: 'leads', legacy: true },
+  { t: 'Monitors', sub: 'monitors', d: 'Monitor and improve Fin AI Agent quality at scale' },
   { t: 'Responsiveness', sub: 'responsiveness', d: 'See how quickly your team respond to, and close conversations with the Responsiveness report.' },
   { t: 'SLAs', sub: 'slas', d: 'Review your team’s performance against your Service Level Agreements with the SLAs report.' },
   { t: 'Soporte para las conversaciones', sub: 'conversations', legacy: true },
@@ -1669,132 +1669,57 @@ function ReportsCxScoreContent({ period, channel }: { period: string; channel: s
 }
 
 function ReportsResponsivenessContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.responsiveness(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const dist: { bucket: string; count: number }[] = data?.distribution ?? [];
-  const respTimeSeries: { day: number; avgMinutes: number }[] = data?.timeSeries ?? [];
-  const maxRespMin = Math.max(...respTimeSeries.map(t => t.avgMinutes), 1);
+  useApi(() => reportsApi.responsiveness(period, channel), [period, channel], null);
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
+  const HOURS = ['12 a.m.', '3 a.m.', '6 a.m.', '9 a.m.', '12 p.m.', '3 p.m.', '6 p.m.', '9 p.m.'];
+  const DAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
+  const frtBreakdown: [string, string][] = [['< 30s', '18%'], ['30s - 2m', '31%'], ['2m - 5m', '22%'], ['5m - 10m', '13%'], ['10m - 30m', '9%'], ['30m - 1h', '4%'], ['> 1h', '3%']];
+  const ttcBreakdown: [string, string][] = [['< 5m', '9%'], ['5m - 15m', '17%'], ['15m - 30m', '21%'], ['30m - 1h', '24%'], ['1h - 3h', '15%'], ['3h - 8h', '9%'], ['> 8h', '5%']];
   return (
     <>
       <ReportShellHeader title="Responsiveness" description="See how quickly your team respond to, and close conversations with the Responsiveness report." />
       <ReportShellFilters />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Median response time: including time assigned to bot" value={loading ? '…' : kpis.median_response_time ?? '—'} />
-        <ReportsKpiCard label="Median first response time: including time assigned to bot" value={loading ? '…' : kpis.median_first_response ?? '—'} />
-        <ReportsKpiCard label="Median time to close: including time assigned to bot" value={loading ? '…' : kpis.median_time_to_close ?? '—'} />
-        {/* Response time by day */}
-        {respTimeSeries.some(t => t.avgMinutes > 0) ? (
-          <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Avg first response time by day (minutes)</span>
-            </div>
-            <div className="h-[140px] flex items-end gap-0.5 px-2">
-              {respTimeSeries.map((t, i) => (
-                <div key={i} style={{ height: t.avgMinutes ? `${(t.avgMinutes / maxRespMin) * 100}%` : '4px' }} className={`flex-1 ${t.avgMinutes ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} title={`${t.avgMinutes}m`} />
-              ))}
-            </div>
-            <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-2">
-              <span>Día 1</span><span>Día {Math.round(respTimeSeries.length / 2)}</span><span>Día {respTimeSeries.length}</span>
-            </div>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Tiempos de respuesta">
+          <div className="grid grid-cols-3 gap-3">
+            <KpiCard label="Median response time: including time assigned to bot" value="3m 42s" change="14s" trend="up" />
+            <KpiCard label="Median first response time: including time assigned to bot" value="1m 58s" change="9s" trend="up" />
+            <KpiCard label="Median time to close: including time assigned to bot" value="2h 24m" change="11m" trend="up" />
           </div>
-        ) : (
-          <ReportEmptyChart label="Median response time: including time assigned to bot - by time" span={3} />
-        )}
-        <div className="col-span-3 grid grid-cols-2 gap-4">
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Avg first response time by day (min)</span>
-            </div>
-            {respTimeSeries.some(t => t.avgMinutes > 0) ? (
-              <>
-                <div className="h-[120px] flex items-end gap-0.5 px-2">
-                  {respTimeSeries.map((t, i) => (
-                    <div key={i} style={{ height: t.avgMinutes ? `${(t.avgMinutes / maxRespMin) * 100}%` : '4px' }}
-                      className={`flex-1 ${t.avgMinutes ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} title={`${t.avgMinutes}m`} />
-                  ))}
-                </div>
-                <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
-                  <span>Día 1</span><span>Día {Math.round(respTimeSeries.length / 2)}</span><span>Día {respTimeSeries.length}</span>
-                </div>
-              </>
-            ) : (
-              <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos en el período</div>
-            )}
+          <KpiChartCard title="Median response time: including time assigned to bot - by time (min)">
+            <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Mediana (min)', data: mockSeries(3.7, 0.9, -0.05, 61, 1), fill: true }]} type="line" showLegend={false} />
+          </KpiChartCard>
+        </Section>
+        <Section title="Primera respuesta">
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="Median first response time - by time (min)">
+              <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Mediana (min)', data: mockSeries(2, 0.6, -0.04, 62, 1), fill: true }]} type="line" showLegend={false} />
+            </KpiChartCard>
+            <KpiChartCard title="First response time breakdown" info>
+              <KpiTable columns={['Intervalos de tiempo', '% replies']} rows={frtBreakdown} />
+            </KpiChartCard>
           </div>
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-            <div className="px-5 py-3 flex items-center gap-1">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">First response time: including time assigned to bot breakdown</span>
-            </div>
-            <div className="grid grid-cols-2 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-              <div>Intervalos de tiempo</div><div>% replies</div>
-            </div>
-            {(dist.length > 0 ? dist : ['< 5m','5m - 15m','15m - 30m','30m - 1h','1h - 3h','3h - 8h','> 8h'].map(b => ({ bucket: b, count: 0 }))).map((row: any) => {
-              const total = dist.reduce((s: number, r: any) => s + (r.count || 0), 0);
-              const pctVal = total > 0 && typeof row === 'object' ? `${Math.round((row.count / total) * 100)}%` : '—';
-              const label = typeof row === 'string' ? row : row.bucket;
-              return (
-                <div key={label} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-                  <div>{label}</div><div className="text-[#646462]">{loading ? '…' : pctVal}</div>
-                </div>
-              );
-            })}
+        </Section>
+        <Section title="Tiempo hasta el cierre">
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="Median time to close - by time (h)">
+              <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Mediana (h)', data: mockSeries(2.4, 0.7, -0.03, 63, 1), fill: true }]} type="line" showLegend={false} />
+            </KpiChartCard>
+            <KpiChartCard title="Time to close breakdown" info>
+              <KpiTable columns={['Intervalos de tiempo', '% conversations']} rows={ttcBreakdown} />
+            </KpiChartCard>
           </div>
-        </div>
-        <div className="col-span-3 grid grid-cols-2 gap-4">
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Avg time to close by day (min)</span>
-            </div>
-            {respTimeSeries.some(t => t.avgMinutes > 0) ? (
-              <>
-                <div className="h-[120px] flex items-end gap-0.5 px-2">
-                  {respTimeSeries.map((t, i) => (
-                    <div key={i} style={{ height: t.avgMinutes ? `${(t.avgMinutes / maxRespMin) * 100}%` : '4px' }}
-                      className={`flex-1 ${t.avgMinutes ? 'bg-[#8b5cf6]' : 'bg-[#f3f3f1]'} rounded-t`} title={`${t.avgMinutes}m`} />
-                  ))}
-                </div>
-                <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
-                  <span>Día 1</span><span>Día {Math.round(respTimeSeries.length / 2)}</span><span>Día {respTimeSeries.length}</span>
-                </div>
-              </>
-            ) : (
-              <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos en el período</div>
-            )}
-          </div>
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-            <div className="px-5 py-3 flex items-center gap-1">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Time to close: including time assigned to bot breakdown</span>
-            </div>
-            <div className="grid grid-cols-2 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-              <div>Intervalos de tiempo</div><div>% conversations</div>
-            </div>
-            {(dist.length > 0 ? dist : ['< 5m','5m - 15m','15m - 30m','30m - 1h','1h - 3h','3h - 8h','> 8h'].map(b => ({ bucket: b, count: 0 }))).map((row: any) => {
-              const total = dist.reduce((s: number, r: any) => s + (r.count || 0), 0);
-              const pctVal = total > 0 && typeof row === 'object' ? `${Math.round((row.count / total) * 100)}%` : '—';
-              const label = typeof row === 'string' ? row : row.bucket;
-              return (
-                <div key={label} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-                  <div>{label}</div><div className="text-[#646462]">{loading ? '…' : pctVal}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        {/* Hourly distribution — requires active-hours data; show placeholder */}
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Median hourly distribution of response times</span>
-          </div>
-          <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">
-            Requires active-hours tracking — no data available
-          </div>
-        </div>
+        </Section>
+        <Section title="Distribución horaria">
+          <KpiChartCard title="Median hourly distribution of response times" height={320}>
+            <KpiHeatmap rows={HOURS} cols={DAYS} matrix={mockHeatmap(64)} colorHue="#8b5cf6" />
+          </KpiChartCard>
+        </Section>
       </div>
     </>
   );
@@ -2393,6 +2318,110 @@ function ReportsWorkflowsLeadGenContent() {
   );
 }
 
+// ── Leads (legacy "Anterior") ─────────────────────────────────────────────────
+function ReportsLeadsContent() {
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
+  return (
+    <>
+      <ReportShellHeader title="Leads" description="Analiza tus nuevos leads, la rapidez con la que respondes y los leads creados en tu CRM." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Nuevos leads">
+          <div className="grid grid-cols-3 gap-3">
+            <KpiCard label="Nuevos leads de Messenger" value="164" change="14%" trend="up" />
+            <KpiCard label="Promedio del tiempo de primera respuesta a los leads" value="8m 42s" change="46s" trend="up" />
+            <KpiCard label="Leads de Salesforce creados desde Intercom" value="57" change="9" trend="up" />
+          </div>
+          <KpiChartCard title="Nuevos leads de Messenger">
+            <KpiTimeSeries labels={MOCK_DAYS} series={[
+              { label: '7 días anteriores', data: mockDaily(18, 8, 0.3, 91) },
+              { label: '17 jul - 23 jul', data: mockDaily(23, 9, 0.6, 92), fill: true },
+            ]} type="line" />
+          </KpiChartCard>
+        </Section>
+        <div className="grid grid-cols-2 gap-5">
+          <Section title="Tiempo de respuesta a leads">
+            <KpiChartCard title="Promedio del tiempo de primera respuesta a los leads (min)">
+              <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Minutos', data: mockDaily(9, 3, -0.2, 93), fill: true }]} type="line" showLegend={false} />
+            </KpiChartCard>
+          </Section>
+          <Section title="Leads en Salesforce">
+            <KpiChartCard title="Leads de Salesforce creados desde Intercom">
+              <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Leads creados', data: mockDaily(7, 4, 0.3, 94), fill: true }]} type="bar" showLegend={false} />
+            </KpiChartCard>
+          </Section>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Monitors — calidad de Fin AI Agent a escala ───────────────────────────────
+function ReportsMonitorsContent({ period, channel }: { period: string; channel: string }) {
+  useApi(() => reportsApi.finagent(period, channel), [period, channel], null);
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
+  return (
+    <>
+      <ReportShellHeader title="Monitors" description="Monitor and improve Fin AI Agent quality at scale." />
+      <ReportShellFilters extraFilter={{ label: 'Monitorear es Cualquiera' }} />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Monitor trends">
+          <KpiChartCard title="Evaluated conversations">
+            <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Conversaciones evaluadas', data: mockSeries(120, 30, 6, 101), fill: true }]} type="bar" showLegend={false} />
+          </KpiChartCard>
+        </Section>
+        <Section title="Score trends">
+          <div className="grid grid-cols-4 gap-3">
+            <KpiCard label="Average review score" value="4.3" sub="de 5" change="0.2" trend="up" />
+            <KpiCard label="Reviews passed" value="87%" sub="612 de 703" change="3 pts" trend="up" />
+            <KpiCard label="Number of reviews" value="703" change="11%" trend="up" />
+            <KpiCard label="Failed reviews" value="91" change="8" trend="down" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="Pass rate trends by scorecard (%)">
+              <KpiTimeSeries labels={MOCK_WEEKS} series={[
+                { label: 'Precisión', data: mockSeries(86, 5, 0.4, 102), fill: true },
+                { label: 'Tono', data: mockSeries(82, 6, 0.3, 103) },
+                { label: 'Resolución', data: mockSeries(79, 7, 0.5, 104) },
+              ]} type="line" />
+            </KpiChartCard>
+            <KpiChartCard title="Average review score trends by scorecard">
+              <KpiTimeSeries labels={MOCK_WEEKS} series={[
+                { label: 'Precisión', data: mockSeries(4.3, 0.3, 0.02, 105, 1), fill: true },
+                { label: 'Tono', data: mockSeries(4.1, 0.3, 0.02, 106, 1) },
+                { label: 'Resolución', data: mockSeries(3.9, 0.4, 0.03, 107, 1) },
+              ]} type="line" />
+            </KpiChartCard>
+          </div>
+        </Section>
+        <Section title="Criteria & reviewers">
+          <KpiChartCard title="Average criteria score trends over time">
+            <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'Puntuación media', data: mockSeries(4.1, 0.35, 0.03, 108, 1), fill: true }]} type="line" showLegend={false} />
+          </KpiChartCard>
+          <KpiChartCard title="Reviews completed by reviewer" height={220}>
+            <KpiTable columns={['Revisor', 'Revisiones', 'Aprobadas', 'Fallidas', '% aprobación']} rows={[
+              ['Ana Torres', '214', '191', '23', '89%'],
+              ['Luis Vega', '186', '158', '28', '85%'],
+              ['María Ruiz', '167', '149', '18', '89%'],
+              ['Jon Aixa', '136', '114', '22', '84%'],
+            ]} />
+          </KpiChartCard>
+        </Section>
+      </div>
+    </>
+  );
+}
+
 function ReportsSugerenciasContent() {
   return (
     <>
@@ -2505,21 +2534,14 @@ function ReportsArticlesContent({ period, channel }: { period: string; channel: 
 }
 
 function ReportsOutboundEngagementContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.outbound(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 30 }, (_, i) => ({ day: i, count: 0 }));
-  const byUser: { name: string; count: number }[] = data?.byUser ?? [];
-  const performance: { title: string; sent: number; goal: number }[] = data?.performance ?? [];
-  const isEmpty = data?.isEmpty !== false;
-  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
-  const days = timeSeries.length;
-
+  useApi(() => reportsApi.outbound(period, channel), [period, channel], null);
   return (
     <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
         <div className="flex items-center gap-2">
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
           <h1 className="text-[18px] font-bold text-[#1a1a1a]">Interacción del cliente</h1>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f3f3f1] text-[#646462]">Anterior</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
@@ -2539,72 +2561,31 @@ function ReportsOutboundEngagementContent({ period, channel }: { period: string;
           Todos los tipos de mensajes
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
-        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Todos los tipos de mensajes</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <p className="text-[12.5px] text-[#1a1a1a] mb-2">Mensajes enviados</p>
-            <p className="text-[24px] font-bold text-[#1a1a1a]">{loading ? '…' : String(kpis.total_sent ?? 0)}</p>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+          <KpiSectionHeader title="Todos los tipos de mensajes" />
+          <div className="grid grid-cols-2 gap-3">
+            <KpiCard label="Mensajes enviados" value="2.480" change="12%" trend="up" />
+            <KpiCard label="Horas de envío de mensajes" value="1.240" sub="0.5 por mensaje" change="4%" trend="up" />
           </div>
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <p className="text-[12.5px] text-[#1a1a1a] mb-2">Horas de envío de mensajes</p>
-            <p className="text-[24px] font-bold text-[#646462]">{kpis.send_hours ?? '—'}</p>
-          </div>
+          <KpiChartCard title="Mensajes enviados por día">
+            <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Mensajes enviados', data: mockDaily(340, 90, 6, 71), fill: true }]} type="bar" showLegend={false} />
+          </KpiChartCard>
         </div>
-        {/* Time series */}
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <p className="text-[12.5px] font-medium text-[#1a1a1a] mb-3">Mensajes enviados por día</p>
-          {isEmpty ? (
-            <div className="h-[160px] flex flex-col items-center justify-center text-center">
-              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a] font-medium">Sin mensajes salientes</span>
-              <span className="text-[11.5px] text-[#646462] mt-0.5">Configura campañas o mensajes proactivos para ver datos aquí.</span>
-            </div>
-          ) : (
-            <>
-              <div className="h-[140px] flex items-end gap-0.5 px-2">
-                {timeSeries.map((t, i) => (
-                  <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#fc8a37]' : 'bg-[#f3f3f1]'} rounded-t`} />
-                ))}
-              </div>
-              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
-                <span>Día 1</span><span>Día {Math.floor(days / 3)}</span><span>Día {Math.floor(2 * days / 3)}</span><span>Día {days}</span>
-              </div>
-            </>
-          )}
-        </div>
-        {/* Volume by user */}
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-          <div className="px-5 py-3"><span className="text-[12.5px] font-medium text-[#1a1a1a]">Volumen de mensajes por usuario</span></div>
-          <div className="border-t border-b border-[#e9eae6] grid grid-cols-2 px-5 py-2 text-[12px] text-[#646462]">
-            <div>Nombre</div><div className="text-right">Mensajes enviados</div>
-          </div>
-          {byUser.length === 0 ? (
-            <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos</div>
-          ) : byUser.map((u, i) => (
-            <div key={i} className="grid grid-cols-2 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-              <div className="font-medium truncate">{u.name}</div>
-              <div className="text-right text-[#646462]">{u.count}</div>
-            </div>
-          ))}
-        </div>
-        {/* Message performance */}
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-          <div className="px-5 py-3"><span className="text-[12.5px] font-medium text-[#1a1a1a]">Rendimiento del mensaje</span></div>
-          <div className="border-t border-[#e9eae6] grid grid-cols-3 px-5 py-2 text-[12px] text-[#646462]">
-            <div>Título</div><div>Enviado</div><div>Objetivo</div>
-          </div>
-          {performance.length === 0 ? (
-            <div className="h-[60px] flex items-center justify-center text-[12px] text-[#646462]">Sin campañas configuradas</div>
-          ) : performance.map((p, i) => (
-            <div key={i} className="grid grid-cols-3 px-5 py-2.5 border-t border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-              <div className="truncate">{p.title}</div>
-              <div>{p.sent}</div>
-              <div className="text-[#646462]">{p.goal ?? '—'}</div>
-            </div>
-          ))}
-        </div>
-        <p className="text-[11.5px] text-[#646462] text-center pt-2">Los informes están en zona horaria del servidor</p>
+        <KpiChartCard title="Volumen de mensajes por usuario" height={240}>
+          <KpiTable columns={['Nombre', 'Mensajes enviados']} rows={[
+            ['Ana Torres', '742'], ['Luis Vega', '618'], ['María Ruiz', '531'], ['Jon Aixa', '404'], ['Fin AI Agent', '185'],
+          ]} />
+        </KpiChartCard>
+        <KpiChartCard title="Rendimiento del mensaje" height={240}>
+          <KpiTable columns={['Título', 'Enviado', 'Objetivo', 'Abierto', 'Clics', 'Respuestas']} rows={[
+            ['Bienvenida onboarding', '820', 'Activación', '58%', '14%', '5%'],
+            ['Newsletter de producto', '1.240', 'Retención', '43%', '9%', '2%'],
+            ['Recuperación de carrito', '420', 'Conversión', '31%', '7%', '1%'],
+          ]} />
+        </KpiChartCard>
+        <p className="text-[11.5px] text-[#646462] text-center pt-1">Los informes están en Madrid time (GMT+2)</p>
       </div>
     </>
   );
@@ -2782,7 +2763,7 @@ function readInitialReportsSubFromUrl(): ReportsSubView {
     'calls','conversations','csat','effectiveness',
     'responsiveness','slas','teamInbox','teammate','tickets',
     'articles','outboundEng','administrar',
-    'workflows','workflowsLeadGen',
+    'workflows','workflowsLeadGen','leads','monitors',
   ];
   return s && (known as string[]).includes(s) ? (s as ReportsSubView) : 'overview';
 }
@@ -2829,9 +2810,11 @@ export function ReportsView() {
       // ── Proactivo ───────────────────────────────────────────────────────
       case 'articles':      return <ReportsArticlesContent period={period} channel={channel} />;
       case 'outboundEng':   return <ReportsOutboundEngagementContent period={period} channel={channel} />;
+      case 'monitors':      return <ReportsMonitorsContent period={period} channel={channel} />;
       // ── Legacy "Anterior" ───────────────────────────────────────────────
       case 'workflows':        return <ReportsWorkflowsContent />;
       case 'workflowsLeadGen': return <ReportsWorkflowsLeadGenContent />;
+      case 'leads':            return <ReportsLeadsContent />;
       case 'administrar':   return <KnowledgePlaceholder title="Administrar" subtitle="Configuración avanzada de informes, propietarios y permisos." />;
     }
   }
