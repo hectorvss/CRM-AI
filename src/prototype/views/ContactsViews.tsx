@@ -764,14 +764,410 @@ function ContactsMapView({ customers }: { customers: any[] }) {
 }
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Contacts › Conversaciones — Inbox-style feed of the demo channel conversations
+// (Messenger / Email / WhatsApp & Social / Phone & SMS). Each card expands into
+// the full conversation: header actions (assignee / priority / snooze / more),
+// the thread, and an Email|Note composer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ConvChannel = {
+  key: string;
+  name: string;
+  avatar: { kind: 'grid' | 'letter'; text?: string; bg: string };
+  preview: string;
+  count: number;
+  body: string[];
+  setupLabel: string;
+};
+
+const CONV_CHANNELS: ConvChannel[] = [
+  {
+    key: 'messenger', name: 'Messenger', avatar: { kind: 'grid', bg: '#1a1a1a' },
+    preview: 'Install Messenger', count: 4,
+    body: [
+      'This is a demo message. It shows how a customer conversation from the Messenger will look in your Inbox. Conversations handled by Fin AI Agent will also appear here.',
+      'Once a channel is installed, all conversations come straight to your Inbox, so you can route them to the right team.',
+    ],
+    setupLabel: 'Install Messenger',
+  },
+  {
+    key: 'email', name: 'Email', avatar: { kind: 'letter', text: 'E', bg: '#61d65c' },
+    preview: '[Image] This is a demo email. It shows how email conversations with customers will look in…', count: 2,
+    body: [
+      'This is a demo email. It shows how email conversations with customers will look in your Inbox. Emails handled by Fin AI Agent appear here, too.',
+      'Once a channel is set up, all conversations come straight to your Inbox, so you can route them to the right team.',
+    ],
+    setupLabel: 'Set up email or test it first',
+  },
+  {
+    key: 'whatsapp', name: 'WhatsApp & Social', avatar: { kind: 'letter', text: 'W', bg: '#25d366' },
+    preview: 'Set up WhatsApp or social channels', count: 4,
+    body: [
+      'This is a demo message. It shows how a customer conversation from WhatsApp and social channels will look in your Inbox. Conversations handled by Fin AI Agent will also appear here.',
+      'Once a channel is set up, all conversations come straight to your Inbox, so you can route them to the right team.',
+    ],
+    setupLabel: 'Set up WhatsApp or social channels',
+  },
+  {
+    key: 'phone', name: 'Phone & SMS', avatar: { kind: 'letter', text: 'P', bg: '#b09efa' },
+    preview: 'Set up phone or SMS', count: 4,
+    body: [
+      'This is a demo message. It shows how a customer conversation from SMS will look in your Inbox.',
+      'Once a channel is set up, all conversations come straight to your Inbox, so you can route them to the right team.',
+    ],
+    setupLabel: 'Set up phone or SMS',
+  },
+];
+
+function ConvGridMark({ className = 'w-4 h-4', fill = '#ffffff' }: { className?: string; fill?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} fill={fill}>
+      {[3.4, 8, 12.6].map(y => [3.4, 8, 12.6].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.35" />))}
+    </svg>
+  );
+}
+
+function ConvAvatar({ ch, size = 'w-8 h-8' }: { ch: ConvChannel; size?: string }) {
+  return (
+    <span className={`${size} rounded-full flex items-center justify-center flex-shrink-0 text-white text-[13px] font-semibold`} style={{ background: ch.avatar.bg }}>
+      {ch.avatar.kind === 'grid' ? <ConvGridMark className="w-4 h-4" /> : ch.avatar.text}
+    </span>
+  );
+}
+
+/** Small click-outside popover anchored under its trigger. */
+function ConvPopover({ open, onClose, children, align = 'right', width = 220 }: { open: boolean; onClose: () => void; children: ReactNode; align?: 'left' | 'right'; width?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('mousedown', onDoc); window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('mousedown', onDoc); window.removeEventListener('keydown', onKey); };
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div ref={ref} className={`absolute top-[calc(100%+6px)] ${align === 'right' ? 'right-0' : 'left-0'} z-40 bg-white rounded-[10px] border border-[#e9eae6] shadow-[0_10px_36px_rgba(20,20,20,0.18)] py-1.5`} style={{ minWidth: width }}>
+      {children}
+    </div>
+  );
+}
+
+const CONV_PRIORITIES = [
+  { key: 'urgent', label: 'Urgente', color: '#e5484d', bars: 3 },
+  { key: 'high', label: 'Alto', color: '#e5484d', bars: 3 },
+  { key: 'medium', label: 'Medio', color: '#e8a13a', bars: 2 },
+  { key: 'low', label: 'Bajo', color: '#e8c53a', bars: 1 },
+  { key: 'none', label: 'Sin prioridad', color: '#a4a4a2', bars: 3 },
+];
+const CONV_SNOOZE = [
+  { key: 'later', label: 'Later today', hint: 'In 3 hours' },
+  { key: 'tomorrow', label: 'Tomorrow', hint: 'Fri 9am' },
+  { key: 'monday', label: 'Monday', hint: 'Mon 9am' },
+  { key: 'week', label: 'One week', hint: 'Thu 5pm' },
+  { key: 'month', label: 'One month', hint: 'Aug 23' },
+  { key: 'custom', label: 'Custom', hint: '' },
+];
+
+function ConvPriorityBars({ color, bars }: { color: string; bars: number }) {
+  return (
+    <svg viewBox="0 0 16 16" className="w-4 h-4">
+      <rect x="2" y="9" width="3" height="5" rx="0.6" fill={bars >= 1 ? color : '#d4d4d2'} />
+      <rect x="6.5" y="6" width="3" height="8" rx="0.6" fill={bars >= 2 ? color : '#d4d4d2'} />
+      <rect x="11" y="3" width="3" height="11" rx="0.6" fill={bars >= 3 ? color : '#d4d4d2'} />
+    </svg>
+  );
+}
+
+/** The illustration strip shown inside each demo conversation. */
+function ConvChannelIllustration() {
+  return (
+    <div className="rounded-[8px] bg-[#f1f1ee]/70 h-[120px] flex items-center justify-center gap-3 overflow-hidden">
+      <div className="relative w-16 h-16">
+        <span className="absolute left-0 top-0 w-6 h-6 rounded-[7px] bg-white shadow-sm flex items-center justify-center"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#e1306c]" strokeWidth="1.2"><rect x="3" y="3" width="10" height="10" rx="3"/><circle cx="8" cy="8" r="2.2"/></svg></span>
+        <span className="absolute left-4 top-4 w-8 h-8 rounded-[9px] bg-[#1a1a1a] flex items-center justify-center"><ConvGridMark className="w-4 h-4" /></span>
+        <span className="absolute left-0 bottom-0 w-6 h-6 rounded-[7px] bg-white shadow-sm flex items-center justify-center"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.2"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4"/></svg></span>
+        <span className="absolute left-4 bottom-0 w-5 h-5 rounded-full bg-[#1877f2] flex items-center justify-center text-white text-[11px] font-bold">f</span>
+      </div>
+      <span className="border-t border-dashed border-[#c8c9c4] w-10" />
+      <span className="w-9 h-9 rounded-[9px] bg-white shadow-sm flex items-center justify-center"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3"><path d="M2 4.5h12v7H2z"/><path d="M2 7.5h4l1 1.5h2l1-1.5h4"/></svg></span>
+    </div>
+  );
+}
+
+function ConvComposer() {
+  const [tab, setTab] = useState<'email' | 'note'>('email');
+  return (
+    <div className={`rounded-[10px] border ${tab === 'note' ? 'border-[#f0d98a] bg-[#fdf4d0]' : 'border-[#e9eae6] bg-white'} overflow-hidden`}>
+      <div className={`flex items-center gap-4 px-4 pt-2.5 border-b ${tab === 'note' ? 'border-[#f0d98a]' : 'border-[#f1f1ee]'}`}>
+        {(['email', 'note'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} className={`pb-2 text-[13.5px] border-b-2 -mb-px ${tab === t ? 'border-[#fa7938] text-[#1a1a1a] font-medium' : 'border-transparent text-[#646462]'}`}>
+            {t === 'email' ? 'Email' : 'Note'}
+          </button>
+        ))}
+      </div>
+      <div className="px-4 py-3">
+        <p className={`text-[13.5px] ${tab === 'note' ? 'text-[#8a7530]' : 'text-[#a4a4a2]'}`}>
+          {tab === 'note' ? "Type @ to mention a teammate and they'll be notified." : 'Type # to add a macro'}
+        </p>
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex items-center gap-3 text-[#646462]">
+            {tab === 'email' && <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><path d="M2 2.5h5v11H2zM7 2.5h7v11H7z"/></svg>}
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><path d="M4 3v10l4-2 4 2V3z"/></svg>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.8 9.5c.5.7 1.3 1.1 2.2 1.1s1.7-.4 2.2-1.1M6 6.5v.1M10 6.5v.1" strokeLinecap="round"/></svg>
+            <span className="px-1 h-[15px] rounded-[3px] border border-current text-[9px] font-bold leading-[13px] tracking-tight">GIF</span>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.2"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2 10l3-2.5 2.5 2 3-3L14 9.5"/></svg>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><path d="M9.5 4.5L5.8 8.2a1.9 1.9 0 0 0 2.7 2.7l4-4a3.1 3.1 0 0 0-4.4-4.4l-4 4a4.3 4.3 0 0 0 6.1 6.1l3.3-3.3" strokeLinecap="round"/></svg>
+          </div>
+          <button className={`h-8 px-4 rounded-full text-[13px] font-semibold ${tab === 'note' ? 'bg-white text-[#8a7530] border border-[#f0d98a]' : 'bg-[#f1f1ee] text-[#a4a4a2]'}`}>
+            {tab === 'note' ? 'Add note' : 'Send'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConvThread({ ch }: { ch: ConvChannel }) {
+  const [msgMenu, setMsgMenu] = useState(false);
+  return (
+    <div className="px-5 py-4 flex flex-col gap-4">
+      <p className="text-center text-[12px] text-[#a4a4a2]">operator+ou8ubic8@intercom.io set company to “[Demo]” 7d ago</p>
+      <p className="text-center text-[12px] text-[#a4a4a2]">You assigned this conversation to yourself 7d ago</p>
+      <div className="flex items-start gap-2.5">
+        <ConvAvatar ch={ch} />
+        <div className="relative flex-1 min-w-0">
+          <div className="bg-[#f1f1ee] rounded-[10px] p-3.5">
+            <ConvChannelIllustration />
+            <div className="mt-3 flex flex-col gap-2.5">
+              {ch.body.map((p, i) => <p key={i} className="text-[13.5px] text-[#1a1a1a] leading-[20px]">{p}</p>)}
+            </div>
+            <button className="mt-3 h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#3b59f6] hover:bg-[#f8f8f7]">{ch.setupLabel}</button>
+          </div>
+          <p className="mt-1.5 text-[12px] text-[#a4a4a2] flex items-center gap-1.5">7d · <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.3"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/></svg></p>
+          <div className="absolute -right-1 top-2">
+            <button onClick={() => setMsgMenu(o => !o)} className="w-7 h-7 rounded-full bg-white border border-[#e9eae6] shadow-sm flex items-center justify-center text-[#646462] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><circle cx="8" cy="3" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="8" cy="13" r="1.3"/></svg>
+            </button>
+            <ConvPopover open={msgMenu} onClose={() => setMsgMenu(false)} width={160}>
+              <button className="w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.5 8h5" strokeLinecap="round"/></svg>Delete</button>
+              <button className="w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><path d="M6.5 9.5a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5l-1 1M9.5 6.5a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 0 0 3.5 3.5l1-1" strokeLinecap="round"/></svg>Copy link</button>
+            </ConvPopover>
+          </div>
+        </div>
+      </div>
+      <p className="text-center text-[12px] text-[#a4a4a2]">Fin set Language to “ English ” 7d ago</p>
+    </div>
+  );
+}
+
+function ConvCardExpanded({ ch }: { ch: ConvChannel }) {
+  const [openMenu, setOpenMenu] = useState<null | 'more' | 'assignee' | 'priority' | 'snooze'>(null);
+  const [assignee, setAssignee] = useState<'none' | 'you'>('you');
+  const [priority, setPriority] = useState('none');
+  const [snoozeCustom, setSnoozeCustom] = useState(false);
+  const pri = CONV_PRIORITIES.find(p => p.key === priority)!;
+  const toggle = (k: typeof openMenu) => setOpenMenu(o => (o === k ? null : k));
+
+  return (
+    <div className="border border-[#e9eae6] rounded-[12px] bg-white overflow-hidden">
+      {/* Header */}
+      <div className="flex items-start justify-between px-4 py-3 border-b border-[#f1f1ee]">
+        <div>
+          <p className="text-[15px] font-semibold text-[#1a1a1a]">Conversation <span className="text-[#646462] font-normal">with</span> <span className="underline">{ch.name}</span></p>
+          <p className="text-[13px] text-[#a4a4a2] mt-0.5">Add conversation title</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {/* More */}
+          <div className="relative">
+            <button onClick={() => toggle('more')} className={`w-8 h-8 rounded-full flex items-center justify-center ${openMenu === 'more' ? 'bg-[#f1f1ee]' : 'hover:bg-[#f8f8f7]'} text-[#646462]`}>
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><circle cx="3" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="13" cy="8" r="1.3"/></svg>
+            </button>
+            <ConvPopover open={openMenu === 'more'} onClose={() => setOpenMenu(null)} width={260}>
+              <button className="w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><path d="M10.5 2.8l2.7 2.7L6 12.6l-3.4.9.9-3.4z" strokeLinejoin="round"/></svg>Iniciar una nueva conversación</button>
+              <button className="w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.3"><path d="M8 2v8M5.3 7.3L8 10l2.7-2.7M3 12.5h10" strokeLinecap="round" strokeLinejoin="round"/></svg>Exportar conversación como texto</button>
+            </ConvPopover>
+          </div>
+          {/* Assignee */}
+          <div className="relative">
+            <button onClick={() => toggle('assignee')} className={`w-8 h-8 rounded-full flex items-center justify-center ${openMenu === 'assignee' ? 'bg-[#f1f1ee]' : 'hover:bg-[#f8f8f7]'}`}>
+              <span className="w-5 h-5 rounded-full bg-[#f1f1ee] border border-[#e0e0dc] flex items-center justify-center text-[#a4a4a2]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="6" r="2.5"/><path d="M3.5 13c.6-2.2 2.3-3.5 4.5-3.5s3.9 1.3 4.5 3.5"/></svg></span>
+            </button>
+            <ConvPopover open={openMenu === 'assignee'} onClose={() => setOpenMenu(null)} width={260}>
+              <div className="px-2.5 pb-1.5">
+                <div className="flex items-center gap-2 h-8 px-2.5 rounded-[8px] border border-[#e9eae6]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14" strokeLinecap="round"/></svg>
+                  <input placeholder="Search teammates and teams…" className="flex-1 min-w-0 text-[13px] focus:outline-none placeholder:text-[#a4a4a2]" />
+                </div>
+              </div>
+              <div className="px-3 pt-1 pb-1 text-[12px] font-semibold text-[#a4a4a2]">Assign to teammate</div>
+              {([['none', 'None'], ['you', 'You']] as const).map(([k, label]) => (
+                <button key={k} onClick={() => { setAssignee(k); setOpenMenu(null); }} className="w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                  <span className="w-5 h-5 rounded-full bg-[#f1f1ee] flex items-center justify-center text-[#a4a4a2]"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="6" r="2.5"/><path d="M3.5 13c.6-2.2 2.3-3.5 4.5-3.5s3.9 1.3 4.5 3.5"/></svg></span>
+                  <span className="flex-1">{label}</span>
+                  {assignee === k && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#fa7938]" strokeWidth="1.8"><path d="M3 8.5l3.3 3.3L13 4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+              ))}
+            </ConvPopover>
+          </div>
+          {/* Priority */}
+          <div className="relative">
+            <button onClick={() => toggle('priority')} title="Prioridad" className={`w-8 h-8 rounded-full flex items-center justify-center ${openMenu === 'priority' ? 'bg-[#f1f1ee]' : 'hover:bg-[#f8f8f7]'}`}>
+              <ConvPriorityBars color={pri.color} bars={pri.bars} />
+            </button>
+            <ConvPopover open={openMenu === 'priority'} onClose={() => setOpenMenu(null)} width={200}>
+              <div className="px-3 pt-1 pb-1 text-[12px] font-semibold text-[#a4a4a2]">Prioridad</div>
+              {CONV_PRIORITIES.map(p => (
+                <button key={p.key} onClick={() => { setPriority(p.key); setOpenMenu(null); }} className="w-full h-9 px-3 flex items-center gap-2.5 text-left text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                  <ConvPriorityBars color={p.color} bars={p.bars} />
+                  <span className="flex-1">{p.label}</span>
+                  {priority === p.key && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#fa7938]" strokeWidth="1.8"><path d="M3 8.5l3.3 3.3L13 4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+              ))}
+            </ConvPopover>
+          </div>
+          {/* Snooze */}
+          <div className="relative">
+            <button onClick={() => { toggle('snooze'); setSnoozeCustom(false); }} className={`w-8 h-8 rounded-full flex items-center justify-center ${openMenu === 'snooze' ? 'bg-[#1a1a1a] text-white' : 'hover:bg-[#f8f8f7] text-[#646462]'}`}>
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 4.8V8l2.2 1.3" strokeLinecap="round"/></svg>
+            </button>
+            <ConvPopover open={openMenu === 'snooze'} onClose={() => setOpenMenu(null)} width={snoozeCustom ? 480 : 240}>
+              <div className="flex">
+                <div className="py-0.5" style={{ width: 240 }}>
+                  {CONV_SNOOZE.map(s => (
+                    <button key={s.key} onClick={() => { if (s.key === 'custom') setSnoozeCustom(true); else setOpenMenu(null); }} className={`w-full h-9 px-3 flex items-center justify-between text-left text-[13.5px] hover:bg-[#f8f8f7] ${snoozeCustom && s.key === 'custom' ? 'bg-[#f8f8f7]' : ''}`}>
+                      <span className="text-[#1a1a1a]">{s.label}</span>
+                      <span className="text-[#a4a4a2]">{s.hint}</span>
+                    </button>
+                  ))}
+                </div>
+                {snoozeCustom && (
+                  <div className="border-l border-[#f1f1ee] p-3" style={{ width: 240 }}>
+                    <ConvMiniCalendar />
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-[13px] text-[#1a1a1a]">5:30 pm ▾</span>
+                      <button onClick={() => setOpenMenu(null)} className="text-[13px] font-medium text-[#fa7938]">Snooze</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ConvPopover>
+          </div>
+          {/* Done */}
+          <button className="w-8 h-8 rounded-full hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]" title="Marcar como resuelta">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Thread */}
+      <div className="max-h-[440px] overflow-y-auto">
+        <ConvThread ch={ch} />
+      </div>
+
+      {/* Composer */}
+      <div className="px-4 pb-4 pt-2 border-t border-[#f1f1ee]">
+        <ConvComposer />
+      </div>
+    </div>
+  );
+}
+
+function ConvMiniCalendar() {
+  const days = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  // Static July 2026 grid to match the reference (1 = We).
+  const cells = [null, null, null, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31];
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <button className="w-6 h-6 flex items-center justify-center text-[#646462]">‹</button>
+        <span className="text-[13px] font-semibold text-[#1a1a1a]">July 2026</span>
+        <button className="w-6 h-6 flex items-center justify-center text-[#646462]">›</button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 text-center">
+        {days.map(d => <span key={d} className="text-[11px] text-[#a4a4a2] py-1">{d}</span>)}
+        {cells.map((c, i) => (
+          <span key={i} className={`text-[12px] py-1 rounded-full ${c === 23 ? 'bg-[#fa7938] text-white' : c && c > 23 ? 'text-[#1a1a1a] hover:bg-[#f1f1ee] cursor-pointer' : 'text-[#c8c9c4]'}`}>{c ?? ''}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContactsConversationsView() {
+  const [expanded, setExpanded] = useState<string | null>('messenger');
+  const [statusOpen, setStatusOpen] = useState(false);
+  return (
+    <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="max-w-[620px] mx-auto px-4 py-6">
+          {/* Identity verification banner */}
+          <div className="flex items-start gap-2 bg-[#f8f8f7] rounded-[8px] px-4 py-3 border border-[#e9eae6] mb-5">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0 mt-0.5" strokeWidth="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11.5v.1" strokeLinecap="round"/></svg>
+            <p className="text-[13px] text-[#1a1a1a] leading-[19px]">
+              Exige la verificación de identidad para proteger las conversaciones con los clientes y evitar la suplantación de identidad. <span className="underline cursor-pointer">Configurar verificación de identidad.</span>
+            </p>
+          </div>
+
+          {/* Status filter */}
+          <div className="relative inline-block mb-4">
+            <button onClick={() => setStatusOpen(o => !o)} className="h-9 px-3.5 rounded-full border border-[#e9eae6] bg-white text-[13.5px] inline-flex items-center gap-2 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.3"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4"/></svg>
+              Abierta <span className="text-[#646462]">4</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <ConvPopover open={statusOpen} onClose={() => setStatusOpen(false)} align="left" width={180}>
+              {['Abierta', 'Pausada', 'Cerrada', 'Todas'].map(s => (
+                <button key={s} onClick={() => setStatusOpen(false)} className="w-full h-9 px-3 text-left text-[13.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">{s}</button>
+              ))}
+            </ConvPopover>
+          </div>
+
+          {/* Feed */}
+          <div className="flex gap-4">
+            <span className="text-[12px] text-[#a4a4a2] pt-4 w-[70px] flex-shrink-0 text-right">16 jul 2026</span>
+            <div className="flex-1 min-w-0 flex flex-col gap-4">
+              {CONV_CHANNELS.map(ch => (
+                <Fragment key={ch.key}>
+                  {expanded === ch.key ? (
+                    <div>
+                      <ConvCardExpanded ch={ch} />
+                      <button onClick={() => setExpanded(null)} className="mt-1.5 text-[12px] text-[#646462] hover:underline">Contraer</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setExpanded(ch.key)} className="text-left border border-[#e9eae6] rounded-[12px] bg-white hover:bg-[#fbfbf9] overflow-hidden">
+                      <div className="flex items-center gap-2.5 px-4 pt-3.5">
+                        <ConvAvatar ch={ch} size="w-7 h-7" />
+                        <span className="flex-1 text-[13.5px] text-[#1a1a1a]"><span className="text-[#3b59f6] font-medium">{ch.name}</span> replied to this <span className="text-[#3b59f6]">conversation</span> with <span className="font-semibold">You</span></span>
+                        <span className="text-[12px] text-[#a4a4a2] flex-shrink-0">7d ago</span>
+                      </div>
+                      <div className="flex items-center gap-3 px-4 pb-3.5 pt-3">
+                        <span className="flex-1 text-[13px] text-[#646462] truncate">{ch.preview}</span>
+                        <span className="px-2 h-5 rounded-[5px] border border-[#e9eae6] text-[12px] text-[#646462] flex items-center flex-shrink-0">{ch.count}</span>
+                      </div>
+                    </button>
+                  )}
+                </Fragment>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function ContactsSidebar({
-  view, onNavigate, counts, onNewMessage, onEmpresasView,
+  view, onNavigate, counts, onNewMessage, onEmpresasView, onConversations,
 }: {
   view: View;
   onNavigate: (v: View) => void;
   counts?: { allUsers: number; allLeads: number; active: number; fresh: number };
   onNewMessage?: () => void;
   onEmpresasView?: (segment: 'all' | 'active' | 'new') => void;
+  onConversations?: () => void;
 }) {
   type ItemId = 'allUsers' | 'allLeads' | 'active' | 'new' | 'empresas' | 'empresasAll' | 'empresasActive' | 'empresasNew' | 'conversaciones' | 'mapa';
   const initialItem: ItemId = view === 'allLeads' ? 'allLeads' : 'active';
@@ -903,6 +1299,16 @@ function ContactsSidebar({
           </div>
         )}
       </div>
+
+      <div className="h-px bg-[#e9eae6] mx-2 my-1" />
+
+      <button
+        onClick={() => { setActiveItem('conversaciones'); onConversations?.(); }}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-[8px] w-full ${activeItem === 'conversaciones' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]' : 'hover:bg-white/60'}`}
+      >
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.3"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/><path d="M5 14l3-2.5h5"/></svg>
+        <span className={`text-[13px] text-[#1a1a1a] ${activeItem === 'conversaciones' ? 'font-semibold' : ''}`}>Conversaciones</span>
+      </button>
     </div>
   );
 }
@@ -2251,6 +2657,7 @@ function ContactsCommon({
   const [contactMode, setContactMode] = useState<'personas' | 'empresas'>('personas');
   const [empresaSegment, setEmpresaSegment] = useState<'all' | 'active' | 'new'>('all');
   const [empresaCreating, setEmpresaCreating] = useState(false);
+  const [showConversations, setShowConversations] = useState(false);
   // Real companies from the companies table (companiesApi CRUD) — replaces the
   // previous "derive companies from the customers list" behaviour.
   const { data: companies, loading: companiesLoading, error: companiesError, refetch: refetchCompanies } =
@@ -2295,12 +2702,13 @@ function ContactsCommon({
           <ContactsSidebar
             view={view}
             onNavigate={(v) => {
-              if ((v as string) === 'mapa') { setShowMap(true); setContactMode('personas'); }
-              else { setShowMap(false); setContactMode('personas'); onNavigate(v); }
+              if ((v as string) === 'mapa') { setShowMap(true); setContactMode('personas'); setShowConversations(false); }
+              else { setShowMap(false); setContactMode('personas'); setShowConversations(false); onNavigate(v); }
             }}
             counts={counts}
             onNewMessage={() => setShowNewMsgModal(true)}
-            onEmpresasView={(seg) => { setContactMode('empresas'); setEmpresaSegment(seg); setShowMap(false); }}
+            onEmpresasView={(seg) => { setContactMode('empresas'); setEmpresaSegment(seg); setShowMap(false); setShowConversations(false); }}
+            onConversations={() => { setShowConversations(true); setShowMap(false); setContactMode('personas'); }}
           />
         </div>
       </div>
@@ -2311,6 +2719,8 @@ function ContactsCommon({
           onBack={() => setOpenProfileId(null)}
           onUpdated={refetch}
         />
+      ) : showConversations ? (
+        <ContactsConversationsView />
       ) : showMap ? (
         <ContactsMapView customers={all} />
       ) : contactMode === 'empresas' ? (
