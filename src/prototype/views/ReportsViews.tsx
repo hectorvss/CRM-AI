@@ -7,7 +7,7 @@ import { useApi } from '../../api/hooks';
 import { casesApi, reportsApi } from '../../api/client';
 import { useRef, useState, memo, type ReactNode, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { Dropdown, KnowledgePlaceholder, TrialBanner } from '../sharedUi';
-import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDistributionBar, KpiDoughnut, KpiHeatmap, KpiTable } from '../charts/KpiChart';
+import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDistributionBar, KpiDoughnut, KpiHeatmap, KpiTable, ReportEditProvider } from '../charts/KpiChart';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3846,6 +3846,30 @@ function DateRangePicker({ value, onChange }: { value: DateRange; onChange: (v: 
   );
 }
 
+// Envuelve el contenido de un informe: al pasar el ratón por cualquier KPI/gráfico
+// aparecen los controles Detallado/Editar/⋯ y "Editar" abre el editor a pantalla
+// completa — con exactamente las mismas funcionalidades que en el constructor.
+function ReportEditHost({ children }: { children: ReactNode }) {
+  const [editing, setEditing] = useState<{ title: string; kind: BuilderKind; variant?: string } | null>(null);
+  const KIND_OK: BuilderKind[] = ['kpi', 'line', 'bar', 'doughnut', 'table', 'heatmap', 'title'];
+  return (
+    <ReportEditProvider value={cfg => setEditing({ title: cfg.title, kind: (KIND_OK.includes(cfg.kind as BuilderKind) ? cfg.kind : 'line') as BuilderKind, variant: cfg.variant })}>
+      {children}
+      {editing && (
+        <div className="fixed inset-0 z-[70] bg-[#f6f6f4] p-3 flex flex-col">
+          <ChartEditor
+            item={{ id: 'edit', group: '', label: editing.title, kind: editing.kind, span: 4 }}
+            initialKind={editing.kind} initialTitle={editing.title} initialVariant={editing.variant}
+            submitLabel="Actualizar gráfico"
+            onCancel={() => setEditing(null)}
+            onUpdate={() => setEditing(null)}
+          />
+        </div>
+      )}
+    </ReportEditProvider>
+  );
+}
+
 // Editor de gráfico a pantalla completa — cambia tipo, título, métricas y ejes.
 function ChartEditor({ item, initialKind, initialTitle, initialVariant, submitLabel = 'Actualizar gráfico', onCancel, onUpdate }: {
   item: CatalogItem; initialKind: BuilderKind; initialTitle: string; initialVariant?: string; submitLabel?: string;
@@ -4254,7 +4278,7 @@ export function ReportsView() {
               className="h-8 px-3 rounded-[8px] text-[12.5px] text-[#646462] hover:bg-[#f8f8f7] disabled:opacity-50"
             >Restablecer</button>
           </div>
-          {renderSub()}
+          <ReportEditHost>{renderSub()}</ReportEditHost>
         </div>
       </div>
     </div>

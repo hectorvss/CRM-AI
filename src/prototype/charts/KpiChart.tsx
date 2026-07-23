@@ -8,7 +8,7 @@
 // thin marks, a legend for ≥2 series, recessive grid/axes, tooltips on by
 // default. Cards degrade to an Intercom-style "sin datos" empty state.
 // ─────────────────────────────────────────────────────────────────────────────
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, createContext, useContext, useState, type ReactNode } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale, TimeScale,
@@ -28,6 +28,47 @@ ChartJS.register(
 );
 
 export { CLAIN_PALETTE };
+
+// ── Edición de bloques en informes ────────────────────────────────────────────
+// Cuando un informe envuelve su contenido con <ReportEditProvider>, cada tarjeta
+// (KpiCard / KpiChartCard) muestra al pasar el ratón los controles Detallado /
+// Editar / ⋯ que abren el editor de gráfico — igual que en el constructor.
+export type ReportEditFn = (cfg: { title: string; kind: string; variant?: string }) => void;
+const ReportEditContext = createContext<ReportEditFn | null>(null);
+export const ReportEditProvider = ReportEditContext.Provider;
+export function useReportEdit() { return useContext(ReportEditContext); }
+
+function ReportBlockControls({ title, kind, variant }: { title: string; kind: string; variant?: string }) {
+  const openEditor = useReportEdit();
+  const [menu, setMenu] = useState(false);
+  if (!openEditor) return null;
+  return (
+    <div className="absolute -top-3.5 right-2 z-20 hidden group-hover:flex items-center gap-1 bg-white border border-[#e9eae6] rounded-md shadow-sm px-1 py-0.5">
+      <button onClick={() => openEditor({ title, kind, variant })} title="Detallado" className="flex items-center gap-1 text-[11.5px] font-medium text-[#1a1a1a] px-1.5 py-1 rounded hover:bg-[#f3f3f1]">
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M5 4L2 8l3 4M11 4l3 4-3 4"/></svg>Detallado
+      </button>
+      <button onClick={() => openEditor({ title, kind, variant })} title="Editar" className="flex items-center gap-1 text-[11.5px] font-medium text-[#1a1a1a] px-1.5 py-1 rounded hover:bg-[#f3f3f1]">
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M11 2l3 3-8 8H3v-3z"/></svg>Editar
+      </button>
+      <div className="relative">
+        <button onClick={() => setMenu(m => !m)} title="Más" className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#f3f3f1] text-[#646462]">⋯</button>
+        {menu && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
+            <div className="absolute right-0 top-7 w-56 bg-white border border-[#e9eae6] rounded-lg shadow-lg py-1 z-20">
+              <button onClick={() => { openEditor({ title, kind, variant }); setMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M11 2l3 3-8 8H3v-3z"/></svg>Editar gráfico
+              </button>
+              <button onClick={() => setMenu(false)} className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 2v8M5 7l3 3 3-3M2 13h12"/></svg>Exportar datos agregados
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 export const kpiColor = (i: number) => CLAIN_PALETTE[i % CLAIN_PALETTE.length];
 
 const GRID = '#f1f1ee';
@@ -87,11 +128,12 @@ export function KpiEmpty({ text = 'Este gráfico no tiene datos', hint = 'Para v
 }
 
 // ── Card shell — a titled chart/KPI container with an info dot ────────────────
-export function KpiChartCard({ title, info = true, className = '', height = 260, titleRight, children }: {
-  title: string; info?: boolean; className?: string; height?: number; titleRight?: ReactNode; children: ReactNode;
+export function KpiChartCard({ title, info = true, className = '', height = 260, titleRight, editKind = 'line', children }: {
+  title: string; info?: boolean; className?: string; height?: number; titleRight?: ReactNode; editKind?: string; children: ReactNode;
 }) {
   return (
-    <div className={`bg-white border border-[#e9eae6] rounded-[12px] p-4 flex flex-col ${className}`}>
+    <div className={`group relative bg-white border border-[#e9eae6] rounded-[12px] p-4 flex flex-col ${className}`}>
+      <ReportBlockControls title={title} kind={editKind} />
       <div className="flex items-center gap-1.5 mb-2">
         {info && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a] flex-shrink-0"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM7.25 6.75h1.5V11h-1.5V6.75zM8 4a.9.9 0 110 1.8A.9.9 0 018 4z"/></svg>}
         <h3 className="text-[13.5px] font-semibold text-[#1a1a1a] min-w-0 truncate">{title}</h3>
@@ -109,7 +151,8 @@ export function KpiCard({ label, value, change, trend, sub, info = true }: {
   const deltaColor = trend === 'up' ? 'text-[#16a34a]' : trend === 'down' ? 'text-[#dc2626]' : 'text-[#646462]';
   const arrow = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '';
   return (
-    <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5 flex flex-col">
+    <div className="group relative bg-white border border-[#e9eae6] rounded-[12px] p-5 flex flex-col">
+      <ReportBlockControls title={label} kind="kpi" />
       <div className="flex items-center gap-1.5 mb-3">
         {info && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a] flex-shrink-0"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM7.25 6.75h1.5V11h-1.5V6.75zM8 4a.9.9 0 110 1.8A.9.9 0 018 4z"/></svg>}
         <span className="text-[13px] font-medium text-[#646462] leading-[17px]">{label}</span>
