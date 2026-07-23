@@ -68,6 +68,123 @@ function ReportsAnalysisKpiCard({ label, value, change, trend, sub }: { label: s
   );
 }
 
+// ── Todos los informes — catálogo de los 25 informes preconfigurados ──────────
+type AllReportRow = { t: string; d?: string; sub?: ReportsSubView; legacy?: boolean };
+const ALL_REPORTS: AllReportRow[] = [
+  { t: 'Artículos', sub: 'articles', legacy: true },
+  { t: 'Calls', sub: 'calls', d: 'Use the Calls report to visualize and explore your team’s calling activity.' },
+  { t: 'Capacidad de entrega de correo electrónico', legacy: true },
+  { t: 'Conversation tags', sub: 'temas', d: 'Explore the reasons your customers get in touch, and monitor trends in the topics that come up.' },
+  { t: 'Conversations', sub: 'conversations', d: 'Track your new inbound conversations, busiest periods and biggest customer issues, and optimize your support.' },
+  { t: 'Copilot', sub: 'copilot', d: 'Analyze and report on how Copilot is used by teammates in your workspace.' },
+  { t: 'CX Score', sub: 'csat', d: 'Analyze your customer experience across teammates and AI Agents using a breakthrough AI-generated metric.' },
+  { t: 'Descripción general de los informes de Intercom', sub: 'overview' },
+  { t: 'Effectiveness', sub: 'effectiveness', d: 'Measure how effectively your teams handle conversations with the Effectiveness report.' },
+  { t: 'Fin AI Agent', sub: 'finAgent', d: 'Find out how Fin AI Agent is performing in conversations and impacting your resolution rates.' },
+  { t: 'Fin for Ecommerce', sub: 'finAgent', d: 'Analyze how Fin for Ecommerce is performing, including carousel engagement and checkout activity.' },
+  { t: 'Fin for Service', sub: 'finAgent', d: 'Find out how Fin for Service is performing in conversations and impacting your resolution rates.' },
+  { t: 'Flujos de trabajo', legacy: true },
+  { t: 'Flujos de trabajo (generación de prospectos)', legacy: true },
+  { t: 'Información general sobre las relaciones con el cliente', sub: 'outboundEng', legacy: true },
+  { t: 'Leads', legacy: true },
+  { t: 'Monitors', sub: 'finAgent', d: 'Monitor and improve Fin AI Agent quality at scale' },
+  { t: 'Responsiveness', sub: 'responsiveness', d: 'See how quickly your team respond to, and close conversations with the Responsiveness report.' },
+  { t: 'SLAs', sub: 'slas', d: 'Review your team’s performance against your Service Level Agreements with the SLAs report.' },
+  { t: 'Soporte para las conversaciones', sub: 'conversations', legacy: true },
+  { t: 'Surveyed CSAT', sub: 'csat', d: 'Get a holistic view of customer satisfaction across all support channels, teammates, AI agents, and chatbots.' },
+  { t: 'Team inbox performance', sub: 'teamInbox', d: 'Check in on how each team inbox is performing with accurate metrics and insights.' },
+  { t: 'Teammate performance', sub: 'teammate', d: 'Check in on teammate performance with accurate metrics and insights.' },
+  { t: 'Tickets', sub: 'tickets', d: 'Explore your tickets report and create your own custom reports using ticket data.' },
+  { t: 'Ventas', legacy: true },
+];
+
+function ReportsAllReportsContent({ onOpen }: { onOpen: (s: ReportsSubView) => void }) {
+  const [tab, setTab] = useState<'shared' | 'mine' | 'intercom'>('intercom');
+  const [q, setQ] = useState('');
+  const query = q.trim().toLowerCase();
+  const rows = tab === 'intercom' ? ALL_REPORTS.filter(r => !query || r.t.toLowerCase().includes(query)) : [];
+  const IntercomTag = () => (
+    <span className="inline-flex items-center gap-1.5 text-[13px] text-[#646462]">
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M3 2a1 1 0 011-1h8a1 1 0 011 1v12l-5-2.5L3 14V2z"/></svg>
+      Intercom
+    </span>
+  );
+  const tabs = [
+    { id: 'shared' as const,   label: 'Compartido contigo (0)' },
+    { id: 'mine' as const,     label: 'Tus informes (0)' },
+    { id: 'intercom' as const, label: `Informes de Intercom (${ALL_REPORTS.length})` },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M2 13V9h2.5v4H2zm3.5 0V6.5H8V13H5.5zm3.5 0V4h2.5v9H9zm3.5 0V7.5H15V13h-2.5z"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Todos los informes</h1>
+        </div>
+        <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Nuevo informe
+        </button>
+      </div>
+      <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${
+              tab === t.id ? 'border-[#ed621d] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="px-6 py-3 border-b border-[#f1f1ee] flex-shrink-0">
+        <div className="flex items-center gap-2 h-9 rounded-lg border border-[#e9eae6] px-3 bg-white focus-within:border-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L14 14" strokeLinecap="round"/></svg>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar…" className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]" />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {tab !== 'intercom' ? (
+          <div className="px-6 py-16 text-center">
+            <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">{tab === 'mine' ? 'Aún no has creado informes' : 'No hay informes compartidos contigo'}</p>
+            <p className="text-[13px] text-[#646462]">{tab === 'mine' ? 'Crea uno nuevo o duplica un informe de Intercom para empezar.' : 'Cuando alguien comparta un informe contigo, aparecerá aquí.'}</p>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead className="bg-[#f8f8f7] sticky top-0">
+              <tr className="text-[12px] font-semibold text-[#646462]">
+                <th className="text-left px-6 py-2.5">Título</th>
+                <th className="text-left px-4 py-2.5 w-[180px]">Propiedad de</th>
+                <th className="text-left px-4 py-2.5 w-[180px]">Última actualización</th>
+                <th className="text-left px-4 py-2.5 w-[180px]">Última actualización de</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr
+                  key={r.t}
+                  onClick={() => r.sub && onOpen(r.sub)}
+                  className={`border-t border-[#f1f1ee] ${r.sub ? 'hover:bg-[#f8f8f7] cursor-pointer' : ''}`}
+                >
+                  <td className="px-6 py-3.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13.5px] font-semibold text-[#1a1a1a]">{r.t}</span>
+                      {r.legacy && <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f3f3f1] text-[#646462]">Anterior</span>}
+                    </div>
+                    {r.d && <p className="text-[12.5px] text-[#646462] mt-0.5 max-w-[640px]">{r.d}</p>}
+                  </td>
+                  <td className="px-4 py-3.5"><IntercomTag /></td>
+                  <td className="px-4 py-3.5 text-[13px] text-[#646462]">{r.d ? '7 días atrás' : '—'}</td>
+                  <td className="px-4 py-3.5 text-[13px] text-[#646462]">—</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Demo data — deterministic simulated overview so the Resumen shows real
 // Chart.js charts until reportsApi.overview returns time-series. Seeded RNG →
 // stable across renders. Used only as a fallback when the backend has no series.
@@ -2773,7 +2890,7 @@ export function ReportsView() {
     switch (sub) {
       // ── Análisis (from original Reports.tsx) ────────────────────────────
       case 'overview':         return <ReportsOverviewContent period={period} channel={channel} />;
-      case 'todos':            return <KnowledgePlaceholder title="Todos los informes" subtitle="Aquí verás los 25 informes disponibles: familias de KPIs de IA, soporte humano y proactivo." />;
+      case 'todos':            return <ReportsAllReportsContent onOpen={setSub} />;
       case 'misInformes':      return <KnowledgePlaceholder title="Tus informes" subtitle="Aún no has creado informes propios. Duplica un informe o crea uno desde cero para verlo aquí." />;
       case 'favoritos':        return <KnowledgePlaceholder title="Tus favoritos" subtitle="Marca informes como favoritos para acceder a ellos rápidamente desde aquí." />;
       case 'aiResumen':        return <ReportsAiResumenContent period={period} channel={channel} />;
