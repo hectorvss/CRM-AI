@@ -1456,7 +1456,7 @@ function OutboundMessageEditor({ template, draft, onBack, onSave }: {
 
 
 // ── Outbound Mensajes main view ───────────────────────────────────────────────
-function OutboundMensajes() {
+function OutboundMensajes({ onEditorOpenChange }: { onEditorOpenChange?: (open: boolean) => void }) {
   // Load persisted messages from emailTemplatesApi (category=outbound)
   const { data: apiTemplates, loading: loadingMsgs, refetch: refetchMsgs } = useApi<any[]>(
     () => emailTemplatesApi.list({ category: 'outbound' }),
@@ -1505,6 +1505,9 @@ function OutboundMensajes() {
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [editorState, setEditorState] = useState<{ open: boolean; template: OutboundTemplate | null; draft?: OutboundMsg } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Tell the parent to hide the "Canales salientes" sidebar while composing.
+  useEffect(() => { onEditorOpenChange?.(!!editorState?.open); }, [editorState?.open, onEditorOpenChange]);
 
   const contentTypeOpts: OutboundContentType[] = ['all', 'chat', 'email', 'whatsapp', 'sms', 'push', 'banner', 'post'];
 
@@ -2265,6 +2268,7 @@ function readInitialOutboundSubFromUrl(): OutboundSubView {
 
 export function OutboundView() {
   const [sub, setSub] = useState<OutboundSubView>(() => readInitialOutboundSubFromUrl());
+  const [editorOpen, setEditorOpen] = useState(false);
   // Sync /outbound/:sub so deep-links + reload land on the right sub-view.
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2272,7 +2276,7 @@ export function OutboundView() {
   }, [sub]);
   function renderSub() {
     switch (sub) {
-      case 'mensajes':   return <OutboundMensajes />;
+      case 'mensajes':   return <OutboundMensajes onEditorOpenChange={setEditorOpen} />;
       case 'series':     return <OutboundSeries />;
       case 'ultimo':     return <KnowledgePlaceholder title="Último" subtitle="El último mensaje saliente que has visualizado o editado." />;
       case 'borradores': return <KnowledgePlaceholder title="Borradores recientes" subtitle="Mensajes salientes en estado borrador para finalizar y enviar." />;
@@ -2283,7 +2287,7 @@ export function OutboundView() {
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
-        <OutboundSidebar sub={sub} onSelect={setSub} />
+        {!editorOpen && <OutboundSidebar sub={sub} onSelect={setSub} />}
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           {renderSub()}
         </div>
