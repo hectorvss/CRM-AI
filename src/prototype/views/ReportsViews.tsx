@@ -1458,139 +1458,80 @@ function ReportsConversationsContent({ period, channel }: { period: string; chan
 }
 
 function ReportsCsatContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.csat(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const csatTs: { day: number; avgScore: number; count: number }[] = data?.timeSeries ?? [];
-  const csatBreakdown: { userId: string; name: string; avgCsat: number; count: number }[] = data?.teammateCsatBreakdown ?? [];
-  const maxCsat = Math.max(...csatTs.map(t => t.avgScore ?? 0), 1);
+  useApi(() => reportsApi.csat(period, channel), [period, channel], null);
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
   return (
     <>
-      <ReportShellHeader title="Surveyed CSAT" description="See how your customer satisfaction scores and support channels, teammates, e..." />
+      <ReportShellHeader title="Surveyed CSAT" description="Get a holistic view of customer satisfaction across all support channels, teammates, AI agents, and chatbots." />
       <ReportShellFilters />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Overall CSAT score" value={loading ? '…' : kpis.overall_csat != null ? `${kpis.overall_csat}%` : '—'} sub={`${kpis.positive_count ?? 0} de ${(kpis.positive_count ?? 0) + (kpis.neutral_count ?? 0) + (kpis.negative_count ?? 0)}`} />
-        <ReportsKpiCard label="Teammate CSAT score" value={loading ? '…' : kpis.teammate_csat != null ? `${kpis.teammate_csat}%` : '—'} sub={kpis.teammate_csat_count ? `${kpis.teammate_csat_count} surveys` : '0 de 0'} />
-        <ReportsKpiCard label="Fin Agent CSAT score" value={loading ? '…' : kpis.fin_csat != null ? `${kpis.fin_csat}%` : '—'} sub={kpis.fin_csat_count ? `${kpis.fin_csat_count} surveys` : '0 de 0'} />
-        {/* CSAT score over time */}
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">CSAT score over time (avg %)</span>
-          </div>
-          {csatTs.length === 0 || csatTs.every(t => t.count === 0) ? (
-            <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin encuestas CSAT en el período</div>
-          ) : (
-            <>
-              <div className="h-[120px] flex items-end gap-0.5 px-2">
-                {csatTs.map((t, i) => (
-                  <div key={i} style={{ height: t.avgScore ? `${(t.avgScore / maxCsat) * 100}%` : '4px' }}
-                    className={`flex-1 ${t.count > 0 ? 'bg-[#16a34a]' : 'bg-[#f3f3f1]'} rounded-t`}
-                    title={t.count > 0 ? `${Math.round(t.avgScore)}% (${t.count} surveys)` : 'Sin datos'} />
-                ))}
-              </div>
-              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
-                <span>Día 1</span><span>Día {Math.round(csatTs.length / 2)}</span><span>Día {csatTs.length}</span>
-              </div>
-            </>
-          )}
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <div className="grid grid-cols-3 gap-3">
+          <KpiCard label="Overall CSAT score" value="91%" sub="248 de 273" change="1 pt" trend="up" />
+          <KpiCard label="Teammate CSAT score" value="93%" sub="164 de 176" change="2 pts" trend="up" />
+          <KpiCard label="Fin AI agent CSAT score" value="89%" sub="97 de 109" change="3 pts" trend="up" />
         </div>
-        <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Conversation ratings and remarks</h3>
-        <div className="col-span-3 grid grid-cols-2 gap-4">
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Conversation ratings – by channel</span>
-            </div>
-            <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">Sin desglose de canal disponible</div>
+        <KpiChartCard title="CSAT score over time (avg %)">
+          <KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: 'CSAT', data: mockSeries(90, 4, 0.2, 111), fill: true }]} type="line" showLegend={false} />
+        </KpiChartCard>
+        <Section title="Conversation ratings and remarks">
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="Conversation ratings - by conversation rating">
+              <KpiTimeSeries labels={['😡 1', '🙁 2', '😐 3', '🙂 4', '🤩 5']} series={[{ label: 'Valoraciones', data: [4, 4, 17, 68, 180] }]} type="bar" showLegend={false} />
+            </KpiChartCard>
+            <KpiChartCard title="Conversation ratings - by channel">
+              <KpiTimeSeries labels={['Chat', 'Email', 'WhatsApp', 'Teléfono']} series={[
+                { label: 'Positivo', data: [128, 74, 31, 15] },
+                { label: 'Negativo', data: [4, 2, 1, 1] },
+              ]} type="bar" stacked />
+            </KpiChartCard>
           </div>
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Conversation ratings – distribution</span>
-            </div>
-            <div className="space-y-2 pt-1">
-              {[{ label: '😊 Positive', count: kpis.positive_count ?? 0, color: '#16a34a' }, { label: '😐 Neutral', count: kpis.neutral_count ?? 0, color: '#d97706' }, { label: '😞 Negative', count: kpis.negative_count ?? 0, color: '#dc2626' }].map(r => {
-                const total = (kpis.positive_count ?? 0) + (kpis.neutral_count ?? 0) + (kpis.negative_count ?? 0);
-                return (
-                  <div key={r.label} className="flex items-center gap-2">
-                    <span className="text-[11px] text-[#646462] w-[80px]">{r.label}</span>
-                    <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
-                      <div className="h-2 rounded-full" style={{ width: `${total > 0 ? (r.count / total) * 100 : 0}%`, background: r.color }} />
-                    </div>
-                    <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{r.count}</span>
-                  </div>
-                );
-              })}
-            </div>
+          <div className="grid grid-cols-3 gap-3">
+            <KpiCard label="🤩 Positive remarks" value="248" change="12" trend="up" />
+            <KpiCard label="😐 Neutral remarks" value="17" change="2" trend="down" />
+            <KpiCard label="🥴 Negative remarks" value="8" change="3" trend="down" />
           </div>
-        </div>
-        <ReportsKpiCard label="Positive remarks" value={loading ? '…' : String(kpis.positive_count ?? 0)} />
-        <ReportsKpiCard label="Neutral remarks" value={loading ? '…' : String(kpis.neutral_count ?? 0)} />
-        <ReportsKpiCard label="Negative remarks" value={loading ? '…' : String(kpis.negative_count ?? 0)} />
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-3">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Conversation ratings</span>
+          <KpiChartCard title="Conversation ratings" height={240}>
+            <KpiTable columns={['Conversación', 'Valoración', 'Comentario', 'Canal', 'Fecha']} rows={[
+              ['#1042', '🤩 5', 'Súper rápido, gracias', 'Chat', 'Jul 18'],
+              ['#1039', '😡 1', 'Demasiada espera', 'Email', 'Jul 17'],
+              ['#1036', '🙂 4', 'Resuelto a la primera', 'Chat', 'Jul 16'],
+              ['#1031', '😐 3', 'Correcto pero lento', 'WhatsApp', 'Jul 15'],
+              ['#1028', '🤩 5', 'Muy amable', 'Teléfono', 'Jul 14'],
+            ]} />
+          </KpiChartCard>
+        </Section>
+        <Section title="CSAT survey">
+          <div className="grid grid-cols-2 gap-3">
+            <KpiCard label="CSAT request rate" value="74%" sub="273 de 369" change="5 pts" trend="up" />
+            <KpiCard label="CSAT response rate" value="41%" sub="112 de 273" change="2 pts" trend="up" />
           </div>
-          <div className="h-[140px] flex flex-col items-center justify-center">
-            <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-[#646462] mb-1" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-            <span className="text-[12px] text-[#1a1a1a]">No hay datos disponibles</span>
-            <span className="text-[11px] text-[#646462] mt-0.5">Pruebe los filtros para refinar los datos</span>
-          </div>
-        </div>
-        <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">CSAT survey</h3>
-        <ReportsKpiCard label="CSAT request rate" value={loading ? '…' : kpis.request_rate ?? '0%'} sub={loading ? undefined : `${kpis.survey_sent_count ?? 0} de ${kpis.closed_count ?? 0}`} />
-        <ReportsKpiCard label="CSAT response rate" value={loading ? '…' : kpis.response_rate ?? '0%'} sub={loading ? undefined : `${kpis.survey_responded_count ?? 0} de ${kpis.survey_sent_count ?? 0}`} />
-        <div className="col-span-1" />
-        {/* CSAT survey rates over time — would need per-conversation survey tracking */}
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">CSAT survey request & response rates – by time</span>
-          </div>
-          <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">
-            Requiere seguimiento de envíos de encuesta por conversación
-          </div>
-        </div>
-        <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Dissatisfaction drivers</h3>
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Topics driving dissatisfaction</span>
-          </div>
-          <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">
-            Requiere análisis NLP de comentarios – sin datos disponibles
-          </div>
-        </div>
-        <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Teammate performance</h3>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
-          <div className="px-5 py-3 flex items-center gap-1">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Teammate CSAT performance</span>
-          </div>
-          <div className="grid grid-cols-3 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-            <div>Compañero de equipo</div>
-            <div>Avg CSAT</div>
-            <div>Encuestas</div>
-          </div>
-          {loading ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
-          ) : csatBreakdown.length === 0 ? (
-            <div className="h-[120px] flex flex-col items-center justify-center text-center">
-              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Sin datos de CSAT por compañero</span>
-              <span className="text-[11.5px] text-[#646462] mt-0.5">Los datos aparecen cuando se reciban encuestas CSAT respondidas.</span>
-            </div>
-          ) : csatBreakdown.map((row) => (
-            <div key={row.userId} className="grid grid-cols-3 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-              <div className="font-medium truncate">{row.name}</div>
-              <div className={row.avgCsat >= 80 ? 'text-[#16a34a]' : row.avgCsat >= 60 ? 'text-[#d97706]' : 'text-[#dc2626]'}>
-                {Math.round(row.avgCsat)}%
-              </div>
-              <div className="text-[#646462]">{row.count}</div>
-            </div>
-          ))}
-        </div>
+          <KpiChartCard title="CSAT survey request & response rates - by time (%)">
+            <KpiTimeSeries labels={MOCK_WEEKS} series={[
+              { label: 'Tasa de solicitud', data: mockSeries(72, 6, 0.4, 112), fill: true },
+              { label: 'Tasa de respuesta', data: mockSeries(40, 6, 0.3, 113) },
+            ]} type="line" />
+          </KpiChartCard>
+        </Section>
+        <Section title="Dissatisfaction drivers">
+          <KpiChartCard title="Topics driving dissatisfaction">
+            <KpiTimeSeries labels={['Tiempo de espera', 'Resolución incompleta', 'Tono', 'No resuelto', 'Facturación']} series={[{ label: 'Conversaciones', data: [12, 8, 5, 4, 3] }]} type="bar" showLegend={false} />
+          </KpiChartCard>
+        </Section>
+        <Section title="Teammate performance">
+          <KpiChartCard title="Teammate CSAT performance" height={240}>
+            <KpiTable columns={['Compañero de equipo', 'Avg CSAT', 'Positivos', 'Negativos', 'Encuestas']} rows={[
+              ['Ana Torres', '95%', '55', '3', '58'],
+              ['María Ruiz', '93%', '44', '3', '47'],
+              ['Luis Vega', '90%', '35', '4', '39'],
+              ['Jon Aixa', '87%', '17', '3', '20'],
+            ]} />
+          </KpiChartCard>
+        </Section>
       </div>
     </>
   );
@@ -1726,439 +1667,182 @@ function ReportsResponsivenessContent({ period, channel }: { period: string; cha
 }
 
 function ReportsSlasContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
-  const distribution: { status: string; count: number }[] = data?.distribution ?? [];
-  const byPriority: { priority: string; slaStatus: string; count: number }[] = data?.byPriority ?? [];
-  const breachedByType: { type: string; count: number }[] = data?.breachedByType ?? [];
-  const slaTimeSeries: { day: number; compliant: number; breached: number }[] = data?.timeSeries ?? [];
-  const totalWithSla = distribution.reduce((s, d) => s + d.count, 0);
-  const breachedCount = distribution.find(d => d.status === 'breached')?.count ?? 0;
-  const compliantCount = distribution.find(d => d.status === 'compliant')?.count ?? 0;
-  const missRate = totalWithSla > 0 ? `${Math.round((breachedCount / totalWithSla) * 100)}%` : '—';
-
-  // Group byPriority into pivot table
-  const priorities = [...new Set(byPriority.map(r => r.priority))].filter(Boolean);
-  const slaStatuses = [...new Set(byPriority.map(r => r.slaStatus))].filter(Boolean);
-
+  useApi(() => reportsApi.sla(period, channel), [period, channel], null);
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
   return (
     <>
       <ReportShellHeader title="SLAs" description="Review your team's performance against your Service Level Agreements with the SLAs report." />
       <ReportShellFilters extraFilter={{ icon: 'sla', label: 'SLA (Acuerdo de nivel de servicio) es Cualquiera' }} />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Conversation and ticket SLA miss rate" value={loading ? '…' : missRate} sub={`${breachedCount} de ${totalWithSla}`} />
-        <ReportsKpiCard label="Conversations and tickets with SLA" value={loading ? '…' : String(totalWithSla)} />
-        <ReportsKpiCard label="Conversations and tickets with missed SLA" value={loading ? '…' : String(breachedCount)} />
-        {/* Distribution summary */}
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
-          <div className="px-5 py-3 flex items-center gap-1">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">SLA performance</span>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Cumplimiento de SLA">
+          <div className="grid grid-cols-3 gap-3">
+            <KpiCard label="Conversation and ticket SLA miss rate" value="8%" sub="14 de 176" change="2 pts" trend="up" />
+            <KpiCard label="Conversations and tickets with SLA" value="176" change="11%" trend="up" />
+            <KpiCard label="Conversations and tickets with missed SLA" value="14" change="3" trend="up" />
           </div>
-          <div className="grid grid-cols-4 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-            <div>Estado SLA</div>
-            <div>Casos</div>
-            <div>% del total</div>
-            <div>Tendencia</div>
+          <KpiChartCard title="Targets hit over time">
+            <KpiTimeSeries labels={MOCK_WEEKS} series={[
+              { label: 'Cumplidos', data: mockSeries(150, 24, 4, 121), fill: true },
+              { label: 'Incumplidos', data: mockSeries(14, 6, -0.3, 122) },
+            ]} type="bar" stacked />
+          </KpiChartCard>
+        </Section>
+        <Section title="Desglose de SLA">
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="SLA por prioridad">
+              <KpiTimeSeries labels={['Urgente', 'Alta', 'Media', 'Baja']} series={[
+                { label: 'Cumplido', data: [22, 48, 61, 31] },
+                { label: 'Incumplido', data: [4, 5, 3, 2] },
+              ]} type="bar" stacked />
+            </KpiChartCard>
+            <KpiChartCard title="SLA incumplidos por tipo de caso">
+              <KpiTable columns={['Tipo de caso', 'Incumplidos']} rows={[
+                ['Reembolso', '5'], ['Envío', '4'], ['Facturación', '3'], ['Cuenta', '2'],
+              ]} />
+            </KpiChartCard>
           </div>
-          {loading ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
-          ) : distribution.length === 0 ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Sin datos SLA en el período</div>
-          ) : distribution.map(d => (
-            <div key={d.status} className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-              <div className="capitalize">{d.status}</div>
-              <div>{d.count}</div>
-              <div className="text-[#646462]">{totalWithSla > 0 ? `${Math.round((d.count / totalWithSla) * 100)}%` : '—'}</div>
-              <div className="text-[#646462]">—</div>
-            </div>
-          ))}
-          {/* Compliant summary row */}
-          {distribution.length > 0 && (
-            <div className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] bg-[#f8f8f7] text-[12.5px] font-medium text-[#1a1a1a]">
-              <div>Total</div>
-              <div>{totalWithSla}</div>
-              <div>100%</div>
-              <div className={compliantCount > breachedCount ? 'text-[#16a34a]' : 'text-[#dc2626]'}>{missRate} miss rate</div>
-            </div>
-          )}
-        </div>
-        {/* By priority table */}
-        {byPriority.length > 0 && (
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
-            <div className="px-5 py-3 flex items-center gap-1">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">SLA por prioridad</span>
-            </div>
-            <div className={`grid px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]`} style={{ gridTemplateColumns: `repeat(${1 + slaStatuses.length}, minmax(0,1fr))` }}>
-              <div>Prioridad</div>
-              {slaStatuses.map(s => <div key={s} className="capitalize">{s}</div>)}
-            </div>
-            {priorities.map(priority => (
-              <div key={priority} className={`grid px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]`} style={{ gridTemplateColumns: `repeat(${1 + slaStatuses.length}, minmax(0,1fr))` }}>
-                <div className="capitalize">{priority ?? 'Sin prioridad'}</div>
-                {slaStatuses.map(s => {
-                  const found = byPriority.find(r => r.priority === priority && r.slaStatus === s);
-                  return <div key={s} className="text-[#646462]">{found?.count ?? 0}</div>;
-                })}
-              </div>
-            ))}
-          </div>
-        )}
-        {/* Breached by type */}
-        {breachedByType.length > 0 && (
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-3">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">SLA incumplidos por tipo de caso</span>
-            </div>
-            <div className="space-y-2">
-              {breachedByType.slice(0, 8).map(t => {
-                const maxCount = Math.max(...breachedByType.map(x => x.count), 1);
-                return (
-                  <div key={t.type} className="flex items-center gap-2">
-                    <span className="text-[11px] text-[#646462] w-[120px] truncate">{t.type.replace(/_/g, ' ')}</span>
-                    <div className="flex-1 bg-[#fee2e2] rounded-full h-2">
-                      <div className="bg-[#dc2626] h-2 rounded-full" style={{ width: `${(t.count / maxCount) * 100}%` }} />
-                    </div>
-                    <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{t.count}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {/* SLA targets hit over time */}
-        {slaTimeSeries.some(t => t.compliant > 0 || t.breached > 0) ? (
-          <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Targets hit over time</span>
-              <span className="ml-auto flex items-center gap-3 text-[11px] text-[#646462]">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#16a34a] inline-block" />Compliant</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#dc2626] inline-block" />Breached</span>
-              </span>
-            </div>
-            <div className="h-[140px] flex items-end gap-0.5 px-2">
-              {slaTimeSeries.map((t, i) => {
-                const total = t.compliant + t.breached;
-                const maxH = Math.max(...slaTimeSeries.map(x => x.compliant + x.breached), 1);
-                return (
-                  <div key={i} className="flex-1 flex flex-col-reverse" style={{ height: total ? `${(total / maxH) * 100}%` : '4px' }}>
-                    {total > 0 ? (
-                      <>
-                        <div style={{ height: `${(t.compliant / total) * 100}%` }} className="bg-[#16a34a] rounded-t-sm w-full" />
-                        <div style={{ height: `${(t.breached / total) * 100}%` }} className="bg-[#dc2626] w-full" />
-                      </>
-                    ) : (
-                      <div className="bg-[#f3f3f1] w-full h-full rounded-t" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-2">
-              <span>Día 1</span><span>Día {Math.round(slaTimeSeries.length / 2)}</span><span>Día {slaTimeSeries.length}</span>
-            </div>
-          </div>
-        ) : (
-          <ReportEmptyChart label="Targets hit over time" span={3} />
-        )}
+          <KpiChartCard title="SLA performance" height={220}>
+            <KpiTable columns={['Estado SLA', 'Casos', '% del total']} rows={[
+              ['Cumplido', '162', '92%'], ['Incumplido', '14', '8%'], ['Total', '176', '100%'],
+            ]} />
+          </KpiChartCard>
+        </Section>
       </div>
     </>
   );
 }
 
 function ReportsTeamInboxContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.teamInbox(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const inboxBreakdown: { inbox: string; assigned: number; replied: number; closed: number; medianClose: string }[] = data?.inboxBreakdown ?? [];
-  const inboxTimeSeries: { day: number; count: number }[] = data?.timeSeries ?? [];
-  const maxInboxTs = Math.max(...inboxTimeSeries.map(t => t.count), 1);
-  const isEmpty = data?.isEmpty !== false;
-
+  useApi(() => reportsApi.teamInbox(period, channel), [period, channel], null);
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
   return (
     <>
       <ReportShellHeader title="Team inbox performance" description="Check in on how each team inbox is performing with accurate metrics and insights." />
       <ReportShellFilters extraFilter={{ icon: 'team', label: 'Equipo es Cualquiera' }} />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Median team assignment to first response" value={kpis.median_assign_to_first_response ?? '—'} />
-        <ReportsKpiCard label="Median team assignment to subsequent response" value={kpis.median_assign_to_subsequent_response ?? '—'} />
-        <ReportsKpiCard label="Median team assignment to close" value={loading ? '…' : kpis.median_assign_to_close ?? '—'} />
-        <ReportsKpiCard label="Conversations assigned" value={loading ? '…' : String(kpis.conversations_assigned ?? 0)} />
-        <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.conversations_replied ?? 0)} />
-        <ReportsKpiCard label="Closed conversations" value={loading ? '…' : String(kpis.closed_conversations ?? 0)} />
-        {/* Inbox breakdown table */}
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-          <div className="px-5 py-3 flex items-center gap-1">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Comparison of Team inbox performance</span>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Rendimiento del inbox de equipo">
+          <div className="grid grid-cols-3 gap-3">
+            <KpiCard label="Median team assignment to first response" value="3m 18s" change="12s" trend="up" />
+            <KpiCard label="Median team assignment to subsequent response" value="5m 44s" change="21s" trend="down" />
+            <KpiCard label="Median team assignment to close" value="1h 52m" change="8m" trend="up" />
+            <KpiCard label="Conversations assigned" value="284" change="9%" trend="up" />
+            <KpiCard label="Conversations replied to" value="271" change="7%" trend="up" />
+            <KpiCard label="Closed conversations" value="248" change="11%" trend="up" />
           </div>
-          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-            <div>Inbox / Assignee</div>
-            <div>Assigned</div>
-            <div>Replied</div>
-            <div>Closed</div>
-            <div>Median close time</div>
-          </div>
-          {loading ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
-          ) : isEmpty || inboxBreakdown.length === 0 ? (
-            <div className="h-[120px] flex flex-col items-center justify-center text-center">
-              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Sin datos de inbox por equipo</span>
-              <span className="text-[11.5px] text-[#646462] mt-0.5">Asigna conversaciones a agentes para ver métricas aquí.</span>
-            </div>
-          ) : inboxBreakdown.map((row, i) => (
-            <div key={i} className="grid grid-cols-5 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
-              <div className="font-medium truncate">{row.inbox}</div>
-              <div>{row.assigned}</div>
-              <div>{row.replied}</div>
-              <div>{row.closed}</div>
-              <div className="text-[#646462]">{row.medianClose}</div>
-            </div>
-          ))}
-        </div>
-        {/* Team activity over time */}
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Team inbox activity – conversations per day</span>
-          </div>
-          {inboxTimeSeries.length === 0 || inboxTimeSeries.every(t => t.count === 0) ? (
-            <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin actividad en el período</div>
-          ) : (
-            <>
-              <div className="h-[120px] flex items-end gap-0.5 px-2">
-                {inboxTimeSeries.map((t, i) => (
-                  <div key={i} style={{ height: t.count ? `${(t.count / maxInboxTs) * 100}%` : '4px' }}
-                    className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`}
-                    title={`${t.count} conversaciones`} />
-                ))}
-              </div>
-              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
-                <span>Día 1</span><span>Día {Math.round(inboxTimeSeries.length / 2)}</span><span>Día {inboxTimeSeries.length}</span>
-              </div>
-            </>
-          )}
-        </div>
+          <KpiChartCard title="Teammate Activity – conversaciones por día">
+            <KpiTimeSeries labels={MOCK_DAYS} series={[
+              { label: 'Asignadas', data: mockDaily(40, 14, 1, 131), fill: true },
+              { label: 'Respondidas', data: mockDaily(37, 12, 1, 132) },
+              { label: 'Cerradas', data: mockDaily(33, 11, 1, 133) },
+            ]} type="line" />
+          </KpiChartCard>
+        </Section>
+        <Section title="Comparativa por inbox">
+          <KpiChartCard title="Comparison of Team inbox performance" height={240}>
+            <KpiTable columns={['Inbox', 'Assigned', 'Replied', 'Closed', 'Median close time']} rows={[
+              ['Soporte general', '124', '119', '108', '1h 44m'],
+              ['Facturación', '68', '64', '59', '2h 12m'],
+              ['Técnico', '52', '50', '47', '2h 38m'],
+              ['Ventas', '40', '38', '34', '1h 22m'],
+            ]} />
+          </KpiChartCard>
+        </Section>
       </div>
     </>
   );
 }
 
 function ReportsTeammateContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.teammate(period, channel), [period, channel], null);
-  const members: any[] = data?.members ?? [];
-  const isEmpty = data?.isEmpty !== false || members.length === 0;
-  const teamTimeSeries: { day: number; count: number }[] = data?.teamTimeSeries ?? [];
-  const maxTts = Math.max(...teamTimeSeries.map(t => t.count), 1);
-
-  // Aggregate KPIs — prefer backend-computed values, fall back to client-side median
-  const handleTimes = members.filter((m: any) => m.medianHandleTime).map((m: any) => m.medianHandleTime as string);
-  const aggHandleTime = handleTimes.length > 0 ? handleTimes[Math.floor(handleTimes.length / 2)] : null;
-  const assignToCloseTimes = members.filter((m: any) => m.medianAssignToClose).map((m: any) => m.medianAssignToClose as string);
-  const aggAssignToClose = assignToCloseTimes.length > 0 ? assignToCloseTimes[Math.floor(assignToCloseTimes.length / 2)] : null;
-  const assignToFirstRespTimes = members.filter((m: any) => m.medianAssignToFirstResp).map((m: any) => m.medianAssignToFirstResp as string);
-  const aggAssignToFirstResp = assignToFirstRespTimes.length > 0 ? assignToFirstRespTimes[Math.floor(assignToFirstRespTimes.length / 2)] : null;
-  // Subsequent response — use backend aggregate
-  const aggSubsequentResp: string | null = data?.aggMedianSubsequentResp ?? null;
-  // Per-active-hour — from backend totals
-  const closedPerHour: number | null = data?.closedPerActiveHour ?? null;
-  const assignedPerHour: number | null = data?.assignedPerActiveHour ?? null;
-  const repliedPerHour: number | null = data?.repliedPerActiveHour ?? null;
-  const totalActiveHours: number = data?.totalActiveHours ?? 0;
-
-  const csatScores = members.filter((m: any) => m.avgCsat).map((m: any) => Number.parseFloat(String(m.avgCsat).replace('%', '')));
-  const aggTeammateCsat = csatScores.length > 0 ? `${Math.round(csatScores.reduce((s, v) => s + v, 0) / csatScores.length)}%` : null;
-
-  const fmtRate = (r: number | null) => r !== null ? String(r) : '—';
-  const activeHoursSub = totalActiveHours > 0 ? `${totalActiveHours}h activas totales` : undefined;
-
+  useApi(() => reportsApi.teammate(period, channel), [period, channel], null);
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
   return (
     <>
       <ReportShellHeader title="Teammate performance" description="Check in on teammate performance with accurate metrics and insights." />
       <ReportShellFilters extraFilter={{ icon: 'user', label: 'Compañero de equipo es Cualquiera' }} />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <div className="col-span-2"><ReportsKpiCard label="Median teammate handling time" value={loading ? '…' : aggHandleTime ?? '—'} /></div>
-        <ReportsKpiCard label="Median teammate assignment to close" value={loading ? '…' : aggAssignToClose ?? '—'} />
-        <ReportsKpiCard label="Median teammate assignment to first response" value={loading ? '…' : aggAssignToFirstResp ?? '—'} />
-        <ReportsKpiCard label="Median teammate assignment to subsequent response" value={loading ? '…' : aggSubsequentResp ?? '—'} />
-        <ReportsKpiCard label="Conversations closed per active hour" value={loading ? '…' : fmtRate(closedPerHour)} sub={activeHoursSub} />
-        <ReportsKpiCard label="Conversations assigned per active hour" value={loading ? '…' : fmtRate(assignedPerHour)} sub={activeHoursSub} />
-        <ReportsKpiCard label="Conversations replied to per active hour" value={loading ? '…' : fmtRate(repliedPerHour)} sub={activeHoursSub} />
-        <div className="col-span-1" />
-        {/* Teammate productivity chart — cases closed per day */}
-        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Teammate Productivity – cases closed per day</span>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Rendimiento del compañero">
+          <div className="grid grid-cols-4 gap-3">
+            <KpiCard label="Median teammate handling time" value="11m 08s" change="40s" trend="up" />
+            <KpiCard label="Median teammate assignment to close" value="1h 46m" change="9m" trend="up" />
+            <KpiCard label="Median teammate assignment to first response" value="2m 54s" change="11s" trend="up" />
+            <KpiCard label="Median teammate assignment to subsequent response" value="4m 37s" change="18s" trend="down" />
+            <KpiCard label="Conversations closed per active hour" value="4.2" change="0.3" trend="up" />
+            <KpiCard label="Conversations assigned per active hour" value="5.1" change="0.4" trend="up" />
+            <KpiCard label="Conversations replied to per active hour" value="6.8" change="0.5" trend="up" />
+            <KpiCard label="Teammate CSAT score" value="92%" sub="164 encuestas" change="2 pts" trend="up" />
           </div>
-          {teamTimeSeries.length === 0 || teamTimeSeries.every(t => t.count === 0) ? (
-            <div className="h-[100px] flex items-center justify-center text-[12px] text-[#646462]">Sin actividad en el período</div>
-          ) : (
-            <>
-              <div className="h-[100px] flex items-end gap-0.5 px-2">
-                {teamTimeSeries.map((t, i) => (
-                  <div key={i} style={{ height: t.count ? `${(t.count / maxTts) * 100}%` : '3px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-                ))}
-              </div>
-              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
-                <span>Día 1</span><span>Día {Math.floor(teamTimeSeries.length / 2)}</span><span>Día {teamTimeSeries.length}</span>
-              </div>
-            </>
-          )}
-        </div>
-        <ReportsKpiCard label="Teammate CSAT score" value={loading ? '…' : aggTeammateCsat ?? '—'} sub={csatScores.length > 0 ? `${csatScores.length} compañeros con datos` : '0 de 0'} />
-        <div className="col-span-2 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Teammate conversation ratings</span>
-          </div>
-          <div className="space-y-2 pt-1">
-            {(['positive','neutral','negative'] as const).map(sentiment => {
-              const counts = members.map((m: any) => {
-                const s = Number.parseFloat(String(m.avgCsat ?? '0').replace('%',''));
-                return sentiment === 'positive' ? (s >= 80 ? 1 : 0) : sentiment === 'neutral' ? (s >= 60 && s < 80 ? 1 : 0) : (s < 60 && s > 0 ? 1 : 0);
-              });
-              const count = counts.reduce((a: number, b: number) => a + b, 0);
-              const colors: Record<string,string> = { positive: '#16a34a', neutral: '#d97706', negative: '#dc2626' };
-              const labels: Record<string,string> = { positive: '😊 Positivo', neutral: '😐 Neutral', negative: '😞 Negativo' };
-              return (
-                <div key={sentiment} className="flex items-center gap-2">
-                  <span className="text-[11px] text-[#646462] w-[80px]">{labels[sentiment]}</span>
-                  <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
-                    <div className="h-2 rounded-full" style={{ width: members.length > 0 ? `${(count / members.length) * 100}%` : '0%', background: colors[sentiment] }} />
-                  </div>
-                  <span className="text-[11px] text-[#1a1a1a] w-5 text-right">{count}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
-          <div className="px-5 py-3 flex items-center gap-1">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Comparison of Teammate performance</span>
-          </div>
-          <div className="grid grid-cols-8 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-            <div className="col-span-2">Compañero de equipo</div>
-            <div>Rol</div>
-            <div>Asignados</div>
-            <div>Respondidos</div>
-            <div>Cerrados</div>
-            <div>T. gestión</div>
-            <div>CSAT</div>
-          </div>
-          {loading ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
-          ) : isEmpty ? (
-            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay miembros activos en el workspace. Añade agentes en workspace_members para ver datos aquí.</div>
-          ) : members.map((m: any, i: number) => (
-            <div key={i} className="grid grid-cols-8 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a] hover:bg-[#fafaf9]">
-              <div className="col-span-2 font-medium truncate">{m.name ?? m.userId ?? 'Miembro'}{m.team ? <span className="ml-1 text-[11px] text-[#646462]">· {m.team}</span> : null}</div>
-              <div className="text-[#646462] capitalize">{m.role ?? '—'}</div>
-              <div>{m.casesAssigned ?? 0}</div>
-              <div>{m.casesReplied ?? 0}</div>
-              <div>{m.casesClosed ?? 0}</div>
-              <div className="text-[#646462]">{m.medianHandleTime ?? '—'}</div>
-              <div className={m.avgCsat ? (Number.parseFloat(String(m.avgCsat)) >= 80 ? 'text-[#16a34a]' : Number.parseFloat(String(m.avgCsat)) >= 60 ? 'text-[#d97706]' : 'text-[#dc2626]') : 'text-[#646462]'}>{m.avgCsat ?? '—'}</div>
-            </div>
-          ))}
-        </div>
+          <KpiChartCard title="Teammate productivity – cases closed per day">
+            <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Casos cerrados', data: mockDaily(36, 12, 1, 141), fill: true }]} type="bar" showLegend={false} />
+          </KpiChartCard>
+        </Section>
+        <Section title="Comparativa de compañeros">
+          <KpiChartCard title="Comparison of Teammate performance" height={240}>
+            <KpiTable columns={['Compañero', 'Rol', 'Asignados', 'Respondidos', 'Cerrados', 'T. gestión', 'CSAT']} rows={[
+              ['Ana Torres', 'Agente', '92', '90', '84', '9m 42s', '95%'],
+              ['Luis Vega', 'Agente', '78', '75', '69', '11m 18s', '90%'],
+              ['María Ruiz', 'Agente', '67', '65', '61', '10m 06s', '93%'],
+              ['Jon Aixa', 'Lead', '47', '45', '41', '12m 30s', '87%'],
+            ]} />
+          </KpiChartCard>
+        </Section>
       </div>
     </>
   );
 }
 
 function ReportsTicketsContent({ period, channel }: { period: string; channel: string }) {
-  const { data, loading } = useApi(() => reportsApi.tickets(period, channel), [period, channel], null);
-  const kpis = data?.kpis ?? {};
-  const byType: { type: string; count: number }[] = data?.byType ?? [];
-  const byAssignee: { assignee: string; count: number }[] = data?.byAssignee ?? [];
-  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 28 }, (_, i) => ({ day: i, count: 0 }));
-  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
-  const maxType = Math.max(...byType.map(t => t.count), 1);
+  useApi(() => reportsApi.tickets(period, channel), [period, channel], null);
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />{children}
+    </div>
+  );
   return (
     <>
       <ReportShellHeader title="Tickets" description="Explore your tickets report and create your own custom reports using ticket data." />
       <ReportShellFilters extraFilter={{ icon: 'ticket', label: 'El tipo de ticket es Cualquiera' }} />
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-4 gap-4">
-        <ReportsKpiCard label="Median ticket time to resolve" value={loading ? '…' : kpis.median_resolution ?? '—'} />
-        <ReportsKpiCard label="Median ticket time in submitted" value={loading ? '…' : kpis.median_time_submitted ?? '—'} />
-        <ReportsKpiCard label="Median ticket time in progress" value={loading ? '…' : kpis.median_time_in_progress ?? '—'} />
-        <ReportsKpiCard label="Median ticket time in waiting on customer" value={loading ? '…' : kpis.median_time_waiting ?? '—'} />
-        <div className="col-span-2"><ReportsKpiCard label="New tickets" value={loading ? '…' : String(kpis.new_tickets ?? 0)} /></div>
-        <div className="col-span-2"><ReportsKpiCard label="Resolved tickets" value={loading ? '…' : String(kpis.resolved_tickets ?? 0)} /></div>
-        {/* time series */}
-        <div className="col-span-4 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Nuevos tickets por día</span>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
+        <div className="self-start"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e]">Datos de ejemplo</span></div>
+        <Section title="Tiempos de ticket">
+          <div className="grid grid-cols-4 gap-3">
+            <KpiCard label="Median ticket time to resolve" value="6h 24m" change="22m" trend="up" />
+            <KpiCard label="Median ticket time in submitted" value="42m" change="4m" trend="up" />
+            <KpiCard label="Median ticket time in progress" value="3h 18m" change="12m" trend="down" />
+            <KpiCard label="Median ticket time in waiting on customer" value="2h 06m" change="8m" trend="up" />
+            <div className="col-span-2"><KpiCard label="New tickets" value="142" change="14%" trend="up" /></div>
+            <div className="col-span-2"><KpiCard label="Resolved tickets" value="128" change="9%" trend="up" /></div>
           </div>
-          <div className="h-[140px] flex items-end gap-1 px-3">
-            {timeSeries.map((t, i) => (
-              <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-            ))}
+          <KpiChartCard title="Nuevos tickets por día">
+            <KpiTimeSeries labels={MOCK_DAYS} series={[{ label: 'Nuevos tickets', data: mockDaily(20, 8, 0.6, 151), fill: true }]} type="bar" showLegend={false} />
+          </KpiChartCard>
+        </Section>
+        <Section title="Desglose de tickets">
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="Tickets por tipo">
+              <KpiTimeSeries labels={['Reembolso', 'Envío', 'Facturación', 'Cuenta', 'Bug']} series={[{ label: 'Tickets', data: [38, 31, 27, 24, 22] }]} type="bar" showLegend={false} />
+            </KpiChartCard>
+            <KpiChartCard title="Tickets por compañero asignado">
+              <KpiTable columns={['Compañero', 'Tickets']} rows={[
+                ['Ana Torres', '41'], ['Luis Vega', '36'], ['María Ruiz', '29'], ['Jon Aixa', '22'],
+              ]} />
+            </KpiChartCard>
           </div>
-          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
-            <span>Día 1</span><span>Día 7</span><span>Día 14</span><span>Día 21</span><span>Día 28</span>
-          </div>
-        </div>
-        {/* by type */}
-        {byType.length > 0 ? (
-          <div className="col-span-4 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <div className="flex items-center gap-1 mb-3">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-              <span className="text-[12.5px] text-[#1a1a1a]">Tickets por tipo</span>
-            </div>
-            <div className="space-y-2">
-              {byType.map(t => (
-                <div key={t.type} className="flex items-center gap-2">
-                  <span className="text-[11px] text-[#646462] w-[120px] truncate">{t.type.replace(/_/g, ' ')}</span>
-                  <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
-                    <div className="bg-[#3b59f6] h-2 rounded-full" style={{ width: `${(t.count / maxType) * 100}%` }} />
-                  </div>
-                  <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{t.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="col-span-4"><ReportEmptyChart label="Ticket volume - by type" span={3} /></div>
-        )}
-        {/* by team assigned — always empty since team routing is not tracked */}
-        <div className="col-span-2 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Tickets por equipo asignado</span>
-          </div>
-          <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos de asignación por equipo</div>
-        </div>
-        {/* by teammate assigned */}
-        <div className="col-span-2 border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Tickets por compañero asignado</span>
-          </div>
-          {byAssignee.length === 0 ? (
-            <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">Sin asignaciones en el período</div>
-          ) : (
-            <div className="space-y-1.5">
-              {byAssignee.slice(0, 6).map(a => {
-                const maxA = Math.max(...byAssignee.map(x => x.count), 1);
-                return (
-                  <div key={a.assignee} className="flex items-center gap-2">
-                    <span className="text-[11px] text-[#646462] w-[90px] truncate">{a.assignee}</span>
-                    <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
-                      <div className="bg-[#3b59f6] h-2 rounded-full" style={{ width: `${(a.count / maxA) * 100}%` }} />
-                    </div>
-                    <span className="text-[11px] text-[#1a1a1a] w-5 text-right">{a.count}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        </Section>
       </div>
     </>
   );
