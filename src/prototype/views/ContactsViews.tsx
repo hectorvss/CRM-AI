@@ -971,7 +971,7 @@ function ConvCardExpanded({ ch }: { ch: ConvChannel }) {
   const toggle = (k: typeof openMenu) => setOpenMenu(o => (o === k ? null : k));
 
   return (
-    <div className="border border-[#e9eae6] rounded-[12px] bg-white overflow-hidden">
+    <div className="border border-[#e9eae6] rounded-[12px] bg-white">
       {/* Header */}
       <div className="flex items-start justify-between px-4 py-3 border-b border-[#f1f1ee]">
         <div>
@@ -1085,10 +1085,13 @@ function ConvMiniCalendar() {
         <span className="text-[13px] font-semibold text-[#1a1a1a]">July 2026</span>
         <button className="w-6 h-6 flex items-center justify-center text-[#646462]">›</button>
       </div>
-      <div className="grid grid-cols-7 gap-0.5 text-center">
-        {days.map(d => <span key={d} className="text-[11px] text-[#a4a4a2] py-1">{d}</span>)}
+      <div className="grid grid-cols-7 gap-y-0.5 justify-items-center">
+        {days.map(d => <span key={d} className="w-7 h-6 flex items-center justify-center text-[11px] text-[#a4a4a2]">{d}</span>)}
         {cells.map((c, i) => (
-          <span key={i} className={`text-[12px] py-1 rounded-full ${c === 23 ? 'bg-[#fa7938] text-white' : c && c > 23 ? 'text-[#1a1a1a] hover:bg-[#f1f1ee] cursor-pointer' : 'text-[#c8c9c4]'}`}>{c ?? ''}</span>
+          <span
+            key={i}
+            className={`w-7 h-7 flex items-center justify-center text-[12.5px] rounded-full ${c === 23 ? 'bg-[#fa7938] text-white font-medium' : c && c > 23 ? 'text-[#1a1a1a] hover:bg-[#f1f1ee] cursor-pointer' : 'text-[#c8c9c4]'}`}
+          >{c ?? ''}</span>
         ))}
       </div>
     </div>
