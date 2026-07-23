@@ -107,12 +107,7 @@ function ReportsAllReportsContent({ tab, onTab, onOpen, onCreate }: { tab: 'shar
   const rows = tab === 'intercom' ? ALL_REPORTS.filter(r => !query || r.t.toLowerCase().includes(query)) : [];
   const IntercomTag = () => (
     <span className="inline-flex items-center gap-1.5 text-[13px] text-[#646462]">
-      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]" aria-label="Clain">
-        <rect x="2" y="2.5" width="1.7" height="11" rx="0.5" />
-        <rect x="5.2" y="4" width="1.7" height="9.5" rx="0.5" />
-        <rect x="8.4" y="2.5" width="1.7" height="11" rx="0.5" />
-        <rect x="11.6" y="4" width="1.7" height="9.5" rx="0.5" />
-      </svg>
+      <img src="/logos/clain-favicon.png" alt="Clain" className="w-4 h-4 object-contain" draggable={false} />
       Clain
     </span>
   );
@@ -1088,10 +1083,7 @@ function ReportShellHeader({ title, description }: { title: string; description:
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         <span className="inline-flex items-center gap-1 text-[12px] text-[#646462]">Propietario:
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]" aria-label="Clain">
-            <rect x="2" y="2.5" width="1.7" height="11" rx="0.5" /><rect x="5.2" y="4" width="1.7" height="9.5" rx="0.5" />
-            <rect x="8.4" y="2.5" width="1.7" height="11" rx="0.5" /><rect x="11.6" y="4" width="1.7" height="9.5" rx="0.5" />
-          </svg>
+          <img src="/logos/clain-favicon.png" alt="Clain" className="w-3.5 h-3.5 object-contain" draggable={false} />
           <span className="text-[#1a1a1a]">Clain</span></span>
         <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><span className="text-[#646462]">⋯</span></button>
         <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]">
@@ -1255,10 +1247,7 @@ function ReportsCustomReport({ title, description }: { title: string; descriptio
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="inline-flex items-center gap-1 text-[12px] text-[#646462]">Propietario:
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]" aria-label="Clain">
-            <rect x="2" y="2.5" width="1.7" height="11" rx="0.5" /><rect x="5.2" y="4" width="1.7" height="9.5" rx="0.5" />
-            <rect x="8.4" y="2.5" width="1.7" height="11" rx="0.5" /><rect x="11.6" y="4" width="1.7" height="9.5" rx="0.5" />
-          </svg>
+          <img src="/logos/clain-favicon.png" alt="Clain" className="w-3.5 h-3.5 object-contain" draggable={false} />
           <span className="text-[#1a1a1a]">Clain</span></span>
           <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><span className="text-[#646462]">⋯</span></button>
           <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
@@ -2497,71 +2486,241 @@ type BuilderKind = 'kpi' | 'line' | 'bar' | 'doughnut' | 'table' | 'heatmap' | '
 type CatalogItem = {
   id: string; group: string; label: string; kind: BuilderKind; span: 1 | 2 | 3 | 4;
   value?: string; sub?: string; change?: string; trend?: 'up' | 'down'; seed?: number;
+  dim?: string;        // chip de dimensión (Tiempo, Canal, Día de la semana · Hora del día…)
+  qualifier?: string;  // p.ej. "Mediana, Dentro del horario de atención"
+  isNew?: boolean;     // badge "Nuevo"
+  subgroup?: string;   // línea gris; por defecto = group
 };
 
 // Catálogo completo de componentes que se pueden añadir a cualquier monitor.
 const BUILDER_CATALOG: CatalogItem[] = [
-  // Componentes
-  { id: 'cmp-title', group: 'Componentes', label: 'Title / banner', kind: 'title', span: 4, value: 'Nueva sección' },
-  // Fin AI Agent
-  { id: 'fin-defl', group: 'Fin AI Agent', label: 'Fin AI agent deflection rate', kind: 'kpi', span: 1, value: '46%', sub: '57 de 124', change: '4 pts', trend: 'up' },
-  { id: 'fin-auto', group: 'Fin AI Agent', label: 'Fin AI agent automation rate', kind: 'kpi', span: 1, value: '63%', sub: '78 de 124', change: '6 pts', trend: 'up' },
-  { id: 'fin-reso', group: 'Fin AI Agent', label: 'Fin AI agent resolution rate', kind: 'kpi', span: 1, value: '87%', sub: '68 de 78', change: '2 pts', trend: 'up' },
-  { id: 'fin-cx', group: 'Fin AI Agent', label: 'Fin AI agent CX Score', kind: 'kpi', span: 1, value: '84', sub: 'de 100', change: '1', trend: 'up' },
-  { id: 'fin-impact', group: 'Fin AI Agent', label: "Fin AI agent's impact over time", kind: 'line', span: 4, seed: 81 },
-  { id: 'fin-invol', group: 'Fin AI Agent', label: 'Fin AI agent involved conversations', kind: 'bar', span: 2, seed: 83 },
-  // Copilot
-  { id: 'cop-pct', group: 'Copilot', label: 'Percentage of conversations using Copilot', kind: 'kpi', span: 1, value: '34%', sub: '42 de 124', change: '6 pts', trend: 'up' },
-  { id: 'cop-q', group: 'Copilot', label: 'Copilot questions', kind: 'kpi', span: 1, value: '287', change: '15%', trend: 'up' },
-  { id: 'cop-tm', group: 'Copilot', label: 'Teammates using Copilot', kind: 'bar', span: 2, seed: 42 },
-  // Conversations
-  { id: 'cv-new', group: 'Conversations', label: 'New conversations', kind: 'kpi', span: 1, value: '124', change: '9%', trend: 'up' },
-  { id: 'cv-chan', group: 'Conversations', label: 'New conversations by channel', kind: 'bar', span: 2, seed: 31 },
-  { id: 'cv-busy', group: 'Conversations', label: 'Busiest periods', kind: 'heatmap', span: 4, seed: 44 },
-  // Effectiveness
-  { id: 'ef-repl', group: 'Effectiveness', label: 'Conversations replied to', kind: 'kpi', span: 1, value: '128', change: '12%', trend: 'up' },
-  { id: 'ef-first', group: 'Effectiveness', label: 'Closed on first contact rate', kind: 'kpi', span: 1, value: '62%', sub: '79 de 128', change: '4 pts', trend: 'up' },
-  { id: 'ef-time', group: 'Effectiveness', label: 'First contact rate - by time', kind: 'line', span: 2, seed: 13 },
-  // CX Score
-  { id: 'cx-overall', group: 'CX Score', label: 'Overall CX Score', kind: 'kpi', span: 1, value: '82', sub: 'de 100', change: '2', trend: 'up' },
-  { id: 'cx-time', group: 'CX Score', label: 'CX Score over time', kind: 'line', span: 2, seed: 21 },
-  { id: 'cx-neg', group: 'CX Score', label: 'Negative CX score reasons', kind: 'doughnut', span: 2 },
-  // Calls
-  { id: 'ca-total', group: 'Calls', label: 'Total calls', kind: 'kpi', span: 1, value: '312', change: '8%', trend: 'up' },
-  { id: 'ca-state', group: 'Calls', label: 'Inbound calls - by call state', kind: 'bar', span: 2, seed: 71 },
-  // Surveyed CSAT
-  { id: 'cs-overall', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'Puntuación general de CSAT', kind: 'kpi', span: 1, value: '91%', sub: '248 de 273', change: '1 pt', trend: 'up' },
-  { id: 'cs-tm', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'Puntuación CSAT del compañero de equipo', kind: 'kpi', span: 1, value: '93%', sub: '164 de 176', change: '2 pts', trend: 'up' },
-  { id: 'cs-fin', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'Puntuación CSAT de Fin AI Agent', kind: 'kpi', span: 1, value: '89%', sub: '97 de 109', change: '3 pts', trend: 'up' },
-  { id: 'cs-time', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'CSAT score over time', kind: 'line', span: 2, seed: 111 },
-  { id: 'cs-rating', group: 'Satisfacción del cliente (CSAT) encuestada', label: 'Conversation ratings - by rating', kind: 'bar', span: 2, seed: 114 },
-  // Responsiveness
-  { id: 'rs-resp', group: 'Capacidad de respuesta', label: 'Median response time', kind: 'kpi', span: 1, value: '3m 42s', change: '14s', trend: 'up' },
-  { id: 'rs-first', group: 'Capacidad de respuesta', label: 'Median first response time', kind: 'kpi', span: 1, value: '1m 58s', change: '9s', trend: 'up' },
-  { id: 'rs-close', group: 'Capacidad de respuesta', label: 'Median time to close', kind: 'kpi', span: 1, value: '2h 24m', change: '11m', trend: 'up' },
-  { id: 'rs-time', group: 'Capacidad de respuesta', label: 'Response time - by time', kind: 'line', span: 2, seed: 61 },
-  // SLAs
-  { id: 'sla-miss', group: 'SLA', label: 'SLA miss rate', kind: 'kpi', span: 1, value: '8%', sub: '14 de 176', change: '2 pts', trend: 'up' },
-  { id: 'sla-with', group: 'SLA', label: 'Conversations with SLA', kind: 'kpi', span: 1, value: '176', change: '11%', trend: 'up' },
-  { id: 'sla-time', group: 'SLA', label: 'Targets hit over time', kind: 'bar', span: 2, seed: 121 },
-  // Team inbox
-  { id: 'ti-assign', group: 'Desempeño de los compañeros de equipo de Inbox', label: 'Conversations assigned', kind: 'kpi', span: 1, value: '284', change: '9%', trend: 'up' },
-  { id: 'ti-replied', group: 'Desempeño de los compañeros de equipo de Inbox', label: 'Conversations replied to', kind: 'kpi', span: 1, value: '271', change: '7%', trend: 'up' },
-  { id: 'ti-closed', group: 'Desempeño de los compañeros de equipo de Inbox', label: 'Closed conversations', kind: 'kpi', span: 1, value: '248', change: '11%', trend: 'up' },
-  // Teammate
-  { id: 'tm-handle', group: 'Desempeño de los compañeros de equipo', label: 'Median teammate handling time', kind: 'kpi', span: 1, value: '11m 08s', change: '40s', trend: 'up' },
-  { id: 'tm-prod', group: 'Desempeño de los compañeros de equipo', label: 'Teammate productivity', kind: 'bar', span: 2, seed: 141 },
-  { id: 'tm-csat', group: 'Desempeño de los compañeros de equipo', label: 'Teammate CSAT score', kind: 'kpi', span: 1, value: '92%', sub: '164 de 176', change: '2 pts', trend: 'up' },
-  // Tickets
-  { id: 'tk-new', group: 'Folios de atención', label: 'New tickets', kind: 'kpi', span: 1, value: '142', change: '14%', trend: 'up' },
-  { id: 'tk-res', group: 'Folios de atención', label: 'Resolved tickets', kind: 'kpi', span: 1, value: '128', change: '9%', trend: 'up' },
-  { id: 'tk-time', group: 'Folios de atención', label: 'Time to resolve - by time', kind: 'line', span: 2, seed: 151 },
-  // Monitors
-  { id: 'mo-eval', group: 'Monitores', label: 'Evaluated conversations', kind: 'bar', span: 2, seed: 101 },
-  { id: 'mo-score', group: 'Monitores', label: 'Average review score', kind: 'kpi', span: 1, value: '4.3', sub: 'de 5', change: '0.2', trend: 'up' },
-  { id: 'mo-pass', group: 'Monitores', label: 'Reviews passed', kind: 'kpi', span: 1, value: '87%', sub: '612 de 703', change: '3 pts', trend: 'up' },
-  { id: 'mo-num', group: 'Monitores', label: 'Number of reviews', kind: 'kpi', span: 1, value: '703', change: '11%', trend: 'up' },
-  { id: 'mo-fail', group: 'Monitores', label: 'Failed reviews', kind: 'kpi', span: 1, value: '91', change: '8', trend: 'down' },
+  { id:'c1', group:'Componentes', label:'banner', kind:'title', span:4, isNew:true, seed:200 },
+  { id:'c2', group:'Satisfacción del cliente (CSAT) encuestada', label:'Puntuación general de CSAT', kind:'kpi', span:1, value:'91%' },
+  { id:'c3', group:'Satisfacción del cliente (CSAT) encuestada', label:'Puntuación CSAT del compañero de equipo', kind:'kpi', span:1, value:'88%' },
+  { id:'c4', group:'Satisfacción del cliente (CSAT) encuestada', label:'Puntuación CSAT de Fin AI Agent', kind:'kpi', span:1, value:'94%' },
+  { id:'c5', group:'Satisfacción del cliente (CSAT) encuestada', label:'Puntuación CSAT a lo largo del tiempo', kind:'line', span:2, dim:'Tiempo', seed:204 },
+  { id:'c6', group:'Satisfacción del cliente (CSAT) encuestada', label:'Valoraciones de las conversaciones', kind:'bar', span:2, dim:'Valoración de la conversación', seed:205 },
+  { id:'c7', group:'Satisfacción del cliente (CSAT) encuestada', label:'🤩 Comentarios positivos', kind:'kpi', span:1, value:'287' },
+  { id:'c8', group:'Satisfacción del cliente (CSAT) encuestada', label:'😐 Comentarios neutrales', kind:'kpi', span:1, value:'124' },
+  { id:'c9', group:'Satisfacción del cliente (CSAT) encuestada', label:'😠 Comentarios negativos', kind:'kpi', span:1, value:'63' },
+  { id:'c10', group:'Satisfacción del cliente (CSAT) encuestada', label:'tasa de solicitudes de CSAT', kind:'kpi', span:1, value:'46%' },
+  { id:'c11', group:'Satisfacción del cliente (CSAT) encuestada', label:'Tasa de respuesta de CSAT', kind:'kpi', span:1, value:'63%' },
+  { id:'c12', group:'Satisfacción del cliente (CSAT) encuestada', label:'Tasas de solicitud y respuesta a la encuesta CSAT', kind:'line', span:2, dim:'Tiempo', seed:211 },
+  { id:'c13', group:'Satisfacción del cliente (CSAT) encuestada', label:'Temas que generan insatisfacción', kind:'table', span:4, dim:'Temas', seed:212 },
+  { id:'c14', group:'Satisfacción del cliente (CSAT) encuestada', label:'Rendimiento de CSAT de los compañeros de equipo', kind:'table', span:4, dim:'Compañero de equipo', seed:213 },
+  { id:'c15', group:'Fin AI Agent', label:'Tasa de desvíos de Fin AI Agent', kind:'kpi', span:1, value:'63%' },
+  { id:'c16', group:'Fin AI Agent', label:'Tasa de automatización del agente de IA de Fin', kind:'kpi', span:1, value:'46%' },
+  { id:'c17', group:'Fin AI Agent', label:'Tasa de resolución de Fin AI Agent', kind:'kpi', span:1, value:'87%' },
+  { id:'c18', group:'Fin AI Agent', label:'Puntuación CX de Fin AI Agent', kind:'kpi', span:1, value:'84' },
+  { id:'c19', group:'Fin AI Agent', label:'El impacto de Fin AI Agent a lo largo del tiempo', kind:'line', span:2, dim:'Tiempo', seed:218 },
+  { id:'c20', group:'Fin AI Agent', label:'Tasa de participación de Fin AI Agent', kind:'bar', span:2, dim:'Fin AI Agent participó', seed:219 },
+  { id:'c21', group:'Fin AI Agent', label:'Conversaciones en las que Fin AI Agent participó a lo largo del tiempo', kind:'bar', span:2, dim:'Tiempo', seed:220 },
+  { id:'c22', group:'Fin AI Agent', label:'Conversaciones en las que Fin Ai Agent participó', kind:'bar', span:2, dim:'Canal', seed:221 },
+  { id:'c23', group:'Fin AI Agent', label:'Conversaciones en las que Fin Ai Agent no participó', kind:'bar', span:2, dim:'Canal', seed:222 },
+  { id:'c24', group:'Fin AI Agent', label:'Conversaciones en las que Fin AI Agent participó a lo largo del tiempo', kind:'bar', span:2, dim:'Tiempo', seed:223 },
+  { id:'c25', group:'Fin AI Agent', label:'Conversaciones en las que Fin AI Agent participó y resolvió', kind:'kpi', span:1, value:'703' },
+  { id:'c26', group:'Fin AI Agent', label:'Conversaciones en las que Fin AI Agent participó y resolvió a lo largo del tiempo', kind:'bar', span:2, dim:'Tiempo', seed:225 },
+  { id:'c27', group:'Fin AI Agent', label:'Conversaciones en las que participó Fin AI Agent y que fueron resueltas por estado de resolución de Fin AI Agent', kind:'bar', span:2, dim:'Fin AI Agent resolution state', seed:226 },
+  { id:'c28', group:'Fin AI Agent', label:'Tasa de participación de Fin AI Agent', kind:'kpi', span:1, value:'91%' },
+  { id:'c29', group:'Fin AI Agent', label:'Tasa de canalizaciones de Fin AI Agent al equipo', kind:'kpi', span:1, value:'37%' },
+  { id:'c30', group:'Fin AI Agent', label:'Tasa de abandono de Fin AI Agent', kind:'kpi', span:1, value:'12%' },
+  { id:'c31', group:'Fin AI Agent', label:'Rendimiento del contenido del agente de IA Fin', kind:'table', span:4, dim:'Contenido de Fin referenciado', seed:230 },
+  { id:'c32', group:'Fin AI Agent', label:'Tasa de resolución asumida de Fin AI Agent', kind:'kpi', span:1, value:'58%' },
+  { id:'c33', group:'Fin AI Agent', label:'Tasa de resolución confirmada de Fin AI Agent', kind:'kpi', span:1, value:'42%' },
+  { id:'c34', group:'Fin AI Agent', label:'Conversaciones de Fin AI Agent con una calificación de puntuación de experiencia del cliente (CX)', kind:'kpi', span:1, value:'287' },
+  { id:'c35', group:'Fin AI Agent', label:'Calificaciones de puntuación de la experiencia del cliente de Fin AI Agent', kind:'doughnut', span:2, dim:'Puntuación de la experiencia del cliente (CX)', seed:234 },
+  { id:'c36', group:'Fin AI Agent', label:'Calificaciones de la puntuación experiencia del cliente (CX) de Fin AI Agent - por tiempo', kind:'line', span:2, dim:'Tiempo', seed:235 },
+  { id:'c37', group:'Fin AI Agent', label:'Calificaciones de puntuación CX de Fin AI Agent', kind:'kpi', span:1, value:'4.3' },
+  { id:'c38', group:'Fin for Service', label:'Tasa de automatización de Fin for Service', kind:'kpi', span:1, value:'46%' },
+  { id:'c39', group:'Fin for Service', label:'Tasa de resolución de Fin for Service', kind:'kpi', span:1, value:'63%' },
+  { id:'c40', group:'Fin for Service', label:'Tasa de participación de Fin for Service', kind:'kpi', span:1, value:'87%' },
+  { id:'c41', group:'Fin for Service', label:'Tasa de actividad de Fin for Service', kind:'kpi', span:1, value:'91%' },
+  { id:'c42', group:'Fin for Service', label:'Puntuación CX de Fin for Service', kind:'kpi', span:1, value:'84' },
+  { id:'c43', group:'Fin for Service', label:'Desglose de la puntuación CX de Fin for Service', kind:'bar', span:2, dim:'Puntuación de la experiencia del cliente (CX)', seed:242 },
+  { id:'c44', group:'Fin for Service', label:'Razones por las que Fin for Service tiene un puntaje CX positiva', kind:'doughnut', span:2, dim:'CX Score reasons', seed:243 },
+  { id:'c45', group:'Fin for Service', label:'Motivos de la puntuación negativa en la experiencia del cliente (CX) de Fin for Service', kind:'doughnut', span:2, dim:'CX Score reasons', seed:244 },
+  { id:'c46', group:'Fin for Service', label:'Rendimiento de Fin for Service a lo largo del tiempo', kind:'line', span:2, dim:'Tiempo', seed:245 },
+  { id:'c47', group:'Fin for Service', label:'Conversaciones sobre Fin for Service a lo largo del tiempo', kind:'bar', span:2, dim:'Tiempo', seed:246 },
+  { id:'c48', group:'Fin para comercio electrónico', label:'Tasa de automatización de Fin for Ecommerce', kind:'kpi', span:1, value:'52%' },
+  { id:'c49', group:'Fin para comercio electrónico', label:'Tasa de resolución de Fin for Ecommerce', kind:'kpi', span:1, value:'68%' },
+  { id:'c50', group:'Fin para comercio electrónico', label:'Tasa de participación de Fin for Ecommerce', kind:'kpi', span:1, value:'79%' },
+  { id:'c51', group:'Fin para comercio electrónico', label:'Tasa de activo de Fin for Ecommerce', kind:'kpi', span:1, value:'94%' },
+  { id:'c52', group:'Fin para comercio electrónico', label:'Puntuación CX de Fin for Ecommerce', kind:'kpi', span:1, value:'4.3' },
+  { id:'c53', group:'Fin para comercio electrónico', label:'Desglose de la puntuación de la experiencia del cliente de Fin for Ecommerce', kind:'bar', span:2, dim:'Puntuación de la experiencia del cliente (CX)', seed:252 },
+  { id:'c54', group:'Fin para comercio electrónico', label:'Motivos de la puntuación positiva de la experiencia del cliente de Fin for Ecommerce', kind:'doughnut', span:2, dim:'CX Score reasons', seed:253 },
+  { id:'c55', group:'Fin para comercio electrónico', label:'Motivos de la puntuación negativa en la experiencia del cliente (CX) de Fin for Ecommerce', kind:'doughnut', span:2, dim:'CX Score reasons', seed:254 },
+  { id:'c56', group:'Fin para comercio electrónico', label:'Rendimiento de Fin for Ecommerce a lo largo del tiempo', kind:'line', span:2, dim:'Tiempo', seed:255 },
+  { id:'c57', group:'Fin para comercio electrónico', label:'Conversaciones sobre Fin for Ecommerce a lo largo del tiempo', kind:'bar', span:2, dim:'Tiempo', seed:256 },
+  { id:'c58', group:'Fin para comercio electrónico', label:'Carrusel mostrado de Fin for Ecommerce', kind:'table', span:4, dim:'Fin for Ecommerce: Product recommended', seed:257 },
+  { id:'c59', group:'Fin para comercio electrónico', label:'Clics en enlaces de pago de Fin for Ecommerce', kind:'table', span:4, dim:'Fin for Ecommerce: Checkout link clicked', seed:258 },
+  { id:'c60', group:'Conversaciones', label:'Nuevas conversaciones', kind:'kpi', span:1, value:'287' },
+  { id:'c61', group:'Conversaciones', label:'Conversaciones respondidas a', kind:'kpi', span:1, value:'263' },
+  { id:'c62', group:'Conversaciones', label:'Respuestas enviadas', kind:'kpi', span:1, value:'703' },
+  { id:'c63', group:'Conversaciones', label:'Conversaciones cerradas', kind:'kpi', span:1, value:'241' },
+  { id:'c64', group:'Conversaciones', label:'Conversaciones reabiertas', kind:'kpi', span:1, value:'38' },
+  { id:'c65', group:'Conversaciones', label:'Conversaciones abiertas', kind:'kpi', span:1, value:'124' },
+  { id:'c66', group:'Conversaciones', label:'Conversaciones pospuestas', kind:'kpi', span:1, value:'56' },
+  { id:'c67', group:'Conversaciones', label:'Nuevas conversaciones', kind:'bar', span:2, dim:'Tiempo', seed:266 },
+  { id:'c68', group:'Conversaciones', label:'Nuevas conversaciones', kind:'bar', span:2, dim:'Canal', seed:267 },
+  { id:'c69', group:'Conversaciones', label:'Respuestas enviadas', kind:'bar', span:2, dim:'Tiempo', seed:268 },
+  { id:'c70', group:'Conversaciones', label:'Conversaciones cerradas vs. reabiertas', kind:'bar', span:2, dim:'Tiempo', seed:269 },
+  { id:'c71', group:'Conversaciones', label:'Conversaciones abiertas y pospuestas', kind:'bar', span:2, dim:'Tiempo', seed:270 },
+  { id:'c72', group:'Conversaciones', label:'Comparación de nuevas conversaciones y respuestas', kind:'bar', span:2, dim:'Tiempo', seed:271 },
+  { id:'c73', group:'Conversaciones', label:'Distribución por hora de nuevas conversaciones', kind:'heatmap', span:4, dim:'Día de la semana · Hora del día', seed:272 },
+  { id:'c74', group:'Capacidad de respuesta', label:'Tiempo de respuesta: incluye el tiempo asignado al bot', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'11m 08s' },
+  { id:'c75', group:'Capacidad de respuesta', label:'Tiempo de respuesta inicial: incluido el tiempo asignado al bot', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'3m 42s' },
+  { id:'c76', group:'Capacidad de respuesta', label:'Tiempo hasta el cierre: incluido el tiempo asignado al bot', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'2h 24m' },
+  { id:'c77', group:'Capacidad de respuesta', label:'Tiempo de respuesta: incluye el tiempo asignado al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:276 },
+  { id:'c78', group:'Capacidad de respuesta', label:'Tiempo de respuesta inicial: incluido el tiempo asignado al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:277 },
+  { id:'c79', group:'Capacidad de respuesta', label:'Tiempo de respuesta inicial: incluido el desglose del tiempo asignado al bot', kind:'table', span:2, dim:'Intervalos de tiempo personalizados', qualifier:'Rango, Dentro del horario de atención', isNew:true, seed:278 },
+  { id:'c80', group:'Capacidad de respuesta', label:'Tiempo hasta el cierre: incluido el tiempo asignado al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:279 },
+  { id:'c81', group:'Capacidad de respuesta', label:'Tiempo hasta el cierre: incluyendo el tiempo asignado a la avería del bot', kind:'table', span:2, dim:'Intervalos de tiempo personalizados', qualifier:'Rango, Dentro del horario de atención', isNew:true, seed:280 },
+  { id:'c82', group:'Capacidad de respuesta', label:'Distribución horaria de los tiempos de respuesta: incluye el tiempo asignado al bot', kind:'heatmap', span:4, dim:'Día de la semana · Hora del día', qualifier:'Mediana, Dentro del horario de atención', seed:281 },
+  { id:'c83', group:'Efectividad', label:'Conversaciones respondidas a', kind:'kpi', span:1, value:'263' },
+  { id:'c84', group:'Efectividad', label:'Tasa de conversaciones cerradas en el primer contacto', kind:'kpi', span:1, value:'63%' },
+  { id:'c85', group:'Efectividad', label:'Respuestas para cerrar una conversación', kind:'kpi', span:1, qualifier:'Mediana', value:'3' },
+  { id:'c86', group:'Efectividad', label:'Conversaciones reasignadas', kind:'kpi', span:1, value:'47' },
+  { id:'c87', group:'Efectividad', label:'Tiempo para la primera asignación', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'1m 58s' },
+  { id:'c88', group:'Efectividad', label:'Tiempo desde la primera asignación hasta el cierre', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'1h 42m' },
+  { id:'c89', group:'Efectividad', label:'Respuestas para cerrar una conversación', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana', seed:288 },
+  { id:'c90', group:'Efectividad', label:'Tiempo para la primera asignación', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:289 },
+  { id:'c91', group:'Efectividad', label:'Tasa de conversaciones cerradas en el primer contacto', kind:'line', span:2, dim:'Tiempo', seed:290 },
+  { id:'c92', group:'Efectividad', label:'Conversaciones reasignadas', kind:'bar', span:2, dim:'Tiempo', seed:291 },
+  { id:'c93', group:'Efectividad', label:'Tiempo desde la primera asignación hasta el cierre', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:292 },
+  { id:'c94', group:'Desempeño de los compañeros de equipo', label:'Tiempo de gestión del compañero de equipo', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'3m 42s' },
+  { id:'c95', group:'Desempeño de los compañeros de equipo', label:'Tiempo de manejo ajustado del miembro del equipo', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'2h 24m' },
+  { id:'c96', group:'Desempeño de los compañeros de equipo', label:'Asignación de compañero de equipo a la respuesta inicial', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'11m 08s' },
+  { id:'c97', group:'Desempeño de los compañeros de equipo', label:'Asignación de compañero de equipo a una respuesta posterior', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'1m 58s' },
+  { id:'c98', group:'Desempeño de los compañeros de equipo', label:'Asignación de compañero de equipo para el cierre', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'58m 03s' },
+  { id:'c99', group:'Desempeño de los compañeros de equipo', label:'Conversaciones asignadas por hora activa', kind:'kpi', span:1, value:'4.3' },
+  { id:'c100', group:'Desempeño de los compañeros de equipo', label:'Conversaciones respondidas por hora activa', kind:'kpi', span:1, value:'3.8' },
+  { id:'c101', group:'Desempeño de los compañeros de equipo', label:'Conversaciones cerradas por hora activa', kind:'line', span:2, dim:'Tiempo', seed:300 },
+  { id:'c102', group:'Desempeño de los compañeros de equipo', label:'Productividad de los compañeros de equipo', kind:'kpi', span:1, value:'87%' },
+  { id:'c103', group:'Desempeño de los compañeros de equipo', label:'Puntuación CSAT del compañero de equipo', kind:'bar', span:2, dim:'Valoración de la conversación', seed:302 },
+  { id:'c104', group:'Desempeño de los compañeros de equipo', label:'Calificaciones de las conversaciones de los compañeros de equipo', kind:'table', span:4, dim:'Compañero de equipo', seed:303 },
+  { id:'c105', group:'Desempeño de los compañeros de equipo', label:'Comparación del desempeño de los compañeros de equipo', kind:'table', span:4, qualifier:'Mediana, Dentro del horario de atención', seed:304 },
+  { id:'c106', group:'Desempeño de los compañeros de equipo de Inbox', label:'Asignación de equipo a la respuesta inicial', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'9m 12s' },
+  { id:'c107', group:'Desempeño de los compañeros de equipo de Inbox', label:'Asignación de equipo a una respuesta posterior', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'2m 15s' },
+  { id:'c108', group:'Desempeño de los compañeros de equipo de Inbox', label:'Asignación de equipo para el cierre', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'4h 02m' },
+  { id:'c109', group:'Desempeño de los compañeros de equipo de Inbox', label:'Conversaciones asignadas', kind:'kpi', span:1, value:'287' },
+  { id:'c110', group:'Desempeño de los compañeros de equipo de Inbox', label:'Conversaciones respondidas a', kind:'kpi', span:1, value:'703' },
+  { id:'c111', group:'Desempeño de los compañeros de equipo de Inbox', label:'Conversaciones cerradas', kind:'bar', span:2, dim:'Tiempo', seed:310 },
+  { id:'c112', group:'Desempeño de los compañeros de equipo de Inbox', label:'Actividad de los compañeros de equipo', kind:'table', span:4, dim:'Equipo', seed:311 },
+  { id:'c113', group:'Desempeño de los compañeros de equipo de Inbox', label:'Comparación del desempeño del buzón del equipo', kind:'table', span:4, qualifier:'Mediana, Dentro del horario de atención', seed:312 },
+  { id:'c114', group:'SLA', label:'Tasa de incumplimiento del SLA de conversaciones y folios de atención', kind:'kpi', span:1, value:'12%' },
+  { id:'c115', group:'SLA', label:'Conversaciones y folios de atención con SLA', kind:'kpi', span:1, value:'624' },
+  { id:'c116', group:'SLA', label:'Conversaciones y folios de atención con SLA no cumplido', kind:'bar', span:2, dim:'Tipo de métrica de SLA', seed:315 },
+  { id:'c117', group:'SLA', label:'Rendimiento del SLA', kind:'line', span:2, dim:'Tiempo · Tipo de métrica de SLA', qualifier:'Mediana', seed:316 },
+  { id:'c118', group:'SLA', label:'Objetivos alcanzados con el tiempo', kind:'heatmap', span:4, dim:'Día de la semana · Hora del día', seed:317 },
+  { id:'c119', group:'SLA', label:'Distribución por hora de objetivos no alcanzados', kind:'bar', span:2, seed:318 },
+  { id:'c120', group:'Etiquetas de conversación', label:'Nuevas conversaciones', kind:'kpi', span:1, value:'124' },
+  { id:'c121', group:'Etiquetas de conversación', label:'Conversaciones etiquetadas', kind:'bar', span:2, dim:'Tiempo', seed:320 },
+  { id:'c122', group:'Etiquetas de conversación', label:'Conversaciones etiquetadas', kind:'bar', span:2, dim:'Etiqueta de la conversación', seed:321 },
+  { id:'c123', group:'Etiquetas de conversación', label:'Etiquetas de conversación más usadas', kind:'table', span:4, seed:322 },
+  { id:'c124', group:'Copilot', label:'Porcentaje de conversaciones que utilizan Copilot', kind:'kpi', span:1, value:'46%' },
+  { id:'c125', group:'Copilot', label:'Preguntas de Copilot', kind:'kpi', span:1, value:'287' },
+  { id:'c126', group:'Copilot', label:'Conversaciones con Copilot', kind:'kpi', span:1, value:'124' },
+  { id:'c127', group:'Copilot', label:'Porcentaje de conversaciones con una respuesta copiada de Copilot', kind:'kpi', span:1, value:'63%' },
+  { id:'c128', group:'Copilot', label:'Compañeros de equipo que usan Copilot', kind:'line', span:2, dim:'Tiempo', seed:327 },
+  { id:'c129', group:'Copilot', label:'Porcentaje de conversaciones que utilizan Copilot', kind:'line', span:2, dim:'Tiempo', seed:328 },
+  { id:'c130', group:'Copilot', label:'Compañeros de equipo que usan Copilot', kind:'table', span:4, dim:'Compañero de equipo', seed:329 },
+  { id:'c131', group:'Copilot', label:'Descripción general de compañeros de equipo', kind:'table', span:4, dim:'Contenido de Copilot referenciado', seed:330 },
+  { id:'c132', group:'Copilot', label:'Rendimiento del contenido de Copilot', kind:'table', span:4, seed:331 },
+  { id:'c133', group:'Folios de atención', label:'Tiempo para resolver el folio de atención', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'2h 24m' },
+  { id:'c134', group:'Folios de atención', label:'Tiempo del folio de atención en enviado', kind:'kpi', span:1, qualifier:'Mediana', value:'11m 08s' },
+  { id:'c135', group:'Folios de atención', label:'Tiempo del folio de atención en curso', kind:'kpi', span:1, qualifier:'Mediana', value:'1m 58s' },
+  { id:'c136', group:'Folios de atención', label:'Tiempo del folio de atención en espera con el cliente', kind:'kpi', span:1, qualifier:'Mediana', value:'3m 42s' },
+  { id:'c137', group:'Folios de atención', label:'Tiempo para resolver el folio de atención', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:336 },
+  { id:'c138', group:'Folios de atención', label:'Tiempo para resolver el folio de atención', kind:'table', span:4, dim:'Equipo asignado actualmente', qualifier:'Mediana, Dentro del horario de atención', seed:337 },
+  { id:'c139', group:'Folios de atención', label:'Tiempo para resolver el folio de atención', kind:'table', span:4, dim:'Compañero de equipo asignado actualmente', qualifier:'Mediana, Dentro del horario de atención', seed:338 },
+  { id:'c140', group:'Folios de atención', label:'Nuevos folios de atención', kind:'kpi', span:1, value:'124' },
+  { id:'c141', group:'Folios de atención', label:'Folios de atención resueltos', kind:'kpi', span:1, value:'287' },
+  { id:'c142', group:'Folios de atención', label:'Comparación de folios de atención nuevos y resueltos', kind:'bar', span:2, dim:'Tiempo', seed:341 },
+  { id:'c143', group:'Folios de atención', label:'Volumen de folios de atención', kind:'table', span:4, dim:'Equipo asignado actualmente', seed:342 },
+  { id:'c144', group:'Folios de atención', label:'Volumen de folios de atención', kind:'table', span:4, dim:'Compañero de equipo asignado actualmente', seed:343 },
+  { id:'c145', group:'Llamadas', label:'Llamadas entrantes', kind:'kpi', span:1, value:'124' },
+  { id:'c146', group:'Llamadas', label:'Llamadas salientes', kind:'kpi', span:1, value:'287' },
+  { id:'c147', group:'Llamadas', label:'Llamadas por Messenger', kind:'kpi', span:1, value:'58' },
+  { id:'c148', group:'Llamadas', label:'Duración de la llamada', kind:'kpi', span:1, qualifier:'Mediana', value:'3m 42s' },
+  { id:'c149', group:'Llamadas', label:'Tiempo en fila de la llamada', kind:'kpi', span:1, qualifier:'Mediana', value:'1m 58s' },
+  { id:'c150', group:'Llamadas', label:'Tiempo de conversación de la llamada', kind:'kpi', span:1, qualifier:'Mediana', value:'2m 15s' },
+  { id:'c151', group:'Llamadas', label:'Llamadas', kind:'bar', span:2, dim:'Tiempo · Dirección de llamada', seed:350 },
+  { id:'c152', group:'Llamadas', label:'Llamadas entrantes', kind:'bar', span:2, dim:'Tiempo · Estado de la llamada', seed:351 },
+  { id:'c153', group:'Llamadas', label:'Tiempo de conversación de la llamada', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana', seed:352 },
+  { id:'c154', group:'Llamadas', label:'Tiempo en fila de la llamada', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana', seed:353 },
+  { id:'c155', group:'Llamadas', label:'Rendimiento de llamadas', kind:'table', span:4, dim:'Compañero de equipo', qualifier:'Mediana', seed:354 },
+  { id:'c156', group:'Llamadas', label:'Answered calls', kind:'kpi', span:1, value:'612' },
+  { id:'c157', group:'Llamadas', label:'Missed calls', kind:'kpi', span:1, value:'38' },
+  { id:'c158', group:'Llamadas', label:'Abandoned calls', kind:'kpi', span:1, value:'22' },
+  { id:'c159', group:'Llamadas', label:'Call outcomes', kind:'table', span:4, dim:'Compañero de equipo', seed:358 },
+  { id:'c160', group:'Puntuación de la experiencia del cliente (CX)', label:'Puntuación general de la experiencia del cliente (CX)', kind:'kpi', span:1, value:'84' },
+  { id:'c161', group:'Puntuación de la experiencia del cliente (CX)', label:'Puntuación de la experiencia del cliente de Fin AI Agent', kind:'kpi', span:1, value:'87%' },
+  { id:'c162', group:'Puntuación de la experiencia del cliente (CX)', label:'Puntuación de la experiencia del cliente del compañero de equipo (CX)', kind:'kpi', span:1, value:'91%' },
+  { id:'c163', group:'Puntuación de la experiencia del cliente (CX)', label:'Puntuación de la experiencia del cliente (CX) de Fin AI Agent y del compañero de equipo', kind:'kpi', span:1, value:'88%' },
+  { id:'c164', group:'Puntuación de la experiencia del cliente (CX)', label:'Puntuación de la experiencia del cliente (CX) a lo largo del tiempo', kind:'line', span:2, dim:'Tiempo', seed:363 },
+  { id:'c165', group:'Puntuación de la experiencia del cliente (CX)', label:'Razones de puntuación CX negativa 😞', kind:'doughnut', span:2, dim:'CX Score reasons', seed:364 },
+  { id:'c166', group:'Puntuación de la experiencia del cliente (CX)', label:'Razones de puntuación CX positiva 😀', kind:'doughnut', span:2, dim:'CX Score reasons', seed:365 },
+  { id:'c167', group:'Puntuación de la experiencia del cliente (CX)', label:'Temas de conversación con puntuación CX negativa', kind:'bar', span:2, dim:'AI Topic', seed:366 },
+  { id:'c168', group:'Puntuación de la experiencia del cliente (CX)', label:'Puntuaciones de experiencia del cliente (CX) - por puntuación de experiencia del cliente (CX)', kind:'line', span:2, dim:'Tiempo', seed:367 },
+  { id:'c169', group:'Puntuación de la experiencia del cliente (CX)', label:'Puntuaciones de experiencia del cliente (CX) - por puntuación de experiencia del cliente (CX)', kind:'bar', span:2, seed:368 },
+  { id:'c170', group:'Puntuación de la experiencia del cliente (CX)', label:'Puntuaciones de la experiencia del cliente (CX)', kind:'table', span:4, seed:369 },
+  { id:'c171', group:'Monitores', label:'Conversaciones evaluadas', kind:'bar', span:2, dim:'Tiempo · Monitorear', seed:370 },
+  { id:'c172', group:'Monitores', label:'Puntuación de revisión', kind:'kpi', span:1, qualifier:'Mediana', value:'4.3' },
+  { id:'c173', group:'Monitores', label:'Revisiones aprobadas', kind:'kpi', span:1, value:'63%' },
+  { id:'c174', group:'Monitores', label:'Número de reseñas', kind:'kpi', span:1, value:'142' },
+  { id:'c175', group:'Monitores', label:'Revisiones fallidas', kind:'kpi', span:1, value:'18' },
+  { id:'c176', group:'Monitores', label:'Tendencias de la tasa de aprobación de la tarjeta de puntuación', kind:'line', span:2, dim:'Tiempo · Tarjeta de puntuación', seed:375 },
+  { id:'c177', group:'Monitores', label:'Revise las tendencias de puntuación por tarjeta de evaluación', kind:'line', span:2, dim:'Tiempo · Tarjeta de puntuación', qualifier:'Mediana', seed:376 },
+  { id:'c178', group:'Monitores', label:'Tendencias de la puntuación de los criterios a lo largo del tiempo', kind:'line', span:2, dim:'Tiempo · Criterios de la tarjeta de puntuación', qualifier:'Mediana', seed:377 },
+  { id:'c179', group:'Monitores', label:'Revisiones completadas por el revisor', kind:'table', span:4, dim:'Tiempo · Revisado por', seed:378 },
+  { id:'c180', group:'Otros', label:'Nuevas conversaciones entrantes', kind:'kpi', span:1, value:'703' },
+  { id:'c181', group:'Otros', label:'Nuevas conversaciones entrantes', kind:'bar', span:2, dim:'Tiempo', seed:380 },
+  { id:'c182', group:'Otros', label:'Conversaciones respondidas a', kind:'bar', span:2, dim:'Tiempo', seed:381 },
+  { id:'c183', group:'Otros', label:'Calificaciones de las conversaciones de los compañeros de equipo', kind:'bar', span:2, dim:'Valoración de la conversación', seed:382 },
+  { id:'c184', group:'Otros', label:'Conversaciones con observaciones', kind:'kpi', span:1, value:'124' },
+  { id:'c185', group:'Otros', label:'Todas las observaciones', kind:'kpi', span:1, value:'287' },
+  { id:'c186', group:'Otros', label:'🤩 Sorprendentes comentarios', kind:'kpi', span:1, value:'46' },
+  { id:'c187', group:'Otros', label:'😃 Grandes comentarios', kind:'kpi', span:1, value:'91' },
+  { id:'c188', group:'Otros', label:'😐 Buenos comentarios', kind:'kpi', span:1, value:'63' },
+  { id:'c189', group:'Otros', label:'🙁 Malos comentarios', kind:'kpi', span:1, value:'18' },
+  { id:'c190', group:'Otros', label:'😠 Comentarios terribles', kind:'kpi', span:1, value:'7' },
+  { id:'c191', group:'Otros', label:'Todos los comentarios sobre las conversaciones de Fin AI Agent', kind:'kpi', span:1, value:'234' },
+  { id:'c192', group:'Otros', label:'🤩 Sorprendentes comentarios para Fin AI Agent', kind:'kpi', span:1, value:'52' },
+  { id:'c193', group:'Otros', label:'😃 Excelente comentarios para Fin AI Agent', kind:'kpi', span:1, value:'88' },
+  { id:'c194', group:'Otros', label:'😐 Buenos comentarios para Fin AI Agent', kind:'kpi', span:1, value:'41' },
+  { id:'c195', group:'Otros', label:'🙁 Malos comentarios para Fin AI Agent', kind:'kpi', span:1, value:'12' },
+  { id:'c196', group:'Otros', label:'😠 Terribles comentarios para Fin AI Agent', kind:'kpi', span:1, value:'5' },
+  { id:'c197', group:'Otros', label:'Tiempo de respuesta inicial: incluido el tiempo asignado al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:396 },
+  { id:'c198', group:'Otros', label:'Tiempo de respuesta inicial: excluyendo el tiempo asignado al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:397 },
+  { id:'c199', group:'Otros', label:'Tiempo hasta el cierre: incluido el tiempo asignado al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:398 },
+  { id:'c200', group:'Otros', label:'Hora de cierre: excluyendo la hora asignada al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:399 },
+  { id:'c201', group:'Otros', label:'Descripción general de compañeros de equipo', kind:'table', span:4, dim:'Compañero de equipo', qualifier:'Mediana, Dentro del horario de atención', seed:400 },
+  { id:'c202', group:'Otros', label:'Resoluciones asumidas por Fin AI Agent', kind:'kpi', span:1, value:'68%' },
+  { id:'c203', group:'Otros', label:'Resoluciones confirmadas de Fin AI Agent', kind:'kpi', span:1, value:'54%' },
+  { id:'c204', group:'Otros', label:'Calificaciones de las conversaciones de Fin AI Agent', kind:'bar', span:2, dim:'Valoración de la conversación', seed:403 },
+  { id:'c205', group:'Otros', label:'Calificaciones de las conversaciones de Fin AI Agent', kind:'bar', span:2, dim:'Valoración de la conversación', seed:404 },
+  { id:'c206', group:'Otros', label:'Tasa de actividad de Fin AI agent', kind:'kpi', span:1, value:'87%' },
+  { id:'c207', group:'Otros', label:'Tasa de resolución de respuesta de AI de Fin AI Agent', kind:'kpi', span:1, value:'63%' },
+  { id:'c208', group:'Otros', label:'Tasa de resolución de respuestas personalizadas de Fin AI Agent', kind:'kpi', span:1, value:'46%' },
+  { id:'c209', group:'Otros', label:'Respuestas de la encuesta de satisfacción de clientes de Fin Ai Agent', kind:'kpi', span:1, value:'312' },
+  { id:'c210', group:'Otros', label:'Calificaciones de las conversaciones de Fin AI Agent', kind:'bar', span:2, dim:'Valoración de la conversación', seed:409 },
+  { id:'c211', group:'Otros', label:'Participación de Fin AI Agent', kind:'bar', span:2, dim:'Fin AI Agent activo', seed:410 },
+  { id:'c212', group:'Otros', label:'Comentarios sobre las calificaciones de las conversaciones de Fin AI Agent', kind:'kpi', span:1, value:'156' },
+  { id:'c213', group:'Otros', label:'Observaciones de satisfacción del cliente (CSAT) encuestada', kind:'kpi', span:1, value:'402' },
+  { id:'c214', group:'Otros', label:'El impacto de Fin AI Agent a lo largo del tiempo', kind:'line', span:2, dim:'Tiempo', seed:413 },
+  { id:'c215', group:'Otros', label:'Tendencias de puntuación de revisión por equipo', kind:'table', span:4, dim:'Equipo asignado actualmente', qualifier:'Mediana', seed:414 },
+  { id:'c216', group:'Otros', label:'Tendencias de puntuación de revisión por evaluado', kind:'table', span:4, dim:'Revisado', qualifier:'Mediana', seed:415 },
+  { id:'c217', group:'Otros', label:'Tarjetas de evaluación evaluadas', kind:'bar', span:2, dim:'Resultado de la tarjeta de puntuación', seed:416 },
+  { id:'c218', group:'Otros', label:'Criterios evaluados de la tarjeta de puntuación', kind:'bar', span:2, dim:'Opción de calificación de criterios de la tarjeta de evaluación', seed:417 },
+  { id:'c219', group:'Otros', label:'Tiempo de respuesta inicial: excluyendo el tiempo asignado al bot', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'3m 42s' },
+  { id:'c220', group:'Otros', label:'Tiempo de primera respuesta: excluyendo el tiempo asignado al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:419 },
+  { id:'c221', group:'Otros', label:'Hora de cierre: excluyendo la hora asignada al bot', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'2h 24m' },
+  { id:'c222', group:'Otros', label:'Hora de cierre: excluyendo la hora asignada al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:421 },
+  { id:'c223', group:'Otros', label:'Tiempo de respuesta: excluye el tiempo asignado al bot', kind:'kpi', span:1, qualifier:'Mediana, Dentro del horario de atención', value:'1m 58s' },
+  { id:'c224', group:'Otros', label:'Tiempo de respuesta: excluye el tiempo asignado al bot', kind:'line', span:2, dim:'Tiempo', qualifier:'Mediana, Dentro del horario de atención', seed:423 },
+  { id:'c225', group:'Otros', label:'Distribución horaria de los tiempos de respuesta: excluye el tiempo asignado al bot', kind:'heatmap', span:4, dim:'Día de la semana · Hora del día', qualifier:'Mediana, Dentro del horario de atención', seed:424 },
+  { id:'c226', group:'Otros', label:'Desglose del tiempo de primera respuesta', kind:'table', span:2, dim:'Intervalos de tiempo personalizados', qualifier:'Rango, Dentro del horario de atención', isNew:true, seed:425 },
+  { id:'c227', group:'Otros', label:'Desglose de tiempo para cerrar', kind:'table', span:2, dim:'Intervalos de tiempo personalizados', qualifier:'Rango, Dentro del horario de atención', isNew:true, seed:426 },
 ];
 const CATALOG_BY_ID: Record<string, CatalogItem> = Object.fromEntries(BUILDER_CATALOG.map(i => [i.id, i]));
 
@@ -2757,12 +2916,19 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
                         onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('application/json', JSON.stringify({ t: 'new', itemId: item.id })); }}
                         onClick={() => addItem(item.id)}
                         title="Arrástralo al lienzo o pulsa para añadir"
-                        className="flex items-center gap-3 rounded-lg border border-[#e9eae6] p-2.5 hover:border-[#3b59f6] hover:bg-[#f8f8f7] cursor-grab active:cursor-grabbing"
+                        className="flex items-start gap-3 rounded-lg border border-[#e9eae6] p-2.5 hover:border-[#3b59f6] hover:bg-[#f8f8f7] cursor-grab active:cursor-grabbing"
                       >
                         <CatalogThumb item={item} />
-                        <div className="min-w-0">
-                          <p className="text-[11px] text-[#646462] truncate">{group}</p>
+                        <div className="min-w-0 flex-1">
+                          {(item.dim || item.isNew) && (
+                            <div className="flex items-center gap-1 flex-wrap mb-0.5">
+                              {item.dim && <span className="text-[9.5px] px-1.5 py-[1px] rounded bg-[#f0f1f4] text-[#646462] font-medium">{item.dim}</span>}
+                              {item.isNew && <span className="text-[9.5px] px-1.5 py-[1px] rounded-full bg-[#eef1ff] text-[#3b59f6] font-semibold">Nuevo</span>}
+                            </div>
+                          )}
+                          <p className="text-[11px] text-[#646462] truncate">{item.subgroup ?? group}</p>
                           <p className="text-[12.5px] font-semibold text-[#1a1a1a] leading-tight">{item.label}</p>
+                          {item.qualifier && <p className="text-[10px] text-[#9a9a97] mt-0.5">{item.qualifier}</p>}
                         </div>
                       </div>
                     ))}
