@@ -3240,8 +3240,8 @@ const GRAN_EN: Record<string, string> = { hora: 'hour', dia: 'day', semana: 'wee
 
 // ── Catálogo de métricas seleccionables (selector "Buscar métricas") ──────────
 // Solo UI por ahora; la infraestructura de cálculo se hará más adelante.
-type MetricKind = 'count' | 'rate' | 'score' | 'money' | 'dataset' | 'ai';
-type MetricDef = { group: string; title: string; desc: string; kind: MetricKind; tag?: string; beta?: boolean };
+type MetricKind = 'count' | 'rate' | 'score' | 'money' | 'dataset' | 'ai' | 'time';
+type MetricDef = { group: string; title: string; desc: string; kind: MetricKind; tag?: string; tags?: string[]; beta?: boolean };
 const METRIC_CATALOG: MetricDef[] = [
   // Evaluación de tarjeta de puntuación
   { group: 'Evaluación de tarjeta de puntuación', title: 'Aprobaciones de la tarjeta de puntuación', desc: 'Número de evaluaciones de tarjeta de puntuación que pasaron.', kind: 'count' },
@@ -3349,6 +3349,32 @@ const METRIC_CATALOG: MetricDef[] = [
   { group: 'Conjunto de datos de conversación', title: 'Tasa de recontacto del mismo subtema de IA', beta: true, desc: 'Porcentaje de conversaciones en las que el mismo cliente contactó a asistencia dentro de las 24 horas posteriores a una resolución anterior sobre el mismo subtema de IA', kind: 'rate' },
   { group: 'Conjunto de datos de conversación', title: 'Tasa de resolución asumida de Fin AI Agent', desc: 'Porcentaje de conversaciones en las que Fin AI Agent proporcionó una respuesta y el cliente abandonó la conversación sin solicitar hablar con un compañero de equipo (de todas las conversaciones resueltas por Fin AI Agent).', kind: 'rate' },
   { group: 'Conjunto de datos de conversación', title: 'Tasa de resolución confirmada de Fin AI Agent', desc: 'Porcentaje de conversaciones en las que Fin AI Agent proporcionó una respuesta y el cliente respondió con comentarios positivos (de todas las conversaciones resueltas por Fin AI Agent).', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resolución de Fin AI Agent', desc: 'Porcentaje de conversaciones en las que Fin AI Agent intentó proporcionar una respuesta, donde el cliente dio comentarios positivos o no solicitó hablar con un miembro del equipo (de todas las conversaciones en las que participó Fin AI Agent). Datos disponibles a partir de octubre de 2025.', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resolución de Fin AI Agent (heredado)', desc: 'Porcentaje de conversaciones en las que Fin AI Agent proporcionó una respuesta, donde el cliente proporcionó un comentario positivo o no pidió hablar con un compañero del equipo (de todas las conversaciones en las que participó Fin AI Agent).', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resolución de Fin for Ecommerce', desc: 'Porcentaje de conversaciones en las que participó Fin for Ecommerce en las que el cliente dio una respuesta positiva o no solicitó hablar con un miembro del equipo. Datos disponibles a partir de octubre de 2025.', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resolución de Fin for Ecommerce (heredado)', desc: 'Porcentaje de las conversaciones de Fin for Ecommerce que se resolvieron', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resolución de Fin for Service (heredado)', desc: 'Porcentaje de las conversaciones de Fin for Service que se resolvieron', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resolución de respuestas de IA', desc: 'Porcentaje de conversaciones en las que la última respuesta de Fin AI Agent fue una respuesta de IA y el cliente respondió con un comentario positivo o no pidió hablar con un compañero de equipo (de todas las conversaciones en las que participó Fin AI Agent).', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resolución de respuestas personalizadas', desc: 'Porcentaje de conversaciones en las que la última respuesta del Fin AI Agent fue una respuesta personalizada y el cliente respondió con un comentario positivo o no pidió hablar con un compañero de equipo (de todas las conversaciones en las que participó Fin AI Agent).', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de respuesta de Fin AI Agent', desc: 'Porcentaje de conversaciones en las que Fin AI Agent proporcionó al menos una respuesta (de todas las conversaciones en las que participó Fin AI Agent).', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resultado de Fin Sales', desc: 'Porcentaje de conversaciones de Fin Sales que alcanzaron un resultado de enrutamiento calificado o descalificado (de las conversaciones en las que participó Fin Sales)', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resultados de Fin AI Agent', desc: 'Porcentaje de conversaciones con participación de Fin AI Agent que terminaron con un resultado: una resolución o una transferencia de procedimiento.', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resultados de Fin for Ecommerce', desc: 'Porcentaje de conversaciones con participación de Fin for Ecommerce que terminaron con un resultado: una resolución o una transferencia de procedimiento.', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de resultados de Fin for Service', desc: 'Porcentaje de conversaciones con participación de Fin for Service que terminaron con un resultado: una resolución o una transferencia de procedimiento.', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de servicio del carrusel de Fin for Ecommerce', desc: 'Porcentaje de conversaciones de Fin for Ecommerce en las que se sirvió un carrusel de productos', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tasa de transferencia de procedimientos de Fin AI Agent', desc: 'Porcentaje de conversaciones en las que Fin AI Agent se transfirió deliberadamente a otro equipo o flujo de trabajo mediante la lógica configurada en las instrucciones del procedimiento (de todas las conversaciones involucradas en Fin AI Agent).', kind: 'rate' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de gestión de la conversación', desc: 'Tiempo total de una conversación en estado abierto y asignado. (Anteriormente "Tiempo de gestión")', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de gestión de la conversación ajustado', desc: 'El tiempo total dedicado a gestionar una conversación por todos los miembros del equipo, excepto los periodos de inactividad cuando los miembros del equipo no estaban trabajando activamente.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de respuesta inicial', tags: ['Respuesta enviada el', 'Tiempo de Inbox del bot excluido'], desc: 'Tiempo desde que se inició la conversación hasta la respuesta inicial de un compañero.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de respuesta inicial', tags: ['Respuesta enviada el', 'Tiempo de Inbox del bot excluido', 'Horario de atención del Acuerdo'], desc: 'Tiempo que transcurre desde el inicio de la conversación hasta la primera respuesta de un miembro del equipo, y se cuentan solo las horas dentro del horario de atención establecido en el Acuerdo de Nivel de Servicio de la conversación.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de respuesta inicial', tags: ['Respuesta enviada el', 'Tiempo de Inbox del bot incluido'], desc: 'Tiempo desde que se inició la conversación hasta la respuesta inicial de un compañero.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de respuesta inicial', tags: ['Respuesta enviada el', 'Tiempo de Inbox del bot incluido', 'Horario de atención del Acuerdo'], desc: 'Tiempo que transcurre desde el inicio de la conversación hasta la primera respuesta de un miembro del equipo, y se cuentan solo las horas dentro del horario de atención establecido en el Acuerdo de Nivel de Servicio de la conversación.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de respuesta inicial', tags: ['Las conversaciones comenzaron el', 'Tiempo de Inbox del bot excluido'], desc: 'Tiempo desde que se inició la conversación hasta la respuesta inicial de un compañero.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de respuesta inicial', tags: ['Las conversaciones comenzaron el', 'Tiempo de Inbox del bot excluido', 'Horario de atención del Acuerdo'], desc: 'Tiempo que transcurre desde el inicio de la conversación hasta la primera respuesta de un miembro del equipo, y se cuentan solo las horas dentro del horario de atención establecido en el Acuerdo de Nivel de Servicio de la conversación.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de respuesta inicial', tags: ['Las conversaciones comenzaron el', 'Tiempo de Inbox del bot incluido'], desc: 'Tiempo desde que se inició la conversación hasta la respuesta inicial de un compañero.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo de respuesta inicial', tags: ['Las conversaciones comenzaron el', 'Tiempo de Inbox del bot incluido', 'Horario de atención del Acuerdo'], desc: 'Tiempo que transcurre desde el inicio de la conversación hasta la primera respuesta de un miembro del equipo, y se cuentan solo las horas dentro del horario de atención establecido en el Acuerdo de Nivel de Servicio de la conversación.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo desde la primera asignación hasta el cierre', desc: 'Tiempo desde que se asignó una conversación hasta que se cerró.', kind: 'time' },
+  { group: 'Conjunto de datos de conversación', title: 'Tiempo hasta el primer cierre', tags: ['Tiempo de Inbox del bot incluido'], desc: 'Tiempo desde que comenzó la conversación hasta el momento en que un compañero de equipo lo cerró por primera vez.', kind: 'time' },
 ];
 function MetricIcon({ kind }: { kind: MetricKind }) {
   const glyph = kind === 'rate' ? '%' : kind === 'score' ? '02' : kind === 'money' ? '€' : null;
@@ -3356,6 +3382,7 @@ function MetricIcon({ kind }: { kind: MetricKind }) {
     <div className="w-7 h-7 rounded-md bg-[#1a1a1a] text-white flex items-center justify-center flex-shrink-0 text-[11px] font-bold">
       {kind === 'count' ? '#'
         : kind === 'ai' ? <span className="text-[9px] font-extrabold tracking-tight">AI</span>
+        : kind === 'time' ? <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5" strokeLinecap="round"/></svg>
         : kind === 'dataset' ? <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><rect x="6" y="6" width="4" height="4" rx="1"/></svg>
         : glyph}
     </div>
@@ -3381,18 +3408,20 @@ function MetricPicker({ selected, onSelect, onClose }: { selected: string; onSel
             return (
               <div key={g}>
                 <p className="text-[11px] text-[#646462] px-2 pt-2.5 pb-1">{g}</p>
-                {items.map(m => (
-                  <button key={m.title + (m.tag ?? '')} onClick={() => onSelect(m)} className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-[#f8f8f7] text-left">
+                {items.map(m => {
+                  const tags = m.tags ?? (m.tag ? [m.tag] : []);
+                  return (
+                  <button key={m.title + '|' + tags.join(',')} onClick={() => onSelect(m)} className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-[#f8f8f7] text-left">
                     <MetricIcon kind={m.kind} />
                     <div className="min-w-0 flex-1">
                       <p className="text-[12.5px] font-semibold text-[#1a1a1a] leading-snug">{m.title}{m.beta && <span className="ml-1.5 align-middle text-[10px] font-medium text-[#3b59f6] bg-[#eef1ff] rounded-full px-1.5 py-0.5">Beta</span>}</p>
-                      {m.tag && <span className="inline-block text-[10.5px] text-[#646462] bg-[#f1f1ee] rounded px-1.5 py-0.5 mt-1">{m.tag}</span>}
-                      <p className="text-[11.5px] text-[#646462] leading-snug mt-0.5">{m.desc}</p>
+                      {tags.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{tags.map(t => <span key={t} className="text-[10.5px] text-[#646462] bg-[#f1f1ee] rounded px-1.5 py-0.5">{t}</span>)}</div>}
+                      <p className="text-[11.5px] text-[#646462] leading-snug mt-1">{m.desc}</p>
                       <span className="text-[11px] text-[#3b59f6] hover:underline">Más información</span>
                     </div>
                     {selected === m.title && <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#ff7849] flex-shrink-0 mt-0.5" strokeWidth="2"><path d="M3 8.5l3.5 3.5L13 4"/></svg>}
                   </button>
-                ))}
+                ); })}
               </div>
             );
           })}
