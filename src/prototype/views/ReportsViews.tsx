@@ -3238,6 +3238,80 @@ const EDITOR_TYPES: EditorType[] = [
 ];
 const GRAN_EN: Record<string, string> = { hora: 'hour', dia: 'day', semana: 'week', mes: 'month' };
 
+// ── Catálogo de métricas seleccionables (selector "Buscar métricas") ──────────
+// Solo UI por ahora; la infraestructura de cálculo se hará más adelante.
+type MetricKind = 'count' | 'rate' | 'score' | 'money' | 'dataset';
+type MetricDef = { group: string; title: string; desc: string; kind: MetricKind };
+const METRIC_CATALOG: MetricDef[] = [
+  // Evaluación de tarjeta de puntuación
+  { group: 'Evaluación de tarjeta de puntuación', title: 'Aprobaciones de la tarjeta de puntuación', desc: 'Número de evaluaciones de tarjeta de puntuación que pasaron.', kind: 'count' },
+  { group: 'Evaluación de tarjeta de puntuación', title: 'Fallos de la tarjeta de puntuación', desc: 'Número de evaluaciones de la tarjeta de puntuación que no aprobaron.', kind: 'count' },
+  { group: 'Evaluación de tarjeta de puntuación', title: 'Puntuación de la tarjeta de puntuación', desc: 'La puntuación de revisión asignada a las evaluaciones de la tarjeta de puntuación.', kind: 'score' },
+  { group: 'Evaluación de tarjeta de puntuación', title: 'Tarjetas de evaluación evaluadas', desc: 'Número de evaluaciones de tarjetas de evaluación', kind: 'count' },
+  { group: 'Evaluación de tarjeta de puntuación', title: 'Tarjetas de puntuación revisadas', desc: 'Número de evaluaciones de tarjetas de evaluación que han sido revisadas.', kind: 'count' },
+  { group: 'Evaluación de tarjeta de puntuación', title: 'Tasa de aprobación de la tarjeta de puntuación', desc: 'Porcentaje de evaluaciones de la tarjeta de puntuación que aprobaron.', kind: 'rate' },
+  { group: 'Evaluación de tarjeta de puntuación', title: 'Tasa de falla de la tarjeta de puntuación', desc: 'Porcentaje de evaluaciones de la tarjeta de puntuación que no aprobaron.', kind: 'rate' },
+  { group: 'Evaluación de tarjeta de puntuación', title: 'Tasa de revisión de la tarjeta de puntuación', desc: 'Porcentaje de evaluaciones de tarjetas de puntuación que se han revisado.', kind: 'rate' },
+  // Evaluación de atributos de la tarjeta de puntuación
+  { group: 'Evaluación de atributos de la tarjeta de puntuación', title: 'Criterios evaluados de la tarjeta de puntuación', desc: 'Número de evaluaciones de criterios de la tarjeta de puntuación.', kind: 'count' },
+  { group: 'Evaluación de atributos de la tarjeta de puntuación', title: 'No se cumplieron los criterios de la tarjeta de puntuación', desc: 'Número de evaluaciones de criterios de la tarjeta de puntuación que no aprobaron.', kind: 'count' },
+  { group: 'Evaluación de atributos de la tarjeta de puntuación', title: 'Puntuación de los criterios de la tarjeta de puntuación', desc: 'La puntuación de revisión asignada a las evaluaciones de los criterios de la tarjeta de evaluación', kind: 'score' },
+  { group: 'Evaluación de atributos de la tarjeta de puntuación', title: 'Se cumplen los criterios de la tarjeta de puntuación', desc: 'Número de evaluaciones de criterios de la tarjeta de puntuación que aprobaron.', kind: 'count' },
+  // Conjunto de datos de conversación
+  { group: 'Conjunto de datos de conversación', title: 'Carrusel de Fin for Ecommerce sirvió conversaciones', desc: 'Número de conversaciones de Fin for Ecommerce en las que se mostró un carrusel de productos', kind: 'dataset' },
+  { group: 'Conjunto de datos de conversación', title: 'Conversaciones activas de Fin AI Agent', desc: 'Número de conversaciones que se pasaron a Fin AI Agent.', kind: 'count' },
+  { group: 'Conjunto de datos de conversación', title: 'Ingresos atribuidos a Fin for Ecommerce', desc: 'Valor total de los pedidos en los que Fin influyó (valor total de cada pedido con al menos un producto recomendado o mencionado por Fin que se compró en un plazo de 14 días)', kind: 'money' },
+];
+function MetricIcon({ kind }: { kind: MetricKind }) {
+  const glyph = kind === 'rate' ? '%' : kind === 'score' ? '02' : kind === 'money' ? '€' : null;
+  return (
+    <div className="w-7 h-7 rounded-md bg-[#1a1a1a] text-white flex items-center justify-center flex-shrink-0 text-[11px] font-bold">
+      {kind === 'count' ? '#'
+        : kind === 'dataset' ? <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><rect x="2" y="2" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="2" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><rect x="6" y="6" width="4" height="4" rx="1"/></svg>
+        : glyph}
+    </div>
+  );
+}
+// Selector desplegable de métricas: buscable y agrupado.
+function MetricPicker({ selected, onSelect, onClose }: { selected: string; onSelect: (m: MetricDef) => void; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const query = q.trim().toLowerCase();
+  const groups = [...new Set(METRIC_CATALOG.map(m => m.group))];
+  return (
+    <>
+      <div className="fixed inset-0 z-30" onClick={onClose} />
+      <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-white border border-[#e9eae6] rounded-xl shadow-xl overflow-hidden flex flex-col" style={{ maxHeight: 400 }}>
+        <div className="p-2 border-b border-[#f1f1ee] flex items-center gap-2 flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] ml-1" strokeWidth="1.5"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2L14 14" strokeLinecap="round"/></svg>
+          <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar métricas..." className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]" />
+        </div>
+        <div className="overflow-y-auto min-h-0 p-1">
+          {groups.map(g => {
+            const items = METRIC_CATALOG.filter(m => m.group === g && (!query || m.title.toLowerCase().includes(query) || m.desc.toLowerCase().includes(query)));
+            if (!items.length) return null;
+            return (
+              <div key={g}>
+                <p className="text-[11px] text-[#646462] px-2 pt-2.5 pb-1">{g}</p>
+                {items.map(m => (
+                  <button key={m.title} onClick={() => onSelect(m)} className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-[#f8f8f7] text-left">
+                    <MetricIcon kind={m.kind} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12.5px] font-semibold text-[#1a1a1a] leading-snug">{m.title}</p>
+                      <p className="text-[11.5px] text-[#646462] leading-snug mt-0.5">{m.desc}</p>
+                      <span className="text-[11px] text-[#3b59f6] hover:underline">Más información</span>
+                    </div>
+                    {selected === m.title && <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#ff7849] flex-shrink-0 mt-0.5" strokeWidth="2"><path d="M3 8.5l3.5 3.5L13 4"/></svg>}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // Editor de gráfico a pantalla completa — cambia tipo, título, métricas y ejes.
 function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel, onUpdate }: {
   item: CatalogItem; initialKind: BuilderKind; initialTitle: string; initialVariant?: string;
@@ -3254,7 +3328,8 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel
   const [compare, setCompare] = useState(false);
   const [gran, setGran] = useState<'hora' | 'dia' | 'semana' | 'mes'>('dia');
   const [metricsOpen, setMetricsOpen] = useState(true);
-  const [metrics, setMetrics] = useState<string[]>([item.label]);
+  const [metrics, setMetrics] = useState<{ title: string; desc: string }[]>([{ title: item.label, desc: '' }]);
+  const [pickerFor, setPickerFor] = useState<number | null>(null);
 
   const type = EDITOR_TYPES.find(t => t.id === typeId) ?? EDITOR_TYPES[4];
   const kind = type.kind;
@@ -3345,8 +3420,13 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel
                   <div className="flex flex-col gap-2">
                     {metrics.map((m, i) => (
                       <div key={i} className="border border-[#e9eae6] rounded-lg p-3 flex flex-col gap-2.5">
-                        <p className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5">{metrics.length > 1 && <span className="text-[#9a9a97] font-normal">{i + 1}</span>}{m}</p>
-                        <div className="border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#646462] flex items-center justify-between">Tiempo para cerrar y Tiempo de Inbox del bot incluido<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg></div>
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5">{metrics.length > 1 && <span className="text-[#9a9a97] font-normal">{i + 1}</span>}{m.title}</p>
+                        <div className="relative">
+                          <button onClick={() => setPickerFor(pickerFor === i ? null : i)} className="w-full border border-[#e9eae6] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#646462] flex items-center justify-between text-left hover:border-[#1a1a1a]">
+                            <span className="truncate">{m.title}</span><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z"/></svg>
+                          </button>
+                          {pickerFor === i && <MetricPicker selected={m.title} onClose={() => setPickerFor(null)} onSelect={met => { setMetrics(prev => prev.map((x, j) => j === i ? { title: met.title, desc: met.desc } : x)); setPickerFor(null); }} />}
+                        </div>
                         <label className="flex items-center gap-2 text-[12.5px] text-[#1a1a1a]"><input type="checkbox" defaultChecked className="accent-[#3b59f6]" />Dentro del horario de atención<svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a97]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M6.5 6.5a1.5 1.5 0 113 .5c0 1-1.5 1-1.5 2M8 12h.01"/></svg></label>
                         <div>
                           <p className="text-[12px] font-medium text-[#1a1a1a] mb-1 flex items-center gap-1">Agrupación<svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#9a9a97]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M6.5 6.5a1.5 1.5 0 113 .5c0 1-1.5 1-1.5 2M8 12h.01"/></svg></p>
@@ -3357,7 +3437,7 @@ function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel
                     ))}
                   </div>
                 )}
-                <button onClick={() => setMetrics(m => [...m, 'Promedio Tiempo para cerrar'])} className="text-[12.5px] text-[#646462] flex items-center gap-1 mt-2"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir métrica</button>
+                <button onClick={() => setMetrics(m => [...m, { title: 'Promedio Tiempo para cerrar', desc: '' }])} className="text-[12.5px] text-[#646462] flex items-center gap-1 mt-2"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>Añadir métrica</button>
               </div>
               {/* Ver por — varía según el tipo */}
               {!isNumber && (
