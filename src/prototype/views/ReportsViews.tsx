@@ -2800,30 +2800,32 @@ function BuilderBanner({ text, color, onText, onColor, onDelete }: {
 }) {
   const bg = (BANNER_COLORS.find(c => c.id === color) ?? BANNER_COLORS[3]).bg;
   const ref = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState(false);
-  const [below, setBelow] = useState(false);
-  // Al entrar, decide si la barra cabe encima. Mide el espacio disponible contra
-  // el contenedor con scroll (no el viewport): si el banner está pegado al borde
-  // superior del lienzo, la barra se muestra debajo para no recortarse.
-  const onEnter = () => {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Barra posicionada con `fixed` para que NUNCA la recorte el overflow del lienzo.
+  // Se coloca encima del banner salvo que no quepa (pegado al borde del scroll),
+  // en cuyo caso baja. Un temporizador corto hace de puente para no perder el hover.
+  const [pos, setPos] = useState<{ top: number; left: number; below: boolean } | null>(null);
+  const show = () => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
     const el = ref.current;
     const r = el?.getBoundingClientRect();
-    if (r) {
-      let scrollTop = 0;
-      for (let n: HTMLElement | null = el!.parentElement; n; n = n.parentElement) {
-        const oy = getComputedStyle(n).overflowY;
-        if (oy === 'auto' || oy === 'scroll') { scrollTop = n.getBoundingClientRect().top; break; }
-      }
-      setBelow(r.top - scrollTop < 44);
+    if (!r) return;
+    let scrollTop = 0;
+    for (let n: HTMLElement | null = el!.parentElement; n; n = n.parentElement) {
+      const oy = getComputedStyle(n).overflowY;
+      if (oy === 'auto' || oy === 'scroll') { scrollTop = n.getBoundingClientRect().top; break; }
     }
-    setHover(true);
+    const below = r.top - scrollTop < 48;
+    setPos({ top: below ? r.bottom : r.top, left: r.left + r.width / 2, below });
   };
+  const hide = () => { timer.current = setTimeout(() => setPos(null), 150); };
   return (
-    <div ref={ref} className="relative h-full" onMouseEnter={onEnter} onMouseLeave={() => setHover(false)}>
-      {/* Barra flotante (aparece al pasar el ratón). El contenedor toca el banner
-          (bottom-full / top-full) y el padding hace de puente para no perder el hover. */}
-      {hover && (
-        <div className={`absolute left-1/2 -translate-x-1/2 z-30 flex ${below ? 'top-full pt-2' : 'bottom-full pb-2'}`}>
+    <div ref={ref} className="relative h-full" onMouseEnter={show} onMouseLeave={hide}>
+      {/* Barra flotante de colores (aparece al pasar el ratón). */}
+      {pos && (
+        <div onMouseEnter={show} onMouseLeave={hide}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, transform: `translate(-50%, ${pos.below ? '0' : '-100%'})` }}
+          className={`z-50 flex ${pos.below ? 'pt-2' : 'pb-2'}`}>
           <div className="flex items-center gap-1.5 bg-white border border-[#e9eae6] rounded-full shadow-md px-2 py-1">
             {BANNER_COLORS.map(c => (
               <button key={c.id} onClick={() => onColor(c.id)} title={c.id}
