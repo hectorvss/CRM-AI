@@ -17,6 +17,7 @@ import { Dropdown, KnowledgePlaceholder, TrialBanner } from '../sharedUi';
 
 type ReportsSubView =
   | 'overview' | 'aiResumen' | 'areasNegocio' | 'agentesPerf' | 'aprobacionesRisk' | 'costesRoi'
+  | 'todos' | 'misInformes' | 'favoritos'
   | 'temas' | 'sugerencias' | 'export' | 'horarios'
   | 'finAgent' | 'copilot'
   | 'calls' | 'conversations' | 'csat' | 'effectiveness'
@@ -26,7 +27,8 @@ type ReportsSubView =
 type ReportsItemIcon = 'topic' | 'export' | 'schedule' | 'folder' | 'admin'
   | 'lightbulb' | 'sparkles' | 'fin' | 'copilot' | 'phone' | 'chat' | 'star'
   | 'zap' | 'clock' | 'sla' | 'inbox' | 'user' | 'ticket' | 'doc' | 'globe'
-  | 'chart' | 'ai' | 'area' | 'robot' | 'approve' | 'coin';
+  | 'chart' | 'ai' | 'area' | 'robot' | 'approve' | 'coin'
+  | 'grid' | 'heart' | 'aiInfo';
 
 type ReportsNavGroup = {
   key?: ReportsSubView;
@@ -599,31 +601,33 @@ function ReportsCostesRoiContent({ period, channel }: { period: string; channel:
 
 function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: ReportsSubView) => void }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    'Temas de informes': true,
-    'AI & Automation': true,
-    'Human support': true,
-    'Proactive': true,
+    'AI & Automation': false,
+    'Human support': false,
+    'Proactive': false,
   });
   const toggleGroup = (label: string) => setOpenGroups(s => ({ ...s, [label]: !s[label] }));
-  const groups: ReportsNavGroup[] = [
+  // Flat top section (matches the Informes screenshot): direct items with an
+  // optional count badge, external-link arrow, or a right chevron.
+  const topItems: { key: ReportsSubView; label: string; icon: ReportsItemIcon; count?: number; external?: boolean; chevron?: boolean }[] = [
+    { key: 'aiResumen',   label: 'Información de IA',            icon: 'aiInfo', external: true },
+    { key: 'overview',    label: 'Resumen',                     icon: 'grid' },
+    { key: 'todos',       label: 'Todos los informes',          icon: 'chart', count: 25 },
+    { key: 'misInformes', label: 'Tus informes',                icon: 'user',  count: 0 },
+    { key: 'favoritos',   label: 'Tus favoritos',               icon: 'heart', chevron: true },
+    { key: 'temas',       label: 'Temas de conversación',       icon: 'lightbulb', chevron: true },
+    { key: 'export',      label: 'Exportación de conjuntos de datos', icon: 'export' },
+    { key: 'horarios',    label: 'Administrar los horarios',    icon: 'schedule' },
+  ];
+  const familyGroups: { label: string; items: { key: ReportsSubView; label: string; icon?: ReportsItemIcon }[] }[] = [
     {
-      label: 'Temas de informes', icon: 'topic',
-      items: [
-        { key: 'temas',       label: 'Temas',       icon: 'lightbulb' },
-        { key: 'sugerencias', label: 'Sugerencias', icon: 'sparkles' },
-      ],
-    },
-    { key: 'export',  label: 'Exportación de conjuntos de datos', icon: 'export' },
-    { key: 'horarios',label: 'Administrar los horarios', icon: 'schedule' },
-    {
-      label: 'AI & Automation', icon: 'folder',
+      label: 'AI & Automation',
       items: [
         { key: 'finAgent', label: 'Fin AI Agent', icon: 'fin' },
         { key: 'copilot',  label: 'Copilot',      icon: 'copilot' },
       ],
     },
     {
-      label: 'Human support', icon: 'folder',
+      label: 'Human support',
       items: [
         { key: 'calls',          label: 'Calls',                    icon: 'phone' },
         { key: 'conversations',  label: 'Conversations',            icon: 'chat' },
@@ -637,10 +641,10 @@ function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: 
       ],
     },
     {
-      label: 'Proactive', icon: 'folder',
+      label: 'Proactive',
       items: [
         { key: 'articles',    label: 'Artículos',           icon: 'doc' },
-        { key: 'outboundEng', label: 'Información general', icon: 'globe' },
+        { key: 'outboundEng', label: 'Información general',  icon: 'globe' },
       ],
     },
   ];
@@ -675,6 +679,9 @@ function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: 
       case 'robot':     return <svg viewBox="0 0 16 16" className={cls}><path d="M6 1.5h4v2H7.75v.75H10a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2h2.25V3.5H6v-2zM5.75 9a.75.75 0 101.5 0 .75.75 0 00-1.5 0zm4 0a.75.75 0 101.5 0 .75.75 0 00-1.5 0zM5 12.5h2V14H5v-1.5zm4 0h2V14H9v-1.5z"/></svg>;
       case 'approve':   return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5l5.5 2.5v4c0 3-2.3 5.7-5.5 6.5C4.8 13.7 2.5 11 2.5 8V4L8 1.5zM6.5 8.7L5.5 9.7l2 2 3.5-4-1-1-2.5 2.7-1-.7z"/></svg>;
       case 'coin':      return <svg viewBox="0 0 16 16" className={cls}><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v1M8 10.5v1M6 7.5C6 6.7 6.9 6 8 6s2 .7 2 1.5S9.1 9 8 9s-2 .7-2 1.5S6.9 12 8 12" fill="none" stroke="#fff" strokeWidth="1.2" strokeLinecap="round"/></svg>;
+      case 'grid':      return <svg viewBox="0 0 16 16" className={cls}><rect x="1.5" y="1.5" width="5.6" height="5.6" rx="1.4"/><rect x="8.9" y="1.5" width="5.6" height="5.6" rx="1.4"/><rect x="1.5" y="8.9" width="5.6" height="5.6" rx="1.4"/><rect x="8.9" y="8.9" width="5.6" height="5.6" rx="1.4"/></svg>;
+      case 'heart':     return <svg viewBox="0 0 16 16" className={cls}><path d="M8 14.5l-5.2-5A3.3 3.3 0 018 4.3a3.3 3.3 0 015.2 5.2z"/></svg>;
+      case 'aiInfo':    return <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#e8572a]"><path d="M2 13V9.5h2.3V13H2zm3.3 0V6h2.3v7H5.3zm3.3 0V8h2.3v5H8.6zM12 5.6l.6 1.8 1.8.6-1.8.6L12 10.4l-.6-1.8L9.6 8l1.8-.6L12 5.6z"/></svg>;
     }
   }
 
@@ -688,27 +695,43 @@ function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: 
         </button>
       </div>
       <div className="flex-1 overflow-y-auto pl-3 pr-3 pb-2 flex flex-col gap-0.5 text-[13px]">
-        {groups.map((g, i) => {
-          // Bug fix: don't auto-expand when child active — only state controls collapse.
-          // This makes "Temas de informes" actually collapsible even with `temas` active.
-          const expanded = openGroups[g.label] === true;
-          const groupActive = g.key !== undefined && sub === g.key;
-          const childActive = (g.items ?? []).some(it => it.key === sub);
+        {/* Top flat section */}
+        {topItems.map(it => {
+          const active = sub === it.key;
           return (
-            <div key={g.label + i}>
+            <button
+              key={it.key}
+              onClick={() => onSelect(it.key)}
+              className={`w-full min-h-8 flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors ${
+                active ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]' : 'hover:bg-[#e9eae6]/40 text-[#1a1a1a]'
+              }`}
+            >
+              <GroupIcon kind={it.icon} />
+              <span className="flex-1 text-left leading-[15px]">{it.label}</span>
+              {it.count !== undefined && <span className="text-[12px] text-[#646462] flex-shrink-0">{it.count}</span>}
+              {it.external && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5.5 10.5l5-5M6 5.5h4.5V10"/></svg>}
+              {it.chevron && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>}
+            </button>
+          );
+        })}
+
+        {/* Divider before the report families */}
+        <div className="my-2 mx-1 border-t border-[#e9eae6]" />
+
+        {/* Report families (collapsible) */}
+        {familyGroups.map(g => {
+          const expanded = openGroups[g.label] === true;
+          return (
+            <div key={g.label}>
               <button
-                onClick={() => g.key ? onSelect(g.key) : toggleGroup(g.label)}
-                className={`w-full h-8 flex items-center gap-2 px-3 rounded-lg text-[13px] transition-colors ${
-                  groupActive || (childActive && !g.items) ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]' : 'hover:bg-[#e9eae6]/40'
-                }`}
+                onClick={() => toggleGroup(g.label)}
+                className="w-full h-8 flex items-center gap-2 px-3 rounded-lg text-[13px] transition-colors hover:bg-[#e9eae6]/40"
               >
-                {g.icon && <GroupIcon kind={g.icon} />}
-                <span className="flex-1 text-left text-[#1a1a1a]">{g.label}</span>
-                {g.items && (
-                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
-                )}
+                <GroupIcon kind="folder" />
+                <span className="flex-1 text-left text-[#1a1a1a] font-medium">{g.label}</span>
+                <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
               </button>
-              {g.items && expanded && (
+              {expanded && (
                 <div className="flex flex-col pl-7 mt-0.5 mb-1 gap-0.5">
                   {g.items.map(it => (
                     <button
@@ -2611,17 +2634,18 @@ function ReportsExportContent({ period, channel }: { period: string; channel: st
 }
 
 function readInitialReportsSubFromUrl(): ReportsSubView {
-  if (typeof window === 'undefined') return 'temas';
+  if (typeof window === 'undefined') return 'overview';
   const s = new URLSearchParams(window.location.search).get('sub');
   const known: ReportsSubView[] = [
     'overview','aiResumen','areasNegocio','agentesPerf','aprobacionesRisk','costesRoi',
+    'todos','misInformes','favoritos',
     'temas','sugerencias','export','horarios',
     'finAgent','copilot',
     'calls','conversations','csat','effectiveness',
     'responsiveness','slas','teamInbox','teammate','tickets',
     'articles','outboundEng','administrar',
   ];
-  return s && (known as string[]).includes(s) ? (s as ReportsSubView) : 'temas';
+  return s && (known as string[]).includes(s) ? (s as ReportsSubView) : 'overview';
 }
 
 export function ReportsView() {
@@ -2635,6 +2659,9 @@ export function ReportsView() {
     switch (sub) {
       // ── Análisis (from original Reports.tsx) ────────────────────────────
       case 'overview':         return <ReportsOverviewContent period={period} channel={channel} />;
+      case 'todos':            return <KnowledgePlaceholder title="Todos los informes" subtitle="Aquí verás los 25 informes disponibles: familias de KPIs de IA, soporte humano y proactivo." />;
+      case 'misInformes':      return <KnowledgePlaceholder title="Tus informes" subtitle="Aún no has creado informes propios. Duplica un informe o crea uno desde cero para verlo aquí." />;
+      case 'favoritos':        return <KnowledgePlaceholder title="Tus favoritos" subtitle="Marca informes como favoritos para acceder a ellos rápidamente desde aquí." />;
       case 'aiResumen':        return <ReportsAiResumenContent period={period} channel={channel} />;
       case 'areasNegocio':     return <ReportsAreasNegocioContent period={period} channel={channel} />;
       case 'agentesPerf':      return <ReportsAgentesContent period={period} channel={channel} />;
