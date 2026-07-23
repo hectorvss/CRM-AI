@@ -114,7 +114,7 @@ function ReportsAllReportsContent({ tab, onTab, onOpen, onCreate }: { tab: 'shar
   const tabs = [
     { id: 'shared' as const,   label: 'Compartido contigo (0)' },
     { id: 'mine' as const,     label: 'Tus informes (0)' },
-    { id: 'intercom' as const, label: `Informes de Intercom (${ALL_REPORTS.length})` },
+    { id: 'intercom' as const, label: `Informes de Clain (${ALL_REPORTS.length})` },
   ];
   return (
     <div className="flex flex-col flex-1 min-h-0">
