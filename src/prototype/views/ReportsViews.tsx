@@ -5,8 +5,9 @@
 
 import { useApi } from '../../api/hooks';
 import { casesApi, reportsApi } from '../../api/client';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Dropdown, KnowledgePlaceholder, TrialBanner } from '../sharedUi';
+import { KpiCard, KpiChartCard, KpiEmpty, KpiSectionHeader, KpiTimeSeries, KpiDistributionBar, KpiDoughnut } from '../charts/KpiChart';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,68 +68,135 @@ function ReportsAnalysisKpiCard({ label, value, change, trend, sub }: { label: s
   );
 }
 
-// ── 1. Visión general ─────────────────────────────────────────────────────────
+// ── 1. Resumen — dashboard de KPIs (Chart.js vía KpiChart) ────────────────────
+// Data-driven: pulls what reportsApi.overview provides, and renders Intercom-
+// style empty states everywhere there is no series yet. Every KPI/chart goes
+// through the shared KpiChart library so the whole area shares one renderer.
 function ReportsOverviewContent({ period, channel }: { period: string; channel: string }) {
-  const { data: ov, loading } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
+  const { data: ov } = useApi(() => reportsApi.overview(period, channel), [period, channel], null);
   const { data: sla } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
   const kpis: any[] = ov?.kpis ?? [];
-  const improved = kpis.filter((m: any) => m.trend === 'up').slice(0, 3);
-  const worsened = kpis.filter((m: any) => m.trend === 'down').slice(0, 3);
+  // Best-effort lookup of a backend KPI by fuzzy label; defaults to "—".
+  const kpiVal = (needle: string): { value: any; change?: string; trend?: string } => {
+    const m = kpis.find((k: any) => String(k.label || '').toLowerCase().includes(needle.toLowerCase()));
+    return m ? { value: m.value, change: m.change, trend: m.trend } : { value: '—' };
+  };
+  const num = (needle: string): number => {
+    const v = kpiVal(needle).value;
+    const n = parseFloat(String(v).replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  // A generic series accessor: reportsApi may expose `ov.series[key]` as
+  // { labels, series:[{label,data}] }. Absent → render an empty state.
+  const seriesBlock = (key: string) => {
+    const s = ov?.series?.[key];
+    if (s && Array.isArray(s.series) && s.series.some((x: any) => (x.data ?? []).some((v: number) => v))) return s;
+    return null;
+  };
+
+  // "Cómo manejas las conversaciones" — split of total conversations.
+  const total = num('conversacion') || num('total') || 0;
+  const handling = ov?.handling ?? (total ? [{ label: 'Conversaciones', value: total }] : []);
   const dist: any[] = sla?.distribution ?? [];
-  const distTotal = dist.reduce((s, d) => s + (d.count ?? 0), 0);
+
+  const finGroup: [string, string][] = [
+    ['Tasa de desviación', 'desviaci'], ['Tasa de resolución', 'resoluci'], ['Puntuación de la experiencia del cliente (CX)', 'cx'],
+  ];
+  const teammateGroup: [string, string][] = [
+    ['Mediana de tiempo de primera respuesta', 'primera respuesta'], ['Mediana de tiempo de respuesta', 'tiempo de respuesta'],
+    ['Mediana de tiempo para cerrar', 'para cerrar'], ['Mediana de tiempo de gestión', 'gestión'],
+  ];
+  const cxGroup: [string, string][] = [
+    ['Puntuación general de la experiencia del cliente', 'cx general'], ['Puntuación CX · Fin', 'cx fin'],
+    ['Puntuación CX · Chatbot', 'cx chatbot'], ['Puntuación CX · Compañero', 'cx compañero'],
+  ];
+  const csatGroup: [string, string][] = [
+    ['Puntuación general de CSAT', 'csat general'], ['Puntuación CSAT de Fin AI Agent', 'csat fin'], ['Puntuación CSAT del compañero de equipo', 'csat compañero'],
+  ];
+
+  const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-4">
+      <KpiSectionHeader title={title} />
+      {children}
+    </div>
+  );
+  const TimeCard = ({ title, seriesKey }: { title: string; seriesKey: string }) => {
+    const s = seriesBlock(seriesKey);
+    return (
+      <KpiChartCard title={title}>
+        {s ? <KpiTimeSeries labels={s.labels} series={s.series} type="line" /> : <KpiEmpty />}
+      </KpiChartCard>
+    );
+  };
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div>
-          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Visión general</h1>
-          <p className="text-[12.5px] text-[#646462]">Métricas principales del workspace en el período seleccionado.</p>
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><rect x="1.5" y="1.5" width="5.6" height="5.6" rx="1.4"/><rect x="8.9" y="1.5" width="5.6" height="5.6" rx="1.4"/><rect x="1.5" y="8.9" width="5.6" height="5.6" rx="1.4"/><rect x="8.9" y="8.9" width="5.6" height="5.6" rx="1.4"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Resumen</h1>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
-        {loading && !kpis.length ? (
-          <div className="grid grid-cols-2 gap-3">{['Total','Resolución','SLA','Auto-IA','Riesgo'].map((l, i) => <div key={i} className="border border-[#e9eae6] rounded-[10px] bg-white h-[110px] animate-pulse" />)}</div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {kpis.map((m: any, i: number) => <ReportsAnalysisKpiCard key={i} idx={i} label={m.label} value={m.value} change={m.change} trend={m.trend} sub={m.sub} />)}
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
-            <h2 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Cambios de rendimiento</h2>
-            <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-wide mb-2 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#16a34a] inline-block"/>Mejoras</p>
-            {improved.length ? improved.map((m: any, i: number) => (
-              <div key={i} className="text-[12px] text-[#646462] mb-1.5 flex items-start gap-1.5">
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#16a34a] flex-shrink-0 mt-0.5"><path d="M3 11l5-7 5 7z"/></svg>
-                <span><strong className="text-[#1a1a1a]">{m.label}</strong>: {m.value}{m.change ? ` (${m.change})` : ''}</span>
-              </div>
-            )) : <p className="text-[12px] text-[#646462] mb-3">Sin KPIs al alza en este rango.</p>}
-            <div className="border-t border-[#e9eae6] pt-3 mt-3">
-              <p className="text-[11px] font-bold text-[#1a1a1a] uppercase tracking-wide mb-2 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#dc2626] inline-block"/>Caídas</p>
-              {worsened.length ? worsened.map((m: any, i: number) => (
-                <div key={i} className="text-[12px] text-[#646462] mb-1.5 flex items-start gap-1.5">
-                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#dc2626] flex-shrink-0 mt-0.5"><path d="M3 5l5 7 5-7z"/></svg>
-                  <span><strong className="text-[#1a1a1a]">{m.label}</strong>: {m.value}{m.change ? ` (${m.change})` : ''}</span>
-                </div>
-              )) : <p className="text-[12px] text-[#646462]">Sin KPIs a la baja en este rango.</p>}
-            </div>
-          </div>
-          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4">
-            <h2 className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Distribución SLA</h2>
-            {dist.length ? dist.map((d: any, i: number) => {
-              const pct = distTotal > 0 ? Math.round((d.count / distTotal) * 100) : 0;
-              const bar = d.status === 'breached' ? 'bg-[#dc2626]' : d.status === 'at_risk' ? 'bg-[#f97316]' : 'bg-[#16a34a]';
-              return (
-                <div key={i} className="mb-3">
-                  <div className="flex justify-between text-[12px] mb-1">
-                    <span className="text-[#1a1a1a] capitalize">{String(d.status).replace(/_/g,' ')}</span>
-                    <span className="text-[#646462]">{d.count} ({pct}%)</span>
-                  </div>
-                  <div className="w-full bg-[#f3f3f1] rounded-full h-1.5"><div className={`${bar} h-1.5 rounded-full`} style={{ width: `${pct}%` }}/></div>
-                </div>
-              );
-            }) : <p className="text-[12px] text-[#646462]">Sin datos SLA para este filtro.</p>}
-          </div>
+
+        {/* Cómo manejas las conversaciones */}
+        <KpiChartCard title="Cómo manejas las conversaciones" height={120}>
+          {handling.length ? <KpiDistributionBar segments={handling} /> : <KpiEmpty />}
+        </KpiChartCard>
+
+        {/* Crecimiento general del volumen */}
+        <TimeCard title="Crecimiento general del volumen" seriesKey="volume" />
+
+        {/* Nuevas conversaciones por canal + Tiempo medio para cerrar por canal */}
+        <div className="grid grid-cols-2 gap-4">
+          <TimeCard title="Nuevas conversaciones por canal" seriesKey="newByChannel" />
+          <TimeCard title="Tiempo medio para cerrar por canal" seriesKey="closeByChannel" />
         </div>
+
+        {/* Rendimiento de Fin AI Agent */}
+        <Section title="Rendimiento de Fin AI Agent">
+          <div className="grid grid-cols-3 gap-3">
+            {finGroup.map(([label, key]) => { const k = kpiVal(key); return <KpiCard key={label} label={label} value={k.value} change={k.change} trend={k.trend} />; })}
+          </div>
+          <TimeCard title="El impacto de Fin a lo largo del tiempo" seriesKey="finImpact" />
+        </Section>
+
+        {/* Desempeño de los compañeros de equipo */}
+        <Section title="Desempeño de los compañeros de equipo">
+          <div className="grid grid-cols-4 gap-3">
+            {teammateGroup.map(([label, key]) => { const k = kpiVal(key); return <KpiCard key={label} label={label} value={k.value} change={k.change} trend={k.trend} />; })}
+          </div>
+          <TimeCard title="El desempeño del compañero de equipo a lo largo del tiempo" seriesKey="teammateOverTime" />
+        </Section>
+
+        {/* Puntuación de la experiencia del cliente (CX) */}
+        <Section title="Puntuación de la experiencia del cliente (CX)">
+          <div className="grid grid-cols-4 gap-3">
+            {cxGroup.map(([label, key]) => { const k = kpiVal(key); return <KpiCard key={label} label={label} value={k.value} change={k.change} trend={k.trend} />; })}
+          </div>
+          <TimeCard title="Puntuación de la experiencia del cliente (CX) a lo largo del tiempo" seriesKey="cxOverTime" />
+          <div className="grid grid-cols-2 gap-4">
+            <KpiChartCard title="Razones de puntuación CX negativa 😖">{seriesBlock('cxNegReasons') ? <KpiDoughnut labels={ov.series.cxNegReasons.labels} values={ov.series.cxNegReasons.values} /> : <KpiEmpty />}</KpiChartCard>
+            <KpiChartCard title="Razones de puntuación CX positiva 😀">{seriesBlock('cxPosReasons') ? <KpiDoughnut labels={ov.series.cxPosReasons.labels} values={ov.series.cxPosReasons.values} /> : <KpiEmpty />}</KpiChartCard>
+          </div>
+          <TimeCard title="Temas de conversación con puntuación CX negativa" seriesKey="cxNegTopics" />
+        </Section>
+
+        {/* Satisfacción del cliente (CSAT) encuestada */}
+        <Section title="Satisfacción del cliente (CSAT) encuestada">
+          <div className="grid grid-cols-3 gap-3">
+            {csatGroup.map(([label, key]) => { const k = kpiVal(key); return <KpiCard key={label} label={label} value={k.value} change={k.change} trend={k.trend} />; })}
+          </div>
+          <TimeCard title="Puntuación CSAT a lo largo del tiempo" seriesKey="csatOverTime" />
+        </Section>
+
+        {/* SLA (dato real disponible) */}
+        {dist.length > 0 && (
+          <KpiChartCard title="Distribución de SLA" height={140}>
+            <KpiDistributionBar segments={dist.map((d: any) => ({ label: String(d.status).replace(/_/g, ' '), value: d.count ?? 0, color: d.status === 'breached' ? '#dc2626' : d.status === 'at_risk' ? '#f59e0b' : '#16a34a' }))} />
+          </KpiChartCard>
+        )}
       </div>
     </div>
   );
