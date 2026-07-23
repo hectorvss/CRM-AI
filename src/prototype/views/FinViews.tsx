@@ -7536,6 +7536,94 @@ function FinComenzarContent() {
 }
 
 // ─── Analizar / Desempeño (1:16070) ─────────────────────────────────────────
+// ── Shared Analizar building blocks ──────────────────────────────────────────
+
+const FIN_INFO_ICON = (
+  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+);
+const FIN_EMPTY_GLYPH = (
+  <svg viewBox="0 0 24 16" className="w-8 h-6 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+);
+
+/** Section header shared by every Analizar screen: panel icon + title + actions. */
+function FinAnalyzeHeader({ icon, title, actions }: { icon: ReactNode; title: string; actions?: ReactNode }) {
+  return (
+    <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-14 flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        {icon}
+        <h2 className="text-[17px] font-bold text-[#1a1a1a]">{title}</h2>
+      </div>
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+type FinKpiLegend = { color: string; label: string };
+/**
+ * The canonical KPI card (the "Tasa de automatización" layout): title + info
+ * tooltip, optional subtitle, an optional right-aligned action, a big mono
+ * value, an optional progress bar and a legend. Every Analizar metric uses it
+ * so the whole section reads as one system.
+ */
+function FinKpiCard({ title, subtitle, action, value, unit, progress, legend, empty, children }: {
+  title: string;
+  subtitle?: ReactNode;
+  action?: { label: string; onClick?: () => void };
+  value?: string | number | null;
+  unit?: string;
+  progress?: { pct: number; color: string };
+  legend?: FinKpiLegend[];
+  empty?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
+      <div className="flex items-start justify-between mb-3 gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">{title}</h3>
+            {FIN_INFO_ICON}
+          </div>
+          {subtitle && <p className="mt-1 text-[12px] text-[#646462] leading-[17px]">{subtitle}</p>}
+        </div>
+        {action && (
+          <button onClick={action.onClick} className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7] flex-shrink-0">
+            <span>{action.label}</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        )}
+      </div>
+      {empty ? (
+        <div className="flex flex-col items-center justify-center py-8">
+          {FIN_EMPTY_GLYPH}
+          <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
+        </div>
+      ) : (
+        <>
+          {value != null && (
+            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{value}{unit}</p>
+          )}
+          {progress && (
+            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+              <div className="h-2 rounded-full" style={{ width: `${Math.max(0, Math.min(100, progress.pct))}%`, background: progress.color }} />
+            </div>
+          )}
+          {legend && legend.length > 0 && (
+            <div className="mt-3 flex items-center gap-4 flex-wrap">
+              {legend.map(l => (
+                <span key={l.label} className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                  <span className="w-2 h-2" style={{ background: l.color }} /> {l.label}
+                </span>
+              ))}
+            </div>
+          )}
+          {children}
+        </>
+      )}
+    </div>
+  );
+}
+
 function FinDesempenoContent() {
   // Live numbers — pull stats + cases so we can compute Fin-specific KPIs
   // (automation %, engagement %, resolution %) without faking anything.
@@ -7621,135 +7709,226 @@ function FinDesempenoContent() {
           </button>
         </div>
 
-        {/* Top KPI row */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          {/* Tasa de automatización */}
-          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de automatización</h3>
-                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
-                </div>
-                <p className="mt-1 text-[12px] text-[#646462]">{totals.finResolved} conversaciones resueltas por Fin de un volumen total de asistencia de {totals.total}</p>
-              </div>
-              <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7] flex-shrink-0">
-                <span>Recomendaciones</span>
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-            </div>
-            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.automation}%</p>
-            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
-              <div className="h-2 bg-[#a4c34f] rounded-full" style={{ width: `${Math.min(100, totals.automation)}%` }} />
-            </div>
-            <div className="mt-3 flex items-center gap-4">
-              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
-                <span className="w-2 h-2 bg-[#a4c34f]" /> RESUELTO
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
-                <span className="w-2 h-2 bg-[#e9eae6]" /> VOLUMEN TOTAL
-              </span>
-            </div>
-          </div>
-
-          {/* Puntuación CX */}
-          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-[14px] font-bold text-[#1a1a1a]">Puntuación de la experiencia del cliente (CX)</h3>
-                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
-                </div>
-              </div>
-              <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7] flex-shrink-0">
-                <span>Punto de referencia</span>
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-            </div>
-            <div className="flex items-center justify-center py-6">
-              {totals.cxScore != null ? (
-                <div className="text-center">
-                  <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{Math.round(totals.cxScore)}</p>
-                  <p className="mt-2 text-[12px] text-[#646462]">Puntuación CX agregada</p>
-                </div>
-              ) : (
-                <div className="text-center">
-                  <svg viewBox="0 0 24 16" className="w-8 h-6 mx-auto fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
-                  <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3 mt-2 pt-4 border-t border-[#e9eae6]">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h4 className="text-[12px] font-bold text-[#1a1a1a]">Razones para un puntaje CX positivo</h4>
-                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
-                </div>
-                <div className="mt-3 flex flex-col items-center justify-center py-3">
-                  <svg viewBox="0 0 24 16" className="w-6 h-4 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
-                  <p className="mt-1 text-[11px] text-[#646462]">No hay datos para mostrar</p>
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h4 className="text-[12px] font-bold text-[#1a1a1a]">Razones para un puntaje CX negativo</h4>
-                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
-                </div>
-                <div className="mt-3 flex flex-col items-center justify-center py-3">
-                  <svg viewBox="0 0 24 16" className="w-6 h-4 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
-                  <p className="mt-1 text-[11px] text-[#646462]">No hay datos para mostrar</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom KPI row */}
+        {/* KPI grid — every metric shares FinKpiCard */}
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
-            <div className="flex items-center gap-1.5 mb-1">
-              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de participación</h3>
-              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
-            </div>
-            <p className="text-[12px] text-[#646462] mb-3">Fin participó en {totals.finTouched} conversaciones de un volumen total de {totals.total}</p>
-            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.engagement}%</p>
-            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
-              <div className="h-2 bg-[#7c52d8] rounded-full" style={{ width: `${Math.min(100, totals.engagement)}%` }} />
-            </div>
-            <div className="mt-3 flex items-center gap-4">
-              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
-                <span className="w-2 h-2 bg-[#7c52d8]" /> PARTICIPACIÓN
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
-                <span className="w-2 h-2 bg-[#e9eae6]" /> VOLUMEN TOTAL
-              </span>
-            </div>
-          </div>
-          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
-            <div className="flex items-center gap-1.5 mb-1">
-              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de resolución</h3>
-              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
-            </div>
-            {totals.finTouched > 0 ? (
-              <div className="py-3">
-                <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.resolutionRate}%</p>
-                <p className="mt-2 text-[12px] text-[#646462]">{totals.finResolved} resueltas de {totals.finTouched} conversaciones donde Fin participó</p>
-                <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
-                  <div className="h-2 bg-[#a4c34f] rounded-full" style={{ width: `${Math.min(100, totals.resolutionRate)}%` }} />
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-10">
-                <svg viewBox="0 0 24 16" className="w-8 h-6 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
-                <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
-              </div>
-            )}
-          </div>
+          <FinKpiCard
+            title="Tasa de automatización"
+            subtitle={`${totals.finResolved} conversaciones resueltas por Fin de un volumen total de asistencia de ${totals.total}`}
+            action={{ label: 'Recomendaciones' }}
+            value={totals.automation}
+            unit="%"
+            progress={{ pct: totals.automation, color: '#a4c34f' }}
+            legend={[{ color: '#a4c34f', label: 'RESUELTO' }, { color: '#e9eae6', label: 'VOLUMEN TOTAL' }]}
+            empty={totals.total === 0}
+          />
+          <FinKpiCard
+            title="Puntuación de la experiencia del cliente (CX)"
+            subtitle="Percepción agregada del cliente sobre las respuestas de Fin"
+            action={{ label: 'Punto de referencia' }}
+            value={totals.cxScore != null ? Math.round(totals.cxScore) : null}
+            progress={totals.cxScore != null ? { pct: totals.cxScore, color: '#e8a13a' } : undefined}
+            legend={totals.cxScore != null ? [{ color: '#e8a13a', label: 'PUNTUACIÓN CX' }, { color: '#e9eae6', label: 'MÁXIMO' }] : undefined}
+            empty={totals.cxScore == null}
+          />
+          <FinKpiCard
+            title="Tasa de participación"
+            subtitle={`Fin participó en ${totals.finTouched} conversaciones de un volumen total de ${totals.total}`}
+            value={totals.engagement}
+            unit="%"
+            progress={{ pct: totals.engagement, color: '#7c52d8' }}
+            legend={[{ color: '#7c52d8', label: 'PARTICIPACIÓN' }, { color: '#e9eae6', label: 'VOLUMEN TOTAL' }]}
+            empty={totals.total === 0}
+          />
+          <FinKpiCard
+            title="Tasa de resolución"
+            subtitle={`${totals.finResolved} resueltas de ${totals.finTouched} conversaciones donde Fin participó`}
+            value={totals.resolutionRate}
+            unit="%"
+            progress={{ pct: totals.resolutionRate, color: '#a4c34f' }}
+            legend={[{ color: '#a4c34f', label: 'RESUELTO' }, { color: '#e9eae6', label: 'PARTICIPACIÓN' }]}
+            empty={totals.finTouched === 0}
+          />
         </div>
 
         {/* Embudo de desempeño */}
         <div className="border-t border-[#e9eae6] pt-5">
           <h3 className="text-[16px] font-bold text-[#1a1a1a]">Embudo de desempeño</h3>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Topic aggregation shared by Explorador de Temas & Recomendaciones ─────────
+type FinTopicAgg = { name: string; volume: number; finTouched: number; finResolved: number; resolution: number };
+
+/** Group cases by their topic/intent field and compute Fin coverage per topic. */
+function aggregateFinTopics(cases: any[]): FinTopicAgg[] {
+  const map = new Map<string, { volume: number; finTouched: number; finResolved: number }>();
+  for (const c of cases) {
+    const name = String(c.topic || c.intent || c.category || c.tag || 'Sin categorizar').trim() || 'Sin categorizar';
+    const ai = (c.assignedAgent || c.assigned_agent || c.handler || '').toString().toLowerCase();
+    const finTouched = ai.includes('fin') || Boolean(c.aiInvolved ?? c.ai_involved);
+    const resolved = String(c.status || '').toLowerCase() === 'resolved';
+    const cur = map.get(name) || { volume: 0, finTouched: 0, finResolved: 0 };
+    cur.volume += 1;
+    if (finTouched) cur.finTouched += 1;
+    if (finTouched && resolved) cur.finResolved += 1;
+    map.set(name, cur);
+  }
+  return Array.from(map.entries())
+    .map(([name, v]) => ({ ...v, name, resolution: v.finTouched > 0 ? Math.round((v.finResolved / v.finTouched) * 100) : 0 }))
+    .sort((a, b) => b.volume - a.volume);
+}
+
+const FIN_PERIOD_LABEL = (days: number) => {
+  const end = new Date();
+  const start = new Date(); start.setDate(start.getDate() - days);
+  const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+  return `${fmt(start)} – ${fmt(end)}`;
+};
+
+// ─── Analizar / Explorador de Temas ──────────────────────────────────────────
+function FinExploradorTemasContent() {
+  const { data: cases } = useApi(() => casesApi.list(), [], []);
+  const topics = useMemo(() => aggregateFinTopics(Array.isArray(cases) ? cases : []), [cases]);
+  const maxVol = topics.reduce((m, t) => Math.max(m, t.volume), 0) || 1;
+  const totalVol = topics.reduce((s, t) => s + t.volume, 0);
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <FinAnalyzeHeader
+        icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14" strokeLinecap="round"/></svg>}
+        title="Explorador de Temas"
+        actions={
+          <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg>
+            <span>{FIN_PERIOD_LABEL(30)}</span>
+          </button>
+        }
+      />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6">
+        {topics.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="w-12 h-12 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center mb-3">{FIN_EMPTY_GLYPH}</div>
+            <p className="text-[15px] font-semibold text-[#1a1a1a]">Aún no hay temas</p>
+            <p className="mt-1 text-[13px] text-[#646462] max-w-[360px]">Cuando Fin gestione conversaciones, aquí verás los temas más frecuentes agrupados automáticamente.</p>
+          </div>
+        ) : (
+          <>
+            <p className="text-[13px] text-[#646462] mb-4">{topics.length} temas detectados en {totalVol} conversaciones</p>
+            <div className="grid grid-cols-3 gap-4">
+              {topics.map(t => (
+                <Fragment key={t.name}>
+                  <FinKpiCard
+                    title={t.name}
+                    subtitle={`${t.volume} conversaciones · ${t.finResolved} resueltas por Fin`}
+                    value={t.volume}
+                    progress={{ pct: (t.volume / maxVol) * 100, color: '#7c52d8' }}
+                    legend={[{ color: '#7c52d8', label: 'VOLUMEN' }, { color: '#a4c34f', label: `${t.resolution}% RESUELTO` }]}
+                  />
+                </Fragment>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Analizar / Recomendaciones ──────────────────────────────────────────────
+type FinRecommendation = { id: string; kind: 'content' | 'guidance' | 'escalation'; title: string; body: string; cta: string; sub: FinSubView };
+
+function FinRecomendacionesContent({ onNavigateSub }: { onNavigateSub?: (sub: FinSubView) => void } = {}) {
+  const { data: cases } = useApi(() => casesApi.list(), [], []);
+  const { data: articlesRaw } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const finContentCount = useMemo(
+    () => (Array.isArray(articlesRaw) ? articlesRaw : []).filter((a: any) => (a.finService ?? a.fin_service)).length,
+    [articlesRaw],
+  );
+  const recs = useMemo<FinRecommendation[]>(() => {
+    const topics = aggregateFinTopics(Array.isArray(cases) ? cases : []);
+    const out: FinRecommendation[] = [];
+    // Low-resolution, high-volume topics → content gap.
+    topics.filter(t => t.volume >= 2 && t.resolution < 60).slice(0, 4).forEach(t => {
+      out.push({
+        id: `content-${t.name}`,
+        kind: 'content',
+        title: `Refuerza el contenido sobre “${t.name}”`,
+        body: `Fin resuelve el ${t.resolution}% de las ${t.volume} conversaciones de este tema. Añadir o mejorar artículos subiría la tasa de resolución.`,
+        cta: 'Gestionar contenido',
+        sub: 'capContent',
+      });
+    });
+    // Topics Fin never touched → coverage gap.
+    topics.filter(t => t.finTouched === 0 && t.volume >= 2).slice(0, 3).forEach(t => {
+      out.push({
+        id: `coverage-${t.name}`,
+        kind: 'content',
+        title: `Fin aún no cubre “${t.name}”`,
+        body: `${t.volume} conversaciones de este tema se gestionaron sin Fin. Revisa el contenido y las audiencias para que Fin pueda participar.`,
+        cta: 'Gestionar contenido',
+        sub: 'capContent',
+      });
+    });
+    if (finContentCount === 0) {
+      out.unshift({
+        id: 'no-content',
+        kind: 'content',
+        title: 'Añade contenido de asistencia',
+        body: 'Fin todavía no tiene contenido indexado. Agrega artículos o fragmentos para que pueda responder con precisión.',
+        cta: 'Gestionar contenido',
+        sub: 'capContent',
+      });
+    }
+    // A guidance nudge is always relevant.
+    out.push({
+      id: 'tone-guidance',
+      kind: 'guidance',
+      title: 'Define pautas de tono y estilo',
+      body: 'Las pautas ayudan a Fin a hablar como tu marca y a seguir tus políticas de forma consistente en cada respuesta.',
+      cta: 'Administrar pautas',
+      sub: 'capGuidance',
+    });
+    return out;
+  }, [cases, finContentCount]);
+
+  const kindTile: Record<FinRecommendation['kind'], ReactNode> = {
+    content: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 2.5h7l3 3v8H3z" strokeLinejoin="round"/><path d="M5.5 7h5M5.5 9.5h5M5.5 12h3"/></svg>,
+    guidance: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3.5h10v9H3z" strokeLinejoin="round"/><path d="M5.5 6.5h5M5.5 9.5h3"/></svg>,
+    escalation: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4" strokeLinecap="round"><path d="M8 2l6 11H2z" strokeLinejoin="round"/><path d="M8 6.5v3M8 11.4v.1"/></svg>,
+  };
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <FinAnalyzeHeader
+        icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 1l1.6 4.4L14 7l-4.4 1.6L8 13l-1.6-4.4L2 7l4.4-1.6z"/></svg>}
+        title="Recomendaciones"
+      />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6">
+        <p className="text-[13px] text-[#646462] mb-4 max-w-[640px]">
+          Sugerencias basadas en tus conversaciones para mejorar la cobertura, el tono y la resolución de Fin.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          {recs.map(r => (
+            <div key={r.id} className="bg-white rounded-[12px] border border-[#e9eae6] p-5 flex flex-col">
+              <div className="flex items-start gap-3 mb-3">
+                <span className="w-9 h-9 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">{kindTile[r.kind]}</span>
+                <div className="min-w-0">
+                  <h3 className="text-[14px] font-bold text-[#1a1a1a] leading-[19px]">{r.title}</h3>
+                </div>
+              </div>
+              <p className="text-[13px] text-[#646462] leading-[20px] flex-1">{r.body}</p>
+              <button
+                onClick={() => onNavigateSub?.(r.sub)}
+                className="mt-4 self-start h-8 px-3.5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black inline-flex items-center gap-1.5"
+              >
+                {r.cta}
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -7793,112 +7972,403 @@ function FinTendenciasContent() {
 }
 
 // ─── Analizar / Monitores (1:18192) ─────────────────────────────────────────
-function FinMonitoresContent() {
-  return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="1.5" y="3" width="13" height="9" rx="1.5"/><path d="M5 14h6M8 12v2"/></svg>
-          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Monitores</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="h-8 px-3 rounded-[8px] text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>
-            <span>Tarjetas de puntuación</span>
-          </button>
-          <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
-            <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.6"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
-            <span>Monitorear</span>
-          </button>
-        </div>
-      </div>
+type FinMonitorCondition = { id: string; field: string; operator: string; value: string };
+type FinMonitor = {
+  id: string;
+  name: string;
+  description: string;
+  reviewer: 'ai' | 'human' | 'both';
+  frequency: 'continuous' | 'weekly' | 'sample';
+  conditions: FinMonitorCondition[];
+  active: boolean;
+  createdAt: string;
+};
 
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {/* Hero card — Figma 1:18069 (white bg-base-module with bottom border, 192px tall) */}
-        <div className="bg-white border-b border-[#e9eae6] py-6 px-6 flex items-center gap-6 relative">
-          {/* Score conversation interface for QA review — Figma 1:18072 (real asset) */}
-          <div className="w-[300px] h-[144px] flex-shrink-0 rounded-[10px] overflow-hidden">
-            <img
-              src={`${FIGMA_CDN}/625db3da-b0aa-49bb-b2f5-812bc1251d29`}
-              alt="Score conversation interface"
-              className="w-full h-full object-cover object-top"
+const FIN_MONITOR_LS = 'clain.fin.monitors';
+function loadFinMonitors(): FinMonitor[] {
+  try { const raw = window.localStorage.getItem(FIN_MONITOR_LS); return raw ? (JSON.parse(raw) as FinMonitor[]) : []; } catch { return []; }
+}
+function saveFinMonitors(list: FinMonitor[]) {
+  try { window.localStorage.setItem(FIN_MONITOR_LS, JSON.stringify(list)); } catch { /* ignore */ }
+}
+
+/** Fields a monitor can track, with their allowed operators. */
+const FIN_MONITOR_FIELDS: Array<{ key: string; label: string; operators: string[]; values?: string[] }> = [
+  { key: 'handler', label: 'Gestionado por', operators: ['es', 'no es'], values: ['Fin', 'Equipo humano'] },
+  { key: 'status', label: 'Estado', operators: ['es', 'no es'], values: ['Resuelto', 'Abierto', 'Escalado'] },
+  { key: 'csat', label: 'Puntuación CSAT', operators: ['es menor que', 'es mayor que'], values: ['1', '2', '3', '4', '5'] },
+  { key: 'topic', label: 'Tema', operators: ['contiene', 'es'] },
+  { key: 'escalated', label: 'Escalada', operators: ['es'], values: ['Sí', 'No'] },
+  { key: 'risk', label: 'Riesgo legal/seguridad', operators: ['es'], values: ['Alto', 'Medio', 'Bajo'] },
+];
+
+type FinMonitorTemplate = {
+  key: string;
+  name: string;
+  description: string;
+  icon: ReactNode;
+  reviewer: FinMonitor['reviewer'];
+  frequency: FinMonitor['frequency'];
+  conditions: Array<{ field: string; operator: string; value: string }>;
+};
+const FIN_MONITOR_TEMPLATES: FinMonitorTemplate[] = [
+  {
+    key: 'all-fin', name: 'Todas las conversaciones de Fin', description: 'Revisar automáticamente todas las conversaciones de Fin',
+    icon: <FinDotMark className="w-4 h-4" />, reviewer: 'ai', frequency: 'continuous',
+    conditions: [{ field: 'handler', operator: 'es', value: 'Fin' }],
+  },
+  {
+    key: 'all-team', name: 'Todos los compañeros de equipo', description: 'Revisar automáticamente las conversaciones de los miembros del equipo',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="6.2" cy="5.8" r="2.2"/><path d="M2.4 13c.4-2.1 1.9-3.4 3.8-3.4S9.6 10.9 10 13"/><path d="M10.6 4.1a2.2 2.2 0 0 1 0 4.3M11.2 13c-.2-1.4-.8-2.5-1.8-3.2"/></svg>,
+    reviewer: 'human', frequency: 'continuous',
+    conditions: [{ field: 'handler', operator: 'es', value: 'Equipo humano' }],
+  },
+  {
+    key: 'weekly-team', name: 'Revisión semanal de miembros del equipo', description: 'Conversaciones de muestra de miembros del equipo para revisión',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="5.5" r="2.5"/><path d="M3.5 13c.6-2.2 2.3-3.5 4.5-3.5s3.9 1.3 4.5 3.5"/></svg>,
+    reviewer: 'human', frequency: 'weekly',
+    conditions: [{ field: 'handler', operator: 'es', value: 'Equipo humano' }],
+  },
+  {
+    key: 'escalation-issues', name: 'Problemas en la gestión de escalaciones', description: 'Marque las conversaciones en las que la escalación se gestiona incorrectamente',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12L12 4M7 4h5v5"/></svg>,
+    reviewer: 'both', frequency: 'continuous',
+    conditions: [{ field: 'escalated', operator: 'es', value: 'Sí' }],
+  },
+  {
+    key: 'legal-safety', name: 'Problemas legales y de seguridad', description: 'Marque las conversaciones de alto riesgo que presenten problemas legales o de seguridad',
+    icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="3.5" y="7" width="9" height="6" rx="1.2"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>,
+    reviewer: 'human', frequency: 'continuous',
+    conditions: [{ field: 'risk', operator: 'es', value: 'Alto' }],
+  },
+];
+
+function finMonitorReviewerLabel(r: FinMonitor['reviewer']): string {
+  return r === 'ai' ? 'Revisor de IA' : r === 'human' ? 'Revisor humano' : 'IA + humano';
+}
+function finMonitorFreqLabel(f: FinMonitor['frequency']): string {
+  return f === 'continuous' ? 'Continuo' : f === 'weekly' ? 'Muestra semanal' : 'Muestreo';
+}
+
+/** Modal to create/edit a monitor. */
+function FinMonitorBuilder({ initial, onCancel, onSave }: {
+  initial: Partial<FinMonitor> | null;
+  onCancel: () => void;
+  onSave: (m: FinMonitor) => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [reviewer, setReviewer] = useState<FinMonitor['reviewer']>(initial?.reviewer ?? 'ai');
+  const [frequency, setFrequency] = useState<FinMonitor['frequency']>(initial?.frequency ?? 'continuous');
+  const [conditions, setConditions] = useState<FinMonitorCondition[]>(
+    (initial?.conditions ?? []).map((c, i) => ({ id: `c${i}`, field: c.field, operator: c.operator, value: c.value })),
+  );
+  let condSeq = conditions.length;
+
+  function addCondition() {
+    const f = FIN_MONITOR_FIELDS[0];
+    setConditions(list => [...list, { id: `c${condSeq++}-${list.length}`, field: f.key, operator: f.operators[0], value: f.values?.[0] ?? '' }]);
+  }
+  function patchCondition(id: string, patch: Partial<FinMonitorCondition>) {
+    setConditions(list => list.map(c => c.id === id ? { ...c, ...patch } : c));
+  }
+
+  const canSave = name.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="w-full max-w-[600px] max-h-[85vh] bg-white rounded-[16px] shadow-[0px_24px_64px_rgba(20,20,20,0.24)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-6 pt-5 pb-4 flex items-center justify-between flex-shrink-0">
+          <h3 className="text-[18px] font-bold text-[#1a1a1a]">{initial?.name ? 'Configurar monitor' : 'Crear monitor'}</h3>
+          <button onClick={onCancel} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="border-t border-dashed border-[#e0e0dc]" />
+        <div className="px-6 py-5 overflow-y-auto flex flex-col gap-5">
+          <div>
+            <label className="text-[13px] font-bold text-[#1a1a1a]">Nombre</label>
+            <input
+              autoFocus
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Ej. Conversaciones con CSAT bajo"
+              className="mt-1.5 w-full h-10 px-3.5 rounded-[10px] border border-[#e9eae6] text-[13.5px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
             />
           </div>
-          <div className="flex-1 max-w-[682px]">
-            <h2 className="text-[22px] font-serif text-[#1a1a1a] leading-[32px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>Supervise y mejore Fin a gran escala</h2>
-            <p className="mt-3 text-[14px] text-[#646462] leading-[20px]">Marque automáticamente las conversaciones de interés y envíelas a revisores de IA o humanos para el control de calidad.</p>
-            <a href="#" className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#1a1a1a] hover:underline">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
-              <span>Más información</span>
-            </a>
+          <div>
+            <label className="text-[13px] font-bold text-[#1a1a1a]">Descripción</label>
+            <textarea
+              rows={2}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="¿Qué debe vigilar este monitor?"
+              className="mt-1.5 w-full px-3.5 py-2.5 rounded-[10px] border border-[#e9eae6] text-[13.5px] text-[#1a1a1a] leading-[20px] placeholder:text-[#a4a4a2] resize-none focus:outline-none focus:border-[#1a1a1a]"
+            />
           </div>
-          <button className="absolute top-6 right-6 w-8 h-8 rounded-full hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-          </button>
+          <div>
+            <label className="text-[13px] font-bold text-[#1a1a1a]">Qué rastrear</label>
+            <p className="mt-0.5 text-[12.5px] text-[#646462]">Marca las conversaciones que cumplan todas estas condiciones.</p>
+            <div className="mt-2.5 flex flex-col gap-2">
+              {conditions.length === 0 && (
+                <p className="text-[13px] text-[#a4a4a2]">Sin condiciones: se revisarán todas las conversaciones.</p>
+              )}
+              {conditions.map(c => {
+                const field = FIN_MONITOR_FIELDS.find(f => f.key === c.field) ?? FIN_MONITOR_FIELDS[0];
+                return (
+                  <div key={c.id} className="flex items-center gap-2 flex-wrap">
+                    <select
+                      value={c.field}
+                      onChange={e => { const nf = FIN_MONITOR_FIELDS.find(f => f.key === e.target.value)!; patchCondition(c.id, { field: nf.key, operator: nf.operators[0], value: nf.values?.[0] ?? '' }); }}
+                      className="h-9 px-2.5 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] focus:outline-none"
+                    >
+                      {FIN_MONITOR_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                    </select>
+                    <select
+                      value={c.operator}
+                      onChange={e => patchCondition(c.id, { operator: e.target.value })}
+                      className="h-9 px-2.5 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] focus:outline-none"
+                    >
+                      {field.operators.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                    {field.values ? (
+                      <select
+                        value={c.value}
+                        onChange={e => patchCondition(c.id, { value: e.target.value })}
+                        className="h-9 px-2.5 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] focus:outline-none flex-1 min-w-[120px]"
+                      >
+                        {field.values.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        value={c.value}
+                        onChange={e => patchCondition(c.id, { value: e.target.value })}
+                        placeholder="valor"
+                        className="h-9 px-3 rounded-[8px] border border-[#e9eae6] text-[13px] text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] flex-1 min-w-[120px]"
+                      />
+                    )}
+                    <button onClick={() => setConditions(list => list.filter(x => x.id !== c.id))} title="Quitar" className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={addCondition} className="mt-2.5 h-8 px-2 -ml-1 rounded-md inline-flex items-center gap-1.5 text-[13px] font-medium text-[#f4643f] hover:bg-[#fdf6f3]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+              Añadir condición
+            </button>
+          </div>
+          <div>
+            <label className="text-[13px] font-bold text-[#1a1a1a]">Revisor</label>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {([['ai', 'Revisor de IA'], ['human', 'Revisor humano'], ['both', 'IA + humano']] as const).map(([val, lbl]) => (
+                <button key={val} onClick={() => setReviewer(val)} className={`h-10 px-2 rounded-[10px] border text-[13px] ${reviewer === val ? 'bg-[#f1f1ee] border-[#1a1a1a] font-semibold' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}>{lbl}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-[13px] font-bold text-[#1a1a1a]">Frecuencia</label>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {([['continuous', 'Continuo'], ['weekly', 'Muestra semanal']] as const).map(([val, lbl]) => (
+                <button key={val} onClick={() => setFrequency(val)} className={`h-10 px-2 rounded-[10px] border text-[13px] ${frequency === val ? 'bg-[#f1f1ee] border-[#1a1a1a] font-semibold' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}>{lbl}</button>
+              ))}
+            </div>
+          </div>
         </div>
-
-        <div className="p-6">
-          {/* Filters */}
-          <div className="flex items-center gap-2 mb-6">
-            <button className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[14px] inline-flex items-center gap-2 text-[#1a1a1a] hover:bg-[#f8f8f7]">
-              <span>Mostrar actividad en los últimos 7 días</span>
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-            </button>
-            <button className="h-8 px-3 rounded-full border border-[#e9eae6] bg-white text-[14px] inline-flex items-center gap-2 text-[#1a1a1a] hover:bg-[#f8f8f7]">
-              <span>Monitores activos</span>
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-            </button>
-          </div>
-
-          {/* Revisiones de Fin */}
-          <h3 className="text-[14px] text-[#1a1a1a] mb-3">Revisiones de Fin</h3>
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            {/* Conversaciones sin revisión — Figma 1:18113 */}
-            <a href="#" className="bg-white rounded-[8px] border border-[#e9eae6] py-[13px] px-[17px] flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
-              <span className="w-6 h-6 rounded-[6px] bg-[#feecaf] flex items-center justify-center flex-shrink-0">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </span>
-              <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a] leading-[19.5px]">Conversaciones sin revisión</span>
-              <span className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[13px] text-[#1a1a1a] leading-[13px]">0</span>
-            </a>
-            {/* Correcciones necesarias — Figma 1:18124 */}
-            <a href="#" className="bg-white rounded-[8px] border border-[#e9eae6] py-[13px] px-[17px] flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
-              <span className="w-6 h-6 rounded-[6px] bg-[#feecaf] flex items-center justify-center flex-shrink-0">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M9 1L2 9h5l-1 6 7-8h-5l1-6z"/></svg>
-              </span>
-              <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a] leading-[19.5px]">Correcciones necesarias</span>
-              <span className="border border-[#e9eae6] rounded-full px-3 py-[5px] text-[13px] text-[#1a1a1a] leading-[13px]">0</span>
-            </a>
-            <div />
-          </div>
-
-          {/* Todas las conversaciones de Fin — Figma 1:18136 */}
-          <div className="grid grid-cols-3 gap-4">
-            <a href="#" className="bg-white rounded-[16px] border border-[#e9eae6] p-[25px] relative block hover:bg-[#fbfbf9]">
-              <div className="mb-6">
-                <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[24px]">Todas las conversaciones de Fin</h4>
-                <p className="mt-0.5 text-[12px] text-[#81817e] leading-[16.2px]">Continuo</p>
-              </div>
-              {/* Bar chart — 7 narrow bars at #c6c9ec (Periwinkle Gray) */}
-              <div className="flex items-end justify-center gap-3 h-[80px] w-full mb-6">
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <span key={i} className="bg-[#c6c9ec] h-[2px] flex-1" />
-                ))}
-              </div>
-              <div className="pt-[15px] border-t border-[#e9eae6]">
-                <p className="text-[12px] text-[#81817e] leading-[16.2px]">Conversaciones</p>
-                <p className="mt-[7px] text-[12px] font-mono text-[#1a1a1a] leading-[16.2px]">0</p>
-              </div>
-              <button className="absolute bottom-3 right-3 w-8 h-8 rounded-full hover:bg-[#f8f8f7] flex items-center justify-center">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
-              </button>
-            </a>
-          </div>
+        <div className="border-t border-dashed border-[#e0e0dc] px-6 py-4 flex items-center justify-end gap-2 flex-shrink-0">
+          <button onClick={onCancel} className="h-9 px-4 rounded-[8px] text-[13.5px] font-semibold text-[#1a1a1a] hover:bg-[#f1f1ee]">Cancelar</button>
+          <button
+            onClick={() => canSave && onSave({
+              id: initial?.id ?? `mon_${Date.now().toString(36)}`,
+              name: name.trim(),
+              description: description.trim(),
+              reviewer, frequency,
+              conditions,
+              active: initial?.active ?? true,
+              createdAt: initial?.createdAt ?? new Date().toISOString(),
+            })}
+            disabled={!canSave}
+            className={`h-9 px-4 rounded-[8px] text-[13.5px] font-semibold ${canSave ? 'bg-[#1a1a1a] text-white hover:bg-black' : 'bg-[#f3f3f1] text-[#a4a4a2] cursor-not-allowed'}`}
+          >Guardar monitor</button>
         </div>
       </div>
     </div>
   );
 }
+
+function FinMonitorCard({ monitor, onEdit, onDelete }: { monitor: FinMonitor; onEdit: () => void; onDelete: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Deterministic mini bars so the card has a shape without faking metrics.
+  const bars = Array.from({ length: 7 }, (_, i) => 6 + Math.round(30 * Math.abs(Math.sin((i + monitor.name.length) * 1.3))));
+  return (
+    <div className="bg-white rounded-[16px] border border-[#e9eae6] p-[25px] relative">
+      <div className="mb-5">
+        <h4 className="text-[16px] font-semibold text-[#1a1a1a] leading-[22px] pr-6">{monitor.name}</h4>
+        <p className="mt-0.5 text-[12px] text-[#81817e]">{finMonitorFreqLabel(monitor.frequency)} · {finMonitorReviewerLabel(monitor.reviewer)}</p>
+      </div>
+      <div className="flex items-end justify-center gap-2 h-[64px] w-full mb-5">
+        {bars.map((h, i) => <span key={i} className="bg-[#c6c9ec] rounded-t-[1px] flex-1" style={{ height: h }} />)}
+      </div>
+      <div className="pt-[15px] border-t border-[#e9eae6] flex items-center justify-between">
+        <div>
+          <p className="text-[12px] text-[#81817e]">Conversaciones</p>
+          <p className="mt-[6px] text-[12px] font-mono text-[#1a1a1a]">0</p>
+        </div>
+        <span className={`h-[22px] px-2 rounded-full text-[11.5px] inline-flex items-center gap-1.5 ${monitor.active ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f1f1ee] text-[#646462]'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${monitor.active ? 'bg-[#15803d]' : 'bg-[#a4a4a2]'}`} />
+          {monitor.active ? 'Activo' : 'Pausado'}
+        </span>
+      </div>
+      <div className="absolute top-4 right-4">
+        <button onClick={() => setMenuOpen(o => !o)} className="w-8 h-8 rounded-full hover:bg-[#f8f8f7] flex items-center justify-center">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
+        </button>
+        {menuOpen && (
+          <div className="absolute right-0 top-9 z-20 w-[160px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_28px_rgba(20,20,20,0.16)] py-1.5">
+            <button onClick={() => { setMenuOpen(false); onEdit(); }} className="w-full h-8 px-3 text-left text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Configurar</button>
+            <button onClick={() => { setMenuOpen(false); onDelete(); }} className="w-full h-8 px-3 text-left text-[13px] text-[#b91c1c] hover:bg-[#fef2f2]">Eliminar</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FinMonitoresContent() {
+  const [monitors, setMonitors] = useState<FinMonitor[]>(() => loadFinMonitors());
+  const [builder, setBuilder] = useState<{ open: boolean; initial: Partial<FinMonitor> | null }>({ open: false, initial: null });
+
+  function persist(list: FinMonitor[]) { setMonitors(list); saveFinMonitors(list); }
+  function upsert(m: FinMonitor) {
+    const exists = monitors.some(x => x.id === m.id);
+    persist(exists ? monitors.map(x => x.id === m.id ? m : x) : [...monitors, m]);
+    setBuilder({ open: false, initial: null });
+  }
+  function removeMonitor(id: string) { persist(monitors.filter(m => m.id !== id)); }
+  function openFromTemplate(t: FinMonitorTemplate) {
+    setBuilder({ open: true, initial: { name: t.name, description: t.description, reviewer: t.reviewer, frequency: t.frequency, conditions: t.conditions.map((c, i) => ({ id: `t${i}`, ...c })) } });
+  }
+
+  const hasMonitors = monitors.length > 0;
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <FinAnalyzeHeader
+        icon={<svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="1.5" y="3" width="13" height="9" rx="1.5"/><path d="M5 14h6M8 12v2"/></svg>}
+        title="Monitores"
+        actions={
+          <>
+            <button className="h-8 px-3 rounded-[8px] text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>
+              <span>Tarjetas de puntuación</span>
+            </button>
+            <button onClick={() => setBuilder({ open: true, initial: null })} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.6"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+              <span>Monitorear</span>
+            </button>
+          </>
+        }
+      />
+
+      <div className="flex-1 overflow-y-auto min-h-0 p-6">
+        {/* Filters */}
+        <div className="flex items-center gap-2 mb-5">
+          <button className="h-9 px-3.5 rounded-full border border-[#e9eae6] bg-white text-[13.5px] inline-flex items-center gap-2 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            <span>Todos los tipos</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="h-9 px-3.5 rounded-full border border-[#e9eae6] bg-white text-[13.5px] inline-flex items-center gap-2 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            <span>Monitores activos</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+
+        {/* Stat tiles */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          {[
+            { label: 'Todas las reseñas', value: '0', unit: 'Sin revisar' },
+            { label: 'Asignado a mí', value: '0', unit: 'Sin revisar' },
+            { label: 'Reseñas recibidas', value: '0', unit: 'recibido' },
+          ].map(s => (
+            <div key={s.label} className="bg-white rounded-[10px] border border-[#e9eae6] px-4 py-3.5 flex items-center justify-between">
+              <span className="text-[14px] font-semibold text-[#1a1a1a]">{s.label}</span>
+              <span className="h-7 px-3 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[12.5px] text-[#646462] inline-flex items-center">{s.value} {s.unit}</span>
+            </div>
+          ))}
+        </div>
+
+        {hasMonitors ? (
+          <>
+            <h3 className="text-[14px] text-[#1a1a1a] mb-3">Tus monitores</h3>
+            <div className="grid grid-cols-3 gap-4">
+              {monitors.map(m => (
+                <Fragment key={m.id}>
+                  <FinMonitorCard
+                    monitor={m}
+                    onEdit={() => setBuilder({ open: true, initial: m })}
+                    onDelete={() => removeMonitor(m.id)}
+                  />
+                </Fragment>
+              ))}
+              <button onClick={() => setBuilder({ open: true, initial: null })} className="rounded-[16px] border border-dashed border-[#d4d4d0] p-[25px] flex flex-col items-center justify-center gap-3 text-[#646462] hover:bg-[#fbfbf9] hover:border-[#a4a4a2] min-h-[200px]">
+                <span className="w-9 h-9 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                </span>
+                <span className="text-[13.5px] font-semibold text-[#1a1a1a]">Crear desde cero</span>
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Empty-state hero */}
+            <div className="text-center max-w-[560px] mx-auto mt-6 mb-8">
+              <h2 className="text-[30px] font-serif text-[#1a1a1a] leading-[38px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>
+                Supervise, evalúe y mejore a gran escala
+              </h2>
+              <p className="mt-4 text-[13.5px] text-[#646462] leading-[20px]">
+                Marque automáticamente las conversaciones de interés y envíelas a revisores de IA o humanos para el control de calidad.
+              </p>
+            </div>
+
+            {/* Template grid */}
+            <div className="grid grid-cols-3 gap-4 max-w-[980px] mx-auto">
+              <button onClick={() => setBuilder({ open: true, initial: null })} className="rounded-[12px] border border-[#e9eae6] p-6 flex flex-col text-left hover:bg-[#fbfbf9] min-h-[150px]">
+                <span className="w-9 h-9 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center mb-auto">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                </span>
+                <span className="mt-6 text-[15px] font-semibold text-[#1a1a1a]">Crear desde cero</span>
+              </button>
+              {FIN_MONITOR_TEMPLATES.map(t => (
+                <button key={t.key} onClick={() => openFromTemplate(t)} className="rounded-[12px] border border-[#e9eae6] p-6 flex flex-col text-left hover:bg-[#fbfbf9] min-h-[150px]">
+                  <span className="w-9 h-9 rounded-[8px] bg-[#c7ebc1] flex items-center justify-center mb-auto">{t.icon}</span>
+                  <span className="mt-6 text-[15px] font-semibold text-[#1a1a1a] leading-[20px]">{t.name}</span>
+                  <span className="mt-1 text-[12.5px] text-[#646462] leading-[17px]">{t.description}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex justify-center mt-8">
+              <button className="h-9 px-4 rounded-full border border-[#e9eae6] bg-white text-[13.5px] font-semibold text-[#1a1a1a] inline-flex items-center gap-2 hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+                <span>Más información</span>
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {builder.open && (
+        <FinMonitorBuilder
+          initial={builder.initial}
+          onCancel={() => setBuilder({ open: false, initial: null })}
+          onSave={upsert}
+        />
+      )}
+    </div>
+  );
+}
+
 
 // ─── Fin AI · Settings page (Intercom-style accordion) ───────────────────────
 export function FinAiSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
@@ -8694,16 +9164,73 @@ function FinAudiencesContent() {
 }
 
 // ─── Registro de cambios (1:19066) ──────────────────────────────────────────
+// Low-level / operator-agent audit noise that must NOT appear in the Fin
+// changelog (the changelog is for meaningful Fin-config changes, not every tool
+// call or agent command). Entities/actions matching these are filtered out.
+function isChangelogNoise(e: any): boolean {
+  const action = String(e?.action || '');
+  const entity = String(e?.entityType || e?.entity_type || '').toLowerCase();
+  if (/^tool\./i.test(action)) return true;
+  if (/^(super[_-]?agent|agent[_.]|plan[_.]|workflow_|queue|webhook|sla[_.]|job[_.]|inbox\.|case\.)/i.test(action)) return true;
+  if (['tool', 'workspace', 'job', 'queue', 'webhook'].includes(entity)) return true;
+  return false;
+}
+
+// Turn a raw audit action code into a human-readable Spanish changelog label.
+const CHANGELOG_LABELS: Record<string, string> = {
+  PROCEDURE_CREATED: 'Procedimiento creado', PROCEDURE_UPDATED: 'Procedimiento actualizado',
+  PROCEDURE_ENABLED: 'Procedimiento habilitado', PROCEDURE_DISABLED: 'Procedimiento desactivado',
+  PROCEDURE_DELETED: 'Procedimiento eliminado',
+  GUIDANCE_CREATED: 'Guía creada', GUIDANCE_UPDATED: 'Guía actualizada',
+  GUIDANCE_ENABLED: 'Guía habilitada', GUIDANCE_DISABLED: 'Pautas deshabilitadas',
+  ARTICLE_UPDATED: 'Artículo actualizado', ARTICLE_ENABLED: 'Artículo habilitado', ARTICLE_DISABLED: 'Artículo desactivado',
+  ATTRIBUTE_CREATED: 'Atributo creado', ATTRIBUTE_UPDATED: 'Atributo actualizado',
+  ATTRIBUTE_ENABLED: 'Atributo habilitado', ATTRIBUTE_DISABLED: 'Atributo desactivado', ATTRIBUTE_DELETED: 'Atributo eliminado',
+  AUDIENCE_UPDATED: 'Actualización de audiencia de Fin',
+  TONE_UPDATED: 'Tono de voz actualizado', CONTENT_SYNCED: 'Sitio web sincronizado',
+  DEPLOYMENT_UPDATED: 'Implementación actualizada', DEPLOYMENT_ENABLED: 'Implementación habilitada',
+  DEPLOYMENT_DELETED: 'Se eliminó la implementación', DEPLOYMENT_PAUSED: 'Se pausó la implementación',
+  TASK_ENABLED: 'Tarea activada', TASK_UPDATED: 'Tarea actualizada', TASK_DISABLED: 'La tarea está desactivada', TASK_DELETED: 'Tarea eliminada',
+};
+function humanizeChangelogAction(action: string): string {
+  const a = String(action || '').trim();
+  if (CHANGELOG_LABELS[a]) return CHANGELOG_LABELS[a];
+  if (!a) return 'Cambio';
+  // FOO_BAR / foo.bar → "Foo bar"
+  const s = a.replace(/[_.]+/g, ' ').toLowerCase().trim();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function changelogElement(e: any): string {
+  const p = e?.payload || {};
+  return e?.entityName || e?.entity_name || p.name || p.title || p.label
+    || (e?.entityType || e?.entity_type || 'Untitled');
+}
+function changelogActor(e: any): string {
+  return e?.actorName || e?.actor_name || e?.actorEmail || e?.actor_email || 'Sistema';
+}
+
 function FinChangelogContent() {
   const { data: auditData, loading } = useApi<any[]>(() => auditApi.workspaceAll(), [], []);
   const [search, setSearch] = useState('');
-  const entries = useMemo(() => {
-    const list = Array.isArray(auditData) ? auditData : [];
+  // Group the meaningful changes by month (most recent first), like Intercom's changelog.
+  const groups = useMemo(() => {
+    const list = (Array.isArray(auditData) ? auditData : []).filter(e => !isChangelogNoise(e));
     const q = search.trim().toLowerCase();
-    return q
-      ? list.filter((e: any) => `${e.action || ''} ${e.entityType || e.entity_type || ''} ${e.actorName || e.actor_name || ''} ${JSON.stringify(e.payload || {})}`.toLowerCase().includes(q))
+    const filtered = q
+      ? list.filter((e: any) => `${humanizeChangelogAction(e.action)} ${changelogElement(e)} ${changelogActor(e)}`.toLowerCase().includes(q))
       : list;
+    const sorted = [...filtered].sort((a, b) =>
+      new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime());
+    const byMonth = new Map<string, any[]>();
+    for (const e of sorted) {
+      const d = new Date(e.createdAt || e.created_at || Date.now());
+      const key = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+      if (!byMonth.has(key)) byMonth.set(key, []);
+      byMonth.get(key)!.push(e);
+    }
+    return Array.from(byMonth.entries());
   }, [auditData, search]);
+  const total = groups.reduce((n, [, rows]) => n + rows.length, 0);
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* H1 header — Figma 1:19015 */}
@@ -8736,33 +9263,41 @@ function FinChangelogContent() {
           <div className="flex items-start justify-center pt-24 px-6">
             <p className="text-[13px] text-[#646462]">Cargando…</p>
           </div>
-        ) : entries.length === 0 ? (
-          // Figma 1:19041 — centered empty state
+        ) : total === 0 ? (
           <div className="flex flex-col items-center justify-start pt-24 text-center px-6">
             <h2 className="text-[20px] font-semibold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h2>
             <p className="mt-2 text-[14px] text-[#646462] leading-[21px]">Aún no se han realizado cambios en su agente de IA Fin</p>
           </div>
         ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr className="border-b border-[#e9eae6]">
-                <th className="text-left px-6 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Acción</th>
-                <th className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Entidad</th>
-                <th className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Actor</th>
-                <th className="text-left px-4 py-2 text-[11px] font-semibold text-[#646462] uppercase tracking-wide">Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((e: any, i: number) => (
-                <tr key={e.id || i} className="border-b border-[#f5f5f4] hover:bg-[#f8f8f7]">
-                  <td className="px-6 py-2.5 text-[#1a1a1a]">{e.action || '—'}</td>
-                  <td className="px-4 py-2.5 text-[#646462]">{e.entityType || e.entity_type || '—'}</td>
-                  <td className="px-4 py-2.5 text-[#646462]">{e.actorName || e.actor_name || '—'}</td>
-                  <td className="px-4 py-2.5 text-[#646462]">{e.createdAt || e.created_at ? new Date(e.createdAt || e.created_at).toLocaleString('es-ES') : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="px-6 py-4">
+            <div className="grid grid-cols-[190px_1fr_260px_210px] gap-4 px-2 pb-2 border-b border-[#e9eae6] text-[12px] text-[#646462]">
+              <div>Tiempo</div><div>Elemento</div><div>Cambiar</div><div>Autor</div>
+            </div>
+            {groups.map(([month, rows]) => (
+              <div key={month}>
+                <div className="pt-5 pb-1 text-[15px] font-semibold text-[#a4a4a2] capitalize">{month}</div>
+                {rows.map((e: any, i: number) => {
+                  const d = new Date(e.createdAt || e.created_at || Date.now());
+                  const time = `${d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit' })}`;
+                  const actor = changelogActor(e);
+                  return (
+                    <div key={e.id || `${month}-${i}`} className="grid grid-cols-[190px_1fr_260px_210px] gap-4 px-2 py-3 border-b border-[#f1f1ee] items-center hover:bg-[#f8f8f7]/40">
+                      <div className="text-[13px] text-[#646462]">{time}</div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5 6h6M5 9h4"/></svg>
+                        <span className="text-[13px] font-semibold text-[#1a1a1a] truncate">{changelogElement(e)}</span>
+                      </div>
+                      <div className="text-[13px] text-[#646462] truncate">{humanizeChangelogAction(e.action)}</div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-6 h-6 rounded-full bg-[#e9eae6] text-[#646462] text-[11px] font-semibold flex items-center justify-center flex-shrink-0">{actor.charAt(0).toUpperCase()}</span>
+                        <span className="text-[13px] text-[#1a1a1a] truncate">{actor}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -9393,8 +9928,8 @@ export function FinAiView() {
       case 'anaGetStarted':  return <FinComenzarContent />;
       case 'analizar':
       case 'anaPerformance': return <FinDesempenoContent />;
-      case 'anaRecommendations': return <FinPlaceholderContent title="Recomendaciones" subtitle="Sugerencias de Fin para mejorar la cobertura, el tono y la resolución." />;
-      case 'anaTopicExplorer':   return <FinPlaceholderContent title="Explorador de Temas" subtitle="Explora los temas más frecuentes en las conversaciones gestionadas por Fin." />;
+      case 'anaRecommendations': return <FinRecomendacionesContent onNavigateSub={setSub} />;
+      case 'anaTopicExplorer':   return <FinExploradorTemasContent />;
       case 'anaTopicTrends': return <FinTendenciasContent />;
       case 'anaMonitor':     return <FinMonitoresContent />;
       case 'changelog':      return <FinChangelogContent />;
