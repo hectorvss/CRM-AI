@@ -271,6 +271,16 @@ function mockHeatmap(seed: number): number[][] {
   const dayWeight = [1, 1, 0.95, 1, 0.9, 0.45, 0.35];                  // Lu..Do
   return hourWeight.map(hw => dayWeight.map(dw => Math.round(hw * dw * 24 * (0.6 + r() * 0.8))));
 }
+// Full 7 days × 24 hours heatmap (día de la semana × hora del día) con una curva
+// diaria realista (pico a mediodía, tranquilo de noche y fines de semana).
+const HEATMAP_DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const HEATMAP_HOURS = Array.from({ length: 24 }, (_, h) => String(h));
+function mock24Heatmap(seed: number): number[][] {
+  const r = mulberry32(seed);
+  const dayW = [1, 1, 0.95, 1, 0.9, 0.5, 0.4]; // Lun..Dom
+  const hourW = Array.from({ length: 24 }, (_, h) => Math.max(0.02, Math.exp(-Math.pow((h - 13) / 4.6, 2))));
+  return dayW.map(dw => hourW.map(hw => Math.round(dw * hw * 14 * (0.55 + r() * 0.9))));
+}
 
 // ── 1. Resumen — dashboard de KPIs (Chart.js vía KpiChart) ────────────────────
 // Data-driven: pulls what reportsApi.overview provides, and renders Intercom-
@@ -2730,21 +2740,42 @@ const CATALOG_BY_ID: Record<string, CatalogItem> = Object.fromEntries(BUILDER_CA
 function builderDefaultHeight(kind: BuilderKind): number {
   return kind === 'heatmap' ? 300 : kind === 'table' ? 220 : 260;
 }
-function BuilderCardBody({ item, height }: { item: CatalogItem; height?: number }) {
+function BuilderCardBody({ item, height, variant }: { item: CatalogItem; height?: number; variant?: string }) {
   const h = height ?? builderDefaultHeight(item.kind);
+  const seed = item.seed ?? 3;
+  // Variantes del editor (barra horizontal, combo barra+línea, matriz 7×24).
+  if (variant === 'hbar') {
+    return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(40, 14, 1, seed) }]} type="bar" horizontal showLegend={false} /></KpiChartCard>;
+  }
+  if (variant === 'combo') {
+    return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[
+      { label: item.label, data: mockSeries(40, 14, 1, seed), chartType: 'bar' },
+      { label: item.label, data: mockSeries(46, 10, 0.6, seed + 1), chartType: 'line' },
+    ]} /></KpiChartCard>;
+  }
+  if (variant === 'matrix' || (!variant && item.kind === 'heatmap')) {
+    const H = Math.max(h, 300);
+    const rowH = Math.max(24, Math.floor((H - 74) / HEATMAP_DAYS.length)); // llena el alto de la tarjeta
+    return (
+      <KpiChartCard title={item.label} height={H}>
+        <KpiHeatmap rows={HEATMAP_DAYS} cols={HEATMAP_HOURS} matrix={mock24Heatmap(seed + 44)} legend showValues={false}
+          rowHeight={rowH} fmtTitle={(v, r, c) => `${v} (${r} a las ${c}:00)`} />
+      </KpiChartCard>
+    );
+  }
   switch (item.kind) {
     case 'kpi':
       return <div className="h-full"><KpiCard label={item.label} value={item.value ?? '0'} sub={item.sub} change={item.change} trend={item.trend} /></div>;
     case 'title':
       return <div className="py-2 px-1 h-full flex items-center"><h3 className="text-[16px] font-bold text-[#1a1a1a]">{item.value ?? item.label}</h3></div>;
     case 'line':
-      return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(60, 12, 1, item.seed ?? 3), fill: true }]} type="line" showLegend={false} /></KpiChartCard>;
+      return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(60, 12, 1, seed), fill: variant !== 'line' }]} type="line" showLegend={false} /></KpiChartCard>;
     case 'bar':
-      return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(40, 14, 1, item.seed ?? 3) }]} type="bar" showLegend={false} /></KpiChartCard>;
+      return <KpiChartCard title={item.label} height={h}><KpiTimeSeries labels={MOCK_WEEKS} series={[{ label: item.label, data: mockSeries(40, 14, 1, seed) }]} type="bar" showLegend={false} /></KpiChartCard>;
     case 'doughnut':
       return <KpiChartCard title={item.label} height={h}><KpiDoughnut labels={['Tiempo de espera', 'Resolución', 'Tono', 'Otros']} values={[38, 24, 16, 22]} /></KpiChartCard>;
     case 'heatmap':
-      return <KpiChartCard title={item.label} height={h}><KpiHeatmap rows={['12 a.m.', '3 a.m.', '6 a.m.', '9 a.m.', '12 p.m.', '3 p.m.', '6 p.m.', '9 p.m.']} cols={['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do']} matrix={mockHeatmap(item.seed ?? 44)} /></KpiChartCard>;
+      return <KpiChartCard title={item.label} height={Math.max(h, 300)}><KpiHeatmap rows={HEATMAP_DAYS} cols={HEATMAP_HOURS} matrix={mock24Heatmap(seed + 44)} legend showValues={false} fmtTitle={(v, r, c) => `${v} (${r} a las ${c}:00)`} /></KpiChartCard>;
     case 'table':
       return <KpiChartCard title={item.label} height={h}><KpiTable columns={['Nombre', 'Valor']} rows={[['Ana Torres', '42'], ['Luis Vega', '31'], ['María Ruiz', '27']]} /></KpiChartCard>;
   }
@@ -2850,7 +2881,7 @@ function CatalogThumb({ item }: { item: CatalogItem }) {
 function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; onClose: () => void }) {
   const [title, setTitle] = useState(initialTitle);
   const [desc, setDesc] = useState('');
-  const [placed, setPlaced] = useState<{ uid: number; itemId: string; span: number; height?: number; text?: string; color?: string; kind?: BuilderKind; title?: string }[]>([]);
+  const [placed, setPlaced] = useState<{ uid: number; itemId: string; span: number; height?: number; text?: string; color?: string; kind?: BuilderKind; title?: string; variant?: string }[]>([]);
   const [panelOpen, setPanelOpen] = useState(true);
   const [q, setQ] = useState('');
   const [dragOver, setDragOver] = useState<number | string | null>(null);
@@ -2900,8 +2931,8 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
     arr.splice(i + 1, 0, copy);
     return arr;
   });
-  const commitEdit = (uid: number, kind: BuilderKind, title: string) => {
-    setPlaced(prev => prev.map(p => p.uid === uid ? { ...p, kind, title } : p));
+  const commitEdit = (uid: number, kind: BuilderKind, title: string, variant?: string) => {
+    setPlaced(prev => prev.map(p => p.uid === uid ? { ...p, kind, title, variant } : p));
     setEditing(null);
   };
 
@@ -2990,7 +3021,7 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
     const p = placed.find(x => x.uid === editing);
     const item = p ? CATALOG_BY_ID[p.itemId] : null;
     if (p && item) {
-      return <ChartEditor item={item} initialKind={p.kind ?? item.kind} initialTitle={p.title ?? item.label} onCancel={() => setEditing(null)} onUpdate={(k, t) => commitEdit(p.uid, k, t)} />;
+      return <ChartEditor item={item} initialKind={p.kind ?? item.kind} initialTitle={p.title ?? item.label} initialVariant={p.variant} onCancel={() => setEditing(null)} onUpdate={(k, t, v) => commitEdit(p.uid, k, t, v)} />;
     }
   }
 
@@ -3109,7 +3140,7 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
                     </div>
                     {isBanner
                       ? <BuilderBanner text={p.text ?? ''} color={p.color ?? 'gray'} onText={t => updatePlaced(p.uid, { text: t })} onColor={c => updatePlaced(p.uid, { color: c })} onDelete={() => removeItem(p.uid)} />
-                      : <BuilderCardBodyMemo item={item} height={p.height} />}
+                      : <BuilderCardBodyMemo item={item} height={p.height} variant={p.variant} />}
                     {/* Ajustador de tamaño (esquina inferior derecha) */}
                     <div
                       onMouseDown={e => startResize(e, p)}
@@ -3193,24 +3224,29 @@ function ReportBuilderCanvas({ initialTitle, onClose }: { initialTitle: string; 
 // "kind" de render soportado por BuilderCardBody.
 type EditorType = { id: string; kind: BuilderKind; label: string; icon: ReactNode };
 const EDITOR_TYPES: EditorType[] = [
-  { id: 'number', kind: 'kpi', label: 'Número', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><rect x="3" y="3.5" width="10" height="3" rx="1"/><rect x="3" y="8.5" width="6" height="3" rx="1"/></svg> },
-  { id: 'bar', kind: 'bar', label: 'Barras', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><rect x="2.5" y="9" width="2.5" height="5" rx="0.5"/><rect x="6.75" y="5" width="2.5" height="9" rx="0.5"/><rect x="11" y="7" width="2.5" height="7" rx="0.5"/></svg> },
-  { id: 'hbar', kind: 'bar', label: 'Barras horizontales', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><rect x="2" y="3" width="9" height="2.4" rx="0.5"/><rect x="2" y="6.8" width="6" height="2.4" rx="0.5"/><rect x="2" y="10.6" width="11" height="2.4" rx="0.5"/></svg> },
-  { id: 'pie', kind: 'doughnut', label: 'Circular', icon: <svg viewBox="0 0 16 16" className="w-4 h-4"><path d="M8 8V2a6 6 0 11-6 6z" className="fill-current"/><path d="M8.5 2.05A6 6 0 0114 7.5H8.5z" className="fill-current opacity-50"/></svg> },
-  { id: 'line', kind: 'line', label: 'Línea', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2 11l3.5-3.5L8 9l5.5-5.5"/></svg> },
-  { id: 'area', kind: 'line', label: 'Área', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M2 13l3.5-4L8 11l5.5-6V13z"/></svg> },
-  { id: 'column', kind: 'bar', label: 'Columnas', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><rect x="2.5" y="7" width="2.5" height="7" rx="0.5"/><rect x="6.75" y="3" width="2.5" height="11" rx="0.5"/><rect x="11" y="9" width="2.5" height="5" rx="0.5"/></svg> },
-  { id: 'matrix', kind: 'heatmap', label: 'Matriz (día × hora)', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" className="opacity-50"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" className="opacity-50"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg> },
-  { id: 'table', kind: 'table', label: 'Tabla', icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><rect x="2" y="3" width="12" height="2.6" rx="0.5"/><rect x="2" y="6.7" width="12" height="2.6" rx="0.5" className="opacity-60"/><rect x="2" y="10.4" width="12" height="2.6" rx="0.5" className="opacity-60"/></svg> },
+  { id: 'number', kind: 'kpi', label: 'Número', icon: <svg viewBox="0 0 20 20" className="w-[18px] h-[18px]"><text x="10" y="14.5" textAnchor="middle" fontSize="12" fontWeight="800" className="fill-current" fontFamily="ui-sans-serif, system-ui">123</text></svg> },
+  { id: 'bar', kind: 'bar', label: 'Barras verticales', icon: <svg viewBox="0 0 20 20" className="w-[18px] h-[18px]"><g className="fill-current"><rect x="3" y="11" width="3.4" height="6" rx="1"/><rect x="8.3" y="6" width="3.4" height="11" rx="1"/><rect x="13.6" y="8.5" width="3.4" height="8.5" rx="1"/></g></svg> },
+  { id: 'hbar', kind: 'bar', label: 'Barras horizontales', icon: <svg viewBox="0 0 20 20" className="w-[18px] h-[18px]"><g className="fill-current"><rect x="3" y="3.2" width="13" height="3.2" rx="1"/><rect x="3" y="8.4" width="8.5" height="3.2" rx="1"/><rect x="3" y="13.6" width="11" height="3.2" rx="1"/></g></svg> },
+  { id: 'pie', kind: 'doughnut', label: 'Circular', icon: <svg viewBox="0 0 20 20" className="w-[18px] h-[18px]"><circle cx="10" cy="10" r="7" className="fill-current opacity-25"/><path d="M10 10V3a7 7 0 016.06 3.5z" className="fill-current"/><circle cx="10" cy="10" r="2.6" className="fill-white"/></svg> },
+  { id: 'line', kind: 'line', label: 'Línea', icon: <svg viewBox="0 0 20 20" className="w-[18px] h-[18px] fill-none stroke-current" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 14l4-4.5 3.5 2L17 5"/><circle cx="3" cy="14" r="1.3" className="fill-current stroke-none"/><circle cx="17" cy="5" r="1.3" className="fill-current stroke-none"/></svg> },
+  { id: 'area', kind: 'bar', label: 'Combo (barras + línea)', icon: <svg viewBox="0 0 20 20" className="w-[18px] h-[18px]"><g className="fill-current opacity-90"><rect x="3" y="10" width="3.2" height="7" rx="1"/><rect x="8.4" y="7.5" width="3.2" height="9.5" rx="1"/><rect x="13.8" y="12" width="3.2" height="5" rx="1"/></g><path d="M3.5 9l5-3 5.5 3.5L17 4" className="fill-none stroke-current" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+  { id: 'column', kind: 'bar', label: 'Columnas', icon: <svg viewBox="0 0 20 20" className="w-[18px] h-[18px]"><g className="fill-current"><rect x="3" y="12.5" width="3.4" height="4.5" rx="1"/><rect x="8.3" y="8" width="3.4" height="9" rx="1"/><rect x="13.6" y="3.5" width="3.4" height="13.5" rx="1"/></g></svg> },
+  { id: 'matrix', kind: 'heatmap', label: 'Matriz (día × hora)', icon: <svg viewBox="0 0 20 20" className="w-[18px] h-[18px]"><g className="fill-current"><rect x="3" y="3" width="5.5" height="5.5" rx="1.4"/><rect x="11.5" y="3" width="5.5" height="5.5" rx="1.4" className="opacity-40"/><rect x="3" y="11.5" width="5.5" height="5.5" rx="1.4" className="opacity-40"/><rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1.4"/></g></svg> },
+  { id: 'table', kind: 'table', label: 'Tabla', icon: <svg viewBox="0 0 20 20" className="w-[18px] h-[18px] fill-none stroke-current" strokeWidth="1.6"><rect x="3" y="3.5" width="14" height="13" rx="2"/><path d="M3 8h14M3 12h14M8 3.5v13"/></svg> },
 ];
 const GRAN_EN: Record<string, string> = { hora: 'hour', dia: 'day', semana: 'week', mes: 'month' };
 
 // Editor de gráfico a pantalla completa — cambia tipo, título, métricas y ejes.
-function ChartEditor({ item, initialKind, initialTitle, onCancel, onUpdate }: {
-  item: CatalogItem; initialKind: BuilderKind; initialTitle: string;
-  onCancel: () => void; onUpdate: (kind: BuilderKind, title: string) => void;
+function ChartEditor({ item, initialKind, initialTitle, initialVariant, onCancel, onUpdate }: {
+  item: CatalogItem; initialKind: BuilderKind; initialTitle: string; initialVariant?: string;
+  onCancel: () => void; onUpdate: (kind: BuilderKind, title: string, variant?: string) => void;
 }) {
-  const [typeId, setTypeId] = useState<string>(() => (EDITOR_TYPES.find(t => t.kind === initialKind) ?? EDITOR_TYPES[4]).id);
+  const [typeId, setTypeId] = useState<string>(() => {
+    if (initialVariant === 'hbar') return 'hbar';
+    if (initialVariant === 'matrix') return 'matrix';
+    if (initialVariant === 'combo') return 'area';
+    return (EDITOR_TYPES.find(t => t.kind === initialKind) ?? EDITOR_TYPES[4]).id;
+  });
   const [title, setTitle] = useState(initialTitle);
   const [tab, setTab] = useState<'grafico' | 'opciones'>('grafico');
   const [compare, setCompare] = useState(false);
@@ -3228,6 +3264,14 @@ function ChartEditor({ item, initialKind, initialTitle, onCancel, onUpdate }: {
   // Sufijo de dimensión del título del preview, según el tipo.
   const dimSuffix = isNumber ? '' : isMatrix ? 'por día de la semana y hora del día' : isTable ? 'by Intervalos de tiempo' : `by ${GRAN_EN[gran]}`;
   const previewTitle = `${title || item.label}${metrics.length > 1 ? ` + ${metrics.length - 1} métrica` : ''}${dimSuffix ? ` ${dimSuffix}` : ''}`;
+  // Variante de render: barra horizontal, combo barra+línea (≥2 métricas),
+  // matriz 7×24 o área. El número/circular/tabla usan su kind base.
+  const editorVariant =
+    typeId === 'hbar' ? 'hbar'
+    : typeId === 'matrix' ? 'matrix'
+    : typeId === 'area' || (metrics.length >= 2 && (typeId === 'bar' || typeId === 'column' || typeId === 'line')) ? 'combo'
+    : typeId === 'line' ? 'line'
+    : undefined;
 
   return (
     <div className="flex flex-1 min-h-0 gap-2">
@@ -3240,7 +3284,7 @@ function ChartEditor({ item, initialKind, initialTitle, onCancel, onUpdate }: {
             <p className="text-[12.5px] text-[#646462]">Ingresa una descripción</p>
           </div>
           <button onClick={onCancel} className="text-[13px] font-medium text-[#1a1a1a] rounded-full px-3 py-[6px] hover:bg-[#f3f3f1]">Cancelar</button>
-          <button onClick={() => onUpdate(kind, title)} className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-4 py-[6px] hover:bg-black">Actualizar gráfico</button>
+          <button onClick={() => onUpdate(kind, title, editorVariant)} className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-4 py-[6px] hover:bg-black">Actualizar gráfico</button>
         </div>
         {/* Barra de tipos */}
         <div className="flex-shrink-0 px-6 py-2 border-b border-[#e9eae6]">
@@ -3259,7 +3303,7 @@ function ChartEditor({ item, initialKind, initialTitle, onCancel, onUpdate }: {
             <button className="absolute top-3 right-3 z-10 flex items-center gap-1 text-[12.5px] font-medium text-[#1a1a1a] border border-[#e9eae6] rounded-lg px-2.5 py-1 hover:bg-[#f5f5f4]">
               Acciones <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-            <BuilderCardBody item={{ ...item, kind, label: previewTitle }} height={340} />
+            <BuilderCardBody item={{ ...item, kind, label: previewTitle }} height={340} variant={editorVariant} />
           </div>
         </div>
       </div>

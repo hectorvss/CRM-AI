@@ -61,6 +61,8 @@ export interface KpiSeries {
   /** Optional explicit colour; defaults to the palette by index. */
   color?: string;
   fill?: boolean;
+  /** Per-series render type — enables combo charts (bar + line). */
+  chartType?: 'bar' | 'line';
 }
 
 // ── Section header (family title, e.g. "Rendimiento de Fin AI Agent") ─────────
@@ -121,36 +123,42 @@ export function KpiCard({ label, value, change, trend, sub, info = true }: {
 }
 
 // ── Time-series (line or bar) — the workhorse chart ──────────────────────────
-export function KpiTimeSeries({ labels, series, type = 'line', stacked = false, showLegend }: {
+export function KpiTimeSeries({ labels, series, type = 'line', stacked = false, showLegend, horizontal = false }: {
   labels: (string | number)[];
   series: KpiSeries[];
   type?: 'line' | 'bar';
   stacked?: boolean;
   showLegend?: boolean;
+  /** Render bars along the Y axis (horizontal bar chart). */
+  horizontal?: boolean;
 }) {
   const legend = showLegend ?? series.length >= 2;
   const datasets = series.map((s, i) => {
     const c = s.color ?? kpiColor(i);
-    if (type === 'bar') {
-      return { label: s.label, data: s.data, backgroundColor: c, borderColor: c, borderRadius: 4, borderSkipped: false, maxBarThickness: 34 };
+    const st = s.chartType ?? type; // per-series type → combo charts
+    if (st === 'bar') {
+      return { type: 'bar' as const, label: s.label, data: s.data, backgroundColor: c, borderColor: c, borderRadius: 4, borderSkipped: false, maxBarThickness: 34, order: 2 };
     }
     return {
-      label: s.label, data: s.data,
+      type: 'line' as const, label: s.label, data: s.data,
       borderColor: c, backgroundColor: s.fill ? `${c}22` : c,
       borderWidth: 2, tension: 0.25, pointRadius: 2.5, pointHoverRadius: 4,
-      pointBackgroundColor: c, fill: !!s.fill,
+      pointBackgroundColor: c, fill: !!s.fill, order: 1,
     };
   });
+  const anyBar = datasets.some(d => d.type === 'bar');
   const options: ChartOptions<any> = {
     ...BASE_OPTIONS,
+    indexAxis: horizontal ? 'y' : 'x',
     plugins: { ...BASE_OPTIONS.plugins, legend: { ...(BASE_OPTIONS.plugins as any).legend, display: legend } },
     scales: {
-      x: { ...(BASE_OPTIONS.scales as any).x, stacked },
-      y: { ...(BASE_OPTIONS.scales as any).y, stacked },
+      x: { ...(BASE_OPTIONS.scales as any).x, stacked, ...(horizontal ? { beginAtZero: true, grid: { color: GRID }, ticks: { font: { size: 10.5 }, color: AXIS, precision: 0 } } : {}) },
+      y: { ...(BASE_OPTIONS.scales as any).y, stacked, ...(horizontal ? { grid: { display: false } } : {}) },
     },
   };
   const data = { labels, datasets };
-  return type === 'bar'
+  // Mixed charts (bar + line) use the Bar base with per-dataset `type`.
+  return anyBar
     ? <Bar data={data as any} options={options} />
     : <Line data={data as any} options={options} />;
 }
@@ -181,32 +189,49 @@ export function KpiDistributionBar({ segments }: { segments: { label: string; va
 }
 
 // ── Heatmap — e.g. hourly distribution (día × hora) ──────────────────────────
-export function KpiHeatmap({ rows, cols, matrix, colorHue = '#3b59f6' }: {
+export function KpiHeatmap({ rows, cols, matrix, colorHue = '#3b59f6', legend = false, showValues = true, fmtTitle, rowHeight = 28 }: {
   rows: string[]; cols: string[]; matrix: number[][]; colorHue?: string;
+  /** Render a colour-scale legend (0 → max) below the grid. */
+  legend?: boolean;
+  /** Print the cell value inside each cell (off for dense 24-col grids). */
+  showValues?: boolean;
+  /** Tooltip text for a cell. Defaults to "{v} · {row} {col}". */
+  fmtTitle?: (v: number, row: string, col: string) => string;
+  /** Height (px) of each cell row — lets the heatmap fill a tall card. */
+  rowHeight?: number;
 }) {
   const max = Math.max(1, ...matrix.flat());
+  // Blends white → colorHue by intensity so 0 reads as an almost-empty cell.
+  const cellBg = (a: number) => a === 0 ? '#f4f6fb' : `${colorHue}${Math.round(26 + a * 229).toString(16).padStart(2, '0')}`;
   return (
-    <div className="overflow-x-auto">
-      <div className="inline-grid gap-0.5" style={{ gridTemplateColumns: `36px repeat(${cols.length}, minmax(20px,1fr))` }}>
+    <div className="flex flex-col gap-3 w-full">
+      <div className="grid gap-[3px] w-full" style={{ gridTemplateColumns: `34px repeat(${cols.length}, minmax(0,1fr))`, gridTemplateRows: `auto repeat(${rows.length}, ${rowHeight}px)` }}>
         <div />
-        {cols.map(c => <div key={c} className="text-[9.5px] text-[#9a9a97] text-center pb-1">{c}</div>)}
+        {cols.map(c => <div key={c} className="text-[9px] text-[#9a9a97] text-center pb-1">{c}</div>)}
         {rows.map((r, ri) => (
           <Fragment key={`r${ri}`}>
-            <div className="text-[10.5px] text-[#646462] pr-1 flex items-center">{r}</div>
+            <div className="text-[10px] text-[#646462] pr-1.5 flex items-center justify-end">{r}</div>
             {cols.map((_, ci) => {
               const v = matrix[ri]?.[ci] ?? 0;
               const a = v / max;
               return (
-                <div key={`${ri}-${ci}`} title={`${v} · ${r} ${cols[ci]}`}
-                  className="h-6 rounded-[3px] flex items-center justify-center text-[9px] font-medium"
-                  style={{ background: a === 0 ? '#f3f3f1' : `${colorHue}${Math.round(30 + a * 225).toString(16).padStart(2, '0')}`, color: a > 0.55 ? '#fff' : '#646462' }}>
-                  {v > 0 ? v : ''}
+                <div key={`${ri}-${ci}`} title={fmtTitle ? fmtTitle(v, r, cols[ci]) : `${v} · ${r} ${cols[ci]}`}
+                  className="rounded-[3px] flex items-center justify-center text-[9px] font-medium transition-colors hover:ring-2 hover:ring-[#1a1a1a]/20"
+                  style={{ background: cellBg(a), color: a > 0.55 ? '#fff' : '#646462' }}>
+                  {showValues && v > 0 ? v : ''}
                 </div>
               );
             })}
           </Fragment>
         ))}
       </div>
+      {legend && (
+        <div className="flex items-center gap-2 pl-[34px] flex-shrink-0">
+          <span className="text-[10px] text-[#9a9a97]">0</span>
+          <div className="h-2.5 flex-1 max-w-[240px] rounded-full" style={{ background: `linear-gradient(to right, ${cellBg(0)}, ${colorHue})` }} />
+          <span className="text-[10px] text-[#9a9a97]">{max}</span>
+        </div>
+      )}
     </div>
   );
 }
